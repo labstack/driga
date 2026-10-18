@@ -1,0 +1,11 @@
+{
+  "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-023",
+  "entrypoint": "cli",
+  "kind": "interactive",
+  "name": "Heldout synthetic session",
+  "sessionId": "canopy-023",
+  "startedAt": "2026-10-18T16:59:40Z",
+  "status": "busy",
+  "statusUpdatedAt": "2026-10-18T17:59:40Z",
+  "version": "2.1.94"
+}

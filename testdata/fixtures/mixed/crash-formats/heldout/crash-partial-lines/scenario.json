@@ -1,0 +1,70 @@
+{
+  "Agents": [
+    {
+      "Adapter": "claude",
+      "ID": "crash-registry",
+      "Version": "2.1.96",
+      "Status": "busy",
+      "Edit": "",
+      "Repo": 0,
+      "Worktree": 0,
+      "ActivityAge": 0,
+      "Crashed": true,
+      "PIDReuse": false,
+      "Hosted": false,
+      "Completed": false
+    },
+    {
+      "Adapter": "codex",
+      "ID": "crash-midturn",
+      "Version": "0.16.93",
+      "Status": "",
+      "Edit": "",
+      "Repo": 1,
+      "Worktree": 0,
+      "ActivityAge": 0,
+      "Crashed": true,
+      "PIDReuse": false,
+      "Hosted": false,
+      "Completed": false
+    },
+    {
+      "Adapter": "codex",
+      "ID": "crash-completed",
+      "Version": "0.16.93",
+      "Status": "",
+      "Edit": "",
+      "Repo": 2,
+      "Worktree": 0,
+      "ActivityAge": 0,
+      "Crashed": true,
+      "PIDReuse": false,
+      "Hosted": false,
+      "Completed": true
+    },
+    {
+      "Adapter": "claude",
+      "ID": "reused-registry",
+      "Version": "2.1.96",
+      "Status": "idle",
+      "Edit": "",
+      "Repo": 2,
+      "Worktree": 0,
+      "ActivityAge": 0,
+      "Crashed": false,
+      "PIDReuse": true,
+      "Hosted": false,
+      "Completed": false
+    }
+  ],
+  "Repos": 3,
+  "WorktreesPerRepo": 1,
+  "Crashes": false,
+  "PartialLines": true,
+  "Rotations": true,
+  "LongIdle": false,
+  "Seed": 905,
+  "Now": "2026-10-18T18:00:00Z",
+  "Layout": "terraces",
+  "Procs": null
+}

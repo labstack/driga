@@ -1,0 +1,6 @@
+{"payload":{"cli_version":"0.16.93","cwd":"{{FIXTURE_HOME}}/terraces/grove-002","git":{"branch":"heldout"},"id":"crash-completed","originator":"heldout_cli","source":"cli"},"timestamp":"2026-10-18T16:59:40Z","type":"session_meta"}
+{"payload":{"type":"task_started"},"timestamp":"2026-10-18T17:59:38Z","type":"event_msg"}
+{"payload":{"last_agent_message":"Synthetic private handoff","type":"task_complete"},"timestamp":"2026-10-18T17:59:40Z","type":"event_msg"}
+invalid json
+{"type":"future-unknown-type"}
+{"type":"unfinished

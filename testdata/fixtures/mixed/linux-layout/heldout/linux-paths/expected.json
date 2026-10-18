@@ -1,0 +1,14 @@
+{
+  "sessions": [
+    {
+      "external_id": "linux-stream",
+      "label": "working"
+    },
+    {
+      "external_id": "linux-quiet",
+      "label": "stalled?"
+    }
+  ],
+  "orphans": [],
+  "conflicts": []
+}

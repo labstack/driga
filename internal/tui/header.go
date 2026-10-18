@@ -1,0 +1,192 @@
+package tui
+
+import (
+	"fmt"
+	"sort"
+	"strings"
+	"time"
+	"unicode"
+
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
+	"github.com/labstack/driga/internal/collector"
+)
+
+func humanBytes(n uint64) string {
+	if n >= 1<<30 {
+		return fmt.Sprintf("%.1fG", float64(n)/(1<<30))
+	}
+	return fmt.Sprintf("%.1fM", float64(n)/(1<<20))
+}
+func duration(d time.Duration) string { return max(time.Duration(0), d).Round(time.Second).String() }
+func clean(s string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return ' '
+		}
+		return r
+	}, s)
+}
+func truncate(s string, width int) string { return ansi.Truncate(s, max(1, width), "…") }
+func pack(parts []string, width int, separator string) string {
+	var lines []string
+	line := ""
+	for _, p := range parts {
+		p = truncate(clean(p), width)
+		if line != "" && lipgloss.Width(line+separator+p) > width {
+			lines = append(lines, line)
+			line = ""
+		}
+		if line != "" {
+			line += separator
+		}
+		line += p
+	}
+	if line != "" {
+		lines = append(lines, line)
+	}
+	return strings.Join(lines, "\n")
+}
+func wrapText(text string, width int) string {
+	var lines []string
+	for _, line := range strings.Split(text, "\n") {
+		lines = append(lines, ansi.Hardwrap(clean(line), max(1, width), true))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func (m *app) header() string {
+	s := m.snap.Summary
+	sample := s.Sample
+	filled := 0
+	if sample.SwapTotal > 0 {
+		filled = min(8, int(float64(sample.SwapUsed)/float64(sample.SwapTotal)*8))
+	}
+	mode := m.snap.Mode
+	if mode == "snapshot" {
+		mode = "snapshot · no history"
+	}
+	if mode == "" {
+		mode = "loading"
+	}
+	host := m.snap.Hostname
+	if host == "" {
+		host = m.snap.Summary.MachineID
+	}
+	return pack([]string{"driga · " + host, mode, fmt.Sprintf("swap %s/%s %s%s", humanBytes(sample.SwapUsed), humanBytes(sample.SwapTotal), strings.Repeat("▇", filled), strings.Repeat("░", 8-filled)), fmt.Sprintf("load %.1f/%d", sample.Load1, sample.Cores), fmt.Sprintf("%d agents (%d working, %d waiting, %d stalled?)", s.Agents, s.Working, s.Waiting, s.Stalled), fmt.Sprintf("%d orphans ~%s", s.Orphans, humanBytes(s.Reclaim))}, m.width, " · ")
+}
+func (m *app) footer() string {
+	hints := []string{"enter detail", "/ filter", "s sort", "g group by project", "o open terminal"}
+	if m.tmuxTarget() != "" {
+		hints = append(hints, "a attach tmux")
+	}
+	if m.tab == 2 {
+		hints = append(hints, "x/space ack", "X ack all")
+	}
+	if m.tab == 3 {
+		hints = append(hints, "k kill", "K force")
+		if m.snap.Mode == "snapshot" {
+			hints = append(hints, "unverified (snapshot)")
+		}
+	}
+	hints = append(hints, "esc back", "? help", "q quit")
+	text := pack(hints, m.width, " · ")
+	var names []string
+	for name, f := range m.snap.Freshness {
+		interval := collector.Cadence(0).Procs
+		switch name {
+		case "machine":
+			interval = collector.Cadence(0).Machine
+		case "git":
+			interval = 5 * time.Minute
+		}
+		stale := f.Stale || m.snap.Mode != "snapshot" && (f.LastOKAt.IsZero() || m.opts.Now().Sub(f.LastOKAt) > 3*interval)
+		if stale {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		f := m.snap.Freshness[name]
+		age := time.Duration(f.AgeSeconds) * time.Second
+		if !f.LastOKAt.IsZero() {
+			age = m.opts.Now().Sub(f.LastOKAt)
+		}
+		line := truncate(fmt.Sprintf("(stale %s %s)", clean(name), duration(age)), m.width)
+		if !m.opts.NoColor {
+			line = lipgloss.NewStyle().Faint(true).Render(line)
+		}
+		text += "\n" + line
+	}
+	return text
+}
+func (m *app) bodyHeight() int {
+	overhead := lipgloss.Height(m.header()) + lipgloss.Height(m.tabBar()) + lipgloss.Height(m.footer()) + 3
+	return max(2, m.height-overhead)
+}
+func (m *app) confirmationText() string {
+	c := m.confirm
+	if c.kind == "ack-all" {
+		return fmt.Sprintf("Acknowledge %d inbox items? [y/N]\ndriga inbox ack --all", len(c.ids))
+	}
+	var lines []string
+	o := c.orphan
+	idx := map[int32]string{}
+	for _, p := range m.snap.Procs {
+		idx[p.PID] = p.Cmdline
+	}
+	lines = append(lines, "Kill "+o.ID+"? [y/N]", "PID  CMD", fmt.Sprintf("%d  %s", o.RootPID, clean(idx[o.RootPID])))
+	for _, pid := range o.PIDs {
+		if pid != o.RootPID {
+			lines = append(lines, fmt.Sprintf("%d  %s", pid, clean(idx[pid])))
+		}
+	}
+	lines = append(lines, "~reclaim "+humanBytes(o.RSSTotal)+" (RSS estimate)", "driga orphans kill "+o.ID)
+	if c.kind == "force" {
+		lines[0] = "Really SIGKILL survivors? [y/N]"
+		lines[len(lines)-1] += " --force"
+	}
+	return wrapText(strings.Join(lines, "\n"), m.width)
+}
+func (m *app) View() tea.View {
+	body := m.table.View()
+	if len(m.rows) == 0 {
+		body = "No items"
+	}
+	if !m.loaded {
+		body = "Loading…"
+	}
+	if m.detail {
+		body = m.viewport.View()
+	}
+	if m.help {
+		body = wrapText("1–5 tabs · ↑/↓ or j/k move · enter detail · esc back\n/ filter · enter apply · esc clear · s sort: state, age, mem, project\ng group by project · →/← expand/collapse families and worktrees\nx/space acknowledge Inbox · X acknowledge all (confirm)\nk kill orphan (confirm) · K force (two confirmations)\no open terminal · ? close help · q / ctrl+c quit", m.width)
+		if m.tmuxTarget() != "" {
+			body += "\na attach tmux"
+		}
+	}
+	if m.confirm != nil {
+		body = m.confirmationText()
+	}
+	if m.filtering {
+		body = m.filter.View() + "\n" + body
+	}
+	lines := strings.Split(body, "\n")
+	if len(lines) > m.bodyHeight() {
+		lines = lines[:m.bodyHeight()]
+	}
+	body = strings.Join(lines, "\n")
+	status := m.status
+	if m.busy {
+		status = "working… · " + status
+	}
+	content := m.header() + "\n" + m.tabBar() + "\n" + strings.Repeat("─", m.width) + "\n" + body + "\n" + truncate(clean(status), m.width) + "\n" + m.footer()
+	lines = strings.Split(content, "\n")
+	for i, line := range lines {
+		lines[i] = truncate(line, m.width)
+	}
+	v := tea.NewView(strings.Join(lines, "\n"))
+	v.AltScreen = true
+	return v
+}

@@ -1,0 +1,13 @@
+[
+  {
+    "pid": 4003,
+    "ppid": 200,
+    "start_time": "2026-10-18T17:00:40Z",
+    "rss": 85983232,
+    "cpu_seconds": 3,
+    "cpu_percent": 0,
+    "cmdline": "unrelated-worker",
+    "exe": "/usr/bin/unrelated-worker",
+    "cwd": "{{FIXTURE_HOME}}/terraces/grove-002"
+  }
+]

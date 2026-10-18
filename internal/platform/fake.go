@@ -1,0 +1,127 @@
+package platform
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"time"
+
+	"github.com/labstack/driga/internal/model"
+)
+
+// Fake supplies a fixed process table and machine sample without host access.
+// LoadFake reads procs.json and optional machine.json, sockets.json (pid to
+// serving flag), and peers.json (pid to connected peer pids) fixture data.
+type Fake struct {
+	procs   []model.Proc
+	machine model.MachineSample
+	sockets map[int32]bool
+	peers   map[int32][]int32
+}
+
+var _ Platform = (*Fake)(nil)
+var _ SocketProber = (*Fake)(nil)
+
+// LoadFake reads a fixture table. A missing machine.json means a zero sample;
+// malformed or unreadable files are errors, including an optional sample.
+func LoadFake(dir string) (*Fake, error) {
+	f := &Fake{}
+	read := func(name string, dst any, optional bool) error {
+		b, err := os.ReadFile(filepath.Join(dir, name))
+		if optional && errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("fake %s: %w", name, err)
+		}
+		if err := json.Unmarshal(b, dst); err != nil {
+			return fmt.Errorf("fake %s: %w", name, err)
+		}
+		return nil
+	}
+	if err := read("procs.json", &f.procs, false); err != nil {
+		return nil, err
+	}
+	if err := read("machine.json", &f.machine, true); err != nil {
+		return nil, err
+	}
+	if err := read("sockets.json", &f.sockets, true); err != nil {
+		return nil, err
+	}
+	if err := read("peers.json", &f.peers, true); err != nil {
+		return nil, err
+	}
+	seen := map[int32]bool{}
+	for _, p := range f.procs {
+		if p.PID <= 0 || p.StartTime.IsZero() || seen[p.PID] {
+			return nil, fmt.Errorf("fake procs.json: invalid or duplicate process identity %d", p.PID)
+		}
+		seen[p.PID] = true
+	}
+	return f, nil
+}
+
+// ExternalPeers returns optional fixture sockets/listeners and peer pid links.
+func (f *Fake) ExternalPeers(ctx context.Context, pids []int32) (map[int32]bool, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	wanted := make(map[int32]bool, len(pids))
+	for _, pid := range pids {
+		wanted[pid] = true
+	}
+	result := make(map[int32]bool, len(pids))
+	for _, pid := range pids {
+		result[pid] = f.sockets[pid]
+		for _, peer := range f.peers[pid] {
+			if !wanted[peer] {
+				result[pid] = true
+			}
+		}
+	}
+	return result, nil
+}
+
+// Procs returns a copy, since collectors enrich the process table in place.
+func (f *Fake) Procs(ctx context.Context) ([]model.Proc, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return append([]model.Proc(nil), f.procs...), nil
+}
+
+// Machine returns the optional fixed machine sample.
+func (f *Fake) Machine(ctx context.Context) (model.MachineSample, error) {
+	return f.machine, ctx.Err()
+}
+
+// Cwds returns only requested, present process working directories.
+func (f *Fake) Cwds(ctx context.Context, pids []int32) (map[int32]string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	wanted := make(map[int32]bool, len(pids))
+	for _, pid := range pids {
+		wanted[pid] = true
+	}
+	cwds := make(map[int32]string)
+	for _, p := range f.procs {
+		if wanted[p.PID] && p.Cwd != "" {
+			cwds[p.PID] = p.Cwd
+		}
+	}
+	return cwds, nil
+}
+
+// Alive requires both the pid and exact start timestamp to match the fixture.
+func (f *Fake) Alive(pid int32, start time.Time) bool {
+	for _, p := range f.procs {
+		if p.PID == pid {
+			return !start.IsZero() && p.StartTime.Equal(start)
+		}
+	}
+	return false
+}

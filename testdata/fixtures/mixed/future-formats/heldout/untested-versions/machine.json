@@ -1,0 +1,14 @@
+{
+  "ts": "2026-10-18T18:00:00Z",
+  "mem_used": 6442450944,
+  "mem_compressed": 0,
+  "mem_total": 17179869184,
+  "swap_used": 0,
+  "swap_total": 2147483648,
+  "disk_free": 85899345920,
+  "pressure_free": 65,
+  "load1": 0.5,
+  "load5": 0,
+  "load15": 0,
+  "cores": 8
+}

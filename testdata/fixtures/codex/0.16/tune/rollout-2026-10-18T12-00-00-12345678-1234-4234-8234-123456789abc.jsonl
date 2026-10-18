@@ -1,0 +1,6 @@
+{"timestamp":"2026-10-18T12:00:00Z","type":"session_meta","payload":{"id":"12345678-1234-4234-8234-123456789abc","cwd":"/workspace/sample","originator":"codex_cli_rs","source":"cli","cli_version":"0.16.2","git":{"branch":"feat/example","commit_hash":"abc123","repository_url":"https://example.invalid/sample.git"}}}
+{"timestamp":"2026-10-18T12:00:01Z","type":"turn_context","payload":{"model":"example","approval_policy":"on-request","sandbox":"workspace-write"}}
+{"timestamp":"2026-10-18T12:00:02Z","type":"event_msg","payload":{"type":"task_started"}}
+{"timestamp":"2026-10-18T12:00:03Z","type":"event_msg","payload":{"type":"user_message","message":"Please update ghp_SYNTHETIC_TOKEN"}}
+{"timestamp":"2026-10-18T12:00:04Z","type":"response_item","payload":{"type":"function_call","name":"apply_patch","arguments":"{\"input\":\"*** Begin Patch\\n*** Update File: a.go\\n*** Add File: b.go\\n*** End Patch\"}"}}
+{"timestamp":"2026-10-18T12:00:05Z","type":"event_msg","payload":{"type":"task_complete","last_agent_message":"Finished using ghp_SYNTHETIC_TOKEN"}}

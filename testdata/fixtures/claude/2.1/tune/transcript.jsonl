@@ -1,0 +1,5 @@
+{"type":"user","sessionId":"session-a","cwd":"/r","gitBranch":"feat/x","timestamp":"2026-10-18T17:00:00Z","message":{"content":"Update the example"}}
+{"type":"ai-title","sessionId":"session-a","timestamp":"2026-10-18T17:00:01Z","aiTitle":"Update example files"}
+{"type":"assistant","sessionId":"session-a","timestamp":"2026-10-18T17:00:02Z","message":{"content":[{"type":"tool_use","name":"Edit","input":{"file_path":"/r/a.go"}},{"type":"tool_use","name":"Write","input":{"file_path":"/r/b.go"}}]}}
+{"type":"last-prompt","timestamp":"2026-10-18T17:00:03Z","lastPrompt":"  Use ghp_synthetic_fixture_token\t for the example. "}
+{"type":"assistant","timestamp":"2026-10-18T17:00:04Z","message":{"content":[],"stop_reason":"end_turn"}}

@@ -1,0 +1,24 @@
+[
+  {
+    "pid": 4000,
+    "ppid": 200,
+    "start_time": "2026-10-18T16:59:40Z",
+    "rss": 82837504,
+    "cpu_seconds": 3,
+    "cpu_percent": 0,
+    "cmdline": "codex",
+    "exe": "/opt/heldout/bin/codex",
+    "cwd": "{{FIXTURE_HOME}}/home/linnea/src/研究 grove/grove-000"
+  },
+  {
+    "pid": 4001,
+    "ppid": 200,
+    "start_time": "2026-10-18T16:30:00Z",
+    "rss": 76546048,
+    "cpu_seconds": 3,
+    "cpu_percent": 0,
+    "cmdline": "claude",
+    "exe": "/opt/heldout/bin/claude",
+    "cwd": "{{FIXTURE_HOME}}/home/linnea/src/研究 grove/grove-001-branch-001"
+  }
+]
