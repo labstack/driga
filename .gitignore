@@ -1,5 +1,5 @@
 /driga
-/dist
+/dist/
 *.db*
 .superpowers/
 .env

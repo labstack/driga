@@ -1,0 +1,110 @@
+# Canon: conventions/workflow.md (Release security), README.md (Pixel CI),
+# and .github/workflows/typescript.yml (runner selection and action pins).
+name: Release checks and packaging
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      hosted:
+        type: boolean
+        default: false
+        description: Run on GitHub-hosted runners (spends paid minutes)
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  check-and-package:
+    # Dispatch on the release tag for a hosted retry. No PR trigger or credentials.
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ${{ (inputs.hosted || github.actor == 'dependabot[bot]') && fromJSON('["ubuntu-24.04"]') || fromJSON('["self-hosted","Linux","X64","pixel"]') }}
+    timeout-minutes: 45
+    env:
+      GOTOOLCHAIN: local
+      GOWORK: "off"
+      GOFLAGS: ""
+      GOEXPERIMENT: ""
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1; Canon pin
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version-file: go.mod
+          check-latest: false
+          cache: false
+      - name: Isolate test and build state
+        run: |
+          task_root=$(mktemp -d "$RUNNER_TEMP/driga-release.XXXXXX")
+          mkdir -p "$task_root/home" "$task_root/data" "$task_root/spool"
+          {
+            echo "HOME=$task_root/home"
+            echo "CODEX_HOME=$task_root/home/.codex"
+            echo "GEMINI_CLI_HOME=$task_root/home/.gemini"
+            echo "XDG_CONFIG_HOME=$task_root/home/.config"
+            echo "XDG_DATA_HOME=$task_root/home/.local/share"
+            echo "XDG_STATE_HOME=$task_root/home/.local/state"
+            echo "DRIGA_DATA_DIR=$task_root/data"
+            echo "DRIGA_SPOOL_DIR=$task_root/spool"
+            echo "DRIGA_CONFIG=$task_root/config.toml"
+            echo "GOCACHE=$task_root/gocache"
+            echo "GOMODCACHE=$task_root/gomodcache"
+          } >> "$GITHUB_ENV"
+      - name: Verify release source
+        run: git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+      - name: Format and vet
+        run: |
+          test -z "$(gofmt -l cmd/driga/*.go internal/cli/root.go internal/cli/version_test.go)"
+          go vet ./...
+      - name: Test on Linux (including binary smoke test)
+        run: go test ./...
+      - name: Race test
+        env:
+          CGO_ENABLED: "1"
+        run: go test -race ./...
+      - name: Package the cgo-free matrix and verify checksums
+        env:
+          TAG: ${{ github.ref_name }}
+        run: scripts/release.sh "$TAG"
+      - name: Record optional SBOM coverage
+        run: |
+          if command -v syft > /dev/null; then
+            scripts/release-evidence.sh sbom dist
+          else
+            echo "::warning::SBOM not generated; preinstall syft 1.33.0 and rerun before distribution"
+            echo "SBOM: unavailable (syft 1.33.0 not provisioned)" >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Record source, build, and checksums
+        run: |
+          (cd dist && shasum -a 256 -c SHA256SUMS)
+          {
+            echo '### Qualified packaging output (publication remains manual)'
+            echo '```json'
+            cat dist/build-info.json
+            echo '```'
+            echo '```text'
+            cat dist/SHA256SUMS
+            echo '```'
+            echo 'Review README release gates before distribution. This workflow does not sign or publish.'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2; Canon pin
+        with:
+          name: driga-${{ github.ref_name }}-${{ github.sha }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30
+    # No signing secrets are consumed here. Offline signing is a separate step
+    # using scripts/release-evidence.sh and an approved managed key mount.
+    # GitHub provenance attestations may need Enterprise Cloud for private repos;
+    # Canon currently records build/integrity evidence on Team. No SLSA claim.

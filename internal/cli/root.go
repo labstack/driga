@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime"
 	"strings"
 	"time"
 
@@ -29,6 +30,8 @@ type Globals struct {
 	Watch           time.Duration     `help:"Re-render every interval (e.g. 2s)." placeholder:"DUR"`
 
 	Version string    `kong:"-"`
+	Commit  string    `kong:"-"`
+	Date    string    `kong:"-"`
 	Stdout  io.Writer `kong:"-"`
 	Stderr  io.Writer `kong:"-"`
 	Stdin   io.Reader `kong:"-"`
@@ -70,25 +73,36 @@ type Root struct {
 	VersionCmd VersionCmd `cmd:"" name:"version" help:"Print the driga version."`
 }
 
-// VersionCmd prints "driga <version>".
+// VersionCmd prints the version and release build metadata.
 type VersionCmd struct{}
 
 func (VersionCmd) Run(g *Globals) error {
 	if g.JSON {
-		return json.NewEncoder(commandOutput(g)).Encode(map[string]any{"schema": 2, "data": map[string]string{"version": g.Version}})
+		return json.NewEncoder(commandOutput(g)).Encode(map[string]any{"schema": 2, "data": map[string]string{
+			"version": g.Version, "commit": g.Commit, "date": g.Date,
+			"go_version": runtime.Version(), "os": runtime.GOOS, "arch": runtime.GOARCH,
+		}})
 	}
-	_, err := fmt.Fprintf(g.Stdout, "driga %s\n", g.Version)
+	_, err := fmt.Fprintf(commandOutput(g), "driga %s\ncommit: %s\ndate: %s\ngo: %s\nos/arch: %s/%s\n",
+		g.Version, g.Commit, g.Date, runtime.Version(), runtime.GOOS, runtime.GOARCH)
 	return err
 }
 
 // Main parses args, runs the selected command and returns the exit code.
-func Main(args []string, version string) int {
-	return run(args, version, os.Stdin, os.Stdout, os.Stderr)
+func Main(args []string, version string, metadata ...string) int {
+	return run(args, version, os.Stdin, os.Stdout, os.Stderr, metadata...)
 }
 
-func run(args []string, version string, stdin io.Reader, stdout, stderr io.Writer) int {
+func run(args []string, version string, stdin io.Reader, stdout, stderr io.Writer, metadata ...string) int {
 	var root Root
 	root.Version, root.Stdout, root.Stderr, root.Stdin = version, stdout, stderr, stdin
+	root.Commit, root.Date = "unknown", "unknown"
+	if len(metadata) > 0 {
+		root.Commit = metadata[0]
+	}
+	if len(metadata) > 1 {
+		root.Date = metadata[1]
+	}
 	jsonMode := false
 	for _, arg := range args {
 		if arg == "--json" || arg == "--json=true" {
