@@ -3,14 +3,16 @@ package claude
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
 func TestTemporaryCwdViaSymlinkedTempRoot(t *testing.T) {
-	// Keep the fixture outside /tmp so that the built-in /tmp fallback cannot
-	// hide a failure to resolve the custom OS temp root.
-	workdir, err := os.Getwd()
-	if err != nil {
+	// Use a custom OS temp root nested in the test's own temp dir (never the
+	// source tree). On macOS that is outside /tmp, so the built-in /tmp
+	// fallback cannot hide a failure to resolve the custom root.
+	workdir := filepath.Join(t.TempDir(), "custom-tmp")
+	if err := os.Mkdir(workdir, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("TMPDIR", workdir)
@@ -61,10 +63,25 @@ func TestTemporaryCwdViaSymlinkedTempRoot(t *testing.T) {
 		{"missing sibling", filepath.Join(base, "missing"), filepath.Join(base, "missing-other"), false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			if !tc.want && (base == "/tmp" || strings.HasPrefix(base, "/tmp/")) {
+				t.Skip("negative case needs a base outside the built-in /tmp root (Linux test temp dirs live in /tmp)")
+			}
 			t.Setenv("TMPDIR", tc.tempRoot)
 			if got := temporaryCwd(tc.cwd); got != tc.want {
 				t.Fatalf("temporary(%q)=%v, want %v (temp root %q)", tc.cwd, got, tc.want, tc.tempRoot)
 			}
 		})
+	}
+}
+
+func TestLinuxTempCwdVarTmp(t *testing.T) {
+	t.Setenv("TMPDIR", t.TempDir())
+	for _, cwd := range []string{"/var/tmp", "/var/tmp/driga-synthetic/session"} {
+		if !temporaryCwd(cwd) {
+			t.Fatalf("%s must be temporary", cwd)
+		}
+	}
+	if temporaryCwd("/var/tmp-other/session") {
+		t.Fatal("path component boundary")
 	}
 }

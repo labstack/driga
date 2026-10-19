@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"text/tabwriter"
@@ -14,11 +15,13 @@ import (
 	"github.com/labstack/driga/internal/collector"
 	"github.com/labstack/driga/internal/config"
 	"github.com/labstack/driga/internal/derive"
+	"github.com/labstack/driga/internal/fleet"
 	"github.com/labstack/driga/internal/kill"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/platform"
 	"github.com/labstack/driga/internal/spool"
 	"github.com/labstack/driga/internal/store"
+	"github.com/labstack/driga/internal/view"
 )
 
 // OrphansKillCmd terminates explicitly confirmed orphan trees.
@@ -58,7 +61,11 @@ func (c OrphansKillCmd) Run(g *Globals) error {
 		return err
 	}
 	defer closeFn()
-	orphans, err := st.Orphans()
+	scope, err := resolveMachine(g, st)
+	if err != nil {
+		return err
+	}
+	orphans, err := st.OrphansScoped(scope)
 	if err != nil {
 		return err
 	}
@@ -70,6 +77,36 @@ func (c OrphansKillCmd) Run(g *Globals) error {
 	}
 	if !c.All && len(candidates) == 0 {
 		return fmt.Errorf("unknown orphan id %q", c.ID)
+	}
+	// Explicit remote selections refuse before verification or platform calls.
+	// Bulk selection keeps only local candidates.
+	machines, err := st.Machines()
+	if err != nil {
+		return err
+	}
+	local := candidates[:0]
+	skipped := 0
+	for _, o := range candidates {
+		if o.MachineID != st.MachineID() {
+			if c.All {
+				skipped++
+				continue
+			}
+			name := o.MachineID
+			for _, m := range machines {
+				if m.MachineID == o.MachineID {
+					name = view.MachineName(m)
+				}
+			}
+			return fmt.Errorf("orphan is on %s; run driga orphans kill there", name)
+		}
+		local = append(local, o)
+	}
+	candidates = local
+	if skipped > 0 {
+		if _, err := fmt.Fprintf(g.Stdout, "skipped %d orphans on other machines\n", skipped); err != nil {
+			return err
+		}
 	}
 	cfg, err := config.Load(config.Path())
 	if err != nil {
@@ -202,30 +239,88 @@ func (c InboxAckCmd) Run(g *Globals) error {
 	if err := actionSelection(c.ID, c.All); err != nil {
 		return err
 	}
-	ids := []string{c.ID}
-	if c.All {
-		st, _, closeFn, err := OpenReader(context.Background(), g)
+	targets := []model.HookEvent{{Event: "ack", Message: c.ID}}
+	remoteNames := make(map[string]string)
+	st, openErr := store.Open(filepath.Join(config.DataDir(), "driga.db"), store.ReadOnly)
+	if c.All && openErr != nil {
+		var closeFn func()
+		var err error
+		st, _, closeFn, err = OpenReader(context.Background(), g)
 		if err != nil {
 			return err
 		}
 		defer closeFn()
-		items, err := st.Inbox(time.Time{}, false)
+	} else if openErr == nil {
+		defer st.Close()
+	}
+	if st != nil {
+		scope, err := resolveMachine(g, st)
 		if err != nil {
 			return err
 		}
-		ids = nil
+		items, err := st.InboxScoped(time.Time{}, false, scope)
+		if err != nil {
+			return err
+		}
+		var selected []model.HookEvent
 		for _, item := range items {
-			ids = append(ids, item.ID)
+			if !c.All && item.ID != c.ID {
+				continue
+			}
+			ev := model.HookEvent{Event: "ack", Message: item.ID}
+			if item.MachineID != st.MachineID() {
+				if err := fleet.CheckAckPermission(config.DataDir(), item.MachineID); err != nil {
+					return err
+				}
+				ev.MachineID = item.MachineID
+				remoteNames[item.MachineID] = item.MachineID
+			}
+			selected = append(selected, ev)
+		}
+		if !c.All && len(selected) > 1 {
+			return fmt.Errorf("inbox id %q exists on multiple machines; select --machine", c.ID)
+		}
+		if c.All || len(selected) > 0 {
+			targets = selected
+		} else if scope.Machines != nil && len(scope.Machines) == 1 && scope.Machines[0] != st.MachineID() {
+			return fmt.Errorf("unknown inbox id %q on %s", c.ID, scope.Machines[0])
+		}
+		machines, err := st.Machines()
+		if err != nil {
+			return err
+		}
+		for _, machine := range machines {
+			if _, ok := remoteNames[machine.MachineID]; ok {
+				remoteNames[machine.MachineID] = view.MachineName(machine)
+			}
+		}
+	} else if openErr != nil {
+		if _, err := os.Stat(filepath.Join(config.DataDir(), "driga.db")); !os.IsNotExist(err) {
+			return openErr
+		}
+		if g.Machine != "" && g.Machine != "all" && g.Machine != "local" {
+			return fmt.Errorf("unknown machine %q: viewer collector not running", g.Machine)
 		}
 	}
-	for _, id := range ids {
-		if err := spool.Append(config.SpoolDir(), model.HookEvent{Event: "ack", Message: id, TS: time.Now()}); err != nil {
+
+	var ids []string
+	for _, ev := range targets {
+		ev.TS = time.Now()
+		if err := spool.Append(config.SpoolDir(), ev); err != nil {
+			return err
+		}
+		if ev.MachineID == "" {
+			ids = append(ids, ev.Message)
+		} else if _, err := fmt.Fprintf(g.Stdout, "ack pending → %s\n", remoteNames[ev.MachineID]); err != nil {
 			return err
 		}
 	}
-	if len(ids) == 0 {
+	if len(targets) == 0 {
 		_, err := fmt.Fprintln(g.Stdout, "no unacknowledged items")
 		return err
+	}
+	if len(ids) == 0 {
+		return nil
 	}
 	lock, err := collector.Lock(config.DataDir())
 	if err == nil {

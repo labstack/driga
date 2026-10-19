@@ -1,0 +1,208 @@
+{
+  "machine_id": "trace-peer",
+  "steps": [
+    {
+      "name": "snapshot",
+      "at": "2026-10-18T12:00:00Z",
+      "snapshot": {
+        "schema": 1,
+        "observed_at": "2026-10-18T12:00:00Z",
+        "data": {
+          "machine": {
+            "machine_id": "trace-peer",
+            "hostname": "synthetic-peer",
+            "os": "linux"
+          },
+          "cursor": {
+            "epoch": "epoch-A",
+            "seq": 10
+          },
+          "sessions": [
+            {
+              "adapter": "claude",
+              "external_id": "build",
+              "label": "working"
+            },
+            {
+              "adapter": "codex",
+              "external_id": "review",
+              "label": "idle",
+              "heuristic": true,
+              "hosted": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "waiting",
+      "at": "2026-10-18T12:00:01Z",
+      "rows": [
+        {
+          "seq": 11,
+          "ts": "2026-10-18T12:00:01Z",
+          "kind": "session",
+          "key": "[\"claude\",\"build\"]",
+          "payload": {
+            "adapter": "claude",
+            "external_id": "build",
+            "label": "waiting"
+          }
+        }
+      ],
+      "cursor": {
+        "epoch": "epoch-A",
+        "seq": 11
+      },
+      "contact_at": "2026-10-18T12:00:01Z"
+    },
+    {
+      "name": "duplicate",
+      "at": "2026-10-18T12:00:02Z",
+      "rows": [
+        {
+          "seq": 11,
+          "ts": "2026-10-18T12:00:01Z",
+          "kind": "session",
+          "key": "[\"claude\",\"build\"]",
+          "payload": {
+            "adapter": "claude",
+            "external_id": "build",
+            "label": "finished"
+          }
+        }
+      ],
+      "cursor": {
+        "epoch": "epoch-A",
+        "seq": 11
+      }
+    },
+    {
+      "name": "out-of-order-atomic",
+      "at": "2026-10-18T12:00:03Z",
+      "rows": [
+        {
+          "seq": 12,
+          "ts": "2026-10-18T12:00:01Z",
+          "kind": "session",
+          "key": "[\"claude\",\"build\"]",
+          "payload": {
+            "adapter": "claude",
+            "external_id": "build",
+            "label": "finished"
+          }
+        },
+        {
+          "seq": 11,
+          "ts": "2026-10-18T12:00:01Z",
+          "kind": "session",
+          "key": "[\"claude\",\"build\"]",
+          "payload": {
+            "adapter": "claude",
+            "external_id": "build",
+            "label": "dead"
+          }
+        }
+      ],
+      "cursor": {
+        "epoch": "epoch-A",
+        "seq": 12
+      }
+    },
+    {
+      "name": "missing-epoch",
+      "at": "2026-10-18T12:00:04Z",
+      "rows": [
+        {
+          "seq": 12,
+          "ts": "2026-10-18T12:00:01Z",
+          "kind": "session",
+          "key": "[\"claude\",\"build\"]",
+          "payload": {
+            "adapter": "claude",
+            "external_id": "build",
+            "label": "finished"
+          }
+        }
+      ],
+      "cursor": {
+        "epoch": "",
+        "seq": 12
+      }
+    },
+    {
+      "name": "wrong-epoch",
+      "at": "2026-10-18T12:00:05Z",
+      "rows": [
+        {
+          "seq": 12,
+          "ts": "2026-10-18T12:00:01Z",
+          "kind": "session",
+          "key": "[\"claude\",\"build\"]",
+          "payload": {
+            "adapter": "claude",
+            "external_id": "build",
+            "label": "finished"
+          }
+        }
+      ],
+      "cursor": {
+        "epoch": "epoch-B",
+        "seq": 12
+      }
+    },
+    {
+      "name": "missing-sequence",
+      "at": "2026-10-18T12:00:06Z",
+      "rows": [
+        {
+          "seq": 13,
+          "ts": "2026-10-18T12:00:01Z",
+          "kind": "session",
+          "key": "[\"claude\",\"build\"]",
+          "payload": {
+            "adapter": "claude",
+            "external_id": "build",
+            "label": "dead"
+          }
+        }
+      ],
+      "cursor": {
+        "epoch": "epoch-A",
+        "seq": 13
+      }
+    },
+    {
+      "name": "stale-at-deadline",
+      "at": "2026-10-18T12:00:46Z",
+      "refresh": true
+    },
+    {
+      "name": "replacement-snapshot",
+      "at": "2026-10-18T12:00:47Z",
+      "snapshot": {
+        "schema": 1,
+        "observed_at": "2026-10-18T12:00:47Z",
+        "data": {
+          "machine": {
+            "machine_id": "trace-peer",
+            "hostname": "synthetic-peer",
+            "os": "linux"
+          },
+          "cursor": {
+            "epoch": "epoch-B",
+            "seq": 0
+          },
+          "sessions": [
+            {
+              "adapter": "claude",
+              "external_id": "build",
+              "label": "finished",
+              "ended_at": "2026-10-18T12:00:47Z"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

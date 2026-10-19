@@ -92,7 +92,7 @@ func temporaryCwd(cwd string) bool {
 		return false
 	}
 	cwd = canonicalPath(cwd)
-	for _, root := range []string{os.TempDir(), "/tmp", "/private/tmp"} {
+	for _, root := range []string{os.TempDir(), "/tmp", "/private/tmp", "/var/tmp"} {
 		rel, err := filepath.Rel(canonicalPath(root), cwd)
 		if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 			return true

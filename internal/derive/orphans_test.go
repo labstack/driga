@@ -218,3 +218,25 @@ func TestOrphanTopmostAndLiveSessionProtection(t *testing.T) {
 		t.Fatal(got)
 	}
 }
+
+func TestOrphanReparentedToSystemdUser(t *testing.T) {
+	procs, sigs, now := orphanFixture(t)
+	procs[0].PPID = 500
+	for _, pid := range []int32{0, -1, 499} {
+		if got := FindOrphans(NewProcIndex(procs), nil, sigs, now, 10*time.Minute, nil, WithSubreaper(pid)); len(got) != 0 {
+			t.Fatalf("unrelated subreaper %d: %+v", pid, got)
+		}
+	}
+	opts := []OrphanOption{WithSubreaper(500), WithExternalPeers(map[int32]bool{10: false, 11: false, 12: false})}
+	got := FindOrphans(NewProcIndex(procs), nil, sigs, now, 10*time.Minute, nil, opts...)
+	if len(got) != 1 || got[0].ProcCount != 3 || got[0].Verified || !strings.Contains(strings.Join(got[0].Evidence, ";"), "reparented to systemd --user") {
+		t.Fatalf("systemd orphan: %+v", got)
+	}
+	second := FindOrphans(NewProcIndex(procs), nil, sigs, now.Add(time.Minute), 10*time.Minute, map[string]model.Orphan{got[0].ID: got[0]}, opts...)
+	if len(second) != 1 || !second[0].Verified {
+		t.Fatal(second)
+	}
+	if got := FindOrphans(NewProcIndex(procs), []model.Session{familySession(1, 10)}, sigs, now, 0, nil, opts...); len(got) != 0 {
+		t.Fatal("live session", got)
+	}
+}

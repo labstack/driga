@@ -16,6 +16,16 @@ type OrphanOption func(*orphanOptions)
 type orphanOptions struct {
 	spawnMemory   map[string]int64
 	externalPeers map[int32]bool
+	subreaper     int32
+}
+
+// WithSubreaper recognizes helpers reparented to the user's systemd instance.
+func WithSubreaper(pid int32) OrphanOption {
+	return func(o *orphanOptions) {
+		if pid > 1 {
+			o.subreaper = pid
+		}
+	}
 }
 
 // WithExternalPeers supplies a fresh SocketProber result for each candidate tree.
@@ -91,7 +101,7 @@ func FindOrphans(idx ProcIndex, sessions []model.Session, sigs *signatures.Set, 
 		if spawned && owner != 0 {
 			ownerDead = !liveIDs[owner]
 		}
-		if r.PPID != 1 && !ownerDead {
+		if r.PPID != 1 && (options.subreaper <= 1 || r.PPID != options.subreaper) && !ownerDead {
 			continue
 		}
 		tree := append([]model.Proc{r}, idx.Descendants(pid)...)
@@ -129,6 +139,9 @@ func FindOrphans(idx ProcIndex, sessions []model.Session, sigs *signatures.Set, 
 		}
 		if r.PPID == 1 {
 			o.Evidence = append(o.Evidence, "ppid=1")
+		}
+		if options.subreaper > 1 && r.PPID == options.subreaper {
+			o.Evidence = append(o.Evidence, "reparented to systemd --user")
 		}
 		if matched != "" {
 			o.Evidence = append(o.Evidence, matched)

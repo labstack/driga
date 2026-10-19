@@ -1,10 +1,9 @@
 package codex
 
 import (
-	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -37,52 +36,46 @@ type metadata struct {
 }
 
 func readRollout(path string, prev model.Offset, snippets bool) (model.SessionObs, []adapter.Warning, model.Offset, error) {
+	return readRolloutContext(context.Background(), path, prev, snippets)
+}
+
+func readRolloutContext(ctx context.Context, path string, prev model.Offset, snippets bool) (model.SessionObs, []adapter.Warning, model.Offset, error) {
 	obs := model.SessionObs{Adapter: "codex", Origin: "interactive", SourcePath: path}
 	obs.ExternalID = strings.TrimSuffix(filenameID.FindString(filepath.Base(path)), ".jsonl")
 	prev, skipped, err := tail.SeekRecent(path, prev, maxBytes)
 	if err != nil {
 		return obs, nil, prev, err
 	}
-	r, err := tail.Read(path, prev, maxBytes)
-	if err != nil {
-		return obs, nil, r.Next, err
-	}
-	start := prev.Pos
-	if r.Reset {
-		start = 0
-	}
 	// The collector stores deltas, but relative patch paths and completion IDs
 	// need metadata even when this adapter starts with an existing tail offset.
-	if start > 0 {
-		header, err := tail.Read(path, model.Offset{}, 1)
-		if err != nil {
-			return obs, nil, r.Next, err
-		}
-		if len(header.Lines) > 0 {
+	if prev.Pos > 0 {
+		_, err := tail.Scan(ctx, path, model.Offset{}, 1, func(line []byte, _ int64) {
 			var e entry
-			if json.Unmarshal(header.Lines[0], &e) == nil && e.Type == "session_meta" {
+			if json.Unmarshal(line, &e) == nil && e.Type == "session_meta" {
 				// Malformed header warnings belong to the pass that consumes it.
 				_ = fold(&obs, e, 0, snippets)
 			}
+		})
+		if err != nil {
+			return obs, nil, prev, err
 		}
-	}
-	positions, err := linePositions(path, start, r)
-	if err != nil {
-		return obs, nil, r.Next, err
 	}
 	var warnings []adapter.Warning
 	if skipped > 0 {
 		warnings = append(warnings, adapter.Warning{Kind: "skipped-backlog", Detail: fmt.Sprintf("%s: %d bytes", path, skipped)})
 	}
-	for i, line := range r.Lines {
+	r, err := tail.Scan(ctx, path, prev, maxBytes, func(line []byte, offset int64) {
 		var e entry
 		err := json.Unmarshal(line, &e)
 		if err == nil {
-			err = fold(&obs, e, positions[i], snippets)
+			err = fold(&obs, e, offset, snippets)
 		}
 		if err != nil {
-			warnings = append(warnings, adapter.Warning{Kind: "invalid-json", Detail: fmt.Sprintf("%s:%d: %v", path, positions[i], err)})
+			warnings = append(warnings, adapter.Warning{Kind: "invalid-json", Detail: fmt.Sprintf("%s:%d: %v", path, offset, err)})
 		}
+	})
+	if err != nil {
+		return obs, warnings, r.Next, err
 	}
 	for i := 0; i < r.Skipped; i++ {
 		warnings = append(warnings, adapter.Warning{Kind: "oversize-line", Detail: path})
@@ -227,7 +220,7 @@ func temporary(cwd string) bool {
 		return false
 	}
 	cwd = canonicalPath(cwd)
-	for _, root := range []string{os.TempDir(), "/tmp", "/private/tmp"} {
+	for _, root := range []string{os.TempDir(), "/tmp", "/private/tmp", "/var/tmp"} {
 		rel, err := filepath.Rel(canonicalPath(root), cwd)
 		if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 			return true
@@ -247,56 +240,4 @@ func canonicalPath(path string) string {
 		return filepath.Join(canonicalPath(parent), filepath.Base(path))
 	}
 	return path
-}
-
-// linePositions restores absolute offsets omitted by tail.Result. Usually the
-// lengths suffice; skipped oversized records require a bounded boundary scan.
-func linePositions(path string, start int64, r tail.Result) ([]int64, error) {
-	positions := make([]int64, 0, len(r.Lines))
-	pos := start
-	for _, line := range r.Lines {
-		positions = append(positions, pos)
-		pos += int64(len(line)) + 1
-	}
-	if pos == r.Next.Pos && r.Skipped == 0 {
-		return positions, nil
-	}
-	positions = positions[:0]
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-	continuation := false
-	if start > 0 {
-		var before [1]byte
-		if _, err := f.ReadAt(before[:], start-1); err != nil {
-			return nil, err
-		}
-		continuation = before[0] != '\n'
-	}
-	reader := bufio.NewReaderSize(io.NewSectionReader(f, start, r.Next.Pos-start), 64<<10)
-	pos = start
-	var size int64
-	for {
-		fragment, err := reader.ReadSlice('\n')
-		size += int64(len(fragment))
-		switch err {
-		case nil:
-			if !continuation && size-1 <= tail.MaxLine {
-				positions = append(positions, pos)
-			}
-			pos += size
-			size, continuation = 0, false
-		case bufio.ErrBufferFull:
-			continue
-		case io.EOF:
-			if len(positions) != len(r.Lines) {
-				return nil, fmt.Errorf("%s: rollout changed while recovering line offsets", path)
-			}
-			return positions, nil
-		default:
-			return nil, err
-		}
-	}
 }

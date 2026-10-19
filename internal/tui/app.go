@@ -15,6 +15,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/labstack/driga/internal/config"
 	"github.com/labstack/driga/internal/derive"
+	"github.com/labstack/driga/internal/fleet"
 	"github.com/labstack/driga/internal/kill"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/platform"
@@ -23,6 +24,7 @@ import (
 
 // Options configures scope, appearance, and injectable action dependencies.
 type Options struct {
+	Machine     string
 	Project     string
 	NoColor     bool
 	OpenCmd     string
@@ -38,6 +40,7 @@ type Options struct {
 }
 
 type app struct {
+	machineScope  string
 	src           Source
 	opts          Options
 	snap          Snapshot
@@ -67,6 +70,7 @@ type confirmation struct {
 	kind   string
 	orphan model.Orphan
 	force  bool
+	items  []model.InboxItem
 	ids    []string
 }
 type tickMsg struct{}
@@ -114,7 +118,7 @@ func New(src Source, opts Options) tea.Model {
 	input.Prompt = "/ "
 	input.Placeholder = "filter"
 	input.SetStyles(textinput.Styles{})
-	m := &app{src: src, opts: opts, width: 80, height: 24, expanded: map[string]bool{}, filter: input, table: table.New(table.WithFocused(true)), viewport: viewport.New()}
+	m := &app{machineScope: opts.Machine, src: src, opts: opts, width: 80, height: 24, expanded: map[string]bool{}, filter: input, table: table.New(table.WithFocused(true)), viewport: viewport.New()}
 	m.rebuild()
 	return m
 }
@@ -201,6 +205,9 @@ func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.snap = msg.snap
 			m.version = msg.version
 			m.loaded = true
+		}
+		if m.loaded {
+			m.showAckPending()
 			m.rebuild()
 		}
 		return m, nil
@@ -208,7 +215,10 @@ func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.busy = false
 		m.status = msg.status
 		if msg.err != nil {
-			m.status += " · " + msg.err.Error()
+			if m.status != "" {
+				m.status += " · "
+			}
+			m.status += msg.err.Error()
 		}
 		m.rebuild()
 	case tea.KeyPressMsg:
@@ -258,11 +268,17 @@ func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.tabVisible(tab) {
 				m.tab = tab
 				m.detail = false
+				m.showAckPending()
 				m.rebuild()
 			}
 			return m, nil
 		}
 		switch k {
+		case "m":
+			m.cycleMachine()
+			m.detail = false
+			m.showAckPending()
+			m.rebuild()
 		case "/":
 			m.filtering = true
 			return m, m.filter.Focus()
@@ -287,26 +303,31 @@ func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "x", "space", " ":
 			if m.tab == 2 && !m.busy {
 				if r, ok := m.selected(); ok && r.inbox != nil {
-					return m, m.ack([]string{r.inbox.ID})
+					return m, m.ack([]model.InboxItem{*r.inbox})
 				}
 			}
 		case "X":
 			if m.tab == 2 && !m.busy {
-				var ids []string
+				var items []model.InboxItem
 				for _, r := range m.rows {
 					if r.inbox != nil {
-						ids = append(ids, r.inbox.ID)
+						items = append(items, *r.inbox)
 					}
 				}
-				if len(ids) > 0 {
-					m.confirm = &confirmation{kind: "ack-all", ids: ids}
+				if len(items) > 0 {
+					m.confirm = &confirmation{kind: "ack-all", items: items}
+					for _, item := range items {
+						m.confirm.ids = append(m.confirm.ids, item.ID)
+					}
 				}
 			}
 		case "k", "K":
 			if m.tab == 3 && !m.busy {
 				if r, ok := m.selected(); ok && r.orphan != nil {
 					o := *r.orphan
-					if o.Young {
+					if m.remote(r.machine) {
+						m.status = fmt.Sprintf("orphan is on %s; run driga orphans kill there", m.machineName(r.machine))
+					} else if o.Young {
 						m.status = fmt.Sprintf("too young to kill (age %s)", duration(m.opts.Now().Sub(o.StartTime)))
 					} else if !o.Verified {
 						m.status = "unverified — run: driga orphans kill " + o.ID + " (checks it stays idle first)"
@@ -317,7 +338,9 @@ func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "o":
 			if !m.busy {
-				if cwd := m.selectedCwd(); cwd != "" {
+				if r, ok := m.selected(); ok && m.remote(r.machine) {
+					m.status = "open a terminal on " + m.machineName(r.machine)
+				} else if cwd := m.selectedCwd(); cwd != "" {
 					args := openCommand(m.opts.OpenCmd, m.opts.TermProgram, cwd)
 					return m, m.execute(args, false)
 				}
@@ -359,7 +382,7 @@ func (m *app) confirmKey(k string) tea.Cmd {
 	c := *m.confirm
 	m.confirm = nil
 	if c.kind == "ack-all" {
-		return m.ack(c.ids)
+		return m.ack(c.items)
 	}
 	if c.kind == "kill" && c.force {
 		c.kind = "force"
@@ -367,6 +390,10 @@ func (m *app) confirmKey(k string) tea.Cmd {
 		return nil
 	}
 	o := c.orphan
+	if m.remote(o.MachineID) {
+		m.status = fmt.Sprintf("orphan is on %s; run driga orphans kill there", m.machineName(o.MachineID))
+		return nil
+	}
 	var expect []int32
 	pids := o.PIDs
 	if len(pids) == 0 {
@@ -395,18 +422,39 @@ func (m *app) confirmKey(k string) tea.Cmd {
 	}
 }
 
-func (m *app) ack(ids []string) tea.Cmd {
+func (m *app) ack(items []model.InboxItem) tea.Cmd {
 	opts := m.opts
+	var events []model.HookEvent
+	var pending []string
+	for _, item := range items {
+		ev := model.HookEvent{Event: "ack", Message: item.ID, TS: opts.Now()}
+		if m.remote(item.MachineID) {
+			ev.MachineID = item.MachineID
+			pending = append(pending, "ack pending → "+m.machineName(item.MachineID))
+		}
+		events = append(events, ev)
+	}
 	m.busy = true
 	return func() tea.Msg {
-		command := "driga inbox ack " + ids[0]
-		if len(ids) > 1 {
+		command := "driga inbox ack " + items[0].ID
+		if len(items) > 1 {
 			command = "driga inbox ack --all"
 		}
-		for _, id := range ids {
-			if err := opts.Spool(model.HookEvent{Event: "ack", Message: id, TS: opts.Now()}); err != nil {
+		// Preflight the entire selection before writing any spool entries.
+		for _, ev := range events {
+			if ev.MachineID != "" {
+				if err := fleet.CheckAckPermission(opts.DataDir, ev.MachineID); err != nil {
+					return actionMsg{err: err}
+				}
+			}
+		}
+		for _, ev := range events {
+			if err := opts.Spool(ev); err != nil {
 				return actionMsg{status: command, err: err}
 			}
+		}
+		if len(pending) > 0 {
+			return actionMsg{status: strings.Join(pending, " · ")}
 		}
 		return actionMsg{status: command + " · ack recorded, applies on next collect"}
 	}
@@ -453,5 +501,17 @@ func (m *app) execute(args []string, attach bool) tea.Cmd {
 			return tea.ExecProcess(cmd, func(err error) tea.Msg { return actionMsg{status: command, err: err} })()
 		}
 		return actionMsg{status: command, err: cmd.Run()}
+	}
+}
+
+func (m *app) showAckPending() {
+	for _, row := range m.snap.Inbox.Rows {
+		if row.AckPendingAt != nil && m.remote(row.MachineID) && m.machineVisible(row.MachineID) {
+			m.status = "ack pending → " + m.machineName(row.MachineID)
+			return
+		}
+	}
+	if strings.HasPrefix(m.status, "ack pending → ") {
+		m.status = ""
 	}
 }

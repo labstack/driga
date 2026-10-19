@@ -1,4 +1,4 @@
-// Package service configures the optional per-user launchd collector.
+// Package service configures the optional per-user collector.
 package service
 
 import (
@@ -13,34 +13,57 @@ import (
 )
 
 // LogPath is shared by launchd output and the service logs command.
-func LogPath() string {
+func LogPath() string { return logPathForOS(runtime.GOOS) }
+
+func logPathForOS(goos string) string {
+	if goos == "linux" {
+		root := os.Getenv("XDG_STATE_HOME")
+		if !filepath.IsAbs(root) {
+			root = filepath.Join(config.ExpandHome("~"), ".local/state")
+		}
+		return filepath.Join(root, "driga/collector.log")
+	}
 	return filepath.Join(config.ExpandHome("~"), "Library", "Logs", "driga", "collector.log")
 }
 
 // Config returns configuration only; it never contacts the service manager.
-func Config(binPath string) *ks.Config {
+func Config(binPath string) *ks.Config { return configForOS(binPath, runtime.GOOS) }
+
+func configForOS(binPath, goos string) *ks.Config {
 	// Darwin's LogDirectory option fixes the directory but not the filenames.
 	// LaunchdConfig supports directing both streams to the single documented file.
 	escape := strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;", "'", "&apos;", "{", "&#123;")
-	template := strings.ReplaceAll(launchdConfig, "LOG_PATH", escape.Replace(LogPath()))
+	template := strings.ReplaceAll(launchdConfig, "LOG_PATH", escape.Replace(logPathForOS(goos)))
 	env := map[string]string{"HOME": config.ExpandHome("~")}
-	for _, key := range []string{"DRIGA_CONFIG", "DRIGA_DATA_DIR", "DRIGA_SPOOL_DIR", "CODEX_HOME"} {
+	for _, key := range []string{"DRIGA_CONFIG", "DRIGA_DATA_DIR", "DRIGA_SPOOL_DIR", "CODEX_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS"} {
 		if value := os.Getenv(key); value != "" {
 			env[key] = value
 		}
 	}
-	return &ks.Config{
+	c := &ks.Config{
 		Name: "run.driga.collector", DisplayName: "driga collector",
 		Executable: binPath, Arguments: []string{"collect"}, EnvVars: env,
 		Option: ks.KeyValue{"UserService": true, "KeepAlive": true, "RunAtLoad": true,
-			"LogDirectory": filepath.Dir(LogPath()), "LaunchdConfig": template},
+			"LogDirectory": filepath.Dir(logPathForOS(goos)), "LaunchdConfig": template},
 	}
+	if goos == "linux" {
+		c.Option = ks.KeyValue{"UserService": true, "Restart": "always", "LogOutput": false, "SystemdScript": systemdConfig}
+	}
+	return c
+}
+
+// InstallHint explains how a Linux user service can survive logout.
+func InstallHint(goos string) string {
+	if goos == "linux" {
+		return "For collection after logout: loginctl enable-linger $USER"
+	}
+	return ""
 }
 
 // New creates a control handle; installation and startup remain explicit actions.
 func New(binPath string) (ks.Service, error) {
-	if runtime.GOOS != "darwin" {
-		return nil, errors.New("driga service requires macOS launchd")
+	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+		return nil, errors.New("driga service requires macOS launchd or Linux systemd")
 	}
 	if !filepath.IsAbs(binPath) {
 		return nil, errors.New("service binary path must be absolute")
@@ -71,4 +94,19 @@ const launchdConfig = `<?xml version="1.0" encoding="UTF-8"?>
 <key>StandardOutPath</key><string>LOG_PATH</string>
 <key>StandardErrorPath</key><string>LOG_PATH</string>
 </dict></plist>
+`
+
+const systemdConfig = `[Unit]
+Description=driga collector
+
+[Service]
+ExecStart={{Path | cmdEscape}}{{range Arguments}} {{. | cmd}}{{end}}
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+{{range EnvVars}}{{.}}
+{{end}}
+[Install]
+WantedBy=default.target
 `

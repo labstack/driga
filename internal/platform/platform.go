@@ -88,3 +88,10 @@ func CPUPercent(prev, cur model.Proc, dt time.Duration) float64 {
 	}
 	return (cur.CPUSeconds - prev.CPUSeconds) / dt.Seconds() * 100
 }
+
+// SubreaperFinder is implemented by platforms where orphans can be reparented
+// to a per-user child subreaper (Linux: the user's systemd --user instance)
+// instead of pid 1.
+type SubreaperFinder interface {
+	UserSubreaper() (int32, bool)
+}

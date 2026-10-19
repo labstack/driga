@@ -6,8 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -26,6 +29,23 @@ type Config struct {
 	NoServiceHint   bool
 	Adapters        map[string]AdapterConfig
 	ExtraSignatures []string
+	Fleet           FleetConfig
+	Intake          IntakeConfig
+}
+
+// FleetConfig controls optional fleet serving and text sharing.
+type FleetConfig struct {
+	Serve           bool
+	Listen          string
+	ShareText       string
+	EnrollWindow    time.Duration
+	AllowAnyAddress bool
+}
+
+// IntakeConfig controls the optional loopback OTLP/HTTP JSON listener.
+type IntakeConfig struct {
+	OTLP   bool
+	Listen string
 }
 
 // AdapterConfig toggles one agent adapter.
@@ -44,6 +64,8 @@ func Default() Config {
 		StuckAfter:   10 * time.Minute,
 		OrphanMinAge: 10 * time.Minute,
 		CaptureText:  "titles",
+		Fleet:        FleetConfig{ShareText: "titles", EnrollWindow: 10 * time.Minute},
+		Intake:       IntakeConfig{Listen: "127.0.0.1:7418"},
 		Adapters: map[string]AdapterConfig{
 			"claude": {Enabled: true},
 			"codex":  {Enabled: true},
@@ -79,6 +101,17 @@ type file struct {
 	Orphans       struct {
 		ExtraSignatures []string `toml:"extra_signatures"`
 	} `toml:"orphans"`
+	Fleet struct {
+		Serve           *bool     `toml:"serve"`
+		Listen          *string   `toml:"listen"`
+		ShareText       *string   `toml:"share_text"`
+		EnrollWindow    *duration `toml:"enroll_window"`
+		AllowAnyAddress *bool     `toml:"allow_any_address"`
+	} `toml:"fleet"`
+	Intake struct {
+		OTLP   *bool   `toml:"otlp"`
+		Listen *string `toml:"listen"`
+	} `toml:"intake"`
 }
 
 // Load reads path; a missing file yields Default() and no error.
@@ -140,6 +173,44 @@ func Load(path string) (Config, error) {
 	for _, s := range f.Orphans.ExtraSignatures {
 		c.ExtraSignatures = append(c.ExtraSignatures, ExpandHome(s))
 	}
+	if f.Fleet.Serve != nil {
+		c.Fleet.Serve = *f.Fleet.Serve
+	}
+	if f.Fleet.Listen != nil {
+		c.Fleet.Listen = *f.Fleet.Listen
+	}
+	if c.Fleet.Serve && strings.TrimSpace(c.Fleet.Listen) == "" {
+		return c, fmt.Errorf("config %s: fleet.listen is required when fleet.serve is true", path)
+	}
+	if f.Fleet.ShareText != nil {
+		switch *f.Fleet.ShareText {
+		case "none", "titles", "snippets":
+			c.Fleet.ShareText = *f.Fleet.ShareText
+		default:
+			return c, fmt.Errorf("config %s: fleet.share_text must be \"none\", \"titles\" or \"snippets\"", path)
+		}
+	}
+	if f.Fleet.EnrollWindow != nil {
+		if f.Fleet.EnrollWindow.d <= 0 {
+			return c, fmt.Errorf("config %s: fleet.enroll_window must be positive", path)
+		}
+		c.Fleet.EnrollWindow = f.Fleet.EnrollWindow.d
+	}
+	if f.Fleet.AllowAnyAddress != nil {
+		c.Fleet.AllowAnyAddress = *f.Fleet.AllowAnyAddress
+	}
+	if f.Intake.OTLP != nil {
+		c.Intake.OTLP = *f.Intake.OTLP
+	}
+	if f.Intake.Listen != nil {
+		c.Intake.Listen = *f.Intake.Listen
+	}
+	host, port, err := net.SplitHostPort(c.Intake.Listen)
+	ip := net.ParseIP(host)
+	p, portErr := strconv.Atoi(port)
+	if err != nil || ip == nil || !ip.IsLoopback() || portErr != nil || p < 0 || p > 65535 {
+		return c, fmt.Errorf("config %s: intake.listen requires a loopback IP and a numeric TCP port", path)
+	}
 	return c, nil
 }
 
@@ -171,9 +242,17 @@ func Path() string {
 }
 
 // DataDir holds driga.db, driga.lock and viewer.heartbeat (env DRIGA_DATA_DIR overrides).
-func DataDir() string {
+func DataDir() string { return dataDirForOS(runtime.GOOS) }
+
+func dataDirForOS(goos string) string {
 	if p := os.Getenv("DRIGA_DATA_DIR"); p != "" {
 		return p
+	}
+	if goos == "linux" {
+		if p := os.Getenv("XDG_DATA_HOME"); filepath.IsAbs(p) {
+			return filepath.Join(p, "driga")
+		}
+		return filepath.Join(home(), ".local", "share", "driga")
 	}
 	return filepath.Join(home(), "Library", "Application Support", "driga")
 }

@@ -57,7 +57,7 @@ func wrapText(text string, width int) string {
 }
 
 func (m *app) header() string {
-	s := m.snap.Summary
+	s := m.visibleSummary()
 	sample := s.Sample
 	filled := 0
 	if sample.SwapTotal > 0 {
@@ -74,10 +74,10 @@ func (m *app) header() string {
 	if host == "" {
 		host = m.snap.Summary.MachineID
 	}
-	return pack([]string{"driga · " + host, mode, fmt.Sprintf("swap %s/%s %s%s", humanBytes(sample.SwapUsed), humanBytes(sample.SwapTotal), strings.Repeat("▇", filled), strings.Repeat("░", 8-filled)), fmt.Sprintf("load %.1f/%d", sample.Load1, sample.Cores), fmt.Sprintf("%d agents (%d working, %d waiting, %d stalled?)", s.Agents, s.Working, s.Waiting, s.Stalled), fmt.Sprintf("%d orphans ~%s", s.Orphans, humanBytes(s.Reclaim))}, m.width, " · ")
+	return pack([]string{"driga · " + host + m.fleetHeader(), mode, fmt.Sprintf("swap %s/%s %s%s", humanBytes(sample.SwapUsed), humanBytes(sample.SwapTotal), strings.Repeat("▇", filled), strings.Repeat("░", 8-filled)), fmt.Sprintf("load %.1f/%d", sample.Load1, sample.Cores), fmt.Sprintf("%d agents (%d working, %d waiting, %d stalled?)", s.Agents, s.Working, s.Waiting, s.Stalled), fmt.Sprintf("%d orphans ~%s", s.Orphans, humanBytes(s.Reclaim))}, m.width, " · ")
 }
 func (m *app) footer() string {
-	hints := []string{"enter detail", "/ filter", "s sort", "g group by project", "o open terminal"}
+	hints := []string{"m machine", "enter detail", "/ filter", "s sort", "g group by project", "o open terminal"}
 	if m.tmuxTarget() != "" {
 		hints = append(hints, "a attach tmux")
 	}
@@ -95,11 +95,20 @@ func (m *app) footer() string {
 	var names []string
 	for name, f := range m.snap.Freshness {
 		interval := collector.Cadence(0).Procs
-		switch name {
+		sourceName := name
+		if _, tail, ok := strings.Cut(name, "/"); ok {
+			sourceName = tail
+		}
+		switch sourceName {
 		case "machine":
 			interval = collector.Cadence(0).Machine
 		case "git":
 			interval = 5 * time.Minute
+		}
+		for _, machine := range m.snap.Machines.Rows {
+			if name == machine.MachineID {
+				interval = 15 * time.Second
+			}
 		}
 		stale := f.Stale || m.snap.Mode != "snapshot" && (f.LastOKAt.IsZero() || m.opts.Now().Sub(f.LastOKAt) > 3*interval)
 		if stale {
@@ -161,7 +170,7 @@ func (m *app) View() tea.View {
 		body = m.viewport.View()
 	}
 	if m.help {
-		body = wrapText("1–5 tabs · ↑/↓ or j/k move · enter detail · esc back\n/ filter · enter apply · esc clear · s sort: state, age, mem, project\ng group by project · →/← expand/collapse families and worktrees\nx/space acknowledge Inbox · X acknowledge all (confirm)\nk kill orphan (confirm) · K force (two confirmations)\no open terminal · ? close help · q / ctrl+c quit", m.width)
+		body = wrapText("1–5 tabs · ↑/↓ or j/k move · enter detail · esc back\nm cycle machine scope · / filter · enter apply · esc clear · s sort: state, age, mem, project\ng group by project · →/← expand/collapse families and worktrees\nx/space acknowledge Inbox · X acknowledge all (confirm)\nk kill orphan (confirm) · K force (two confirmations)\no open terminal · ? close help · q / ctrl+c quit", m.width)
 		if m.tmuxTarget() != "" {
 			body += "\na attach tmux"
 		}

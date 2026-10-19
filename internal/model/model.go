@@ -6,18 +6,30 @@ import "time"
 
 // Machine is the host the collector runs on.
 type Machine struct {
-	ID        string    `json:"id"`
-	Hostname  string    `json:"hostname"`
-	OS        string    `json:"os"`
-	Arch      string    `json:"arch"`
-	Cores     int       `json:"cores"`
-	MemTotal  uint64    `json:"mem_total"`
-	FirstSeen time.Time `json:"first_seen"`
-	LastSeen  time.Time `json:"last_seen"`
+	Name          string    `json:"name"`
+	DeviceID      string    `json:"device_id"`
+	Addr          string    `json:"addr"`
+	DrigaVersion  string    `json:"driga_version"`
+	FeedEpoch     string    `json:"feed_epoch"`
+	FeedSeq       int64     `json:"feed_seq"`
+	LastContactAt time.Time `json:"last_contact_at"`
+	LastError     string    `json:"last_error"`
+	ClockSkewMS   int64     `json:"clock_skew_ms"`
+	State         string    `json:"state"`
+	MachineID     string    `json:"machine_id"`
+	ID            string    `json:"id"`
+	Hostname      string    `json:"hostname"`
+	OS            string    `json:"os"`
+	Arch          string    `json:"arch"`
+	Cores         int       `json:"cores"`
+	MemTotal      uint64    `json:"mem_total"`
+	FirstSeen     time.Time `json:"first_seen"`
+	LastSeen      time.Time `json:"last_seen"`
 }
 
 // Proc is one process in a snapshot.
 type Proc struct {
+	MachineID  string    `json:"machine_id"`
 	PID        int32     `json:"pid"`
 	PPID       int32     `json:"ppid"`
 	StartTime  time.Time `json:"start_time"`
@@ -34,6 +46,7 @@ type Proc struct {
 
 // MachineSample is one machine-health reading.
 type MachineSample struct {
+	MachineID     string    `json:"machine_id"`
 	TS            time.Time `json:"ts"`
 	MemUsed       uint64    `json:"mem_used"`
 	MemCompressed uint64    `json:"mem_compressed"`
@@ -46,10 +59,13 @@ type MachineSample struct {
 	Load5         float64   `json:"load5"`
 	Load15        float64   `json:"load15"`
 	Cores         int       `json:"cores"`
+	// PsiMemSome10 is Linux PSI memory "some avg10"; nil when unavailable.
+	PsiMemSome10 *float64 `json:"psi_mem_some10,omitempty"`
 }
 
 // Repo is a git repository (the main worktree's path).
 type Repo struct {
+	MachineID string `json:"machine_id"`
 	ID        int64  `json:"id"`
 	Path      string `json:"path"`
 	Name      string `json:"name"`
@@ -58,6 +74,7 @@ type Repo struct {
 
 // Worktree is one checkout of a repo.
 type Worktree struct {
+	MachineID         string    `json:"machine_id"`
 	ID                int64     `json:"id"`
 	RepoID            int64     `json:"repo_id"`
 	Path              string    `json:"path"`
@@ -98,21 +115,24 @@ type SessionObs struct {
 
 // CompletionEvent is one finished turn.
 type CompletionEvent struct {
-	ID   string    `json:"id"`
-	TS   time.Time `json:"ts"`
-	Text string    `json:"text,omitempty"`
+	MachineID string    `json:"machine_id"`
+	ID        string    `json:"id"`
+	TS        time.Time `json:"ts"`
+	Text      string    `json:"text,omitempty"`
 }
 
 // FileTouch is one file edited by a session.
 type FileTouch struct {
-	Path string    `json:"path"`
-	TS   time.Time `json:"ts"`
+	MachineID string    `json:"machine_id"`
+	Path      string    `json:"path"`
+	TS        time.Time `json:"ts"`
 }
 
 // HookEvent is one line in the spool. Event is one of
 // Stop|Notification|SessionStart|SessionEnd|notify|ack; for ack, Message is
 // the inbox item id.
 type HookEvent struct {
+	MachineID string    `json:"machine_id,omitempty"`
 	TS        time.Time `json:"ts"`
 	Adapter   string    `json:"adapter"`
 	SessionID string    `json:"session_id"`
@@ -123,8 +143,9 @@ type HookEvent struct {
 
 // Session is a stored session with derived fields.
 type Session struct {
-	ID       int64  `json:"id"`
-	ParentID *int64 `json:"parent_id,omitempty"`
+	MachineID string `json:"machine_id"`
+	ID        int64  `json:"id"`
+	ParentID  *int64 `json:"parent_id,omitempty"`
 	SessionObs
 	RepoID     *int64     `json:"repo_id,omitempty"`
 	WorktreeID *int64     `json:"worktree_id,omitempty"`
@@ -136,16 +157,19 @@ type Session struct {
 
 // InboxItem is one event needing the user's attention.
 type InboxItem struct {
-	ID        string     `json:"id"`
-	SessionID int64      `json:"session_id"`
-	Kind      string     `json:"kind"` // finished|waiting
-	TS        time.Time  `json:"ts"`
-	Summary   string     `json:"summary"`
-	AckedAt   *time.Time `json:"acked_at,omitempty"`
+	AckPendingAt *time.Time `json:"ack_pending_at,omitempty"`
+	MachineID    string     `json:"machine_id"`
+	ID           string     `json:"id"`
+	SessionID    int64      `json:"session_id"`
+	Kind         string     `json:"kind"` // finished|waiting
+	TS           time.Time  `json:"ts"`
+	Summary      string     `json:"summary"`
+	AckedAt      *time.Time `json:"acked_at,omitempty"`
 }
 
 // Orphan is a process tree left behind by a dead agent session.
 type Orphan struct {
+	MachineID string    `json:"machine_id"`
 	ID        string    `json:"id"` // root_pid:start_unix
 	RootPID   int32     `json:"root_pid"`
 	StartTime time.Time `json:"start_time"`
@@ -171,14 +195,16 @@ type Conflict struct {
 
 // Offset is a tail position in a log file.
 type Offset struct {
-	Inode uint64    `json:"inode"`
-	Size  int64     `json:"size"`
-	Pos   int64     `json:"pos"`
-	Mtime time.Time `json:"mtime"`
+	MachineID string    `json:"machine_id"`
+	Inode     uint64    `json:"inode"`
+	Size      int64     `json:"size"`
+	Pos       int64     `json:"pos"`
+	Mtime     time.Time `json:"mtime"`
 }
 
 // SourceStatus records a collection source's freshness.
 type SourceStatus struct {
+	MachineID   string    `json:"machine_id"`
 	Name        string    `json:"name"`
 	LastOKAt    time.Time `json:"last_ok_at"`
 	LastError   string    `json:"last_error,omitempty"`
@@ -187,12 +213,14 @@ type SourceStatus struct {
 
 // Gap is a period the collector was not running.
 type Gap struct {
-	From time.Time `json:"from"`
-	To   time.Time `json:"to"`
+	MachineID string    `json:"machine_id"`
+	From      time.Time `json:"from"`
+	To        time.Time `json:"to"`
 }
 
 // Event is a stored hook event attributed to a session.
 type Event struct {
+	MachineID  string    `json:"machine_id"`
 	Adapter    string    `json:"adapter"`
 	ExternalID string    `json:"external_id"`
 	TS         time.Time `json:"ts"`

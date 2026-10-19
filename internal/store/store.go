@@ -45,6 +45,8 @@ type querier struct {
 	conn      queryDB
 	ctx       context.Context
 	machineID string
+	localID   string
+	dataDir   string
 }
 
 // Store owns a single connection so PRAGMA data_version always observes the same
@@ -59,16 +61,29 @@ type Store struct {
 // It must not escape the callback passed to Store.Tx.
 type Tx struct{ querier }
 
+// MachineTx stamps writes with one machine's identity in the parent transaction.
+// It must not escape the Store.Tx callback.
+type MachineTx struct{ *Tx }
+
+// ForMachine returns a writer for id without changing the default local writer.
+func (tx *Tx) ForMachine(id string) *MachineTx {
+	q := tx.querier
+	q.machineID = id
+	return &MachineTx{Tx: &Tx{querier: q}}
+}
+
 // Open opens a database and migrates writable stores. Disk databases and their
 // parent directories are restricted to the owner before SQLite opens the file.
 func Open(path string, mode Mode) (_ *Store, retErr error) {
 	var dsn string
+	var dataDir string
 	switch mode {
 	case ReadWrite, ReadOnly:
 		abs, err := filepath.Abs(path)
 		if err != nil {
 			return nil, err
 		}
+		dataDir = filepath.Dir(abs)
 		if mode == ReadWrite {
 			dir := filepath.Dir(abs)
 			if err := os.MkdirAll(dir, 0700); err != nil {
@@ -128,7 +143,15 @@ func Open(path string, mode Mode) (_ *Store, retErr error) {
 		if err != nil {
 			return nil, err
 		}
-		if _, err := provider.Up(ctx); err != nil {
+		// SQLite table rebuilds require foreign keys disabled outside the
+		// migration transaction. This private single connection is not exposed
+		// until migration completes and constraints have been restored.
+		if _, err := db.ExecContext(ctx, "PRAGMA foreign_keys=OFF"); err != nil {
+			return nil, err
+		}
+		_, migrateErr := provider.Up(ctx)
+		_, fkErr := db.ExecContext(ctx, "PRAGMA foreign_keys=ON")
+		if err := errors.Join(migrateErr, fkErr); err != nil {
 			return nil, fmt.Errorf("migrate: %w", err)
 		}
 		id, err := randomID()
@@ -138,12 +161,19 @@ func Open(path string, mode Mode) (_ *Store, retErr error) {
 		if _, err := db.ExecContext(ctx, "INSERT OR IGNORE INTO meta (machine_id, key, value) VALUES (?, 'machine_id', ?)", id, id); err != nil {
 			return nil, err
 		}
+		epoch, err := randomID()
+		if err != nil {
+			return nil, err
+		}
+		if _, err := db.ExecContext(ctx, "INSERT OR IGNORE INTO meta (machine_id,key,value) SELECT machine_id,'feed_epoch',? FROM meta WHERE key='machine_id'", epoch); err != nil {
+			return nil, err
+		}
 	}
 	var id string
 	if err := db.QueryRowContext(ctx, "SELECT value FROM meta WHERE key = 'machine_id'").Scan(&id); err != nil {
 		return nil, fmt.Errorf("machine identity: %w", err)
 	}
-	return &Store{querier: querier{conn: db, ctx: ctx, machineID: id}, db: db}, nil
+	return &Store{querier: querier{conn: db, ctx: ctx, machineID: id, localID: id, dataDir: dataDir}, db: db}, nil
 }
 
 func randomID() (string, error) {
@@ -157,6 +187,9 @@ func randomID() (string, error) {
 // MachineID returns the persistent identity stamped on writes by this store.
 func (q *querier) MachineID() string { return q.machineID }
 
+// DataDir returns the database directory, or empty for an in-memory store.
+func (q *querier) DataDir() string { return q.dataDir }
+
 // Close releases the database connection.
 func (s *Store) Close() error { return s.db.Close() }
 
@@ -168,7 +201,7 @@ func (s *Store) Tx(ctx context.Context, fn func(*Tx) error) error {
 		return err
 	}
 	defer tx.Rollback()
-	if err := fn(&Tx{querier{conn: tx, ctx: ctx, machineID: s.machineID}}); err != nil {
+	if err := fn(&Tx{querier{conn: tx, ctx: ctx, machineID: s.machineID, localID: s.localID, dataDir: s.dataDir}}); err != nil {
 		return err
 	}
 	return tx.Commit()

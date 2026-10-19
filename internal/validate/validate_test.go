@@ -22,6 +22,7 @@ import (
 	"github.com/labstack/driga/internal/config"
 	"github.com/labstack/driga/internal/derive"
 	"github.com/labstack/driga/internal/fixturegen"
+	"github.com/labstack/driga/internal/fleet"
 	"github.com/labstack/driga/internal/platform"
 	"github.com/labstack/driga/internal/signatures"
 	"github.com/labstack/driga/internal/store"
@@ -49,7 +50,7 @@ func TestHeldOutFixtures(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, required := range []string{"one-repo-one-agent", "many-repos-many-worktrees", "untested-versions", "linux-paths", "crash-partial-lines", "orphan-broker-tree", "real-second-machine"} {
+	for _, required := range []string{"one-repo-one-agent", "many-repos-many-worktrees", "untested-versions", "linux-paths", "linux-vm-synthetic", "crash-partial-lines", "orphan-broker-tree", "real-second-machine"} {
 		t.Run(required, func(t *testing.T) {
 			if !found[required] {
 				if required == "real-second-machine" {
@@ -66,6 +67,9 @@ func TestHeldOutFixtures(t *testing.T) {
 	}
 	sort.Strings(names)
 	for _, name := range names {
+		if filepath.Base(sets[name]) == "fleet-traces-synthetic" {
+			continue
+		} // Exercised by TestHeldOutFleetTraces.
 		t.Run("snapshot/"+name, func(t *testing.T) { validateFixture(t, sets[name]) })
 	}
 }
@@ -224,6 +228,28 @@ func validateFixture(t *testing.T, src string) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	if filepath.Base(src) == "linux-vm-synthetic" {
+		pid, ok := platform.UserSubreaper(filepath.Join(home, "proc"), 1001)
+		if !ok || pid != 700 {
+			t.Fatalf("synthetic user manager: %d %v", pid, ok)
+		}
+		procs, err := fake.Procs(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		direct := derive.FindOrphans(derive.NewProcIndex(procs), ss, sigs, sc.Now, cfg.OrphanMinAge, nil, derive.WithSubreaper(pid))
+		ids := []string{}
+		for _, o := range direct {
+			ids = append(ids, o.ID)
+			if !strings.Contains(strings.Join(o.Evidence, ";"), "reparented to systemd --user") || o.ProcCount != 2 || o.Young || o.Verified {
+				t.Errorf("Linux orphan evidence: %+v", o)
+			}
+		}
+		if diff := cmp.Diff(want.Orphans, ids); diff != "" {
+			t.Errorf("direct subreaper derivation: -expected +got:\n%s", diff)
+		}
+	}
 	got := expected{Sessions: []sessionLabel{}, Orphans: []string{}, Conflicts: []conflictLabel{}}
 	for _, s := range ss {
 		got.Sessions = append(got.Sessions, sessionLabel{s.ExternalID, derive.Display(s.Label, s.Heuristic)})
@@ -362,4 +388,74 @@ func conflictDelta(want, got []conflictLabel, home string) (missing, extra []str
 	sort.Strings(missing)
 	sort.Strings(extra)
 	return missing, extra
+}
+
+// TestHeldOutFleetTraces compares independently authored expectations with the
+// real transactional applier; rejected batches must preserve rows and cursor.
+func TestHeldOutFleetTraces(t *testing.T) {
+	const root = "../../testdata/fixtures/fleet/heldout-v1/heldout/fleet-traces-synthetic"
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("CODEX_HOME", filepath.Join(home, ".codex"))
+	t.Setenv("DRIGA_DATA_DIR", filepath.Join(home, "data"))
+	t.Setenv("DRIGA_SPOOL_DIR", filepath.Join(home, "spool"))
+	t.Setenv("DRIGA_CONFIG", filepath.Join(home, "config.toml"))
+	type outcome struct {
+		Name     string         `json:"name"`
+		Rejected bool           `json:"rejected"`
+		Epoch    string         `json:"epoch"`
+		Seq      int64          `json:"seq"`
+		State    string         `json:"state"`
+		Sessions []sessionLabel `json:"sessions"`
+	}
+	var want []outcome
+	readJSON(t, filepath.Join(root, "expected.json"), &want)
+	var trace struct {
+		MachineID string `json:"machine_id"`
+		Steps     []struct {
+			Name      string          `json:"name"`
+			At        time.Time       `json:"at"`
+			Snapshot  *fleet.Snapshot `json:"snapshot"`
+			Rows      []fleet.FeedRow `json:"rows"`
+			Cursor    fleet.Cursor    `json:"cursor"`
+			ContactAt time.Time       `json:"contact_at"`
+			Refresh   bool            `json:"refresh"`
+		} `json:"steps"`
+	}
+	readJSON(t, filepath.Join(root, "trace.json"), &trace)
+	if len(want) == 0 || len(want) != len(trace.Steps) {
+		t.Fatal("one handwritten outcome required per step")
+	}
+	st, err := store.Open("", store.Memory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	for i, step := range trace.Steps {
+		t.Run(step.Name, func(t *testing.T) {
+			err := st.Tx(context.Background(), func(tx *store.Tx) error {
+				if step.Refresh {
+					return fleet.RefreshStates(tx, step.At)
+				}
+				return fleet.ApplyBatch(tx, fleet.Batch{MachineID: trace.MachineID, Snapshot: step.Snapshot, Rows: step.Rows, Cursor: step.Cursor, ContactAt: step.ContactAt}, step.At)
+			})
+			got := outcome{Name: step.Name, Rejected: err != nil, Sessions: []sessionLabel{}}
+			ms, e := st.Machines()
+			if e != nil || len(ms) != 1 {
+				t.Fatalf("machines: %v %v (apply: %v)", ms, e, err)
+			}
+			got.Epoch, got.Seq, got.State = ms[0].FeedEpoch, ms[0].FeedSeq, ms[0].State
+			ss, e := st.SessionsScoped(store.SessionFilter{IncludeEnded: true}, store.Scope{Machines: []string{trace.MachineID}})
+			if e != nil {
+				t.Fatal(e)
+			}
+			for _, s := range ss {
+				got.Sessions = append(got.Sessions, sessionLabel{s.ExternalID, derive.Display(s.Label, s.Heuristic)})
+			}
+			sort.Slice(got.Sessions, func(i, j int) bool { return got.Sessions[i].ExternalID < got.Sessions[j].ExternalID })
+			if diff := cmp.Diff(want[i], got); diff != "" {
+				t.Errorf("held-out fleet mismatch (§14/§13), -expected +got:\n%s (apply: %v)", diff, err)
+			}
+		})
+	}
 }

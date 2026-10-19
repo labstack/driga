@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -185,6 +186,9 @@ func TestTask18CommandParsing(t *testing.T) {
 }
 
 func TestServiceLogsLast50(t *testing.T) {
+	if runtime.GOOS == "linux" {
+		t.Skip("linux reads collector logs from journalctl; see TestServiceLogsLinux")
+	}
 	g, out := initFixture(t, "")
 	if err := os.MkdirAll(filepath.Dir(service.LogPath()), 0700); err != nil {
 		t.Fatal(err)

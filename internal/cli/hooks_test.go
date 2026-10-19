@@ -2,11 +2,54 @@ package cli
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func TestHooksOTLPCLI(t *testing.T) {
+	g, out := initFixture(t, "y\n")
+	cmd := HooksInstallCmd{HooksOptions: HooksOptions{Agent: "claude", OTLP: true, Traces: true, DryRun: true}}
+	if err := cmd.Run(g); err != nil {
+		t.Fatal(err)
+	}
+	p := filepath.Join(os.Getenv("HOME"), ".claude", "settings.json")
+	if _, e := os.Stat(p); !os.IsNotExist(e) {
+		t.Fatal("preview wrote settings", e)
+	}
+	if !strings.Contains(out.String(), "OTEL_TRACES_EXPORTER") {
+		t.Fatal(out.String())
+	}
+	cmd.DryRun = false
+	g.Stdin = strings.NewReader("y\n")
+	if err := cmd.Run(g); err != nil {
+		t.Fatal(err)
+	}
+	b, e := os.ReadFile(p)
+	if e != nil {
+		t.Fatal(e)
+	}
+	var v map[string]any
+	if e = json.Unmarshal(b, &v); e != nil {
+		t.Fatal(e)
+	}
+	if v["env"].(map[string]any)["OTEL_LOGS_EXPORTER"] != "otlp" {
+		t.Fatal(v)
+	}
+	if err := cmd.Run(g); err == nil {
+		t.Fatal("must refuse existing telemetry")
+	}
+	g.Stdin = strings.NewReader("y\n")
+	if err := (HooksUninstallCmd{HooksOptions: HooksOptions{Agent: "claude", OTLP: true}}).Run(g); err != nil {
+		t.Fatal(err)
+	}
+	b, _ = os.ReadFile(p)
+	if strings.Contains(string(b), "OTEL_") {
+		t.Fatal(string(b))
+	}
+}
 
 func TestHooksInstallUsesUnresolvedExecutable(t *testing.T) {
 	home := t.TempDir()

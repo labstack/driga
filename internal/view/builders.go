@@ -59,7 +59,7 @@ func procTree(s model.Session, idx derive.ProcIndex) []model.Proc {
 }
 
 // Agents builds families in activity order, retaining children next to parents.
-func Agents(r Reader, f AgentFilter, now time.Time) (AgentsView, error) {
+func agentsLocal(r Reader, f AgentFilter, now time.Time) (AgentsView, error) {
 	v := AgentsView{Rows: []AgentRow{}}
 	ss, err := sessions(r, f, now)
 	if err != nil {
@@ -154,7 +154,7 @@ func Agents(r Reader, f AgentFilter, now time.Time) (AgentsView, error) {
 }
 
 // Agent reads one session and its last day's files, process tree and events.
-func Agent(r Reader, id int64, now time.Time) (AgentView, error) {
+func agentLocal(r Reader, id int64, now time.Time) (AgentView, error) {
 	v := AgentView{MachineID: r.MachineID(), ObservedAt: now, Files: []FileRow{}, Procs: []ProcRow{}, Events: []EventRow{}}
 	s, err := r.Session(id)
 	if err != nil {
@@ -223,7 +223,7 @@ func projectRow(r Reader, repo model.Repo, ss []model.Session, now time.Time) (P
 }
 
 // Projects composes sourced project summaries and applies activity/risk filters.
-func Projects(r Reader, f Filter, now time.Time) (ProjectsView, error) {
+func projectsLocal(r Reader, f Filter, now time.Time) (ProjectsView, error) {
 	v := ProjectsView{Rows: []ProjectRow{}}
 	repos, err := r.Repos()
 	if err != nil {
@@ -267,7 +267,7 @@ func Projects(r Reader, f Filter, now time.Time) (ProjectsView, error) {
 }
 
 // Where reads a canonical repo's status, worktrees, agents and latest handoffs.
-func Where(r Reader, project string, now time.Time) (WhereView, error) {
+func whereLocal(r Reader, project string, now time.Time) (WhereView, error) {
 	v := WhereView{WorktreeRows: []WorktreeRow{}, Handoffs: []HandoffRow{}}
 	repos, err := r.Repos()
 	if err != nil {
@@ -285,7 +285,7 @@ func Where(r Reader, project string, now time.Time) (WhereView, error) {
 		if err != nil {
 			return v, err
 		}
-		v.Agents, err = Agents(r, AgentFilter{Project: project}, now)
+		v.Agents, err = agentsLocal(r, AgentFilter{Project: project}, now)
 		return v, err
 	}
 	return v, fmt.Errorf("unknown project %q", project)
@@ -302,7 +302,7 @@ func visibleSessions(ss []model.Session, now time.Time) []model.Session {
 }
 
 // Inbox reads events; no acknowledgment or spool mutation occurs here.
-func Inbox(r Reader, f Filter, now time.Time) (InboxView, error) {
+func inboxLocal(r Reader, f Filter, now time.Time) (InboxView, error) {
 	v := InboxView{Rows: []InboxRow{}}
 	items, err := r.Inbox(f.Since, f.All)
 	if err != nil {
@@ -343,7 +343,7 @@ func sessionProject(s model.Session, repos []model.Repo, path string) bool {
 }
 
 // Conflicts recomputes collisions using the current read time and stored edits.
-func Conflicts(r Reader, f Filter, now time.Time) (ConflictsView, error) {
+func conflictsLocal(r Reader, f Filter, now time.Time) (ConflictsView, error) {
 	v := ConflictsView{Current: []ConflictRow{}, Recent: []ConflictRow{}}
 	ss, err := sessions(r, f, now)
 	if err != nil {
@@ -393,7 +393,7 @@ func Conflicts(r Reader, f Filter, now time.Time) (ConflictsView, error) {
 }
 
 // Orphans reads stored reclaim candidates, optionally within a repository.
-func Orphans(r Reader, f Filter, now time.Time) (OrphansView, error) {
+func orphansLocal(r Reader, f Filter, now time.Time) (OrphansView, error) {
 	v := OrphansView{Rows: []OrphanRow{}}
 	os, err := r.Orphans()
 	if err != nil {
@@ -435,7 +435,7 @@ func Orphans(r Reader, f Filter, now time.Time) (OrphansView, error) {
 }
 
 // Machine reads the latest health sample and aggregates agent RSS by role.
-func Machine(r Reader, f Filter, now time.Time) (MachineView, error) {
+func machineLocal(r Reader, f Filter, now time.Time) (MachineView, error) {
 	v := MachineView{MachineID: r.MachineID(), Memory: []MemoryRow{}}
 	sample, err := r.LatestSample()
 	if err != nil && !errors.Is(err, store.ErrNotFound) {
@@ -489,10 +489,10 @@ func Machine(r Reader, f Filter, now time.Time) (MachineView, error) {
 }
 
 // Summary combines live family counts, unacknowledged inbox and machine health.
-func Summary(r Reader, f Filter, now time.Time) (SummaryView, error) {
+func summaryLocal(r Reader, f Filter, now time.Time) (SummaryView, error) {
 	v := SummaryView{MachineID: r.MachineID()}
 	f.All = false
-	agents, err := Agents(r, f, now)
+	agents, err := agentsLocal(r, f, now)
 	if err != nil {
 		return v, err
 	}
@@ -512,17 +512,17 @@ func Summary(r Reader, f Filter, now time.Time) (SummaryView, error) {
 		}
 	}
 	count(agents.Rows)
-	inbox, err := Inbox(r, f, now)
+	inbox, err := inboxLocal(r, f, now)
 	if err != nil {
 		return v, err
 	}
 	v.Inbox = len(inbox.Rows)
-	machine, err := Machine(r, f, now)
+	machine, err := machineLocal(r, f, now)
 	if err != nil {
 		return v, err
 	}
 	v.Sample = machine.Sample
-	orphans, err := Orphans(r, f, now)
+	orphans, err := orphansLocal(r, f, now)
 	if err != nil {
 		return v, err
 	}

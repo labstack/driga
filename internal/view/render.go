@@ -62,12 +62,25 @@ func Render(w io.Writer, v any, opts RenderOpts) error {
 		return lipgloss.NewStyle().Foreground(c).Render(cell(s))
 	}
 	switch x := v.(type) {
+	case MachinesView:
+		fmt.Fprintln(tw, "NAME\tID\tHOST\tOS\tSTATE\tLAST SEEN\tAGENTS\tINBOX\tSKEW\tLAST ERROR")
+		for _, m := range x.Rows {
+			seen := "never"
+			if !lastSeen(m.Machine).IsZero() {
+				seen = age(m.LastSeenAge) + " ago"
+			}
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%d\t%d\t%s\t%s\n", cell(MachineName(m.Machine)), cell(m.MachineID), cell(m.Hostname), cell(m.OS), cell(m.State), seen, m.Agents, m.Inbox, cell(m.SkewWarning), cell(m.LastError))
+		}
+		if x.Warning != "" {
+			fmt.Fprintln(tw, cell(x.Warning))
+		}
 	case SummaryView:
 		fmt.Fprintf(tw, "%d agents (%d working, %d waiting, %d stalled?) · inbox %d · swap %s/%s · load %.0f/%d · orphans %d ~%s · %s\n", x.Agents, x.Working, x.Waiting, x.Stalled, x.Inbox, humanBytes(x.Sample.SwapUsed), humanBytes(x.Sample.SwapTotal), x.Sample.Load1, x.Sample.Cores, x.Orphans, humanBytes(x.Reclaim), opts.Envelope.Mode)
 	case AgentsView:
 		renderAgents(tw, x, label)
 	case AgentView:
 		s := x.Session
+		fmt.Fprintf(tw, "Machine:\t%s\n", cell(originLabel(x.MachineID, x.MachineFresh)))
 		fmt.Fprintln(tw, "ID\tAGENT\tSTATE\tPROJECT / CWD\tBRANCH\tTITLE")
 		fmt.Fprintf(tw, "%d\t%s\t%s\t%s\t%s\t%s\n", s.ID, cell(s.Adapter), label(x.Label), cell(s.Cwd), cell(s.Branch), cell(s.Title))
 		fmt.Fprintf(tw, "Evidence:\t%s\nObserved at:\t%s\n", cell(s.Evidence), x.ObservedAt.Format(time.RFC3339))
@@ -109,8 +122,17 @@ func Render(w io.Writer, v any, opts RenderOpts) error {
 			fmt.Fprintf(tw, "%s\t%s\n", cell(h.Text), h.TS.Format(time.RFC3339))
 		}
 	case InboxView:
+		ids := []string{}
+		stale := false
+		for _, r := range x.Rows {
+			ids = append(ids, r.MachineID)
+			stale = stale || r.Stale
+		}
+		multi := multipleMachines(ids) || stale
+		fmt.Fprint(tw, machineHeading(multi))
 		fmt.Fprintln(tw, "ID\tKIND\tAGE\tPROJECT\tSUMMARY")
 		for _, i := range x.Rows {
+			fmt.Fprint(tw, machinePrefix(multi, i.MachineID, i.MachineFresh))
 			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", cell(i.ID), label(i.Kind), age(i.Age), cell(i.Project), cell(i.Summary))
 		}
 	case ConflictsView:
@@ -119,8 +141,17 @@ func Render(w io.Writer, v any, opts RenderOpts) error {
 		fmt.Fprintln(tw, "recent overlap (last 6h)")
 		renderConflicts(tw, x.Recent)
 	case OrphansView:
+		ids := []string{}
+		stale := false
+		for _, r := range x.Rows {
+			ids = append(ids, r.MachineID)
+			stale = stale || r.Stale
+		}
+		multi := multipleMachines(ids) || stale
+		fmt.Fprint(tw, machineHeading(multi))
 		fmt.Fprintln(tw, "ID\tAGE\tSIGNATURE\tPROCS\t~RECLAIM\tCWD\tYOUNG\tVERIFIED\tEVIDENCE")
 		for _, o := range x.Rows {
+			fmt.Fprint(tw, machinePrefix(multi, o.MachineID, o.MachineFresh))
 			fmt.Fprintf(tw, "%s\t%s\t%s\t%d\t~%s\t%s\t%t\t%t\t%s\n", cell(o.ID), age(o.Age), cell(o.Signature), o.ProcCount, humanBytes(o.RSSTotal), cell(o.Cwd), o.Young, o.Verified, cell(strings.Join(o.Evidence, "; ")))
 		}
 		if opts.Envelope.Mode == "snapshot" {
@@ -128,13 +159,29 @@ func Render(w io.Writer, v any, opts RenderOpts) error {
 		}
 		fmt.Fprintln(tw, "driga orphans kill <id>")
 	case MachineView:
-		s := x.Sample
+		hosts := x.Machines
+		if len(hosts) == 0 {
+			hosts = []MachineView{x}
+		}
+		ids := []string{}
+		for _, h := range hosts {
+			ids = append(ids, h.MachineID)
+		}
+		multi := multipleMachines(ids)
+		fmt.Fprint(tw, machineHeading(multi))
 		fmt.Fprintln(tw, "MEMORY\tCOMPRESSED\tSWAP\tLOAD (1/5/15)\tCORES\tDISK FREE\tPRESSURE FREE")
-		fmt.Fprintf(tw, "%s/%s\t%s\t%s/%s\t%.1f/%.1f/%.1f\t%d\t%s\t%.1f\n", humanBytes(s.MemUsed), humanBytes(s.MemTotal), humanBytes(s.MemCompressed), humanBytes(s.SwapUsed), humanBytes(s.SwapTotal), s.Load1, s.Load5, s.Load15, s.Cores, humanBytes(s.DiskFree), s.PressureFree)
+		for _, h := range hosts {
+			s := h.Sample
+			fmt.Fprint(tw, machinePrefix(multi, h.MachineID, h.MachineFresh))
+			fmt.Fprintf(tw, "%s/%s\t%s\t%s/%s\t%.1f/%.1f/%.1f\t%d\t%s\t%.1f\n", humanBytes(s.MemUsed), humanBytes(s.MemTotal), humanBytes(s.MemCompressed), humanBytes(s.SwapUsed), humanBytes(s.SwapTotal), s.Load1, s.Load5, s.Load15, s.Cores, humanBytes(s.DiskFree), s.PressureFree)
+		}
+		fmt.Fprint(tw, machineHeading(multi))
 		fmt.Fprintln(tw, "AGENT\tROLE\tMEM")
 		for _, m := range x.Memory {
+			fmt.Fprint(tw, machinePrefix(multi, m.MachineID, m.MachineFresh))
 			fmt.Fprintf(tw, "%s\t%s\t%s\n", cell(m.Agent), cell(m.Role), humanBytes(m.RSS))
 		}
+
 	default:
 		return fmt.Errorf("unsupported view %T", v)
 	}
@@ -167,6 +214,19 @@ func Render(w io.Writer, v any, opts RenderOpts) error {
 }
 
 func renderAgents(w io.Writer, v AgentsView, label func(string) string) {
+	ids := []string{}
+	stale := false
+	var collect func([]AgentRow)
+	collect = func(rows []AgentRow) {
+		for _, r := range rows {
+			ids = append(ids, r.MachineID)
+			stale = stale || r.Stale
+			collect(r.Children)
+		}
+	}
+	collect(v.Rows)
+	multi := multipleMachines(ids) || stale
+	fmt.Fprint(w, machineHeading(multi))
 	fmt.Fprintln(w, "ID\tAGENT\tSTATE\tORIGIN\tPROJECT\tBRANCH\tAGE\tMEM\tTITLE\tEVIDENCE")
 	var rows func([]AgentRow, int)
 	rows = func(rs []AgentRow, depth int) {
@@ -179,6 +239,7 @@ func renderAgents(w io.Writer, v AgentsView, label func(string) string) {
 			if r.FinishedChildren > 0 {
 				title += fmt.Sprintf(" (%d workers finished)", r.FinishedChildren)
 			}
+			fmt.Fprint(w, machinePrefix(multi, r.MachineID, r.MachineFresh))
 			fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", r.ID, name, label(r.Label), cell(r.Origin), cell(r.Project), cell(r.Branch), age(r.Age), humanBytes(r.Mem), title, cell(r.Evidence))
 			rows(r.Children, depth+1)
 		}
@@ -187,6 +248,14 @@ func renderAgents(w io.Writer, v AgentsView, label func(string) string) {
 }
 
 func renderProjects(w io.Writer, v ProjectsView, now time.Time) {
+	ids := []string{}
+	stale := false
+	for _, r := range v.Rows {
+		ids = append(ids, r.MachineID)
+		stale = stale || r.Stale
+	}
+	multi := multipleMachines(ids) || stale
+	fmt.Fprint(w, machineHeading(multi))
 	fmt.Fprintln(w, "PROJECT\tACTIVITY\tAGENTS\tDIRTY\tUNPUSHED\tWORKTREES\tWHERE")
 	for _, r := range v.Rows {
 		where := ""
@@ -194,13 +263,23 @@ func renderProjects(w io.Writer, v ProjectsView, now time.Time) {
 			p := r.Status.Where[0]
 			where = fmt.Sprintf("%s (%s, %s)", cell(p.Text), cell(p.Source), age(now.Sub(p.At)))
 		}
+		fmt.Fprint(w, machinePrefix(multi, r.MachineID, r.MachineFresh))
 		fmt.Fprintf(w, "%s\t%s\t%d\t%d\t%d\t%d\t%s\n", cell(r.Status.Repo.Name), r.Status.Activity, r.Status.LiveAgents, r.Dirty, r.Unpushed, r.Worktrees, where)
 	}
 }
 
 func renderConflicts(w io.Writer, rs []ConflictRow) {
+	ids := []string{}
+	stale := false
+	for _, r := range rs {
+		ids = append(ids, r.MachineID)
+		stale = stale || r.Stale
+	}
+	multi := multipleMachines(ids) || stale
+	fmt.Fprint(w, machineHeading(multi))
 	fmt.Fprintln(w, "KIND\tPATH\tSESSIONS\tFAMILY")
 	for _, c := range rs {
+		fmt.Fprint(w, machinePrefix(multi, c.MachineID, c.MachineFresh))
 		fmt.Fprintf(w, "%s\t%s\t%v\t%t\n", cell(c.Kind), cell(c.Path), c.SessionIDs, c.Family)
 	}
 }
@@ -221,4 +300,34 @@ func cell(s string) string {
 		}
 		return r
 	}, s)
+}
+
+func multipleMachines(ids []string) bool {
+	seen := map[string]bool{}
+	for _, id := range ids {
+		seen[id] = true
+	}
+	return len(seen) > 1
+}
+func machineHeading(show bool) string {
+	if show {
+		return "MACHINE\t"
+	}
+	return ""
+}
+func originLabel(id string, f MachineFresh) string {
+	name := f.MachineName
+	if name == "" {
+		name = id
+	}
+	if f.Stale {
+		name += " (" + f.State + " " + age(f.LastSeenAge) + ")"
+	}
+	return name
+}
+func machinePrefix(show bool, id string, f MachineFresh) string {
+	if show {
+		return cell(originLabel(id, f)) + "\t"
+	}
+	return ""
 }

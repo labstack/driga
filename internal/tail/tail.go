@@ -4,6 +4,7 @@ package tail
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -35,6 +36,42 @@ type Result struct {
 // A partial line, even an oversized one, leaves Next.Pos at its start and is
 // rescanned on the next call. File size and mtime describe the opening snapshot.
 func Read(path string, prev model.Offset, maxBytes int64) (Result, error) {
+	return read(path, prev, maxBytes, nil, nil)
+}
+
+// Two reusable line buffers bound concurrent streaming reads across adapters to
+// 2 * MaxLine, rather than one entire read budget for each parsing worker.
+var scanBuffers = func() chan []byte {
+	pool := make(chan []byte, 2)
+	pool <- nil
+	pool <- nil
+	return pool
+}()
+
+// Scan folds complete lines with their absolute offsets. The callback must not
+// retain line, which is reused on the next call. Result.Lines remains empty;
+// offsets, budgets, oversized records and partial lines follow Read semantics.
+func Scan(ctx context.Context, path string, prev model.Offset, maxBytes int64, visit func(line []byte, offset int64)) (Result, error) {
+	if err := ctx.Err(); err != nil {
+		return Result{}, err
+	}
+	var buffer []byte
+	select {
+	case buffer = <-scanBuffers:
+	case <-ctx.Done():
+		return Result{}, ctx.Err()
+	}
+	defer func() { scanBuffers <- buffer }()
+	return read(path, prev, maxBytes, &buffer, func(line []byte, offset int64) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		visit(line, offset)
+		return nil
+	})
+}
+
+func read(path string, prev model.Offset, maxBytes int64, buffer *[]byte, visit func([]byte, int64) error) (Result, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return Result{}, err
@@ -94,11 +131,24 @@ func Read(path string, prev model.Offset, maxBytes int64) (Result, error) {
 			if end-pos > remaining && pos != start {
 				return r, nil
 			}
-			line := make([]byte, int(end-pos-1))
+			size := int(end - pos - 1)
+			var line []byte
+			if buffer == nil {
+				line = make([]byte, size)
+			} else {
+				if cap(*buffer) < size {
+					*buffer = make([]byte, size)
+				}
+				line = (*buffer)[:size]
+			}
 			if _, err := f.ReadAt(line, pos); err != nil {
 				return r, err
 			}
-			r.Lines = append(r.Lines, line)
+			if visit == nil {
+				r.Lines = append(r.Lines, line)
+			} else if err := visit(line, pos); err != nil {
+				return r, err
+			}
 		}
 		pos = end
 		r.Next.Pos = pos

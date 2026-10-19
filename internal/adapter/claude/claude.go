@@ -165,7 +165,7 @@ func (a claudeAdapter) Collect(ctx context.Context, env adapter.Env) ([]model.Se
 						break
 					}
 					results[j].obs.SourcePath = path
-					ws, err := tailTranscript(path, &results[j].obs, localEnv)
+					ws, err := tailTranscript(ctx, path, &results[j].obs, localEnv)
 					results[j].warnings = append(results[j].warnings, ws...)
 					if err != nil {
 						results[j].err = err

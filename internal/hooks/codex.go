@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"reflect"
 	"time"
 
 	"github.com/pelletier/go-toml/v2"
@@ -11,6 +12,40 @@ import (
 
 // ErrNotifyInUse means another program already owns Codex's notify setting.
 var ErrNotifyInUse = errors.New("Codex notify is already in use")
+
+func codexOTLP() map[string]any {
+	return map[string]any{
+		"log_user_prompt": false,
+		"exporter":        map[string]any{"otlp-http": map[string]any{"endpoint": "http://127.0.0.1:7418/v1/logs", "protocol": "json"}},
+	}
+}
+
+// CodexInstallOTLP configures the documented logs exporter; Codex facts stay unmapped.
+// The traces option applies only to Claude's documented spans.
+func CodexInstallOTLP(path string, _ bool, dryRun bool, now time.Time) (Diff, error) {
+	d, settings, err := readCodex(path)
+	if err != nil {
+		return d, err
+	}
+	if _, exists := settings["otel"]; exists {
+		return d, ErrTelemetryInUse
+	}
+	settings["otel"] = codexOTLP()
+	return finishCodex(d, settings, dryRun, now)
+}
+
+// CodexUninstallOTLP removes only the exact Driga metadata-only loopback exporter.
+func CodexUninstallOTLP(path string, dryRun bool) (Diff, error) {
+	d, settings, err := readCodex(path)
+	if err != nil {
+		return d, err
+	}
+	if !reflect.DeepEqual(settings["otel"], codexOTLP()) {
+		return d, nil
+	}
+	delete(settings, "otel")
+	return finishCodex(d, settings, dryRun, time.Now())
+}
 
 // CodexInstall sets notify only when no command is configured.
 func CodexInstall(configPath, driga string, dryRun bool, now time.Time) (Diff, error) {

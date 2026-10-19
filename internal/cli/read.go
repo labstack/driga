@@ -67,7 +67,13 @@ type OrphansCmd struct {
 type OrphansListCmd struct{}
 
 // MachineCmd shows health and top agent memory users.
-type MachineCmd struct{}
+type MachineCmd struct {
+	Show    MachineShowCmd    `cmd:"" default:"withargs" help:"Show machine health."`
+	ResetID MachineResetIDCmd `cmd:"" name:"reset-id" help:"Regenerate cloned machine identity."`
+}
+
+// MachineShowCmd shows health and top agent memory users.
+type MachineShowCmd struct{}
 
 // Run renders the summary.
 func (SummaryCmd) Run(g *Globals) error {
@@ -82,12 +88,12 @@ func (c AgentsCmd) Run(g *Globals) error {
 // Run renders session detail.
 func (c AgentCmd) Run(g *Globals) error {
 	return runRead(g, view.Filter{}, "", func(r view.Reader, f view.Filter, now time.Time) (any, error) {
-		v, err := view.Agent(r, c.ID, now)
+		v, err := view.Agent(r, c.ID, now, f.Scope)
 		if err != nil {
 			return v, err
 		}
 		if f.Project != "" {
-			repos, err := r.Repos()
+			repos, err := r.ReadMachine(v.MachineID).Repos()
 			if err != nil {
 				return v, err
 			}
@@ -112,7 +118,9 @@ func (c ProjectsCmd) Run(g *Globals) error {
 
 // Run renders a project's details.
 func (c WhereCmd) Run(g *Globals) error {
-	return runRead(g, view.Filter{}, c.Project, func(r view.Reader, f view.Filter, now time.Time) (any, error) { return view.Where(r, f.Project, now) })
+	return runRead(g, view.Filter{}, c.Project, func(r view.Reader, f view.Filter, now time.Time) (any, error) {
+		return view.Where(r, f.Project, now, f.Scope)
+	})
 }
 
 // Run renders inbox events.
@@ -131,7 +139,7 @@ func (OrphansListCmd) Run(g *Globals) error {
 }
 
 // Run renders machine health.
-func (MachineCmd) Run(g *Globals) error {
+func (MachineShowCmd) Run(g *Globals) error {
 	return runRead(g, view.Filter{}, "", func(r view.Reader, f view.Filter, now time.Time) (any, error) { return view.Machine(r, f, now) })
 }
 
@@ -187,17 +195,16 @@ func readOnce(ctx context.Context, g *Globals, base view.Filter, project string,
 	if project == "" {
 		project = g.Project
 	}
-	if project != "" {
-		f.Project, err = resolveProject(st, project)
-		if err != nil {
-			return err
-		}
-	}
+
 	// One read transaction keeps all view rows and metadata on the same snapshot.
 	var data any
 	var envelope view.Envelope
 	err = st.Tx(ctx, func(tx *store.Tx) error {
 		var err error
+		f, err = resolveViewFilter(g, tx, f, project)
+		if err != nil {
+			return err
+		}
 		data, err = build(tx, f, now)
 		if err != nil {
 			return err
@@ -206,12 +213,12 @@ func readOnce(ctx context.Context, g *Globals, base view.Filter, project string,
 		if info, err := os.Stat(filepath.Join(config.DataDir(), "viewer.heartbeat")); err == nil {
 			age = now.Sub(info.ModTime())
 		}
-		envelope, err = view.NewEnvelope(tx, mode, now, collector.Cadence(age), data)
+		envelope, err = view.NewEnvelope(tx, mode, now, collector.Cadence(age), data, f.Scope)
 		if err != nil {
 			return err
 		}
 		if !f.Since.IsZero() {
-			envelope.CoverageGaps, err = tx.Gaps(f.Since)
+			envelope.CoverageGaps, err = view.CoverageGaps(tx, f.Since, f.Scope)
 			if envelope.CoverageGaps == nil {
 				envelope.CoverageGaps = []model.Gap{}
 			}

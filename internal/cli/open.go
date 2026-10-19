@@ -57,6 +57,9 @@ func decideMode(ctx context.Context, g *Globals) (*store.Store, string, error) {
 	}
 	if g == nil || !g.Snapshot {
 		if st, err := store.Open(filepath.Join(config.DataDir(), "driga.db"), store.ReadOnly); err == nil {
+			if g != nil && g.cachedMachines {
+				return st, "daemon", nil
+			}
 			raw, metaErr := st.Meta("last_pass_at")
 			last, parseErr := time.Parse(time.RFC3339Nano, raw)
 			if metaErr == nil && parseErr == nil && time.Since(last) <= 10*time.Minute {

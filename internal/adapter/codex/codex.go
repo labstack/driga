@@ -105,7 +105,7 @@ func (a codexAdapter) Collect(ctx context.Context, env adapter.Env) ([]model.Ses
 					continue
 				}
 				t := tasks[i]
-				results[i].obs, results[i].warnings, results[i].next, results[i].err = readRollout(t.path, t.prev, env.CaptureSnippets)
+				results[i].obs, results[i].warnings, results[i].next, results[i].err = readRolloutContext(ctx, t.path, t.prev, env.CaptureSnippets)
 			}
 		})
 	}

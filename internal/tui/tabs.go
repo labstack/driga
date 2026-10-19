@@ -13,6 +13,8 @@ import (
 )
 
 type tabRow struct {
+	machine string
+	stale   bool
 	key     string
 	cells   []string
 	agent   int64
@@ -41,7 +43,24 @@ func (m *app) tabVisible(tab int) bool {
 	return false
 }
 func (m *app) tabBar() string {
-	names := []string{fmt.Sprintf("Agents(%d)", m.snap.Summary.Agents), fmt.Sprintf("Projects(%d)", len(m.snap.Projects.Rows)), fmt.Sprintf("Inbox(%d)", len(m.snap.Inbox.Rows)), fmt.Sprintf("Orphans(%d)", len(m.snap.Orphans.Rows)), "Machine"}
+	s := m.visibleSummary()
+	projects, inbox, orphans := 0, 0, 0
+	for _, r := range m.snap.Projects.Rows {
+		if m.machineVisible(r.MachineID) {
+			projects++
+		}
+	}
+	for _, r := range m.snap.Inbox.Rows {
+		if m.machineVisible(r.MachineID) {
+			inbox++
+		}
+	}
+	for _, r := range m.snap.Orphans.Rows {
+		if m.machineVisible(r.MachineID) {
+			orphans++
+		}
+	}
+	names := []string{fmt.Sprintf("Agents(%d)", s.Agents), fmt.Sprintf("Projects(%d)", projects), fmt.Sprintf("Inbox(%d)", inbox), fmt.Sprintf("Orphans(%d)", orphans), "Machine"}
 	// Keep stable key numbers even when project scope hides a tab.
 	var tabs []string
 	for i, name := range names {
@@ -71,6 +90,13 @@ func (m *app) rebuild() {
 	rows := []tabRow{}
 	query := strings.ToLower(m.filter.Value())
 	add := func(r tabRow) {
+		if !m.machineVisible(r.machine) {
+			return
+		}
+		r.stale = m.machineStale(r.machine)
+		if r.stale {
+			r.cells[len(r.cells)-1] += " (stale " + m.machineAge(r.machine) + ")"
+		}
 		if query != "" && !strings.Contains(strings.ToLower(strings.Join(r.cells, " ")), query) {
 			return
 		}
@@ -112,7 +138,7 @@ func (m *app) rebuild() {
 				if r.FinishedChildren > 0 {
 					title += fmt.Sprintf(" (%d workers finished)", r.FinishedChildren)
 				}
-				add(tabRow{key: key, agent: r.ID, cells: []string{"", r.Label, strings.Repeat(" ", depth) + mark + r.Adapter, r.Project, r.Branch, title, duration(r.Age), humanBytes(r.Mem)}})
+				add(tabRow{machine: r.MachineID, key: key, agent: r.ID, cells: []string{"", r.Label, strings.Repeat(" ", depth) + mark + r.Adapter, r.Project, r.Branch, title, duration(r.Age), humanBytes(r.Mem)}})
 				// Filtering searches through collapsed families as well.
 				if m.expanded[key] || query != "" {
 					agents(r.Children, depth+1)
@@ -138,10 +164,10 @@ func (m *app) rebuild() {
 				}
 				name = mark + name
 			}
-			add(tabRow{key: key, project: r.Status.Repo.ID, cwd: r.Status.Repo.Path, cells: []string{"", name, r.Status.Activity, strconv.Itoa(r.Status.LiveAgents), strconv.Itoa(r.Dirty), strconv.Itoa(r.Unpushed), strconv.Itoa(r.Worktrees), where}})
+			add(tabRow{machine: r.MachineID, key: key, project: r.Status.Repo.ID, cwd: r.Status.Repo.Path, cells: []string{"", name, r.Status.Activity, strconv.Itoa(r.Status.LiveAgents), strconv.Itoa(r.Dirty), strconv.Itoa(r.Unpushed), strconv.Itoa(r.Worktrees), where}})
 			if m.expanded[key] {
 				for _, wt := range m.snap.ProjectDetails[r.Status.Repo.ID].WorktreeRows {
-					add(tabRow{key: key, project: r.Status.Repo.ID, cwd: wt.Path, cells: []string{"", " ↳ " + wt.Branch, "worktree", "", strconv.Itoa(wt.Dirty + wt.Untracked), strconv.Itoa(wt.Ahead), "", wt.Path}})
+					add(tabRow{machine: r.MachineID, key: key, project: r.Status.Repo.ID, cwd: wt.Path, cells: []string{"", " ↳ " + wt.Branch, "worktree", "", strconv.Itoa(wt.Dirty + wt.Untracked), strconv.Itoa(wt.Ahead), "", wt.Path}})
 				}
 			}
 		}
@@ -150,28 +176,51 @@ func (m *app) rebuild() {
 		weights = []int{2, 16, 9, 6, 12, 35}
 		for _, r := range m.snap.Inbox.Rows {
 			item := r.InboxItem
-			add(tabRow{key: "inbox:" + r.ID, agent: r.SessionID, inbox: &item, cells: []string{"", r.ID, r.Kind, duration(r.Age), r.Project, r.Summary}})
+			add(tabRow{machine: r.MachineID, key: "inbox:" + r.MachineID + ":" + r.ID, agent: r.SessionID, inbox: &item, cells: []string{"", r.ID, r.Kind, duration(r.Age), r.Project, r.Summary}})
 		}
 	case 3:
 		titles = []string{"", "ID", "AGE", "SIGNATURE", "PROCS", "~RECLAIM", "CWD", "VERIFIED", "EVIDENCE"}
 		weights = []int{2, 14, 6, 12, 6, 10, 14, 9, 20}
 		for _, r := range m.snap.Orphans.Rows {
 			o := r.Orphan
+			o.MachineID = r.MachineID
 			age := duration(r.Age)
 			if o.Young {
 				age = "young"
 			}
-			add(tabRow{key: "orphan:" + o.ID, cwd: o.Cwd, orphan: &o, cells: []string{"", o.ID, age, o.Signature, strconv.Itoa(o.ProcCount), "~" + humanBytes(o.RSSTotal), o.Cwd, strconv.FormatBool(o.Verified), strings.Join(o.Evidence, "; ")}})
+			add(tabRow{machine: r.MachineID, key: "orphan:" + r.MachineID + ":" + o.ID, cwd: o.Cwd, orphan: &o, cells: []string{"", o.ID, age, o.Signature, strconv.Itoa(o.ProcCount), "~" + humanBytes(o.RSSTotal), o.Cwd, strconv.FormatBool(o.Verified), strings.Join(o.Evidence, "; ")}})
 		}
 	case 4:
 		titles = []string{"", "METRIC / AGENT", "VALUE / ROLE", "MEM"}
 		weights = []int{2, 30, 28, 20}
-		s := m.snap.Machine.Sample
-		for _, r := range [][3]string{{"memory", humanBytes(s.MemUsed) + "/" + humanBytes(s.MemTotal), ""}, {"compressed", humanBytes(s.MemCompressed), ""}, {"swap", humanBytes(s.SwapUsed) + "/" + humanBytes(s.SwapTotal), ""}, {"load (1/5/15)", fmt.Sprintf("%.1f / %.1f / %.1f", s.Load1, s.Load5, s.Load15), ""}, {"cores", strconv.Itoa(s.Cores), ""}, {"disk free", humanBytes(s.DiskFree), ""}, {"pressure free", fmt.Sprintf("%.1f", s.PressureFree), ""}} {
-			add(tabRow{cells: []string{"", r[0], r[1], r[2]}})
+		for _, r := range m.snap.Machines.Rows {
+			add(tabRow{machine: r.MachineID, cells: []string{"", m.machineName(r.MachineID), r.State, m.machineAge(r.MachineID)}})
+		}
+		hosts := m.snap.Machine.Machines
+		if len(hosts) == 0 {
+			hosts = []view.MachineView{m.snap.Machine}
+		}
+		for _, host := range hosts {
+			s := host.Sample
+			for _, r := range [][3]string{{"memory", humanBytes(s.MemUsed) + "/" + humanBytes(s.MemTotal), ""}, {"compressed", humanBytes(s.MemCompressed), ""}, {"swap", humanBytes(s.SwapUsed) + "/" + humanBytes(s.SwapTotal), ""}, {"load (1/5/15)", fmt.Sprintf("%.1f / %.1f / %.1f", s.Load1, s.Load5, s.Load15), ""}, {"cores", strconv.Itoa(s.Cores), ""}, {"disk free", humanBytes(s.DiskFree), ""}, {"pressure free", fmt.Sprintf("%.1f", s.PressureFree), ""}} {
+				add(tabRow{machine: host.MachineID, cells: []string{"", r[0], r[1], r[2]}})
+			}
 		}
 		for _, r := range m.snap.Machine.Memory {
-			add(tabRow{cells: []string{"", r.Agent, r.Role, humanBytes(r.RSS)}})
+			add(tabRow{machine: r.MachineID, cells: []string{"", r.Agent, r.Role, humanBytes(r.RSS)}})
+		}
+	}
+	ids := map[string]bool{}
+	for _, r := range rows {
+		if r.machine != "" {
+			ids[r.machine] = true
+		}
+	}
+	if len(ids) > 1 {
+		titles = append([]string{titles[0], "MACHINE"}, titles[1:]...)
+		weights = append([]int{weights[0], 14}, weights[1:]...)
+		for i := range rows {
+			rows[i].cells = append([]string{rows[i].cells[0], m.machineName(rows[i].machine)}, rows[i].cells[1:]...)
 		}
 	}
 	m.rows = rows
@@ -198,6 +247,9 @@ func (m *app) rebuild() {
 		cells[i] = make(table.Row, len(titles))
 		for j, c := range r.cells {
 			cells[i][j] = truncate(clean(c), widths[j])
+			if r.stale && !m.opts.NoColor {
+				cells[i][j] = lipgloss.NewStyle().Faint(true).Render(cells[i][j])
+			}
 		}
 		if i == m.cursors[m.tab] {
 			cells[i][0] = "›"

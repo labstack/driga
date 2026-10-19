@@ -1,0 +1,11 @@
+{
+  "ts": "2026-10-18T18:00:00Z",
+  "cores": 2,
+  "mem_total": 4194304,
+  "mem_used": 3145728,
+  "swap_total": 2097152,
+  "swap_used": 524288,
+  "pressure_free": 25,
+  "load1": 0.2,
+  "disk_free": 10737418240
+}

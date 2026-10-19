@@ -1,13 +1,12 @@
 # Driga
 
-Driga is a local CLI and terminal UI for Claude Code and Codex sessions, project
-status, an attention inbox, file overlaps, orphaned helpers, and machine health.
-It reads agent metadata and local Git state. It needs no API key and makes no
-network requests during collection.
-
-macOS is the supported collection platform. The code builds on Linux; native
-process and machine collection there currently return `ErrUnsupported`.
-The collector's <50 MB RSS budget is a release target awaiting real measurements.
+Driga is a CLI and terminal UI for Claude Code and Codex sessions, project status,
+an attention inbox, file overlaps, orphaned helpers, and machine health on macOS
+and Linux. It reads agent metadata and local Git state without an API key.
+Collection stays local unless you configure fleet peers. v1.5 adds optional
+fleet pull over pinned mutual TLS, read-only MCP tools, and loopback OTLP intake.
+The collector's <50 MB RSS budget remains a release target pending measurement,
+including serving two fleet viewers.
 
 ## Install
 
@@ -71,9 +70,13 @@ driga conflicts
 driga orphans                     # "orphans list" also works
 driga orphans kill <candidate-id>  # previews the tree and requires y
 driga machine
+driga machines                     # local + paired machine health
+driga agents --machine vm-1
 driga agents --watch=2s
 ```
 
+Data views merge paired machines by default. `--machine all|local|<name|id>`
+selects a scope; `--project .` resolves against local repositories only.
 Data views support `--json`, `--project <name|path|.>`, `--since <duration|yesterday>`,
 `--snapshot`, and `--no-color`; `NO_COLOR` is also honored. View JSON has schema 1,
 an observation time, collection mode, source freshness, coverage gaps, and data.
@@ -87,11 +90,14 @@ does not establish individual thread liveness. Unknown agent versions are parsed
 tolerantly and reported by `driga doctor`.
 
 In the TUI, use `1`–`5` for tabs, Enter for detail, Esc to return, `?` for help,
-and `q` to quit. Opening details or issuing JSON queries never acknowledges inbox
-items. Use `x`/Space in Inbox or `driga inbox ack`. Without a running collector,
+`m` to cycle machine scope, and `q` to quit. Opening details or issuing JSON
+queries never acknowledges inbox items. Use `x`/Space in Inbox or `driga inbox ack`. Without a running collector,
 acknowledgments are queued for the next collection. Orphan kills recheck process
 identity and the descendant set immediately before signaling; young candidates
 are refused. `--force` requires a second confirmation before SIGKILL.
+Remote orphans cannot be killed here; run the kill command on their machine.
+Remote inbox acknowledgments require the peer's `--ack` grant; unreachable peers
+show `ack pending` and retry on reconnect.
 
 ## Privacy and configuration
 
@@ -117,6 +123,13 @@ Defaults and their purpose:
 | `stuck_after` | `10m` | Suspect a quiet busy/mid-turn session after this interval. |
 | `orphan_min_age` | `10m` | Show fresh leaks as young; withhold kill until mature. |
 | `capture_text` | `titles` | Require opt-in for prompt/handoff snippets. |
+| `fleet.serve` | `false` | Open a listener only when explicitly enabled. |
+| `fleet.listen` | none | Require an explicit address; fleet's default client port is 7411. |
+| `fleet.share_text` | `titles` | Share titles/commit subjects; `none` withholds them. |
+| `fleet.enroll_window` | `10m` | Bound pairing; at most three attempts, closes on success. |
+| `fleet.allow_any_address` | `false` | Refuse wildcard/public listeners by default. |
+| `intake.otlp` | `false` | Enable optional metadata-only OTLP/HTTP JSON. |
+| `intake.listen` | `127.0.0.1:7418` | Loopback only. |
 | `no_service_hint` | `false` | Allow a once-daily service hint in snapshot mode. |
 
 Both adapters are enabled by default. Override them with `[adapters.claude]` or
@@ -125,13 +138,32 @@ terminal-opening command using `{cwd}`; otherwise the terminal is detected.
 
 | Data | Default path | Override |
 | --- | --- | --- |
-| SQLite database and collector state | `~/Library/Application Support/driga/` | `DRIGA_DATA_DIR` |
+| SQLite database and collector state (macOS) | `~/Library/Application Support/driga/` | `DRIGA_DATA_DIR` |
+| SQLite database and collector state (Linux) | `$XDG_DATA_HOME/driga`, else `~/.local/share/driga/` | `DRIGA_DATA_DIR` |
 | Hook/ack spool | `~/.driga/events/` | `DRIGA_SPOOL_DIR` |
 | Configuration | `~/.config/driga/config.toml` | `DRIGA_CONFIG` |
 
 Database/spool files use mode `0600`, and their directories use `0700`. Claude
 data is read under `~/.claude/`; Codex under `~/.codex/`, or `CODEX_HOME` when set.
 The Codex catalog is opened read-only. Local Git commands never fetch.
+
+After pairing, the serving peer controls what leaves that machine:
+
+| Data | Shared by default? | Control / limit |
+| --- | --- | --- |
+| Host/OS/resources, session labels/evidence/timestamps, cwd and touched file paths | Yes | Metadata; paths can contain identifying text. |
+| Session titles and Git commit subjects | Yes | `fleet.share_text = "titles"` is the default; use `"none"` to withhold. |
+| Prompts, handoffs, textual inbox summaries | No | Requires peer `fleet.share_text = "snippets"` **and** local `capture_text = "snippets"`; scrubbed, at most 200 characters. Otherwise inbox summaries are generic. |
+| Repository/worktree paths, branches, dirty counts, remote URLs | Yes | URL credentials stripped. |
+| Processes and orphan candidates | Agent processes only | Command lines scrubbed and truncated to 200 characters. |
+| Machine samples, source freshness, coverage gaps | Yes | Same retention and private file permissions on the viewer. |
+| Full transcripts, API keys | No | Full transcripts are not stored; scrubbing cannot guarantee every secret is removed from metadata/snippets. |
+| OTLP prompt/response/tool input/bodies, `user.*`, `organization.id` | No | Dropped before storage. |
+
+A viewer stores the text a peer elects to share, even if the viewer's own local
+capture setting is `titles`. Pair only with viewers you trust to retain metadata.
+Fleet trust files live under the data directory's `fleet/` (directory `0700`,
+files `0600`); do not copy its identity key between machines.
 
 ## Hooks and service
 
@@ -154,7 +186,8 @@ command stays untouched and rollout tailing continues. TOML comments may be lost
 when a change is written; the backup retains the original. Uninstall removes only
 Driga entries. Hooks append events to the spool; the collector alone writes SQLite.
 
-The service is a per-user LaunchAgent named `run.driga.collector`:
+The service is a per-user LaunchAgent on macOS and a systemd user service on
+Linux, named `run.driga.collector`:
 
 ```sh
 driga service status
@@ -165,12 +198,182 @@ driga service restart
 driga service uninstall
 ```
 
-Logs are at `~/Library/Logs/driga/collector.log`. `driga collect` runs a foreground
-collector; `driga collect --once` writes one collection pass. Only one collector
+On macOS logs are at `~/Library/Logs/driga/collector.log`; Linux uses
+`journalctl --user -u run.driga.collector` (`driga service logs -f` wraps it).
+On a Linux VM, allow the user service to run after logout:
+
+```sh
+driga service install
+loginctl enable-linger "$USER"
+driga doctor
+```
+
+The linger command may require administrator authorization. Linux without
+systemd can run `driga collect` under tmux/nohup instead. Missing PSI in containers
+is supported and shown as `psi n/a`; memory pressure uses MemAvailable/MemTotal.
+
+`driga collect` runs a foreground collector; `driga collect --once` writes one collection pass. Only one collector
 can hold the lock in a data directory. Idle collection samples processes/machine
 every 60 seconds and Git every five minutes. A viewer heartbeat speeds these to
 5 seconds, 10 seconds, and 30 seconds respectively. Cwd lookup remains at most
 once per minute. Full Git status runs at least every five minutes.
+
+## Fleet setup
+
+Each serving machine runs a collector; each viewer's collector pulls its paired
+peers. Pairing is directional: repeat in the other direction if both machines
+should see each other. Use an explicitly configured private LAN or overlay
+address (for example, a VPN interface); no particular overlay is required.
+
+On the peer, stop an existing collector before starting a foreground server:
+
+```sh
+driga service stop                 # if installed/running
+driga serve --listen <private-ip>:7411
+```
+
+For persistent serving, put this in the peer's configuration and restart its
+service (or run `driga collect`):
+
+```toml
+[fleet]
+serve = true
+listen = "<private-ip>:7411"  # replace with the peer's actual private address
+share_text = "titles"
+```
+
+In another peer terminal, open enrollment. On the viewer, add the peer, compare
+the six-digit code displayed by **both terminals**, and answer `y` on each:
+
+```sh
+# Peer terminal:
+driga fleet enroll --ack           # omit --ack for read-only access
+# Viewer terminal:
+driga fleet add <private-ip>:7411 --name vm-1
+driga service install             # or start an existing service / driga collect
+driga machines
+driga fleet peers
+driga agents --machine vm-1
+```
+
+`fleet add` reports the actual grant: `read ✓ · ack ✓` or `read ✓ · ack ✗`.
+Enrollment lasts at most ten minutes, allows at most three attempts, and closes
+on success. For headless pairing, exchange full device IDs over a trusted channel:
+
+```sh
+# On each machine, obtain its own ID:
+driga fleet id
+# Peer: authorize exactly the viewer's ID; this returns with the window open.
+driga fleet enroll --allow <viewer-device-id> --ack
+# Viewer: require exactly the peer's ID; neither side prompts.
+driga fleet add <private-ip>:7411 --name vm-1 --id <peer-device-id>
+```
+
+Both `--allow` and `--id` are needed to make both sides headless. Keep host firewall
+and cloud security-group ingress restricted to viewers on the private network
+(TCP 7411, or your configured port); allow viewer egress to that port. A private
+address alone does not open a firewall. Wildcard/public listeners are refused
+unless `fleet.allow_any_address = true` is explicitly configured. Mutual TLS 1.3
+pins each certificate; an identity change becomes `untrusted` and requires
+removal and deliberate re-pairing. No automatic trust on reconnect.
+
+For a bastion-only host, listen on the peer's loopback and tunnel from the viewer:
+
+```sh
+# Peer, in place of the private listener:
+driga serve --listen 127.0.0.1:7411
+# Viewer, keep this SSH connection running (optionally add -J <bastion>):
+ssh -N -L 7411:127.0.0.1:7411 <host>
+# Pair through the tunnel while enrollment is open on the peer:
+driga fleet add 127.0.0.1:7411 --name vm-1
+```
+
+If local port 7411 is busy, use another local port in both `-L` and `fleet add`.
+The pinned peer certificate authenticates the endpoint through the tunnel; no
+public fleet port or inbound security-group rule is needed for loopback serving.
+An interrupted tunnel shows the peer as stale and reconnects when it returns.
+
+`driga fleet status` shows serving streams and enrollment;
+`driga fleet viewers` lists authorized viewers. `driga fleet revoke <viewer>`
+revokes access immediately. `driga fleet remove <name>` (alias `unpair`) stops
+pulling locally; add `--purge` to delete cached rows. Stopped/unreachable peers
+become stale after 45 seconds without contact; last-known rows remain visible.
+Epoch/retention changes trigger a new snapshot. Clock skew over 60 seconds warns
+in `driga machines`.
+
+Before enrolling a cloned VM, stop its collector and run
+`driga machine reset-id` **on the clone**, then restart and re-pair. This creates a
+new machine ID and certificate and invalidates old pairings. `driga fleet rekey`
+rotates only the certificate, also requiring a stopped collector and re-pairing.
+
+## MCP registration
+
+`driga mcp` exposes eleven read-only tools over stdio with the same schema-1 view
+envelopes as `--json`. Reading never acknowledges inbox items. Run a collector for
+history and merged fleet data; without one, tools use labelled snapshot mode.
+Keep the installed `driga` binary on the MCP client's PATH.
+
+Claude Code registration:
+
+```sh
+claude mcp add --scope user driga -- driga mcp
+```
+
+In the Codex configuration (`~/.codex/config.toml`, or `$CODEX_HOME/config.toml`):
+
+```toml
+[mcp_servers.driga]
+command = "driga"
+args = ["mcp"]
+```
+
+For local-only tools, use `args = ["mcp", "--machine", "local"]`.
+
+## Optional OTLP intake
+
+Enable the collector's loopback receiver in Driga configuration, then restart the
+collector:
+
+```toml
+[intake]
+otlp = true
+listen = "127.0.0.1:7418"
+```
+
+Preview and apply exporter configuration separately from command hooks:
+
+```sh
+driga hooks install --otlp --agent claude --dry-run
+driga hooks install --otlp --agent claude
+driga hooks status --otlp
+# Optional Claude beta spans: add --traces to install.
+```
+
+For Claude, this edits the settings `env` block: telemetry is enabled, logs use
+OTLP, metrics and (by default) traces are disabled, protocol is `http/json`, and
+the endpoint is `http://127.0.0.1:7418`. It does not enable prompt/tool-content
+logging. `--traces` enables Claude spans. For Codex (`--agent codex`), it adds
+`[otel]` with a JSON HTTP logs exporter to `/v1/logs` and `log_user_prompt = false`;
+Codex facts remain unmapped pending a scrubbed capture fixture. The default
+`--agent all` configures both. Installation refuses existing telemetry settings,
+previews changes, asks for confirmation, and backs up edited files. It configures
+exporters instead of installing hooks; existing hooks are left in place.
+
+The intake accepts OTLP/HTTP JSON (including gzip); protobuf returns 415. Content
+attributes are discarded before storage. It only enriches existing sessions;
+unmatched session IDs are rejected with partial-success counts and never create
+sessions. Use `driga doctor` for intake health and counters.
+
+To undo, preview then remove Driga's intact exporter settings, disable
+`intake.otlp`, and restart the collector:
+
+```sh
+driga hooks uninstall --otlp --agent claude --dry-run
+driga hooks uninstall --otlp --agent claude
+# Repeat with --agent codex if installed there (or use --agent all).
+```
+
+Uninstall preserves unrelated settings and leaves modified exporter blocks alone.
 
 ## Extend process signatures
 
@@ -226,14 +429,17 @@ labels. Multiple adapter/version sets may use the same scenario name.
 
 The `real-second-machine` requirement currently skips with
 `missing heldout set: real-second-machine`; it needs a maintainer contribution.
-The 50-repo case currently exposes missing cross-worktree file conflicts when
-session paths use macOS `/var` aliases and Git returns `/private/var` paths
-(§7.3). Its failing expectation is retained for maintainer review.
+The 50-repo conflict regression is covered by path normalization, including
+macOS `/var` and `/private/var` aliases. The fleet held-out set
+`fleet-traces-synthetic` checks duplicate and out-of-order sequences, missing or
+changed epochs, atomic rollback, stale peers, and snapshot replacement against
+hand-written labels; it does not replace a real Linux held-out sample.
 
 ```sh
 go test ./internal/fixturegen ./internal/validate -v
 go vet ./...
 go test ./...
+go test -race ./internal/...
 CGO_ENABLED=0 go build ./cmd/driga
 GOOS=linux go build ./...
 ```
@@ -251,15 +457,32 @@ Release checklist:
   three distinct machines, including provenance without personal information.
 - [ ] Compare agents against `ps` and agent session lists, and orphans against
   human-labeled process trees on those machines.
-- [ ] Pass formatting, vet, tests, a cgo-free build, and Linux cross-build.
+- [ ] Add a scrubbed **real Linux VM** held-out sample, including process trees,
+  adapter versions and provenance without personal data; keep human-written
+  expected labels independent of Driga output. Synthetic Linux/fleet sets alone
+  do not satisfy this gate.
+- [ ] Pass formatting, vet, tests, race tests, a cgo-free build, Linux cross-build,
+  and a full `go test ./...` run inside a Linux VM (not just compilation).
+- [ ] Record stripped v1 and v1.5 binary bytes on the same OS/arch/toolchain:
+  `CGO_ENABLED=0 go build -ldflags=-s -o /tmp/driga-stripped ./cmd/driga`;
+  v1.5 growth must be <=8 MiB. Record the measured bytes and baseline below.
 - [ ] Have the maintainer run `scripts/footprint.sh` on macOS with representative
-  real histories. Record both phase peaks, collector/child/combined RSS, and
+  real histories. Record all three phase peaks, collector/child/combined RSS, and
   available wakeup readings; sampled peak collector RSS must be <=50 MB.
 - [ ] Review combined RSS and average CPU (<1% target) separately on large real
   histories. Five-second sampling can miss brief subprocess peaks.
 
-The footprint script builds a temporary binary, reads the real HOME/configuration,
-isolates its database/spool, and runs for ten minutes: five without a heartbeat,
-five with one. It samples collector and descendant RSS every five seconds and
-reports `top` IDLEW where available. It cleans up its collector and temporary
-state on exit. It is a manual acceptance check and is not run by tests.
+The footprint script builds a temporary binary, reads real histories and
+collection settings, and isolates every Driga database/spool/configuration. It
+runs five minutes without a heartbeat, five with one, then ten serving two paired
+viewers on `127.0.0.1` with an OS-selected port. Viewers use empty temporary homes.
+It verifies both watching streams, samples each collector and descendant RSS every
+five seconds, and reports serving collector `top` IDLEW where available. Exec
+wrappers retain real Driga PIDs; cleanup signals only processes it started. It is
+a manual acceptance check and is not run by tests.
+
+Binary measurement (2026-10-18, macOS/arm64, Go 1.27.2, `CGO_ENABLED=0`,
+`-ldflags=-s`): v1 at `156b081` is **13,323,730 bytes**; this v1.5 checkout is
+**20,227,090 bytes**. Growth: **6,903,360 bytes (6.584 MiB)**, within 8 MiB.
+Footprint measurements and real Linux contributions remain maintainer release
+gates.

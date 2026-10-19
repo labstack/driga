@@ -20,6 +20,20 @@ type Fake struct {
 	machine model.MachineSample
 	sockets map[int32]bool
 	peers   map[int32][]int32
+	// subreaper comes from an optional subreaper.json {"uid":N} plus a
+	// synthetic proc/ tree beside the fixture.
+	procRoot string
+	uid      *int
+}
+
+var _ SubreaperFinder = (*Fake)(nil)
+
+// UserSubreaper resolves the fixture's systemd --user instance, if any.
+func (f *Fake) UserSubreaper() (int32, bool) {
+	if f.uid == nil {
+		return 0, false
+	}
+	return UserSubreaper(f.procRoot, *f.uid)
 }
 
 var _ Platform = (*Fake)(nil)
@@ -61,6 +75,13 @@ func LoadFake(dir string) (*Fake, error) {
 		}
 		seen[p.PID] = true
 	}
+	var sub struct {
+		UID *int `json:"uid"`
+	}
+	if err := read("subreaper.json", &sub, true); err != nil {
+		return nil, err
+	}
+	f.uid, f.procRoot = sub.UID, filepath.Join(dir, "proc")
 	return f, nil
 }
 

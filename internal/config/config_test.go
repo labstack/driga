@@ -3,6 +3,7 @@ package config_test
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -88,7 +89,70 @@ func TestPathsHonorEnv(t *testing.T) {
 	t.Setenv("DRIGA_SPOOL_DIR", "")
 	t.Setenv("DRIGA_CONFIG", "")
 	t.Setenv("HOME", "/h")
-	if config.DataDir() != "/h/Library/Application Support/driga" || config.SpoolDir() != "/h/.driga/events" || config.Path() != "/h/.config/driga/config.toml" {
+	wantData := "/h/Library/Application Support/driga"
+	if runtime.GOOS == "linux" {
+		t.Setenv("XDG_DATA_HOME", "")
+		wantData = "/h/.local/share/driga"
+	}
+	if config.DataDir() != wantData || config.SpoolDir() != "/h/.driga/events" || config.Path() != "/h/.config/driga/config.toml" {
 		t.Fatal(config.DataDir(), config.SpoolDir(), config.Path())
+	}
+}
+
+func TestConfigFleetDefaults(t *testing.T) {
+	c := config.Default()
+	if c.Fleet.Serve || c.Fleet.Listen != "" || c.Fleet.ShareText != "titles" || c.Fleet.EnrollWindow != 10*time.Minute || c.Fleet.AllowAnyAddress {
+		t.Fatal(c.Fleet)
+	}
+	if c.Intake.OTLP || c.Intake.Listen != "127.0.0.1:7418" {
+		t.Fatal(c.Intake)
+	}
+	path := filepath.Join(t.TempDir(), "config.toml")
+	body := `[fleet]
+serve = true
+listen = "127.0.0.1:0"
+share_text = "snippets"
+enroll_window = "3m"
+allow_any_address = true
+[intake]
+otlp = true
+listen = "[::1]:0"
+`
+	if err := os.WriteFile(path, []byte(body), 0600); err != nil {
+		t.Fatal(err)
+	}
+	c, err := config.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !c.Fleet.Serve || c.Fleet.Listen != "127.0.0.1:0" || c.Fleet.ShareText != "snippets" || c.Fleet.EnrollWindow != 3*time.Minute || !c.Fleet.AllowAnyAddress {
+		t.Fatal(c.Fleet)
+	}
+	if !c.Intake.OTLP || c.Intake.Listen != "[::1]:0" {
+		t.Fatal(c.Intake)
+	}
+}
+
+func TestConfigFleetValidation(t *testing.T) {
+	for _, tc := range []struct{ body, field string }{
+		{"[fleet]\nshare_text = \"all\"", "share_text"},
+		{"[fleet]\nenroll_window = \"0s\"", "enroll_window"},
+		{"[fleet]\nenroll_window = \"-1m\"", "enroll_window"},
+		{"[fleet]\nenroll_window = \"bad\"", "enroll_window"},
+		{"[fleet]\nserve = true", "listen"},
+		{"[intake]\nlisten = \"0.0.0.0:7418\"", "listen"},
+		{"[intake]\nlisten = \"192.168.1.2:7418\"", "listen"},
+		{"[intake]\nlisten = \"localhost:7418\"", "listen"},
+		{"[intake]\nlisten = \"127.0.0.1:65536\"", "listen"},
+	} {
+		t.Run(tc.body, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config.toml")
+			if err := os.WriteFile(path, []byte(tc.body), 0600); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := config.Load(path); err == nil || !strings.Contains(err.Error(), tc.field) {
+				t.Fatalf("want %s error, got %v", tc.field, err)
+			}
+		})
 	}
 }

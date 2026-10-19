@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"syscall"
 
 	ks "github.com/kardianos/service"
@@ -21,7 +22,7 @@ type ServiceCmd struct {
 	Follow bool   `short:"f" help:"Follow collector log output (logs only)."`
 }
 
-// Run controls launchd or prints the last 50 collector log lines.
+// Run controls the user service or prints the last 50 collector log lines.
 func (c ServiceCmd) Run(g *Globals) error {
 	if c.Follow && c.Action != "logs" {
 		return errors.New("-f is only supported by service logs")
@@ -29,12 +30,8 @@ func (c ServiceCmd) Run(g *Globals) error {
 	if c.Action == "logs" {
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
-		args := []string{"-n", "50"}
-		if c.Follow {
-			args = append(args, "-f")
-		}
-		args = append(args, service.LogPath())
-		cmd := exec.CommandContext(ctx, "tail", args...)
+		name, args := serviceLogCommand(runtime.GOOS, c.Follow)
+		cmd := exec.CommandContext(ctx, name, args...)
 		cmd.Stdout, cmd.Stderr = commandOutput(g), g.Stderr
 		err := cmd.Run()
 		if ctx.Err() != nil {
@@ -56,23 +53,30 @@ func (c ServiceCmd) Run(g *Globals) error {
 	}
 	switch c.Action {
 	case "install":
-		// launchd opens these streams before the collector starts.
-		dir := filepath.Dir(service.LogPath())
-		if err := os.MkdirAll(dir, 0700); err != nil {
-			return err
-		}
-		if err := os.Chmod(dir, 0700); err != nil {
-			return err
-		}
-		f, err := os.OpenFile(service.LogPath(), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
-		if err != nil {
-			return err
-		}
-		if err := errors.Join(f.Chmod(0600), f.Close()); err != nil {
-			return err
+		if runtime.GOOS == "darwin" {
+			// launchd opens these streams before the collector starts.
+			dir := filepath.Dir(service.LogPath())
+			if err := os.MkdirAll(dir, 0700); err != nil {
+				return err
+			}
+			if err := os.Chmod(dir, 0700); err != nil {
+				return err
+			}
+			f, err := os.OpenFile(service.LogPath(), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
+			if err != nil {
+				return err
+			}
+			if err := errors.Join(f.Chmod(0600), f.Close()); err != nil {
+				return err
+			}
 		}
 		if err := s.Install(); err != nil {
 			return err
+		}
+		if hint := service.InstallHint(runtime.GOOS); hint != "" {
+			if _, err := fmt.Fprintln(commandOutput(g), hint); err != nil {
+				return err
+			}
 		}
 		if err := s.Start(); err != nil {
 			return fmt.Errorf("installed collector; start with driga service start: %w", err)
@@ -117,4 +121,18 @@ func commandOutput(g *Globals) io.Writer {
 		return g.Stdout
 	}
 	return io.Discard
+}
+
+func serviceLogCommand(goos string, follow bool) (string, []string) {
+	name, args := "tail", []string{"-n", "50"}
+	if goos == "linux" {
+		name, args = "journalctl", []string{"--user", "-u", "run.driga.collector", "-n", "50"}
+	}
+	if follow {
+		args = append(args, "-f")
+	}
+	if goos != "linux" {
+		args = append(args, service.LogPath())
+	}
+	return name, args
 }

@@ -28,6 +28,8 @@ type Source interface {
 // Snapshot holds the shared views and the evidence needed by detail panes.
 type Snapshot struct {
 	view.Envelope
+	LocalMachineID string
+	Machines       view.MachinesView
 	Hostname       string
 	Summary        view.SummaryView
 	Agents         view.AgentsView
@@ -48,6 +50,7 @@ type StoreSource struct {
 	Filter  view.Filter
 	// ResolveProject applies the CLI's canonical path/name resolution in the read transaction.
 	ResolveProject func(view.Reader, string) (string, error)
+	ResolveFilter  func(view.Reader, view.Filter) (view.Filter, error)
 	Now            func() time.Time
 }
 
@@ -68,15 +71,24 @@ func (s *StoreSource) load(ctx context.Context, mode string) (Snapshot, error) {
 		now = s.Now()
 	}
 	err := s.st.Tx(ctx, func(tx *store.Tx) error {
+		snap.LocalMachineID = tx.MachineID()
 		f := s.Filter
 		var err error
-		if f.Project != "" && s.ResolveProject != nil {
+		if s.ResolveFilter != nil {
+			f, err = s.ResolveFilter(tx, f)
+			if err != nil {
+				return err
+			}
+		} else if f.Project != "" && s.ResolveProject != nil {
 			f.Project, err = s.ResolveProject(tx, f.Project)
 			if err != nil {
 				return err
 			}
 		}
-		if snap.Envelope, err = view.NewEnvelope(tx, mode, now, collector.Cadence(0), nil); err != nil {
+		if snap.Envelope, err = view.NewEnvelope(tx, mode, now, collector.Cadence(0), nil, f.Scope); err != nil {
+			return err
+		}
+		if snap.Machines, err = view.Machines(tx, now); err != nil {
 			return err
 		}
 		if snap.Summary, err = view.Summary(tx, f, now); err != nil {
@@ -121,21 +133,21 @@ func (s *StoreSource) load(ctx context.Context, mode string) (Snapshot, error) {
 			ids[i.SessionID] = true
 		}
 		for id := range ids {
-			d, err := view.Agent(tx, id, now)
+			d, err := view.Agent(tx, id, now, f.Scope)
 			if err != nil {
 				return err
 			}
 			snap.AgentDetails[id] = d
 		}
 		for _, r := range snap.Projects.Rows {
-			d, err := view.Where(tx, r.Status.Repo.Path, now)
+			d, err := view.Where(tx, r.Status.Repo.Path, now, store.Scope{Machines: []string{r.MachineID}})
 			if err != nil {
 				return err
 			}
 			snap.ProjectDetails[r.Status.Repo.ID] = d
 		}
 		if !f.Since.IsZero() {
-			snap.CoverageGaps, err = tx.Gaps(f.Since)
+			snap.CoverageGaps, err = view.CoverageGaps(tx, f.Since, f.Scope)
 		}
 		return err
 	})

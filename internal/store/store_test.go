@@ -51,16 +51,16 @@ func TestMigrateAndRoundTrip(t *testing.T) {
 	if len(s.MachineID()) != 32 {
 		t.Fatalf("machine ID: %q", s.MachineID())
 	}
-	machine := model.Machine{ID: s.MachineID(), Hostname: "host", OS: "os", Arch: "arch", Cores: 8, MemTotal: 123, FirstSeen: now, LastSeen: now}
-	repo := model.Repo{Path: "/repo", Name: "repo", RemoteURL: "remote"}
-	wt := model.Worktree{Path: "/repo", Branch: "main", Head: "abc", Ahead: 1, Behind: 2, Dirty: 3, Untracked: 4, OldestDirtyMtime: now, LastCommitAt: now, LastCommitSubject: "subject", UpdatedAt: now}
-	session := model.Session{SessionObs: model.SessionObs{Adapter: "test", ExternalID: "one", Origin: "cli", Version: "v1", PID: 12, ProcStart: now, Cwd: "/repo", Branch: "main", Title: "title", LastPrompt: "prompt", RegistryStatus: "alive", StartedAt: now, LastActivityAt: now, Hosted: true, TurnOpen: true, SourcePath: "/log"}, Label: "working", Heuristic: true, Evidence: "evidence"}
-	proc := model.Proc{PID: 12, PPID: 1, StartTime: now, RSS: 123, CPUSeconds: 1.5, CPUPercent: 2.5, Cmdline: "agent", Exe: "/agent", Cwd: "/repo", Role: "host", Agent: "test"}
-	sample := model.MachineSample{TS: now, MemUsed: 1, MemCompressed: 2, MemTotal: 3, SwapUsed: 4, SwapTotal: 5, DiskFree: 6, PressureFree: 7.5, Load1: 8, Load5: 9, Load15: 10, Cores: 11}
-	orphan := model.Orphan{ID: "20:123", RootPID: 20, StartTime: now, Signature: "helper", ProcCount: 2, RSSTotal: 100, Cwd: "/repo", Young: true, Evidence: []string{"parent exited", "signature"}, FirstSeen: now, PIDs: []int32{20, 21}}
-	offset := model.Offset{Inode: 42, Size: 100, Pos: 90, Mtime: now}
-	event := model.Event{Adapter: "test", ExternalID: "one", TS: now, Kind: "Stop", Summary: "done"}
-	gap := model.Gap{From: now.Add(-time.Minute), To: now}
+	machine := model.Machine{MachineID: s.MachineID(), Name: "host", State: "local", ID: s.MachineID(), Hostname: "host", OS: "os", Arch: "arch", Cores: 8, MemTotal: 123, FirstSeen: now, LastSeen: now}
+	repo := model.Repo{MachineID: s.MachineID(), Path: "/repo", Name: "repo", RemoteURL: "remote"}
+	wt := model.Worktree{MachineID: s.MachineID(), Path: "/repo", Branch: "main", Head: "abc", Ahead: 1, Behind: 2, Dirty: 3, Untracked: 4, OldestDirtyMtime: now, LastCommitAt: now, LastCommitSubject: "subject", UpdatedAt: now}
+	session := model.Session{MachineID: s.MachineID(), SessionObs: model.SessionObs{Adapter: "test", ExternalID: "one", Origin: "cli", Version: "v1", PID: 12, ProcStart: now, Cwd: "/repo", Branch: "main", Title: "title", LastPrompt: "prompt", RegistryStatus: "alive", StartedAt: now, LastActivityAt: now, Hosted: true, TurnOpen: true, SourcePath: "/log"}, Label: "working", Heuristic: true, Evidence: "evidence"}
+	proc := model.Proc{MachineID: s.MachineID(), PID: 12, PPID: 1, StartTime: now, RSS: 123, CPUSeconds: 1.5, CPUPercent: 2.5, Cmdline: "agent", Exe: "/agent", Cwd: "/repo", Role: "host", Agent: "test"}
+	sample := model.MachineSample{MachineID: s.MachineID(), TS: now, MemUsed: 1, MemCompressed: 2, MemTotal: 3, SwapUsed: 4, SwapTotal: 5, DiskFree: 6, PressureFree: 7.5, Load1: 8, Load5: 9, Load15: 10, Cores: 11}
+	orphan := model.Orphan{MachineID: s.MachineID(), ID: "20:123", RootPID: 20, StartTime: now, Signature: "helper", ProcCount: 2, RSSTotal: 100, Cwd: "/repo", Young: true, Evidence: []string{"parent exited", "signature"}, FirstSeen: now, PIDs: []int32{20, 21}}
+	offset := model.Offset{MachineID: s.MachineID(), Inode: 42, Size: 100, Pos: 90, Mtime: now}
+	event := model.Event{MachineID: s.MachineID(), Adapter: "test", ExternalID: "one", TS: now, Kind: "Stop", Summary: "done"}
+	gap := model.Gap{MachineID: s.MachineID(), From: now.Add(-time.Minute), To: now}
 	mustTx(t, s, func(tx *Tx) error {
 		if err := tx.UpsertMachine(machine); err != nil {
 			return err
@@ -146,7 +146,7 @@ func TestMigrateAndRoundTrip(t *testing.T) {
 		t.Fatalf("handoffs: %v, %v", handoffs, err)
 	}
 	sources, err := s.Sources()
-	equal(t, []model.SourceStatus{{Name: "test", LastOKAt: now, LastError: "failure", LastErrorAt: now.Add(-time.Second)}}, sources, err)
+	equal(t, []model.SourceStatus{{MachineID: s.MachineID(), Name: "test", LastOKAt: now, LastError: "failure", LastErrorAt: now.Add(-time.Second)}}, sources, err)
 	gaps, err := s.Gaps(gap.From)
 	equal(t, []model.Gap{gap}, gaps, err)
 	meta, err := s.Meta("baseline_at")
@@ -225,7 +225,7 @@ func TestMemoryModeIsolated(t *testing.T) {
 func TestInboxInsertIgnoreDedup(t *testing.T) {
 	s := openTest(t, "", Memory)
 	now := time.Now().UTC()
-	item := model.InboxItem{ID: "finished:one", Kind: "finished", TS: now, Summary: "original"}
+	item := model.InboxItem{MachineID: s.MachineID(), ID: "finished:one", Kind: "finished", TS: now, Summary: "original"}
 	mustTx(t, s, func(tx *Tx) error {
 		id, err := tx.UpsertSession(model.Session{SessionObs: model.SessionObs{Adapter: "test", ExternalID: "one"}})
 		if err != nil {
@@ -291,7 +291,7 @@ func TestPruneRetention(t *testing.T) {
 			case 2:
 				liveID = id
 			}
-			if err = tx.ReplaceSessionFiles(id, []model.FileTouch{{Path: "/file", TS: old}}); err != nil {
+			if err = tx.ReplaceSessionFiles(id, []model.FileTouch{{MachineID: s.MachineID(), Path: "/file", TS: old}}); err != nil {
 				return err
 			}
 			if err = tx.InsertHandoff(id, old, "done"); err != nil {
@@ -481,7 +481,7 @@ func TestUpsertAndFileMerge(t *testing.T) {
 		if id != wtID {
 			t.Fatal("worktree identity changed")
 		}
-		session := model.Session{SessionObs: model.SessionObs{Adapter: "test", ExternalID: "one"}, RepoID: &repoID, WorktreeID: &wtID}
+		session := model.Session{MachineID: s.MachineID(), SessionObs: model.SessionObs{Adapter: "test", ExternalID: "one"}, RepoID: &repoID, WorktreeID: &wtID}
 		sessionID, err = tx.UpsertSession(session)
 		if err != nil {
 			return err
@@ -494,18 +494,18 @@ func TestUpsertAndFileMerge(t *testing.T) {
 		if id != sessionID {
 			t.Fatal("session identity changed")
 		}
-		if err = tx.ReplaceSessionFiles(id, []model.FileTouch{{Path: "/a", TS: now}, {Path: "/b", TS: now.Add(-time.Hour)}}); err != nil {
+		if err = tx.ReplaceSessionFiles(id, []model.FileTouch{{MachineID: s.MachineID(), Path: "/a", TS: now}, {MachineID: s.MachineID(), Path: "/b", TS: now.Add(-time.Hour)}}); err != nil {
 			return err
 		}
-		if err = tx.ReplaceSessionFiles(id, []model.FileTouch{{Path: "/a", TS: now.Add(-time.Hour)}, {Path: "/b", TS: now.Add(time.Second)}, {Path: "/c"}}); err != nil {
+		if err = tx.ReplaceSessionFiles(id, []model.FileTouch{{MachineID: s.MachineID(), Path: "/a", TS: now.Add(-time.Hour)}, {MachineID: s.MachineID(), Path: "/b", TS: now.Add(time.Second)}, {MachineID: s.MachineID(), Path: "/c"}}); err != nil {
 			return err
 		}
 		return tx.ReplaceSessionFiles(id, nil)
 	})
 	files, err := s.SessionFiles(time.Time{})
-	equal(t, []model.FileTouch{{Path: "/a", TS: now}, {Path: "/b", TS: now.Add(time.Second)}, {Path: "/c"}}, files[sessionID], err)
+	equal(t, []model.FileTouch{{MachineID: s.MachineID(), Path: "/a", TS: now}, {MachineID: s.MachineID(), Path: "/b", TS: now.Add(time.Second)}, {MachineID: s.MachineID(), Path: "/c"}}, files[sessionID], err)
 	files, err = s.SessionFiles(now)
-	equal(t, []model.FileTouch{{Path: "/a", TS: now}, {Path: "/b", TS: now.Add(time.Second)}}, files[sessionID], err)
+	equal(t, []model.FileTouch{{MachineID: s.MachineID(), Path: "/a", TS: now}, {MachineID: s.MachineID(), Path: "/b", TS: now.Add(time.Second)}}, files[sessionID], err)
 	sessions, err := s.Sessions(SessionFilter{})
 	if err != nil || len(sessions) != 0 {
 		t.Fatalf("ended visible: %v %v", sessions, err)

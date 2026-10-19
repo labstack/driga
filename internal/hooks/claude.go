@@ -51,6 +51,84 @@ func (d Diff) Unified() string {
 
 var claudeEvents = []string{"Stop", "Notification", "SessionStart", "SessionEnd"}
 
+// ErrTelemetryInUse prevents replacing any existing agent telemetry destination.
+var ErrTelemetryInUse = errors.New("telemetry is already configured; Driga cannot replace or relay it")
+
+func claudeOTLPEnv(traces bool) map[string]string {
+	traceExporter := "none"
+	if traces {
+		traceExporter = "otlp"
+	}
+	return map[string]string{
+		"CLAUDE_CODE_ENABLE_TELEMETRY": "1",
+		"OTEL_LOGS_EXPORTER":           "otlp", "OTEL_METRICS_EXPORTER": "none",
+		"OTEL_TRACES_EXPORTER":        traceExporter,
+		"OTEL_EXPORTER_OTLP_PROTOCOL": "http/json",
+		"OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:7418",
+	}
+}
+
+// ClaudeInstallOTLP installs metadata-only telemetry without replacing telemetry settings.
+func ClaudeInstallOTLP(path string, traces, dryRun bool, now time.Time) (Diff, error) {
+	d, settings, err := readClaude(path)
+	if err != nil {
+		return d, err
+	}
+	env := make(map[string]any)
+	if v, exists := settings["env"]; exists {
+		var ok bool
+		env, ok = v.(map[string]any)
+		if !ok {
+			return d, fmt.Errorf("Claude env must be an object")
+		}
+	}
+	for key := range env {
+		if strings.HasPrefix(key, "OTEL_") || strings.HasPrefix(key, "CLAUDE_CODE_ENABLE_TELEMETRY") || strings.Contains(key, "TRACING") {
+			return d, ErrTelemetryInUse
+		}
+	}
+	for k, v := range claudeOTLPEnv(traces) {
+		env[k] = v
+	}
+	settings["env"] = env
+	d.Changed = true
+	return finishClaude(d, settings, dryRun, now)
+}
+
+// ClaudeUninstallOTLP removes only an intact Driga loopback telemetry configuration.
+func ClaudeUninstallOTLP(path string, dryRun bool) (Diff, error) {
+	d, settings, err := readClaude(path)
+	if err != nil {
+		return d, err
+	}
+	env, ok := settings["env"].(map[string]any)
+	if !ok {
+		return d, nil
+	}
+	for _, traces := range []bool{false, true} {
+		want := claudeOTLPEnv(traces)
+		match := true
+		for k, v := range want {
+			if env[k] != v {
+				match = false
+				break
+			}
+		}
+		if !match {
+			continue
+		}
+		for k := range want {
+			delete(env, k)
+		}
+		if len(env) == 0 {
+			delete(settings, "env")
+		}
+		d.Changed = true
+		return finishClaude(d, settings, dryRun, time.Now())
+	}
+	return d, nil
+}
+
 // ClaudeInstall merges missing Driga events into Claude's settings.
 func ClaudeInstall(settingsPath, driga string, dryRun bool, now time.Time) (Diff, error) {
 	d, settings, err := readClaude(settingsPath)

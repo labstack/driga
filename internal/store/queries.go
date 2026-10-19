@@ -3,11 +3,13 @@ package store
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/labstack/driga/internal/feed"
 	"github.com/labstack/driga/internal/model"
 )
 
@@ -53,21 +55,65 @@ func (tx *Tx) upsertID(table, columns, conflict string, values ...any) (int64, e
 	return id, err
 }
 
-// UpsertMachine stores host information under the store's implicit machine ID.
-func (tx *Tx) UpsertMachine(m model.Machine) error {
-	return tx.exec(`INSERT INTO machines (id,machine_id,hostname,os,arch,cores,mem_total,first_seen,last_seen)
-	VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET hostname=excluded.hostname,
-	os=excluded.os,arch=excluded.arch,cores=excluded.cores,mem_total=excluded.mem_total,
-	first_seen=excluded.first_seen,last_seen=excluded.last_seen`, tx.machineID, tx.machineID, m.Hostname, m.OS, m.Arch, m.Cores, m.MemTotal, unix(m.FirstSeen), unix(m.LastSeen))
+// Scope selects machine IDs; nil selects all and an empty slice selects none.
+type Scope struct{ Machines []string }
+
+func (scope Scope) where(column string) (string, []any) {
+	if scope.Machines == nil {
+		return "1=1", nil
+	}
+	if len(scope.Machines) == 0 {
+		return "1=0", nil
+	}
+	args := make([]any, len(scope.Machines))
+	for i, id := range scope.Machines {
+		args[i] = id
+	}
+	return column + " IN (" + strings.TrimSuffix(strings.Repeat("?,", len(args)), ",") + ")", args
 }
 
-// Machine returns the stored host information, or ErrNotFound.
-func (q *querier) Machine() (model.Machine, error) {
+func (q *querier) localScope() Scope { return Scope{Machines: []string{q.machineID}} }
+
+const machineColumns = "id,machine_id,hostname,os,arch,cores,mem_total,first_seen,last_seen,name,device_id,addr,driga_version,feed_epoch,feed_seq,last_contact_at,last_error,clock_skew_ms,state"
+
+// UpsertMachine stores host information under the writer's machine ID.
+func (tx *Tx) UpsertMachine(m model.Machine) error {
+	if m.Name == "" {
+		m.Name = m.Hostname
+	}
+	if m.State == "" {
+		m.State = "local"
+		if tx.machineID != tx.localID {
+			m.State = "stale"
+		}
+	}
+	return tx.exec(`INSERT INTO machines (`+machineColumns+`)
+	VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET hostname=excluded.hostname,
+	os=excluded.os,arch=excluded.arch,cores=excluded.cores,mem_total=excluded.mem_total,
+	first_seen=excluded.first_seen,last_seen=excluded.last_seen,name=excluded.name,device_id=excluded.device_id,
+	addr=excluded.addr,driga_version=excluded.driga_version,feed_epoch=excluded.feed_epoch,feed_seq=excluded.feed_seq,
+	last_contact_at=excluded.last_contact_at,last_error=excluded.last_error,clock_skew_ms=excluded.clock_skew_ms,state=excluded.state`,
+		tx.machineID, tx.machineID, m.Hostname, m.OS, m.Arch, m.Cores, m.MemTotal, unix(m.FirstSeen), unix(m.LastSeen),
+		m.Name, m.DeviceID, m.Addr, m.DrigaVersion, m.FeedEpoch, m.FeedSeq, unix(m.LastContactAt), m.LastError, m.ClockSkewMS, m.State)
+}
+
+func scanMachine(s scanner) (model.Machine, error) {
 	var m model.Machine
-	var first, last int64
-	err := q.conn.QueryRowContext(q.ctx, "SELECT id,hostname,os,arch,cores,mem_total,first_seen,last_seen FROM machines WHERE machine_id=?", q.machineID).Scan(&m.ID, &m.Hostname, &m.OS, &m.Arch, &m.Cores, &m.MemTotal, &first, &last)
-	m.FirstSeen, m.LastSeen = fromUnix(first), fromUnix(last)
+	var first, last, contact int64
+	err := s.Scan(&m.ID, &m.MachineID, &m.Hostname, &m.OS, &m.Arch, &m.Cores, &m.MemTotal, &first, &last,
+		&m.Name, &m.DeviceID, &m.Addr, &m.DrigaVersion, &m.FeedEpoch, &m.FeedSeq, &contact, &m.LastError, &m.ClockSkewMS, &m.State)
+	m.FirstSeen, m.LastSeen, m.LastContactAt = fromUnix(first), fromUnix(last), fromUnix(contact)
 	return m, err
+}
+
+// Machine returns the local host information, or ErrNotFound.
+func (q *querier) Machine() (model.Machine, error) {
+	return scanMachine(q.conn.QueryRowContext(q.ctx, "SELECT "+machineColumns+" FROM machines WHERE machine_id=?", q.machineID))
+}
+
+// Machines returns all known machines in identity order.
+func (q *querier) Machines() ([]model.Machine, error) {
+	return readMany(q, "SELECT "+machineColumns+" FROM machines ORDER BY machine_id", nil, scanMachine)
 }
 
 // ReplaceProcs replaces this machine's entire latest process snapshot.
@@ -86,53 +132,71 @@ func (tx *Tx) ReplaceProcs(procs []model.Proc) error {
 
 // Procs returns the latest processes in PID order.
 func (q *querier) Procs() ([]model.Proc, error) {
-	return readMany(q, "SELECT pid,ppid,start_time,rss,cpu_seconds,cpu_percent,cmdline,exe,role,agent,session_id,cwd FROM procs WHERE machine_id=? ORDER BY pid", []any{q.machineID}, func(s scanner) (model.Proc, error) {
+	return q.ProcsScoped(q.localScope())
+}
+
+// ProcsScoped returns selected machines' processes in PID and machine order.
+func (q *querier) ProcsScoped(scope Scope) ([]model.Proc, error) {
+	where, args := scope.where("machine_id")
+	return readMany(q, "SELECT machine_id,pid,ppid,start_time,rss,cpu_seconds,cpu_percent,cmdline,exe,role,agent,session_id,cwd FROM procs WHERE "+where+" ORDER BY pid,machine_id", args, func(s scanner) (model.Proc, error) {
 		var p model.Proc
 		var start int64
-		err := s.Scan(&p.PID, &p.PPID, &start, &p.RSS, &p.CPUSeconds, &p.CPUPercent, &p.Cmdline, &p.Exe, &p.Role, &p.Agent, &p.SessionID, &p.Cwd)
+		err := s.Scan(&p.MachineID, &p.PID, &p.PPID, &start, &p.RSS, &p.CPUSeconds, &p.CPUPercent, &p.Cmdline, &p.Exe, &p.Role, &p.Agent, &p.SessionID, &p.Cwd)
 		p.StartTime = fromUnix(start)
 		return p, err
 	})
 }
 
-const sampleColumns = "ts,mem_used,mem_compressed,mem_total,swap_used,swap_total,pressure_free,load1,load5,load15,disk_free,cores"
+const sampleColumns = "ts,mem_used,mem_compressed,mem_total,swap_used,swap_total,pressure_free,load1,load5,load15,disk_free,cores,psi_mem_some10"
 
 // InsertSample records a machine-health reading, replacing the same timestamp.
 func (tx *Tx) InsertSample(s model.MachineSample) error {
-	return tx.exec(`INSERT INTO machine_samples (machine_id,`+sampleColumns+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+	return tx.exec(`INSERT INTO machine_samples (machine_id,`+sampleColumns+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 	ON CONFLICT(machine_id,ts) DO UPDATE SET mem_used=excluded.mem_used,mem_compressed=excluded.mem_compressed,
 	mem_total=excluded.mem_total,swap_used=excluded.swap_used,swap_total=excluded.swap_total,pressure_free=excluded.pressure_free,
-	load1=excluded.load1,load5=excluded.load5,load15=excluded.load15,disk_free=excluded.disk_free,cores=excluded.cores`, tx.machineID, unix(s.TS), s.MemUsed, s.MemCompressed, s.MemTotal, s.SwapUsed, s.SwapTotal, s.PressureFree, s.Load1, s.Load5, s.Load15, s.DiskFree, s.Cores)
+	load1=excluded.load1,load5=excluded.load5,load15=excluded.load15,disk_free=excluded.disk_free,cores=excluded.cores,psi_mem_some10=excluded.psi_mem_some10`, tx.machineID, unix(s.TS), s.MemUsed, s.MemCompressed, s.MemTotal, s.SwapUsed, s.SwapTotal, s.PressureFree, s.Load1, s.Load5, s.Load15, s.DiskFree, s.Cores, s.PsiMemSome10)
 }
 
 func scanSample(s scanner) (model.MachineSample, error) {
 	var m model.MachineSample
 	var ts int64
-	err := s.Scan(&ts, &m.MemUsed, &m.MemCompressed, &m.MemTotal, &m.SwapUsed, &m.SwapTotal, &m.PressureFree, &m.Load1, &m.Load5, &m.Load15, &m.DiskFree, &m.Cores)
+	err := s.Scan(&m.MachineID, &ts, &m.MemUsed, &m.MemCompressed, &m.MemTotal, &m.SwapUsed, &m.SwapTotal, &m.PressureFree, &m.Load1, &m.Load5, &m.Load15, &m.DiskFree, &m.Cores, &m.PsiMemSome10)
 	m.TS = fromUnix(ts)
 	return m, err
 }
 
 // LatestSample returns the newest machine sample, or ErrNotFound.
 func (q *querier) LatestSample() (model.MachineSample, error) {
-	return scanSample(q.conn.QueryRowContext(q.ctx, "SELECT "+sampleColumns+" FROM machine_samples WHERE machine_id=? ORDER BY ts DESC LIMIT 1", q.machineID))
+	return q.LatestSampleFor(q.machineID)
+}
+
+// LatestSampleFor returns a machine's newest sample, or ErrNotFound.
+func (q *querier) LatestSampleFor(machineID string) (model.MachineSample, error) {
+	return scanSample(q.conn.QueryRowContext(q.ctx, "SELECT machine_id,"+sampleColumns+" FROM machine_samples WHERE machine_id=? ORDER BY ts DESC LIMIT 1", machineID))
 }
 
 // Samples returns readings at or after since, oldest first.
 func (q *querier) Samples(since time.Time) ([]model.MachineSample, error) {
-	return readMany(q, "SELECT "+sampleColumns+" FROM machine_samples WHERE machine_id=? AND ts>=? ORDER BY ts", []any{q.machineID, unix(since)}, scanSample)
+	return readMany(q, "SELECT machine_id,"+sampleColumns+" FROM machine_samples WHERE machine_id=? AND ts>=? ORDER BY ts", []any{q.machineID, unix(since)}, scanSample)
 }
 
 // UpsertRepo creates or updates a repo identified by path.
 func (tx *Tx) UpsertRepo(r model.Repo) (int64, error) {
-	return tx.upsertID("repos", "machine_id,path,name,remote_url", "path", tx.machineID, r.Path, r.Name, r.RemoteURL)
+	r.RemoteURL = feed.StripURLCredentials(r.RemoteURL)
+	return tx.upsertID("repos", "machine_id,path,name,remote_url", "machine_id,path", tx.machineID, r.Path, r.Name, r.RemoteURL)
 }
 
 // Repos returns repositories ordered by path.
 func (q *querier) Repos() ([]model.Repo, error) {
-	return readMany(q, "SELECT id,path,name,remote_url FROM repos WHERE machine_id=? ORDER BY path", []any{q.machineID}, func(s scanner) (model.Repo, error) {
+	return q.ReposScoped(q.localScope())
+}
+
+// ReposScoped returns selected machines' repositories in path and machine order.
+func (q *querier) ReposScoped(scope Scope) ([]model.Repo, error) {
+	where, args := scope.where("machine_id")
+	return readMany(q, "SELECT machine_id,id,path,name,remote_url FROM repos WHERE "+where+" ORDER BY path,machine_id", args, func(s scanner) (model.Repo, error) {
 		var r model.Repo
-		err := s.Scan(&r.ID, &r.Path, &r.Name, &r.RemoteURL)
+		err := s.Scan(&r.MachineID, &r.ID, &r.Path, &r.Name, &r.RemoteURL)
 		return r, err
 	})
 }
@@ -141,15 +205,15 @@ const worktreeColumns = "repo_id,path,branch,head,ahead,behind,dirty,untracked,o
 
 // UpsertWorktree creates or updates a checkout identified by path.
 func (tx *Tx) UpsertWorktree(w model.Worktree) (int64, error) {
-	return tx.upsertID("worktrees", "machine_id,"+worktreeColumns, "path", tx.machineID, w.RepoID, w.Path, w.Branch, w.Head, w.Ahead, w.Behind, w.Dirty, w.Untracked, unix(w.OldestDirtyMtime), unix(w.LastCommitAt), w.LastCommitSubject, unix(w.UpdatedAt))
+	return tx.upsertID("worktrees", "machine_id,"+worktreeColumns, "machine_id,path", tx.machineID, w.RepoID, w.Path, w.Branch, w.Head, w.Ahead, w.Behind, w.Dirty, w.Untracked, unix(w.OldestDirtyMtime), unix(w.LastCommitAt), w.LastCommitSubject, unix(w.UpdatedAt))
 }
 
 // Worktrees returns a repo's checkouts ordered by path; repoID zero selects all.
 func (q *querier) Worktrees(repoID int64) ([]model.Worktree, error) {
-	return readMany(q, "SELECT id,"+worktreeColumns+" FROM worktrees WHERE machine_id=? AND (?=0 OR repo_id=?) ORDER BY path", []any{q.machineID, repoID, repoID}, func(s scanner) (model.Worktree, error) {
+	return readMany(q, "SELECT machine_id,id,"+worktreeColumns+" FROM worktrees WHERE machine_id=? AND (?=0 OR repo_id=?) ORDER BY path", []any{q.machineID, repoID, repoID}, func(s scanner) (model.Worktree, error) {
 		var w model.Worktree
 		var dirty, commit, updated int64
-		err := s.Scan(&w.ID, &w.RepoID, &w.Path, &w.Branch, &w.Head, &w.Ahead, &w.Behind, &w.Dirty, &w.Untracked, &dirty, &commit, &w.LastCommitSubject, &updated)
+		err := s.Scan(&w.MachineID, &w.ID, &w.RepoID, &w.Path, &w.Branch, &w.Head, &w.Ahead, &w.Behind, &w.Dirty, &w.Untracked, &dirty, &commit, &w.LastCommitSubject, &updated)
 		w.OldestDirtyMtime, w.LastCommitAt, w.UpdatedAt = fromUnix(dirty), fromUnix(commit), fromUnix(updated)
 		return w, err
 	})
@@ -165,10 +229,9 @@ func (tx *Tx) UpsertSession(s model.Session) (int64, error) {
 
 func scanSession(s scanner) (model.Session, error) {
 	var m model.Session
-	var machine string
 	var start, procStart, activity, promptAt int64
 	var ended sql.NullInt64
-	err := s.Scan(&m.ID, &machine, &m.Adapter, &m.ExternalID, &m.ParentID, &m.Origin, &m.Version, &m.PID, &procStart, &m.Cwd, &m.Branch, &m.RepoID, &m.WorktreeID, &m.Title, &m.LastPrompt, &m.RegistryStatus, &m.Label, &m.Heuristic, &m.Evidence, &start, &activity, &promptAt, &m.Hosted, &m.TurnOpen, &ended, &m.SourcePath)
+	err := s.Scan(&m.ID, &m.MachineID, &m.Adapter, &m.ExternalID, &m.ParentID, &m.Origin, &m.Version, &m.PID, &procStart, &m.Cwd, &m.Branch, &m.RepoID, &m.WorktreeID, &m.Title, &m.LastPrompt, &m.RegistryStatus, &m.Label, &m.Heuristic, &m.Evidence, &start, &activity, &promptAt, &m.Hosted, &m.TurnOpen, &ended, &m.SourcePath)
 	m.ProcStart, m.StartedAt, m.LastActivityAt, m.LastPromptAt, m.EndedAt = fromUnix(procStart), fromUnix(start), fromUnix(activity), fromUnix(promptAt), timePointer(ended)
 	return m, err
 }
@@ -180,8 +243,13 @@ func (q *querier) Session(id int64) (model.Session, error) {
 
 // Sessions returns sessions matching filter, newest activity first.
 func (q *querier) Sessions(filter SessionFilter) ([]model.Session, error) {
-	query := "SELECT id," + sessionColumns + " FROM sessions WHERE machine_id=?"
-	args := []any{q.machineID}
+	return q.SessionsScoped(filter, q.localScope())
+}
+
+// SessionsScoped returns selected machines' sessions matching filter.
+func (q *querier) SessionsScoped(filter SessionFilter, scope Scope) ([]model.Session, error) {
+	where, args := scope.where("sessions.machine_id")
+	query := "SELECT id," + sessionColumns + " FROM sessions WHERE " + where
 	if !filter.IncludeEnded {
 		if filter.EndedSince.IsZero() {
 			query += " AND ended_at IS NULL"
@@ -191,8 +259,8 @@ func (q *querier) Sessions(filter SessionFilter) ([]model.Session, error) {
 		}
 	}
 	if filter.RepoPath != "" {
-		query += " AND repo_id IN (SELECT id FROM repos WHERE machine_id=? AND path=?)"
-		args = append(args, q.machineID, filter.RepoPath)
+		query += " AND repo_id IN (SELECT id FROM repos WHERE machine_id=sessions.machine_id AND path=?)"
+		args = append(args, filter.RepoPath)
 	}
 	return readMany(q, query+" ORDER BY last_activity_at DESC,id", args, scanSession)
 }
@@ -211,7 +279,7 @@ func (tx *Tx) ReplaceSessionFiles(sessionID int64, files []model.FileTouch) erro
 
 // SessionFiles groups paths edited at or after since by session, in path order.
 func (q *querier) SessionFiles(since time.Time) (map[int64][]model.FileTouch, error) {
-	rows, err := q.conn.QueryContext(q.ctx, "SELECT session_id,path,last_edit_at FROM session_files WHERE machine_id=? AND last_edit_at>=? ORDER BY session_id,path", q.machineID, unix(since))
+	rows, err := q.conn.QueryContext(q.ctx, "SELECT machine_id,session_id,path,last_edit_at FROM session_files WHERE machine_id=? AND last_edit_at>=? ORDER BY session_id,path", q.machineID, unix(since))
 	if err != nil {
 		return nil, err
 	}
@@ -220,7 +288,7 @@ func (q *querier) SessionFiles(since time.Time) (map[int64][]model.FileTouch, er
 	for rows.Next() {
 		var id, ts int64
 		var f model.FileTouch
-		if err := rows.Scan(&id, &f.Path, &ts); err != nil {
+		if err := rows.Scan(&f.MachineID, &id, &f.Path, &ts); err != nil {
 			return nil, err
 		}
 		f.TS = fromUnix(ts)
@@ -231,12 +299,12 @@ func (q *querier) SessionFiles(since time.Time) (map[int64][]model.FileTouch, er
 
 // UpsertInboxItem inserts an item once. Duplicates never change its text or ack.
 func (tx *Tx) UpsertInboxItem(i model.InboxItem) error {
-	return tx.exec("INSERT OR IGNORE INTO inbox_items (machine_id,id,session_id,kind,ts,summary,acked_at) VALUES (?,?,?,?,?,?,?)", tx.machineID, i.ID, i.SessionID, i.Kind, unix(i.TS), i.Summary, nullableTime(i.AckedAt))
+	return tx.exec("INSERT OR IGNORE INTO inbox_items (machine_id,id,session_id,kind,ts,summary,acked_at,ack_pending_at) VALUES (?,?,?,?,?,?,?,?)", tx.machineID, i.ID, i.SessionID, i.Kind, unix(i.TS), i.Summary, nullableTime(i.AckedAt), nullableTime(i.AckPendingAt))
 }
 
 // AckInbox acknowledges an existing unacknowledged item, returning whether it changed.
 func (tx *Tx) AckInbox(id string, at time.Time) (bool, error) {
-	r, err := tx.conn.ExecContext(tx.ctx, "UPDATE inbox_items SET acked_at=? WHERE machine_id=? AND id=? AND acked_at IS NULL", unix(at), tx.machineID, id)
+	r, err := tx.conn.ExecContext(tx.ctx, "UPDATE inbox_items SET acked_at=?,ack_pending_at=NULL WHERE machine_id=? AND id=? AND acked_at IS NULL", unix(at), tx.machineID, id)
 	if err != nil {
 		return false, err
 	}
@@ -246,12 +314,19 @@ func (tx *Tx) AckInbox(id string, at time.Time) (bool, error) {
 
 // Inbox returns items at or after since, newest first, optionally including acks.
 func (q *querier) Inbox(since time.Time, includeAcked bool) ([]model.InboxItem, error) {
-	return readMany(q, "SELECT id,session_id,kind,ts,summary,acked_at FROM inbox_items WHERE machine_id=? AND ts>=? AND (? OR acked_at IS NULL) ORDER BY ts DESC,id", []any{q.machineID, unix(since), includeAcked}, func(s scanner) (model.InboxItem, error) {
+	return q.InboxScoped(since, includeAcked, q.localScope())
+}
+
+// InboxScoped returns selected machines' attention items, newest first.
+func (q *querier) InboxScoped(since time.Time, includeAcked bool, scope Scope) ([]model.InboxItem, error) {
+	where, args := scope.where("machine_id")
+	args = append(args, unix(since), includeAcked)
+	return readMany(q, "SELECT machine_id,id,session_id,kind,ts,summary,acked_at,ack_pending_at FROM inbox_items WHERE "+where+" AND ts>=? AND (? OR acked_at IS NULL) ORDER BY ts DESC,id,machine_id", args, func(s scanner) (model.InboxItem, error) {
 		var i model.InboxItem
 		var ts int64
-		var ack sql.NullInt64
-		err := s.Scan(&i.ID, &i.SessionID, &i.Kind, &ts, &i.Summary, &ack)
-		i.TS, i.AckedAt = fromUnix(ts), timePointer(ack)
+		var ack, pending sql.NullInt64
+		err := s.Scan(&i.MachineID, &i.ID, &i.SessionID, &i.Kind, &ts, &i.Summary, &ack, &pending)
+		i.TS, i.AckedAt, i.AckPendingAt = fromUnix(ts), timePointer(ack), timePointer(pending)
 		return i, err
 	})
 }
@@ -280,11 +355,17 @@ func (tx *Tx) ReplaceOrphans(orphans []model.Orphan) error {
 
 // Orphans returns orphan process trees ordered by ID.
 func (q *querier) Orphans() ([]model.Orphan, error) {
-	return readMany(q, "SELECT id,root_pid,start_time,signature,proc_count,rss_total,cwd,young,verified,evidence,pids,first_seen FROM orphans WHERE machine_id=? ORDER BY id", []any{q.machineID}, func(s scanner) (model.Orphan, error) {
+	return q.OrphansScoped(q.localScope())
+}
+
+// OrphansScoped returns selected machines' orphan trees in ID and machine order.
+func (q *querier) OrphansScoped(scope Scope) ([]model.Orphan, error) {
+	where, args := scope.where("machine_id")
+	return readMany(q, "SELECT machine_id,id,root_pid,start_time,signature,proc_count,rss_total,cwd,young,verified,evidence,pids,first_seen FROM orphans WHERE "+where+" ORDER BY id,machine_id", args, func(s scanner) (model.Orphan, error) {
 		var o model.Orphan
 		var start, first int64
 		var evidence, pids string
-		if err := s.Scan(&o.ID, &o.RootPID, &start, &o.Signature, &o.ProcCount, &o.RSSTotal, &o.Cwd, &o.Young, &o.Verified, &evidence, &pids, &first); err != nil {
+		if err := s.Scan(&o.MachineID, &o.ID, &o.RootPID, &start, &o.Signature, &o.ProcCount, &o.RSSTotal, &o.Cwd, &o.Young, &o.Verified, &evidence, &pids, &first); err != nil {
 			return o, err
 		}
 		o.StartTime, o.FirstSeen = fromUnix(start), fromUnix(first)
@@ -310,10 +391,10 @@ func (tx *Tx) SetSourceError(name, message string, at time.Time) error {
 
 // Sources returns collection source freshness, ordered by name.
 func (q *querier) Sources() ([]model.SourceStatus, error) {
-	return readMany(q, "SELECT name,last_ok_at,last_error,last_error_at FROM sources WHERE machine_id=? ORDER BY name", []any{q.machineID}, func(s scanner) (model.SourceStatus, error) {
+	return readMany(q, "SELECT machine_id,name,last_ok_at,last_error,last_error_at FROM sources WHERE machine_id=? ORDER BY name", []any{q.machineID}, func(s scanner) (model.SourceStatus, error) {
 		var m model.SourceStatus
 		var ok, failed int64
-		err := s.Scan(&m.Name, &ok, &m.LastError, &failed)
+		err := s.Scan(&m.MachineID, &m.Name, &ok, &m.LastError, &failed)
 		m.LastOKAt, m.LastErrorAt = fromUnix(ok), fromUnix(failed)
 		return m, err
 	})
@@ -321,15 +402,27 @@ func (q *querier) Sources() ([]model.SourceStatus, error) {
 
 // InsertGap records a collector downtime interval once.
 func (tx *Tx) InsertGap(g model.Gap) error {
-	return tx.exec("INSERT OR IGNORE INTO gaps (machine_id,from_ts,to_ts) VALUES (?,?,?)", tx.machineID, unix(g.From), unix(g.To))
+	r, err := tx.conn.ExecContext(tx.ctx, "INSERT OR IGNORE INTO gaps (machine_id,from_ts,to_ts) VALUES (?,?,?)", tx.machineID, unix(g.From), unix(g.To))
+	if err != nil {
+		return err
+	}
+	n, err := r.RowsAffected()
+	if err != nil || n == 0 || tx.machineID != tx.localID {
+		return err
+	}
+	g.MachineID = tx.machineID
+	key, payload := feed.Encode(feed.Gap, g, feed.None)
+	_, err = tx.AppendFeed(string(feed.Gap), key, payload, g.To)
+	return err
 }
 
 // Gaps returns intervals ending at or after since, oldest first.
 func (q *querier) Gaps(since time.Time) ([]model.Gap, error) {
-	return readMany(q, "SELECT from_ts,to_ts FROM gaps WHERE machine_id=? AND to_ts>=? ORDER BY from_ts,to_ts", []any{q.machineID, unix(since)}, func(s scanner) (model.Gap, error) {
+	return readMany(q, "SELECT machine_id,from_ts,to_ts FROM gaps WHERE machine_id=? AND to_ts>=? ORDER BY from_ts,to_ts", []any{q.machineID, unix(since)}, func(s scanner) (model.Gap, error) {
 		var from, to int64
-		err := s.Scan(&from, &to)
-		return model.Gap{From: fromUnix(from), To: fromUnix(to)}, err
+		var machine string
+		err := s.Scan(&machine, &from, &to)
+		return model.Gap{MachineID: machine, From: fromUnix(from), To: fromUnix(to)}, err
 	})
 }
 
@@ -337,7 +430,7 @@ func (q *querier) Gaps(since time.Time) ([]model.Gap, error) {
 func (q *querier) GetOffset(path string) (model.Offset, bool, error) {
 	var o model.Offset
 	var mtime int64
-	err := q.conn.QueryRowContext(q.ctx, "SELECT inode,size,offset,mtime FROM offsets WHERE machine_id=? AND path=?", q.machineID, path).Scan(&o.Inode, &o.Size, &o.Pos, &mtime)
+	err := q.conn.QueryRowContext(q.ctx, "SELECT machine_id,inode,size,offset,mtime FROM offsets WHERE machine_id=? AND path=?", q.machineID, path).Scan(&o.MachineID, &o.Inode, &o.Size, &o.Pos, &mtime)
 	if err == sql.ErrNoRows {
 		return o, false, nil
 	}
@@ -361,6 +454,9 @@ func (q *querier) Meta(key string) (string, error) {
 // SetMeta stores metadata. The machine identity is immutable after creation.
 // It is available on Store as well as Tx; use Tx inside a transaction callback.
 func (q *querier) SetMeta(key, value string) error {
+	if q.machineID != q.localID {
+		return fmt.Errorf("metadata is local-only")
+	}
 	if key == "machine_id" && value != q.machineID {
 		return fmt.Errorf("machine_id is immutable")
 	}
@@ -379,19 +475,19 @@ func (tx *Tx) InsertEvent(e model.Event) error {
 func scanEvent(s scanner) (model.Event, error) {
 	var e model.Event
 	var ts int64
-	err := s.Scan(&e.Adapter, &e.ExternalID, &ts, &e.Kind, &e.Summary)
+	err := s.Scan(&e.MachineID, &e.Adapter, &e.ExternalID, &ts, &e.Kind, &e.Summary)
 	e.TS = fromUnix(ts)
 	return e, err
 }
 
 // Events returns a session's events at or after since, oldest first.
 func (q *querier) Events(adapter, externalID string, since time.Time) ([]model.Event, error) {
-	return readMany(q, "SELECT adapter,external_id,ts,kind,summary FROM events WHERE machine_id=? AND adapter=? AND external_id=? AND ts>=? ORDER BY ts,id", []any{q.machineID, adapter, externalID, unix(since)}, scanEvent)
+	return readMany(q, "SELECT machine_id,adapter,external_id,ts,kind,summary FROM events WHERE machine_id=? AND adapter=? AND external_id=? AND ts>=? ORDER BY ts,id", []any{q.machineID, adapter, externalID, unix(since)}, scanEvent)
 }
 
 // LatestEvents returns events across sessions at or after since, newest first.
 func (q *querier) LatestEvents(since time.Time) ([]model.Event, error) {
-	return readMany(q, "SELECT adapter,external_id,ts,kind,summary FROM events WHERE machine_id=? AND ts>=? ORDER BY ts DESC,id DESC", []any{q.machineID, unix(since)}, scanEvent)
+	return readMany(q, "SELECT machine_id,adapter,external_id,ts,kind,summary FROM events WHERE machine_id=? AND ts>=? ORDER BY ts DESC,id DESC", []any{q.machineID, unix(since)}, scanEvent)
 }
 
 // InsertHandoff records a session's completion text.
@@ -405,11 +501,11 @@ func (q *querier) Handoffs(repoID int64, limit int) ([]model.CompletionEvent, er
 	if limit <= 0 {
 		limit = -1
 	}
-	return readMany(q, `SELECT h.id,h.ts,h.text FROM handoffs h JOIN sessions s ON s.id=h.session_id AND s.machine_id=h.machine_id
+	return readMany(q, `SELECT h.machine_id,h.id,h.ts,h.text FROM handoffs h JOIN sessions s ON s.id=h.session_id AND s.machine_id=h.machine_id
 	WHERE h.machine_id=? AND s.repo_id=? ORDER BY h.ts DESC,h.id DESC LIMIT ?`, []any{q.machineID, repoID, limit}, func(s scanner) (model.CompletionEvent, error) {
 		var e model.CompletionEvent
 		var id, ts int64
-		err := s.Scan(&id, &ts, &e.Text)
+		err := s.Scan(&e.MachineID, &id, &ts, &e.Text)
 		e.ID, e.TS = strconv.FormatInt(id, 10), fromUnix(ts)
 		return e, err
 	})
@@ -419,13 +515,63 @@ func (q *querier) Handoffs(repoID int64, limit int) ([]model.CompletionEvent, er
 // bucket between 24 hours and seven days old. Samples in the last day stay intact.
 func (tx *Tx) Prune(now time.Time) error {
 	month, week, day := unix(now.Add(-30*24*time.Hour)), unix(now.Add(-7*24*time.Hour)), unix(now.Add(-24*time.Hour))
+	// Inbox has no cascading FK; events reference the natural key. Keep the
+	// attribution row for every retained reference, on local and remote machines.
+	const expiredSession = `machine_id=? AND ended_at<?
+	AND NOT EXISTS (SELECT 1 FROM inbox_items i WHERE i.machine_id=sessions.machine_id AND i.session_id=sessions.id AND i.ts>=?)
+	AND NOT EXISTS (SELECT 1 FROM events e WHERE e.machine_id=sessions.machine_id AND e.adapter=sessions.adapter AND e.external_id=sessions.external_id AND e.ts>=?)
+	AND NOT EXISTS (SELECT 1 FROM handoffs h WHERE h.machine_id=sessions.machine_id AND h.session_id=sessions.id AND h.ts>=?)`
+	sessionArgs := []any{tx.machineID, month, month, month, month}
+	// Capture natural keys before deleting rows (including cascading children).
+	if tx.machineID == tx.localID {
+		sessions, err := readMany(&tx.querier, "SELECT id,"+sessionColumns+" FROM sessions WHERE "+expiredSession, sessionArgs, scanSession)
+		if err != nil {
+			return err
+		}
+		events, err := tx.LatestEvents(time.Time{})
+		if err != nil {
+			return err
+		}
+		items, err := tx.Inbox(time.Time{}, true)
+		if err != nil {
+			return err
+		}
+		remove := func(kind feed.Kind, row any) error {
+			key, _ := feed.Encode(kind, row, feed.None)
+			deleteKey, payload := feed.Encode(feed.Delete, feed.DeleteRow{Kind: kind, Key: key}, feed.None)
+			_, err := tx.AppendFeed(string(feed.Delete), deleteKey, payload, now)
+			return err
+		}
+		for _, s := range sessions {
+			if s.EndedAt != nil && unix(*s.EndedAt) < month {
+				if err := remove(feed.Session, s); err != nil {
+					return err
+				}
+			}
+		}
+		for _, e := range events {
+			if unix(e.TS) < month {
+				if err := remove(feed.Event, e); err != nil {
+					return err
+				}
+			}
+		}
+		for _, i := range items {
+			if unix(i.TS) < month {
+				if err := remove(feed.Inbox, i); err != nil {
+					return err
+				}
+			}
+		}
+	}
 	for _, stmt := range []struct {
 		query string
 		args  []any
 	}{
 		{"DELETE FROM events WHERE machine_id=? AND ts<?", []any{tx.machineID, month}},
 		{"DELETE FROM inbox_items WHERE machine_id=? AND ts<?", []any{tx.machineID, month}},
-		{"DELETE FROM sessions WHERE machine_id=? AND ended_at<?", []any{tx.machineID, month}},
+		{"DELETE FROM handoffs WHERE machine_id=? AND ts<?", []any{tx.machineID, month}},
+		{"DELETE FROM sessions WHERE " + expiredSession, sessionArgs},
 		{"DELETE FROM machine_samples WHERE machine_id=? AND ts<?", []any{tx.machineID, week}},
 		{`DELETE FROM machine_samples WHERE machine_id=? AND ts<? AND ts NOT IN
 		(SELECT MAX(ts) FROM machine_samples WHERE machine_id=? AND ts>=? AND ts<? GROUP BY ts/?)`, []any{tx.machineID, day, tx.machineID, week, day, int64(5 * time.Minute)}},
@@ -435,12 +581,152 @@ func (tx *Tx) Prune(now time.Time) error {
 			return err
 		}
 	}
+	if tx.machineID == tx.localID {
+		// Remove a sequence prefix even if the wall clock moved backwards, so
+		// min(seq)-1 remains a sufficient guard against skipping deleted rows.
+		if err := tx.exec(`DELETE FROM feed WHERE seq<=(SELECT MAX(seq) FROM feed WHERE ts<?) OR seq IN
+		(SELECT seq FROM feed ORDER BY seq DESC LIMIT -1 OFFSET 200000)`, month); err != nil {
+			return err
+		}
+		return tx.PruneRemote(now)
+	}
 	return nil
+}
+
+// FeedRow is one committed fleet change, ordered by its persistent sequence.
+type FeedRow = feed.FeedRow
+
+// ErrResnapshot means the epoch or cursor cannot be resumed safely.
+var ErrResnapshot = errors.New("feed cursor requires resnapshot")
+
+// FeedSince validates and reads a cursor in one read transaction, so a concurrent
+// retention pass cannot prune rows between checking bounds and reading them.
+func (s *Store) FeedSince(epoch string, seq int64, limit int) ([]FeedRow, error) {
+	tx, err := s.db.BeginTx(s.ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	q := s.querier
+	q.conn = tx
+	rows, err := q.FeedSince(epoch, seq, limit)
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
+// AppendFeed appends a local change in the same transaction as its data writes.
+func (tx *Tx) AppendFeed(kind, key string, payload []byte, ts time.Time) (int64, error) {
+	if tx.machineID != tx.localID {
+		return 0, fmt.Errorf("feed is local-only")
+	}
+	if enabled, err := tx.Meta("feed_enabled"); err != nil && !errors.Is(err, ErrNotFound) {
+		return 0, err
+	} else if enabled == "false" {
+		return 0, nil
+	}
+	if !json.Valid(payload) {
+		return 0, fmt.Errorf("invalid feed payload for %s", kind)
+	}
+	var seq int64
+	err := tx.conn.QueryRowContext(tx.ctx, "INSERT INTO feed (ts,kind,key,payload) VALUES (?,?,?,?) RETURNING seq", unix(ts), kind, key, string(payload)).Scan(&seq)
+	return seq, err
+}
+
+// ConfigureFeed suspends publication without consumers. Restarting publication
+// rotates the epoch because changes during suspension require a fresh snapshot.
+func (tx *Tx) ConfigureFeed(enabled bool) error {
+	previous, err := tx.Meta("feed_enabled")
+	if err != nil && !errors.Is(err, ErrNotFound) {
+		return err
+	}
+	value := strconv.FormatBool(enabled)
+	if previous == value {
+		return nil
+	}
+	if previous != "" || !enabled {
+		if err := tx.resetFeed(); err != nil {
+			return err
+		}
+	}
+	return tx.SetMeta("feed_enabled", value)
+}
+
+// SetFeedShare persists the effective export policy. A stricter policy removes
+// retained text and invalidates every old cursor in the same transaction.
+func (tx *Tx) SetFeedShare(share feed.ShareText) error {
+	previous, err := tx.Meta("feed_share_text")
+	if err != nil && !errors.Is(err, ErrNotFound) {
+		return err
+	}
+	level := map[feed.ShareText]int{feed.None: 0, feed.Titles: 1, feed.Snippets: 2}
+	// An unversioned retained feed may contain snippets from an older collector.
+	oldLevel := 2
+	if previous != "" {
+		oldLevel = level[feed.ShareText(previous)]
+	}
+	if level[share] < oldLevel {
+		if err := tx.resetFeed(); err != nil {
+			return err
+		}
+	}
+	if previous == string(share) {
+		return nil
+	}
+	return tx.SetMeta("feed_share_text", string(share))
+}
+
+func (tx *Tx) resetFeed() error {
+	epoch, err := randomID()
+	if err != nil {
+		return err
+	}
+	if err := tx.exec("DELETE FROM feed"); err != nil {
+		return err
+	}
+	return tx.SetMeta("feed_epoch", epoch)
+}
+
+// FeedBounds returns the epoch and retained cursor range. With no retained rows,
+// minSeq is maxSeq+1; maxSeq still remembers the last committed AUTOINCREMENT ID.
+func (q *querier) FeedBounds() (epoch string, minSeq, maxSeq int64, err error) {
+	err = q.conn.QueryRowContext(q.ctx, `SELECT value,
+	COALESCE((SELECT MIN(seq) FROM feed),COALESCE((SELECT seq FROM sqlite_sequence WHERE name='feed'),0)+1),
+	COALESCE((SELECT seq FROM sqlite_sequence WHERE name='feed'),0)
+	FROM meta WHERE key='feed_epoch' AND machine_id=?`, q.localID).Scan(&epoch, &minSeq, &maxSeq)
+	return
+}
+
+// FeedSince returns changes strictly after seq; nonpositive limit means all.
+// Use the transaction's method when reading alongside snapshot data.
+func (q *querier) FeedSince(epoch string, seq int64, limit int) ([]FeedRow, error) {
+	current, min, max, err := q.FeedBounds()
+	if err != nil {
+		return nil, err
+	}
+	if epoch != current || seq < min-1 || seq > max {
+		return nil, ErrResnapshot
+	}
+	if limit <= 0 {
+		limit = -1
+	}
+	return readMany(q, "SELECT seq,ts,kind,key,payload FROM feed WHERE seq>? ORDER BY seq LIMIT ?", []any{seq, limit}, func(s scanner) (FeedRow, error) {
+		var row FeedRow
+		var ts int64
+		var payload string
+		err := s.Scan(&row.Seq, &ts, &row.Kind, &row.Key, &payload)
+		row.TS, row.Payload = fromUnix(ts), json.RawMessage(payload)
+		return row, err
+	})
 }
 
 // Offsets loads tail positions once before concurrent source collection.
 func (q *querier) Offsets() (map[string]model.Offset, error) {
-	rows, err := q.conn.QueryContext(q.ctx, "SELECT path,inode,size,offset,mtime FROM offsets WHERE machine_id=?", q.machineID)
+	rows, err := q.conn.QueryContext(q.ctx, "SELECT machine_id,path,inode,size,offset,mtime FROM offsets WHERE machine_id=?", q.machineID)
 	if err != nil {
 		return nil, err
 	}
@@ -450,7 +736,7 @@ func (q *querier) Offsets() (map[string]model.Offset, error) {
 		var path string
 		var o model.Offset
 		var mtime int64
-		if err := rows.Scan(&path, &o.Inode, &o.Size, &o.Pos, &mtime); err != nil {
+		if err := rows.Scan(&o.MachineID, &path, &o.Inode, &o.Size, &o.Pos, &mtime); err != nil {
 			return nil, err
 		}
 		o.Mtime = fromUnix(mtime)

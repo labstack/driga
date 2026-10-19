@@ -12,12 +12,14 @@ import (
 
 // Globals are flags shared by every command.
 type Globals struct {
-	JSON     bool          `help:"Print versioned JSON instead of tables."`
-	Project  string        `help:"Scope views to one project (path, name, or '.')."`
-	Since    string        `help:"Only show items since a duration ago or 'yesterday'."`
-	Snapshot bool          `help:"Force snapshot mode (one-shot collect, no history)."`
-	NoColor  bool          `name:"no-color" help:"Disable colors."`
-	Watch    time.Duration `help:"Re-render every interval (e.g. 2s)." placeholder:"DUR"`
+	Machine        string        `default:"all" help:"Scope views to a machine name, ID, device-ID prefix, local, or all."`
+	cachedMachines bool          `kong:"-"`
+	JSON           bool          `help:"Print versioned JSON instead of tables."`
+	Project        string        `help:"Scope views to one project (path, name, or '.')."`
+	Since          string        `help:"Only show items since a duration ago or 'yesterday'."`
+	Snapshot       bool          `help:"Force snapshot mode (one-shot collect, no history)."`
+	NoColor        bool          `name:"no-color" help:"Disable colors."`
+	Watch          time.Duration `help:"Re-render every interval (e.g. 2s)." placeholder:"DUR"`
 
 	Version string    `kong:"-"`
 	Stdout  io.Writer `kong:"-"`
@@ -37,16 +39,21 @@ type Root struct {
 	Inbox     InboxCmd     `cmd:"" help:"List attention and completion events."`
 	Conflicts ConflictsCmd `cmd:"" help:"Show current and recent overlaps."`
 	Orphans   OrphansCmd   `cmd:"" help:"List orphan process trees."`
+	Machines  MachinesCmd  `cmd:"" help:"List known machines and their connection health."`
 	Machine   MachineCmd   `cmd:"" help:"Show machine health."`
 	Top       TopCmd       `cmd:"" help:"Open the interactive session viewer."`
+	Mcp       McpCmd       `cmd:"" help:"Serve read-only MCP tools over stdio."`
 
 	Service    ServiceCmd `cmd:"" help:"Manage the collector service."`
 	Doctor     DoctorCmd  `cmd:"" help:"Check setup and collection health."`
 	Init       InitCmd    `cmd:"" help:"Guide optional setup."`
 	Config     ConfigCmd  `cmd:"" help:"Inspect or edit configuration."`
 	Collect    CollectCmd `cmd:"" help:"Run the collector (what launchd runs)."`
+	Serve      ServeCmd   `cmd:"" help:"Run the collector with fleet serving enabled."`
+	Fleet      FleetCmd   `cmd:"" help:"Inspect fleet identity, serving status and viewers."`
 	Hook       HookCmd    `cmd:"" hidden:"" help:"Record an agent hook."`
 	Hooks      HooksCmd   `cmd:"" help:"Manage agent hooks."`
+	Feed       FeedCmd    `cmd:"" hidden:"" help:"Inspect the local fleet feed."`
 	VersionCmd VersionCmd `cmd:"" name:"version" help:"Print the driga version."`
 }
 

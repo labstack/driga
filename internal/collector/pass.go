@@ -2,12 +2,15 @@
 package collector
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"runtime"
 	"sort"
 	"strings"
@@ -16,6 +19,8 @@ import (
 	"github.com/labstack/driga/internal/adapter"
 	"github.com/labstack/driga/internal/config"
 	"github.com/labstack/driga/internal/derive"
+	"github.com/labstack/driga/internal/feed"
+	"github.com/labstack/driga/internal/fleet"
 	"github.com/labstack/driga/internal/gitscan"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/platform"
@@ -37,6 +42,7 @@ type Deps struct {
 	State      *State
 	spoolSince time.Time
 	snapshot   bool
+	clock      daemonClock
 }
 
 func (d Deps) now() time.Time {
@@ -75,6 +81,18 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 		return r, err
 	}
 	err = st.Tx(ctx, func(tx *store.Tx) error {
+		share := feed.EffectiveShare(feed.ShareText(d.Cfg.Fleet.ShareText), d.Cfg.CaptureText)
+		feedEnabled, err := configurePassFeed(d, tx)
+		if err != nil {
+			return err
+		}
+		var beforeFeed map[string]passFeedRow
+		if feedEnabled {
+			beforeFeed, err = passFeedRows(tx, now, share)
+		}
+		if err != nil {
+			return err
+		}
 		source := func(name string, err error) error {
 			if err != nil {
 				message := scrub.Scrub(err.Error())
@@ -150,6 +168,10 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 				if err := tx.InsertSample(sample); err != nil {
 					return err
 				}
+				sample.MachineID = tx.MachineID()
+				if err := appendFeed(tx, feed.MachineSample, sample, share, now); err != nil {
+					return err
+				}
 				r.Samples = 1
 				m, err := tx.Machine()
 				if err != nil && !errors.Is(err, store.ErrNotFound) {
@@ -211,6 +233,9 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 					if err := tx.InsertHandoff(s.ID, c.TS, c.Text); err != nil {
 						return err
 					}
+					if err := appendFeed(tx, feed.Handoff, feed.HandoffRow{MachineID: tx.MachineID(), Session: feed.SessionKey{Adapter: s.Adapter, ExternalID: s.ExternalID}, TS: c.TS, Text: c.Text}, share, now); err != nil {
+						return err
+					}
 				}
 			}
 		}
@@ -218,6 +243,9 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 			if h.Event == "Stop" && h.Message != "" {
 				if i, ok := byKey[sessionKey(h.Adapter, h.SessionID)]; ok {
 					if err := tx.InsertHandoff(ss[i].ID, h.TS, h.Message); err != nil {
+						return err
+					}
+					if err := appendFeed(tx, feed.Handoff, feed.HandoffRow{MachineID: tx.MachineID(), Session: feed.SessionKey{Adapter: h.Adapter, ExternalID: h.SessionID}, TS: h.TS, Text: h.Message}, share, now); err != nil {
 						return err
 					}
 				}
@@ -272,6 +300,9 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 					}
 				}
 			}
+			if err := intakeInput(tx, *s, events, &in, now); err != nil {
+				return err
+			}
 			s.Label, s.Heuristic, s.Evidence = derive.Label(in, now, derive.Thresholds{StuckAfter: d.Cfg.StuckAfter})
 		}
 		parents = derive.LinkParents(ss, idx)
@@ -322,7 +353,13 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 			for _, o := range old {
 				prev[o.ID] = o
 			}
-			orphans := derive.FindOrphans(idx, ss, d.Sigs, now, d.Cfg.OrphanMinAge, prev, derive.WithSpawnMemory(memory))
+			orphanOpts := []derive.OrphanOption{derive.WithSpawnMemory(memory)}
+			if f, ok := d.Plat.(platform.SubreaperFinder); ok {
+				if pid, ok := f.UserSubreaper(); ok {
+					orphanOpts = append(orphanOpts, derive.WithSubreaper(pid))
+				}
+			}
+			orphans := derive.FindOrphans(idx, ss, d.Sigs, now, d.Cfg.OrphanMinAge, prev, orphanOpts...)
 			var peers map[int32]bool
 			if probe, ok := d.Plat.(platform.SocketProber); ok && p.Sockets && len(orphans) > 0 {
 				var pids []int32
@@ -339,7 +376,7 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 					return e
 				}
 			}
-			orphans = derive.FindOrphans(idx, ss, d.Sigs, now, d.Cfg.OrphanMinAge, prev, derive.WithSpawnMemory(memory), derive.WithExternalPeers(peers))
+			orphans = derive.FindOrphans(idx, ss, d.Sigs, now, d.Cfg.OrphanMinAge, prev, append(orphanOpts, derive.WithExternalPeers(peers))...)
 			if err := tx.ReplaceOrphans(orphans); err != nil {
 				return err
 			}
@@ -359,6 +396,24 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 				return err
 			}
 		}
+		if feedEnabled {
+			afterFeed, err := passFeedRows(tx, now, share)
+			if err != nil {
+				return err
+			}
+			if err := appendPassChanges(tx, beforeFeed, afterFeed, now); err != nil {
+				return err
+			}
+		}
+		if procsOK {
+			keys := make(map[int64]feed.SessionKey, len(ss))
+			for _, s := range ss {
+				keys[s.ID] = feed.SessionKey{Adapter: s.Adapter, ExternalID: s.ExternalID}
+			}
+			if err := appendFeed(tx, feed.Procs, feed.ProcsRow{MachineID: tx.MachineID(), Processes: procs, Sessions: keys}, share, now); err != nil {
+				return err
+			}
+		}
 		r.Sessions, r.Procs = len(ss), len(procs)
 		return tx.SetMeta("last_pass_at", now.Format(time.RFC3339Nano))
 	})
@@ -373,7 +428,30 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 
 func sessionKey(a, id string) string { return a + "\x00" + id }
 
+func configurePassFeed(d Deps, tx *store.Tx) (bool, error) {
+	enabled := d.Cfg.Fleet.Serve && !d.snapshot
+	if !enabled && !d.snapshot {
+		dir := tx.DataDir()
+		if dir == "" {
+			dir = config.DataDir()
+		}
+		viewers, err := fleet.LoadViewers(filepath.Join(dir, "fleet"))
+		if err != nil {
+			return false, err
+		}
+		enabled = len(viewers) > 0
+	}
+	if err := tx.SetFeedShare(feed.EffectiveShare(feed.ShareText(d.Cfg.Fleet.ShareText), d.Cfg.CaptureText)); err != nil {
+		return false, err
+	}
+	return enabled, tx.ConfigureFeed(enabled)
+}
+
 func drainSpool(d Deps, tx *store.Tx, now time.Time, source func(string, error) error) ([]model.HookEvent, error) {
+	// Spool-only wakes can follow enrollment without another full pass.
+	if _, err := configurePassFeed(d, tx); err != nil {
+		return nil, err
+	}
 	offsets := make(map[string]model.Offset)
 	entries, err := os.ReadDir(d.SpoolDir)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -401,6 +479,12 @@ func drainSpool(d Deps, tx *store.Tx, now time.Time, source func(string, error) 
 	var hooks []model.HookEvent
 	for _, ev := range events {
 		if ev.Event == "ack" {
+			if ev.MachineID != "" && ev.MachineID != tx.MachineID() {
+				if err := tx.ForMachine(ev.MachineID).MarkAckPending(ev.Message, now); err != nil {
+					return nil, err
+				}
+				continue
+			}
 			if _, err := tx.AckInbox(ev.Message, ev.TS); err != nil {
 				return nil, err
 			}
@@ -414,12 +498,205 @@ func drainSpool(d Deps, tx *store.Tx, now time.Time, source func(string, error) 
 		} else {
 			ev.Message = ""
 		}
-		if err := tx.InsertEvent(model.Event{Adapter: ev.Adapter, ExternalID: ev.SessionID, TS: ev.TS, Kind: ev.Event, Summary: ev.Message}); err != nil {
+		event := model.Event{MachineID: tx.MachineID(), Adapter: ev.Adapter, ExternalID: ev.SessionID, TS: ev.TS, Kind: ev.Event, Summary: ev.Message}
+		if err := tx.InsertEvent(event); err != nil {
+			return nil, err
+		}
+		share := feed.EffectiveShare(feed.ShareText(d.Cfg.Fleet.ShareText), d.Cfg.CaptureText)
+		if err := appendFeed(tx, feed.Event, event, share, now); err != nil {
 			return nil, err
 		}
 		hooks = append(hooks, ev)
 	}
 	return hooks, nil
+}
+
+func appendFeed(tx *store.Tx, kind feed.Kind, row any, share feed.ShareText, now time.Time) error {
+	key, payload := feed.Encode(kind, row, share)
+	if payload == nil && kind == feed.Handoff && share != feed.Snippets {
+		return nil
+	}
+	_, err := tx.AppendFeed(string(kind), key, payload, now)
+	return err
+}
+
+type passFeedRow struct {
+	kind       feed.Kind
+	key        string
+	payload    []byte
+	comparison []byte
+}
+
+var evidenceDuration = regexp.MustCompile(`\b[0-9]+(?:\.[0-9]+)?(?:h|ms|m|s)(?:[0-9]+(?:\.[0-9]+)?(?:h|ms|m|s))*\b`)
+
+// passFeedRows reads mutable entities on the pass transaction. Stored session
+// changes still emit a row when the changed field is withheld by text policy.
+// Append-only events, handoffs, samples and bulk procs are emitted at insertion.
+func passFeedRows(tx *store.Tx, now time.Time, share feed.ShareText) (map[string]passFeedRow, error) {
+	rows := make(map[string]passFeedRow)
+	add := func(kind feed.Kind, row any) {
+		key, payload := feed.Encode(kind, row, share)
+		comparisonRow := row
+		switch v := row.(type) {
+		case feed.SessionRow:
+			// Evidence is an observation at the feed row's timestamp. Keep its
+			// readable sampled age, but age alone must not publish every wake.
+			v.Evidence = evidenceDuration.ReplaceAllString(v.Evidence, "<age>")
+			comparisonRow = v
+		case model.SourceStatus:
+			failed := !v.LastErrorAt.IsZero() && !v.LastErrorAt.Before(v.LastOKAt)
+			v.LastOKAt, v.LastErrorAt = time.Time{}, time.Time{}
+			comparisonRow = struct {
+				model.SourceStatus
+				Failed bool
+			}{v, failed}
+		}
+		if w, ok := row.(feed.WorktreeRow); ok {
+			// Git refreshes UpdatedAt on every scan; only publish changed facts.
+			w.UpdatedAt = time.Time{}
+			comparisonRow = w
+		}
+		comparison, _ := json.Marshal(comparisonRow)
+		if kind == feed.Machine {
+			comparison = payload
+		} // LastSeen is collection cadence, not host metadata.
+		rows[feed.Key(kind, key)] = passFeedRow{kind, key, payload, comparison}
+	}
+	repos, err := tx.Repos()
+	if err != nil {
+		return nil, err
+	}
+	repoPaths := make(map[int64]string)
+	for _, r := range repos {
+		repoPaths[r.ID] = r.Path
+		clean := feed.StripURLCredentials(r.RemoteURL)
+		if clean != r.RemoteURL {
+			r.RemoteURL = clean
+			if _, err := tx.UpsertRepo(r); err != nil {
+				return nil, err
+			}
+		}
+		add(feed.Repo, r)
+	}
+	worktrees, err := tx.Worktrees(0)
+	if err != nil {
+		return nil, err
+	}
+	worktreePaths := make(map[int64]string)
+	for _, w := range worktrees {
+		worktreePaths[w.ID] = w.Path
+		add(feed.Worktree, feed.WorktreeRow{Worktree: w, RepoPath: repoPaths[w.RepoID]})
+	}
+	ss, err := tx.Sessions(store.SessionFilter{IncludeEnded: true})
+	if err != nil {
+		return nil, err
+	}
+	keys := make(map[int64]feed.SessionKey, len(ss))
+	for _, s := range ss {
+		keys[s.ID] = feed.SessionKey{Adapter: s.Adapter, ExternalID: s.ExternalID}
+	}
+	for _, s := range ss {
+		row := feed.SessionRow{Session: s}
+		if s.ParentID != nil {
+			if parent, ok := keys[*s.ParentID]; ok {
+				row.Parent = &parent
+			}
+		}
+		if s.RepoID != nil {
+			row.RepoPath = repoPaths[*s.RepoID]
+		}
+		if s.WorktreeID != nil {
+			row.WorktreePath = worktreePaths[*s.WorktreeID]
+		}
+		add(feed.Session, row)
+	}
+	files, err := tx.SessionFiles(now.Add(-30 * time.Minute))
+	if err != nil {
+		return nil, err
+	}
+	for id, f := range files {
+		if key, ok := keys[id]; ok {
+			add(feed.SessionFiles, feed.FilesRow{MachineID: tx.MachineID(), Session: key, Files: f})
+		}
+	}
+	items, err := tx.Inbox(time.Time{}, true)
+	if err != nil {
+		return nil, err
+	}
+	for _, i := range items {
+		add(feed.Inbox, feed.InboxRow{InboxItem: i, Session: keys[i.SessionID]})
+	}
+	orphans, err := tx.Orphans()
+	if err != nil {
+		return nil, err
+	}
+	for _, o := range orphans {
+		add(feed.Orphan, o)
+	}
+	sources, err := tx.Sources()
+	if err != nil {
+		return nil, err
+	}
+	for _, s := range sources {
+		add(feed.Source, s)
+	}
+	m, err := tx.Machine()
+	if err == nil {
+		add(feed.Machine, m)
+	} else if !errors.Is(err, store.ErrNotFound) {
+		return nil, err
+	}
+	return rows, nil
+}
+
+func appendPassChanges(tx *store.Tx, before, after map[string]passFeedRow, now time.Time) error {
+	// Stable order also keeps repositories ahead of their referencing checkouts.
+	order := map[feed.Kind]int{feed.Machine: 0, feed.Repo: 1, feed.Worktree: 2, feed.Session: 3, feed.SessionFiles: 4, feed.Inbox: 5, feed.Orphan: 6, feed.Source: 7}
+	var changed []passFeedRow
+	for id, row := range after {
+		publish := !bytes.Equal(before[id].comparison, row.comparison)
+		if row.kind == feed.Source && !publish && !bytes.Equal(before[id].payload, row.payload) {
+			last, err := tx.Meta("feed_source:" + row.key)
+			if err != nil && !errors.Is(err, store.ErrNotFound) {
+				return err
+			}
+			at, _ := time.Parse(time.RFC3339Nano, last)
+			publish = now.Sub(at) >= 5*time.Minute
+		}
+		if publish {
+			changed = append(changed, row)
+		}
+	}
+	sort.Slice(changed, func(i, j int) bool {
+		if order[changed[i].kind] != order[changed[j].kind] {
+			return order[changed[i].kind] < order[changed[j].kind]
+		}
+		return changed[i].key < changed[j].key
+	})
+	for _, row := range changed {
+		if _, err := tx.AppendFeed(string(row.kind), row.key, row.payload, now); err != nil {
+			return err
+		}
+		if row.kind == feed.Source {
+			if err := tx.SetMeta("feed_source:"+row.key, now.Format(time.RFC3339Nano)); err != nil {
+				return err
+			}
+		}
+	}
+	var removed []string
+	for id := range before {
+		if _, ok := after[id]; !ok {
+			removed = append(removed, id)
+		}
+	}
+	sort.Strings(removed)
+	for _, id := range removed {
+		row := before[id]
+		if err := appendFeed(tx, feed.Delete, feed.DeleteRow{Kind: row.kind, Key: row.key}, feed.None, now); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func mergeObs(dst *model.SessionObs, src model.SessionObs) {

@@ -16,11 +16,13 @@ type Thresholds struct {
 
 // StateInput combines adapter, process, hook, and acknowledgment observations.
 type StateInput struct {
-	Obs                        model.SessionObs
-	Proc                       *model.Proc
-	LastNotification, LastStop *time.Time
-	LastUserPrompt             time.Time
-	Unseen                     bool
+	Obs                                          model.SessionObs
+	Proc                                         *model.Proc
+	LastNotification, LastStop                   *time.Time
+	LastUserPrompt                               time.Time
+	Unseen                                       bool
+	LastDecision, LastAPIRequest, LastToolResult *time.Time
+	LastAPIError                                 string
 }
 
 // Display adds the display marker to a heuristic label.
@@ -33,6 +35,11 @@ func Display(label string, heuristic bool) string {
 
 // Label returns a state, whether it is heuristic, and human-readable evidence.
 func Label(in StateInput, now time.Time, th Thresholds) (label string, heuristic bool, evidence string) {
+	defer func() {
+		if (label == "working" || label == "stalled?") && in.LastAPIError != "" {
+			evidence += "; " + in.LastAPIError
+		}
+	}()
 	if th.StuckAfter <= 0 {
 		th.StuckAfter = 10 * time.Minute
 	}
@@ -43,7 +50,13 @@ func Label(in StateInput, now time.Time, th Thresholds) (label string, heuristic
 	}
 	switch in.Obs.Adapter {
 	case "claude":
-		if in.LastNotification != nil && in.LastNotification.After(in.Obs.LastActivityAt) {
+		cleared := in.LastUserPrompt
+		for _, ts := range []*time.Time{in.LastDecision, in.LastToolResult} {
+			if ts != nil && ts.After(cleared) {
+				cleared = *ts
+			}
+		}
+		if in.LastNotification != nil && in.LastNotification.After(in.Obs.LastActivityAt) && in.LastNotification.After(cleared) {
 			return "waiting", false, "Notification newer than last activity"
 		}
 		finished := in.LastStop != nil && in.LastStop.After(in.LastUserPrompt) && in.Unseen
@@ -55,6 +68,12 @@ func Label(in StateInput, now time.Time, th Thresholds) (label string, heuristic
 				return "finished", false, "unacknowledged Stop newer than last user prompt; process gone"
 			}
 			return "dead", false, "registry present, process gone"
+		}
+		if in.Obs.PID != 0 && in.LastToolResult != nil && !in.LastToolResult.Before(in.Obs.LastActivityAt) && (in.LastStop == nil || in.LastToolResult.After(*in.LastStop)) && now.Sub(*in.LastToolResult) < th.StuckAfter {
+			return "working", false, "OTLP activity " + stateDuration(now.Sub(*in.LastToolResult)) + " ago"
+		}
+		if in.Obs.PID != 0 && in.LastAPIRequest != nil && in.LastAPIRequest.After(in.Obs.LastActivityAt) && (in.LastStop == nil || in.LastAPIRequest.After(*in.LastStop)) && now.Sub(*in.LastAPIRequest) < th.StuckAfter {
+			return "working", false, "API call " + stateDuration(now.Sub(*in.LastAPIRequest)) + " ago"
 		}
 		if in.Obs.RegistryStatus == "busy" {
 			if age < th.StuckAfter {

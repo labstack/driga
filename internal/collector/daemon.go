@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -13,6 +14,8 @@ import (
 	"time"
 
 	"github.com/labstack/driga/internal/derive"
+	"github.com/labstack/driga/internal/feed"
+	"github.com/labstack/driga/internal/fleet"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/scrub"
 	"github.com/labstack/driga/internal/spool"
@@ -88,7 +91,11 @@ func recordGap(ctx context.Context, d Deps, st *store.Store) error {
 		}
 		now := d.now()
 		if now.Sub(from) > 3*cadence(time.Hour).Procs {
-			return tx.InsertGap(model.Gap{From: from, To: now})
+			gap := model.Gap{MachineID: tx.MachineID(), From: from, To: now}
+			if err := tx.InsertGap(gap); err != nil {
+				return err
+			}
+			return appendFeed(tx, feed.Gap, gap, feed.None, now)
 		}
 		return nil
 	})
@@ -122,22 +129,20 @@ func (s *schedule) advance(p Plan, now time.Time) {
 	}
 }
 
-func (s *schedule) wait(now time.Time, i Intervals) time.Duration {
-	// Heartbeats must be noticed even while idle, before their five-second TTL.
-	wait := time.Second
-	for _, timer := range []struct {
-		last     time.Time
-		interval time.Duration
-	}{{s.procs, i.Procs}, {s.machine, i.Machine}, {s.git, i.Git}, {s.gitFull, i.GitFull}, {s.cwds, i.Cwds}} {
-		wait = min(wait, max(time.Duration(0), timer.last.Add(timer.interval).Sub(now)))
-	}
-	return wait
+func (s *schedule) wait(_ time.Time, _ Intervals) time.Duration {
+	// Coalesce source deadlines onto the heartbeat/spool check. An overdue
+	// source must not create zero-delay catch-up wakes after a slow import.
+	return time.Second
 }
 
 // Run collects until cancellation while holding the exclusive writer lock.
 func Run(ctx context.Context, d Deps, dataDir string) error {
 	if ctx.Err() != nil {
 		return nil
+	}
+	clock := d.clock
+	if clock == nil {
+		clock = realDaemonClock{}
 	}
 	lock, err := Lock(dataDir)
 	if err != nil {
@@ -149,6 +154,30 @@ func Run(ctx context.Context, d Deps, dataDir string) error {
 		return err
 	}
 	defer st.Close()
+	// Commit export-policy changes before any listener can serve the retained
+	// feed. The first pass may spend a long time collecting recent histories.
+	if err := st.Tx(ctx, func(tx *store.Tx) error {
+		_, err := configurePassFeed(d, tx)
+		return err
+	}); err != nil {
+		if ctx.Err() != nil {
+			return nil
+		}
+		return err
+	}
+	intakeRequests := make(chan intakeRequest, 16)
+	stopIntake, err := startIntake(ctx, d, st, intakeRequests)
+	if err != nil {
+		return err
+	}
+	if stopIntake != nil {
+		defer stopIntake()
+	}
+	fleetErrors := make(chan error, 1)
+	server, stopFleet := startFleetServer(ctx, d, dataDir, fleetErrors)
+	if stopFleet != nil {
+		defer stopFleet()
+	}
 	if err := recordGap(ctx, d, st); err != nil {
 		if ctx.Err() != nil {
 			return nil
@@ -158,28 +187,87 @@ func Run(ctx context.Context, d Deps, dataDir string) error {
 	if d.State == nil {
 		d.State = NewState()
 	}
+	pullers := newFleetPullers(dataDir)
+	pullers.server = server
+	defer pullers.close()
 	var timers schedule
-	lastPrune := time.Now()
+	lastPrune := clock.Now()
 	var spoolStamp time.Time
+	var lastPoll time.Time
+	age := time.Duration(1<<63 - 1)
 	for {
 		if ctx.Err() != nil {
 			return nil
 		}
-		age := time.Duration(1<<63 - 1)
-		if info, err := os.Stat(filepath.Join(dataDir, "viewer.heartbeat")); err == nil {
-			age = d.now().Sub(info.ModTime())
+		now := clock.Now()
+		poll := due(lastPoll, now, time.Second)
+		if poll {
+			lastPoll = now
+		}
+		if poll && server != nil {
+			// Reuse the collector wake instead of a timer per presence stream.
+			_ = server.RefreshPresence()
+			server.ProcessControl(ctx, st)
+		}
+		select {
+		case serveErr := <-fleetErrors:
+			if err := st.Tx(ctx, func(tx *store.Tx) error {
+				now := d.now()
+				if err := tx.SetSourceError("fleet", scrub.Scrub(serveErr.Error()), now); err != nil {
+					return err
+				}
+				sources, err := tx.Sources()
+				if err != nil {
+					return err
+				}
+				for _, source := range sources {
+					if source.Name == "fleet" {
+						return appendFeed(tx, feed.Source, source, feed.None, now)
+					}
+				}
+				return nil
+			}); err != nil {
+				if ctx.Err() != nil {
+					return nil
+				}
+				return err
+			}
+		default:
+		}
+		if poll {
+			age = time.Duration(1<<63 - 1)
+			if info, err := os.Stat(filepath.Join(dataDir, "viewer.heartbeat")); err == nil {
+				age = d.now().Sub(info.ModTime())
+			}
+		}
+		var fleetErr error
+		if poll {
+			fleetErr = pullers.wake(ctx, d, st, server != nil, age < 5*time.Second)
+		} else {
+			fleetErr = pullers.applyReady(ctx, d, st)
+		}
+		if fleetErr != nil {
+			if ctx.Err() != nil {
+				return nil
+			}
+			return fleetErr
 		}
 		intervals := cadence(age)
-		now := time.Now()
-		p := timers.plan(now, intervals)
+		p := Plan{}
+		if poll {
+			p = timers.plan(now, intervals)
+		}
 		// Append marks the directory even for existing files. Capture before
 		// draining so concurrent appends are noticed on the next wake.
-		var stamp time.Time
-		if info, err := os.Stat(d.SpoolDir); err == nil {
-			stamp = info.ModTime()
+		spoolChanged := false
+		if poll {
+			var stamp time.Time
+			if info, err := os.Stat(d.SpoolDir); err == nil {
+				stamp = info.ModTime()
+			}
+			spoolChanged = !stamp.Equal(spoolStamp)
+			spoolStamp = stamp
 		}
-		spoolChanged := !stamp.Equal(spoolStamp)
-		spoolStamp = stamp
 		if p.Procs || p.Machine || p.Git || p.Cwds {
 			r, err := Pass(ctx, d, st, p)
 			if ctx.Err() != nil {
@@ -191,7 +279,12 @@ func Run(ctx context.Context, d Deps, dataDir string) error {
 			for name, message := range r.SourceErrors {
 				slog.Warn("collector source failed", "source", name, "error", message)
 			}
-			timers.advance(p, now)
+			// Long source reads must leave a full cadence before collecting
+			// again, rather than keeping the collector continuously busy.
+			timers.advance(p, clock.Now())
+			if server != nil {
+				server.Notify()
+			}
 		} else if spoolChanged {
 			if err := drainOnly(ctx, d, st); err != nil {
 				if ctx.Err() != nil {
@@ -199,8 +292,11 @@ func Run(ctx context.Context, d Deps, dataDir string) error {
 				}
 				return err
 			}
+			if server != nil {
+				server.Notify()
+			}
 		}
-		if time.Since(lastPrune) >= time.Hour {
+		if clock.Now().Sub(lastPrune) >= time.Hour {
 			if err := st.Tx(ctx, func(tx *store.Tx) error { return tx.Prune(d.now()) }); err != nil {
 				if ctx.Err() != nil {
 					return nil
@@ -210,29 +306,119 @@ func Run(ctx context.Context, d Deps, dataDir string) error {
 			if err := spool.Prune(d.SpoolDir, d.now()); err != nil {
 				slog.Warn("spool prune failed", "error", err)
 			}
-			lastPrune = time.Now()
+			lastPrune = clock.Now()
+			if server != nil {
+				server.Notify()
+			}
 		}
-		timer := time.NewTimer(timers.wait(time.Now(), intervals))
+		timer := clock.NewTimer(timers.wait(clock.Now(), intervals))
 		select {
 		case <-ctx.Done():
 			timer.Stop()
 			return nil
-		case <-timer.C:
+		case <-timer.Chan():
+		case req := <-intakeRequests:
+			timer.Stop()
+			if req.failure != nil {
+				if err := recordIntakeError(ctx, d, st, req.failure); err != nil {
+					if ctx.Err() != nil {
+						return nil
+					}
+					return err
+				}
+				if server != nil {
+					server.Notify()
+				}
+				continue
+			}
+			n, err := applyIntake(ctx, d, st, req.batch)
+			req.reply <- intakeResult{n, err}
+			if err != nil {
+				if ctx.Err() != nil {
+					return nil
+				}
+				return err
+			}
+			if server != nil {
+				server.Notify()
+			}
+		case b := <-pullers.batches:
+			timer.Stop()
+			pullers.ready = append(pullers.ready, b)
 		}
 	}
 }
 
+// startFleetServer keeps serving failures isolated from local collection.
+func startFleetServer(ctx context.Context, d Deps, dataDir string, failures chan<- error) (*fleet.Server, func()) {
+	if !d.Cfg.Fleet.Serve {
+		return nil, nil
+	}
+	fail := func(err error) (*fleet.Server, func()) {
+		slog.Warn("fleet serving unavailable", "error", err)
+		select {
+		case failures <- err:
+		default:
+		}
+		return nil, nil
+	}
+	addr, err := fleet.CheckListen(d.Cfg.Fleet.Listen, d.Cfg.Fleet.AllowAnyAddress)
+	if err != nil {
+		return fail(err)
+	}
+	id, err := fleet.LoadOrCreateIdentity(filepath.Join(dataDir, "fleet"))
+	if err != nil {
+		return fail(err)
+	}
+	ro, err := store.Open(filepath.Join(dataDir, "driga.db"), store.ReadOnly)
+	if err != nil {
+		return fail(err)
+	}
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		ro.Close()
+		return fail(err)
+	}
+	server := fleet.NewServer(ro, id, dataDir, d.Cfg)
+	server.SpoolDir = d.SpoolDir
+	runCtx, cancel := context.WithCancel(ctx)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		defer ro.Close()
+		if err := server.Serve(runCtx, ln); err != nil {
+			_, _ = fail(err)
+		}
+	}()
+	return server, func() { cancel(); <-done }
+}
+
 func drainOnly(ctx context.Context, d Deps, st *store.Store) error {
 	now := d.now()
+	share := feed.EffectiveShare(feed.ShareText(d.Cfg.Fleet.ShareText), d.Cfg.CaptureText)
 	return st.Tx(ctx, func(tx *store.Tx) error {
+		before, err := passFeedRows(tx, now, share)
+		if err != nil {
+			return err
+		}
+		publish := func() error {
+			after, err := passFeedRows(tx, now, share)
+			if err != nil {
+				return err
+			}
+			return appendPassChanges(tx, before, after, now)
+		}
 		hooks, err := drainSpool(d, tx, now, func(name string, err error) error {
 			if err != nil {
 				return tx.SetSourceError(name, scrub.Scrub(err.Error()), now)
 			}
 			return tx.SetSourceOK(name, now)
 		})
-		if err != nil || len(hooks) == 0 {
+		if err != nil {
 			return err
+		}
+		if len(hooks) == 0 {
+			return publish()
 		}
 		ss, err := tx.Sessions(store.SessionFilter{IncludeEnded: true})
 		if err != nil {
@@ -264,8 +450,11 @@ func drainOnly(ctx context.Context, d Deps, st *store.Store) error {
 				if err := tx.InsertHandoff(id, h.TS, h.Message); err != nil {
 					return err
 				}
+				if err := appendFeed(tx, feed.Handoff, feed.HandoffRow{MachineID: tx.MachineID(), Session: feed.SessionKey{Adapter: h.Adapter, ExternalID: h.SessionID}, TS: h.TS, Text: h.Message}, share, now); err != nil {
+					return err
+				}
 			}
 		}
-		return nil
+		return publish()
 	})
 }

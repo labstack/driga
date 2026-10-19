@@ -37,7 +37,7 @@ func TestHookCommandFastAndExitZero(t *testing.T) {
 		t.Fatal(err)
 	}
 	elapsed := time.Since(start)
-	if !testing.Short() && elapsed >= 20*time.Millisecond {
+	if !testing.Short() && !raceEnabled && elapsed >= 20*time.Millisecond {
 		t.Fatalf("hook took %v", elapsed)
 	}
 	got, _, err := spool.Drain(dir, nil)

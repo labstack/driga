@@ -12,6 +12,8 @@ import (
 // Reader is the store's read API used by presentation builders.
 type Reader interface {
 	MachineID() string
+	Machines() ([]model.Machine, error)
+	ReadMachine(string) *store.MachineReader
 	Sessions(store.SessionFilter) ([]model.Session, error)
 	Session(int64) (model.Session, error)
 	Procs() ([]model.Proc, error)
@@ -52,7 +54,7 @@ type Envelope struct {
 }
 
 // NewEnvelope adds source freshness and the last day's coverage gaps to data.
-func NewEnvelope(r Reader, mode string, now time.Time, intervals Intervals, data any) (Envelope, error) {
+func newEnvelopeLocal(r Reader, mode string, now time.Time, intervals Intervals, data any) (Envelope, error) {
 	e := Envelope{Schema: 1, ObservedAt: now, Mode: mode, Freshness: map[string]Fresh{}, CoverageGaps: []model.Gap{}, Data: data}
 	sources, err := r.Sources()
 	if err != nil {
@@ -82,6 +84,7 @@ func NewEnvelope(r Reader, mode string, now time.Time, intervals Intervals, data
 
 // Filter scopes a view to a canonical repo path and an optional time window.
 type Filter struct {
+	Scope   store.Scope
 	Project string
 	Since   time.Time
 	All     bool
@@ -94,6 +97,7 @@ type AgentFilter = Filter
 
 // AgentRow describes one agent and its nested family.
 type AgentRow struct {
+	MachineFresh
 	MachineID        string        `json:"machine_id"`
 	ID               int64         `json:"id"`
 	Label            string        `json:"label"`
@@ -117,6 +121,7 @@ type AgentsView struct {
 
 // AgentView contains the stored state and recent evidence for one session.
 type AgentView struct {
+	MachineFresh
 	MachineID  string        `json:"machine_id"`
 	Session    model.Session `json:"session"`
 	Label      string        `json:"label"`
@@ -176,6 +181,7 @@ type WherePart struct {
 
 // ProjectRow is a derived repository status with checkout totals.
 type ProjectRow struct {
+	MachineFresh
 	MachineID string        `json:"machine_id"`
 	Status    ProjectStatus `json:"status"`
 	Dirty     int           `json:"dirty"`
@@ -198,6 +204,7 @@ type WhereView struct {
 
 // InboxRow is an event with its project and age.
 type InboxRow struct {
+	MachineFresh
 	MachineID string `json:"machine_id"`
 	model.InboxItem
 	Age     time.Duration `json:"age"`
@@ -211,6 +218,7 @@ type InboxView struct {
 
 // ConflictRow is an overlap on the current machine.
 type ConflictRow struct {
+	MachineFresh
 	MachineID string `json:"machine_id"`
 	model.Conflict
 }
@@ -223,6 +231,7 @@ type ConflictsView struct {
 
 // OrphanRow adds age and machine identity to an orphan candidate.
 type OrphanRow struct {
+	MachineFresh
 	MachineID string `json:"machine_id"`
 	model.Orphan
 	Age time.Duration `json:"age"`
@@ -235,6 +244,7 @@ type OrphansView struct {
 
 // MemoryRow aggregates process RSS by agent and role.
 type MemoryRow struct {
+	MachineFresh
 	MachineID string `json:"machine_id"`
 	Agent     string `json:"agent"`
 	Role      string `json:"role"`
@@ -243,6 +253,8 @@ type MemoryRow struct {
 
 // MachineView contains the most recent sample and top agent memory users.
 type MachineView struct {
+	MachineFresh
+	Machines  []MachineView       `json:"machines,omitempty"`
 	MachineID string              `json:"machine_id"`
 	Sample    model.MachineSample `json:"sample"`
 	Memory    []MemoryRow         `json:"memory"`
@@ -266,4 +278,28 @@ func nonNil[T any](s []T) []T {
 		return []T{}
 	}
 	return s
+}
+
+// MachineFresh records the origin and connection freshness of a presentation row.
+type MachineFresh struct {
+	MachineName string        `json:"machine_name"`
+	State       string        `json:"machine_state"`
+	Stale       bool          `json:"stale"`
+	LastSeen    time.Time     `json:"last_seen"`
+	LastSeenAge time.Duration `json:"last_seen_age"`
+}
+
+// MachineRow lists a known machine, cached counts, and clock health.
+type MachineRow struct {
+	model.Machine
+	Agents      int           `json:"agents"`
+	Inbox       int           `json:"inbox"`
+	LastSeenAge time.Duration `json:"last_seen_age"`
+	SkewWarning string        `json:"skew_warning,omitempty"`
+}
+
+// MachinesView lists all known machines, including peers with stale caches.
+type MachinesView struct {
+	Rows    []MachineRow `json:"rows"`
+	Warning string       `json:"warning,omitempty"`
 }

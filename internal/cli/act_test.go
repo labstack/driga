@@ -254,3 +254,23 @@ func TestAckReceiptTimeout(t *testing.T) {
 		})
 	}
 }
+
+func TestKillAllSkipsRemote(t *testing.T) {
+	readEnv(t)
+	readDB(t, func(tx *store.Tx) error {
+		if err := tx.ReplaceOrphans([]model.Orphan{{ID: "local", RootPID: 4242, Verified: true}}); err != nil {
+			return err
+		}
+		remote := tx.ForMachine("remote")
+		if err := remote.UpsertMachine(model.Machine{Name: "vm"}); err != nil {
+			return err
+		}
+		return remote.ReplaceOrphans([]model.Orphan{{ID: "remote", RootPID: 4242, Verified: true}})
+	})
+	var out, errout bytes.Buffer
+	// Decline the local candidate: this regression never signals any process.
+	code := run([]string{"orphans", "kill", "--all"}, "test", strings.NewReader("n\n"), &out, &errout)
+	if code != 0 || !strings.Contains(out.String(), "skipped 1 orphans on other machines") || !strings.Contains(out.String(), "Kill local?") || strings.Contains(out.String(), "Kill remote?") {
+		t.Fatalf("code=%d out=%s err=%s", code, &out, &errout)
+	}
+}

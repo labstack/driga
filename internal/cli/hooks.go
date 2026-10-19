@@ -25,6 +25,8 @@ type HooksCmd struct {
 type HooksOptions struct {
 	DryRun bool   `help:"Print the diff without writing or prompting."`
 	Agent  string `enum:"claude,codex,all" default:"all" help:"Agent to configure: claude, codex, or all."`
+	OTLP   bool   `help:"Configure optional metadata-only loopback OTLP instead of hooks."`
+	Traces bool   `help:"Include Claude beta spans (requires --otlp)."`
 }
 
 // HooksInstallCmd installs hooks after confirmation.
@@ -44,6 +46,9 @@ type HooksStatusCmd struct{ HooksOptions }
 
 // Run prints the selected agents' hook status.
 func (c HooksStatusCmd) Run(g *Globals) error {
+	if c.OTLP {
+		return c.otlpStatus(g)
+	}
 	agent, err := c.agent()
 	if err != nil {
 		return err
@@ -117,6 +122,9 @@ func hooksOutput(g *Globals) io.Writer {
 }
 
 func (c HooksOptions) change(g *Globals, install bool) error {
+	if c.Traces && !c.OTLP {
+		return fmt.Errorf("--traces requires --otlp")
+	}
 	agent, err := c.agent()
 	if err != nil {
 		return err
@@ -126,7 +134,7 @@ func (c HooksOptions) change(g *Globals, install bool) error {
 		return err
 	}
 	var driga string
-	if install {
+	if install && !c.OTLP {
 		driga, err = os.Executable()
 		if err != nil {
 			return err
@@ -148,6 +156,12 @@ func (c HooksOptions) change(g *Globals, install bool) error {
 	var operations []func(bool) (hooks.Diff, error)
 	if agent == "claude" || agent == "all" {
 		operations = append(operations, func(dryRun bool) (hooks.Diff, error) {
+			if c.OTLP {
+				if install {
+					return hooks.ClaudeInstallOTLP(claude, c.Traces, dryRun, now)
+				}
+				return hooks.ClaudeUninstallOTLP(claude, dryRun)
+			}
 			if install {
 				return hooks.ClaudeInstall(claude, driga, dryRun, now)
 			}
@@ -156,6 +170,12 @@ func (c HooksOptions) change(g *Globals, install bool) error {
 	}
 	if agent == "codex" || agent == "all" {
 		operations = append(operations, func(dryRun bool) (hooks.Diff, error) {
+			if c.OTLP {
+				if install {
+					return hooks.CodexInstallOTLP(codex, c.Traces, dryRun, now)
+				}
+				return hooks.CodexUninstallOTLP(codex, dryRun)
+			}
 			if install {
 				return hooks.CodexInstall(codex, driga, dryRun, now)
 			}
@@ -215,6 +235,39 @@ func (c HooksOptions) change(g *Globals, install bool) error {
 	}
 	for _, change := range changes {
 		if _, err := change.apply(false); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c HooksOptions) otlpStatus(g *Globals) error {
+	agent, err := c.agent()
+	if err != nil {
+		return err
+	}
+	claude, codex, err := hookPaths()
+	if err != nil {
+		return err
+	}
+	for _, a := range []string{"claude", "codex"} {
+		if agent != "all" && agent != a {
+			continue
+		}
+		var d hooks.Diff
+		if a == "claude" {
+			d, err = hooks.ClaudeUninstallOTLP(claude, true)
+		} else {
+			d, err = hooks.CodexUninstallOTLP(codex, true)
+		}
+		if err != nil {
+			return err
+		}
+		status := "not installed"
+		if d.Changed {
+			status = "installed"
+		}
+		if _, err := fmt.Fprintf(hooksOutput(g), "%s OTLP: %s\n", a, status); err != nil {
 			return err
 		}
 	}

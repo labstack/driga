@@ -9,6 +9,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/labstack/driga/internal/config"
+	"github.com/labstack/driga/internal/store"
 	"github.com/labstack/driga/internal/tui"
 	"github.com/labstack/driga/internal/view"
 )
@@ -39,7 +40,13 @@ func (TopCmd) Run(g *Globals) error {
 	if st != nil {
 		defer st.Close()
 		s := tui.NewStoreSource(st, config.DataDir(), f)
-		s.ResolveProject = resolveProject
+		s.ResolveFilter = func(r view.Reader, f view.Filter) (view.Filter, error) {
+			resolved, err := resolveViewFilter(g, r, f, g.Project)
+			if g.Project == "" {
+				resolved.Scope = store.Scope{}
+			}
+			return resolved, err
+		}
 		source = s
 	} else {
 		d, err := NewDeps(cfg)
@@ -50,12 +57,18 @@ func (TopCmd) Run(g *Globals) error {
 		if err != nil {
 			return err
 		}
-		s.ResolveProject = resolveProject
+		s.ResolveFilter = func(r view.Reader, f view.Filter) (view.Filter, error) {
+			resolved, err := resolveViewFilter(g, r, f, g.Project)
+			if g.Project == "" {
+				resolved.Scope = store.Scope{}
+			}
+			return resolved, err
+		}
 		s.Start(ctx)
 		defer s.Close()
 		source = s
 	}
-	opts := tui.Options{Project: g.Project, NoColor: g.NoColor, OpenCmd: cfg.OpenCmd, DataDir: config.DataDir(), Context: ctx}
+	opts := tui.Options{Machine: g.Machine, Project: g.Project, NoColor: g.NoColor, OpenCmd: cfg.OpenCmd, DataDir: config.DataDir(), Context: ctx}
 	programOpts := []tea.ProgramOption{tea.WithContext(ctx)}
 	if g.Stdin != nil {
 		programOpts = append(programOpts, tea.WithInput(g.Stdin))

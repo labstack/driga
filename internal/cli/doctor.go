@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/user"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"syscall"
@@ -17,6 +19,7 @@ import (
 	"github.com/labstack/driga/internal/config"
 	"github.com/labstack/driga/internal/hooks"
 	"github.com/labstack/driga/internal/model"
+	"github.com/labstack/driga/internal/platform"
 	"github.com/labstack/driga/internal/store"
 )
 
@@ -37,6 +40,11 @@ type DoctorReader interface {
 
 // DoctorDeps supplies all environment and collection state for diagnostics.
 type DoctorDeps struct {
+	OS        string // Optional OS override for offline diagnostics.
+	ProcRoot  string // Optional procfs root; defaults to /proc.
+	LingerDir string // Optional linger marker directory.
+	UID       int
+	Username  string
 	DataDir   string
 	Store     DoctorReader
 	Config    config.Config
@@ -85,6 +93,9 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 			add("sources", "fail", err.Error(), "check database access; run driga service restart")
 		}
 		for _, source := range sources {
+			if source.Name == "otlp" {
+				continue
+			} // Event-driven intake has no polling freshness deadline.
 			interval := intervals.Procs
 			switch source.Name {
 			case "git":
@@ -202,6 +213,92 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 		add("data-permissions", "fail", fmt.Sprintf("directory permissions are %04o; expected 0700", info.Mode().Perm()), "chmod 700 "+d.DataDir)
 	default:
 		add("data-permissions", "ok", "0700", "")
+	}
+	goos := d.OS
+	if goos == "" {
+		goos = runtime.GOOS
+	}
+	if goos == "linux" {
+		checks = append(checks, doctorLinuxChecks(d)...)
+	}
+	checks = append(checks, doctorIntake(d, held))
+	return checks
+}
+
+func doctorIntake(d DoctorDeps, held bool) Check {
+	c := Check{Name: "otlp intake", Status: "info", Detail: "off (optional; driga hooks install --otlp)"}
+	if !d.Config.Intake.OTLP {
+		return c
+	}
+	c.Detail = "no OTLP events since start"
+	if d.Store == nil {
+		return c
+	}
+	read := func(key string) string { v, _ := d.Store.Meta("otlp:" + key); return v }
+	count := read("received")
+	if count != "" && count != "0" {
+		c.Status = "ok"
+		c.Detail = "events received: " + count
+	}
+	if addr := read("listen"); addr != "" && held {
+		c.Detail = "listening on " + addr + "; " + c.Detail
+	}
+	for _, kv := range [][2]string{{"dropped", "content attributes dropped"}, {"unmatched", "unmatched OTLP sessions"}} {
+		v := read(kv[0])
+		if v == "" {
+			v = "0"
+		}
+		c.Detail += "; " + kv[1] + ": " + v
+	}
+	if sources, err := d.Store.Sources(); err == nil {
+		for _, s := range sources {
+			if s.Name == "otlp" && s.LastError != "" && !s.LastErrorAt.Before(s.LastOKAt) {
+				c.Status = "warn"
+				c.Detail += "; last error: " + s.LastError
+				c.Fix = "check intake.listen and restart the collector"
+			}
+		}
+	}
+	return c
+}
+
+func doctorLinuxChecks(d DoctorDeps) []Check {
+	root := d.ProcRoot
+	if root == "" {
+		root = "/proc"
+	}
+	uid, username := d.UID, d.Username
+	if username == "" {
+		uid = os.Getuid()
+		if u, err := user.Current(); err == nil {
+			username = u.Username
+		}
+	}
+	checks := []Check{}
+	b, err := os.ReadFile(filepath.Join(root, "pressure/memory"))
+	if errors.Is(err, os.ErrNotExist) {
+		checks = append(checks, Check{"psi", "info", "psi n/a", ""})
+	} else if err != nil {
+		checks = append(checks, Check{"psi", "warn", err.Error(), "check access to /proc/pressure/memory"})
+	} else if psi, err := platform.ParsePSI(b); err != nil || psi == nil {
+		checks = append(checks, Check{"psi", "warn", "memory PSI unreadable", "check /proc/pressure/memory"})
+	} else {
+		checks = append(checks, Check{"psi", "ok", fmt.Sprintf("memory some avg10=%.2f", *psi), ""})
+	}
+	if pid, ok := platform.UserSubreaper(root, uid); ok {
+		checks = append(checks, Check{"systemd-user", "ok", fmt.Sprintf("systemd --user pid %d", pid), ""})
+	} else {
+		checks = append(checks, Check{"systemd-user", "warn", "no systemd user instance found", "start a systemd user session or run driga collect in the foreground"})
+	}
+	linger := d.LingerDir
+	if linger == "" {
+		linger = "/var/lib/systemd/linger"
+	}
+	info, err := os.Stat(filepath.Join(linger, username))
+	if username != "" && err == nil && info.Mode().IsRegular() {
+		checks = append(checks, Check{"linger", "ok", "enabled; collector can run after logout", ""})
+	} else {
+		checks = append(checks, Check{"linger", "warn", "not enabled; collector may stop after logout", "loginctl enable-linger $USER"})
 	}
 	return checks
 }

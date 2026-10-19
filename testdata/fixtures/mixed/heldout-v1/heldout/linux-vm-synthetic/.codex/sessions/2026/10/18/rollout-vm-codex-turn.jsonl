@@ -1,0 +1,2 @@
+{"type": "session_meta", "timestamp": "2026-10-18T16:59:40Z", "payload": {"id": "vm-codex-turn", "cwd": "{{FIXTURE_HOME}}/home/vm-user/workspaces/service-b", "cli_version": "0.16.92", "source": "cli", "originator": "synthetic_vm"}}
+{"type": "event_msg", "timestamp": "2026-10-18T17:59:40Z", "payload": {"type": "task_started"}}

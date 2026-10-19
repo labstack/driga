@@ -18,6 +18,9 @@ import (
 
 func (m *app) openDetail(r tabRow) {
 	var buf bytes.Buffer
+	if r.machine != "" {
+		fmt.Fprintf(&buf, "Machine: %s · %s · last seen %s ago\n", m.machineName(r.machine), m.machineState(r.machine), m.machineAge(r.machine))
+	}
 	render := func(data any) {
 		if err := view.Render(&buf, data, view.RenderOpts{NoColor: true, Envelope: m.snap.Envelope}); err != nil {
 			fmt.Fprintln(&buf, err)
@@ -50,6 +53,9 @@ func (m *app) openDetail(r tabRow) {
 			rows []view.ConflictRow
 		}{{"current", m.snap.Conflicts.Current}, {"recent overlap (last 6h)", m.snap.Conflicts.Recent}} {
 			for _, c := range group.rows {
+				if r.machine != "" && c.MachineID != r.machine {
+					continue
+				}
 				relevant := r.project != 0
 				for _, id := range c.SessionIDs {
 					if id == r.agent {
@@ -83,7 +89,7 @@ func (m *app) tmuxTarget() string {
 
 func (m *app) tmuxAncestry() (string, []int32, bool) {
 	r, ok := m.selected()
-	if !ok || r.agent == 0 {
+	if !ok || r.agent == 0 || m.remote(r.machine) {
 		return "", nil, false
 	}
 	s := m.snap.AgentDetails[r.agent].Session

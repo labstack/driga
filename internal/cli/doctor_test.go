@@ -57,6 +57,35 @@ func TestDoctorNoDaemon(t *testing.T) {
 	requireCheck(t, Doctor(context.Background(), d), "collector", "warn", "driga service install")
 }
 
+func TestDoctorIntake(t *testing.T) {
+	d, st := doctorFixture(t)
+	c := requireCheck(t, Doctor(context.Background(), d), "otlp intake", "info", "")
+	if !strings.Contains(c.Detail, "off (optional") {
+		t.Fatal(c)
+	}
+	d.Config.Intake.OTLP = true
+	c = requireCheck(t, Doctor(context.Background(), d), "otlp intake", "info", "")
+	if !strings.Contains(c.Detail, "no OTLP events since start") {
+		t.Fatal(c)
+	}
+	for k, v := range map[string]string{"listen": "127.0.0.1:12345", "received": "3", "dropped": "5", "unmatched": "2"} {
+		if err := st.SetMeta("otlp:"+k, v); err != nil {
+			t.Fatal(err)
+		}
+	}
+	c = requireCheck(t, Doctor(context.Background(), d), "otlp intake", "ok", "")
+	for _, s := range []string{"127.0.0.1:12345", "events received: 3", "content attributes dropped: 5", "unmatched OTLP sessions: 2"} {
+		if !strings.Contains(c.Detail, s) {
+			t.Fatal(c)
+		}
+	}
+	st.Tx(context.Background(), func(tx *store.Tx) error { return tx.SetSourceError("otlp", "address already in use", d.Now) })
+	c = requireCheck(t, Doctor(context.Background(), d), "otlp intake", "warn", "")
+	if !strings.Contains(c.Detail, "address already in use") {
+		t.Fatal(c)
+	}
+}
+
 func TestDoctorStaleSource(t *testing.T) {
 	d, st := doctorFixture(t)
 	if err := st.Tx(context.Background(), func(tx *store.Tx) error { return tx.SetSourceOK("git", d.Now.Add(-16*time.Minute)) }); err != nil {
@@ -180,4 +209,54 @@ func TestDoctorCommandWarningsAndFailures(t *testing.T) {
 		t.Fatal(err)
 	}
 	requireCheck(t, checks, "data-permissions", "fail", "chmod 700 "+config.DataDir())
+}
+
+func TestDoctorLinuxChecks(t *testing.T) {
+	d, _ := doctorFixture(t)
+	d.OS, d.ProcRoot, d.LingerDir, d.Username, d.UID = "linux", t.TempDir(), t.TempDir(), "fixture-user", 1001
+	checks := Doctor(context.Background(), d)
+	c := requireCheck(t, checks, "psi", "info", "")
+	if c.Detail != "psi n/a" {
+		t.Fatal(c)
+	}
+	requireCheck(t, checks, "systemd-user", "warn", "")
+	requireCheck(t, checks, "linger", "warn", "loginctl enable-linger $USER")
+	write := func(rel, body string) {
+		t.Helper()
+		p := filepath.Join(d.ProcRoot, rel)
+		if err := os.MkdirAll(filepath.Dir(p), 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(body), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("pressure/memory", "some avg10=1.23 avg60=0.00 total=123\n")
+	write("500/comm", "systemd\n")
+	write("500/status", "Uid:\t1001\t1001\t1001\t1001\n")
+	write("500/cmdline", "systemd\x00--user\x00")
+	if err := os.WriteFile(filepath.Join(d.LingerDir, d.Username), nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	checks = Doctor(context.Background(), d)
+	requireCheck(t, checks, "psi", "ok", "")
+	requireCheck(t, checks, "systemd-user", "ok", "")
+	requireCheck(t, checks, "linger", "ok", "")
+	d.OS = "darwin"
+	for _, c := range Doctor(context.Background(), d) {
+		if c.Name == "psi" || c.Name == "systemd-user" || c.Name == "linger" {
+			t.Fatal(c)
+		}
+	}
+}
+
+func TestServiceLogsLinux(t *testing.T) {
+	name, args := serviceLogCommand("linux", true)
+	if name != "journalctl" || strings.Join(args, " ") != "--user -u run.driga.collector -n 50 -f" {
+		t.Fatal(name, args)
+	}
+	name, args = serviceLogCommand("linux", false)
+	if name != "journalctl" || strings.Contains(strings.Join(args, " "), "-f") {
+		t.Fatal(name, args)
+	}
 }
