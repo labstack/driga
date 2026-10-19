@@ -57,33 +57,62 @@ func wrapText(text string, width int) string {
 	return strings.Join(lines, "\n")
 }
 
+func headerGauge(name string, used, total uint64, noColor bool) string {
+	if total == 0 {
+		return view.TokenStyle("faint", noColor).Render(name + " —")
+	}
+	filled := min(6, int(view.GaugePercent(used, total)*6/100))
+	style := view.GaugeStyle(used, total, noColor)
+	return view.TokenStyle("muted", noColor).Render(name+" ") + style.Render(strings.Repeat("█", filled)) + view.TokenStyle("faint", noColor).Render(strings.Repeat("░", 6-filled)) + " " + style.Render(fmt.Sprintf("%.0f%%", view.GaugePercent(used, total)))
+}
+
 func (m *app) header() string {
-	s := m.visibleSummary()
-	sample := s.Sample
-	filled := 0
-	if sample.SwapTotal > 0 {
-		filled = min(8, int(float64(sample.SwapUsed)/float64(sample.SwapTotal)*8))
-	}
-	mode := m.snap.Mode
-	if mode == "snapshot" {
-		mode = "snapshot · no history"
-	}
-	if mode == "" {
-		mode = "loading"
-	}
+	sample := m.visibleSummary().Sample
 	host := m.snap.Hostname
 	if host == "" {
 		host = m.snap.Summary.MachineID
 	}
-	health := []string{fmt.Sprintf("swap %s/%s %s%s", humanBytes(sample.SwapUsed), humanBytes(sample.SwapTotal), strings.Repeat("▇", filled), strings.Repeat("░", 8-filled)), fmt.Sprintf("load %.1f/%d", sample.Load1, sample.Cores)}
-	if sample.TS.IsZero() {
-		health = []string{"health unavailable"}
+	mode := m.snap.Mode
+	if mode == "" {
+		mode = "loading"
 	}
-	parts := append([]string{"driga · " + host + m.fleetHeader(), mode}, health...)
-	return pack(append(parts, fmt.Sprintf("%d agents (%d working, %d waiting, %d stalled?)", s.Agents, s.Working, s.Waiting, s.Stalled), fmt.Sprintf("%d orphans ~%s", s.Orphans, humanBytes(s.Reclaim))), m.width, " · ")
+	badge := lipgloss.NewStyle()
+	if !m.opts.NoColor {
+		badge = badge.Bold(true).Foreground(view.ThemeColor("on-strong")).Background(view.ThemeColor("strong"))
+	}
+	status := mode
+	if mode == "daemon" {
+		status = view.TokenStyle("working", m.opts.NoColor).Render("● live") + view.TokenStyle("faint", m.opts.NoColor).Render(" · daemon")
+	}
+	if mode == "snapshot" {
+		status = "snapshot · no history"
+	}
+	identity := badge.Render(" driga ") + "  " + clean(host) + m.fleetHeader() + " · " + status
+	if !m.snap.ObservedAt.IsZero() {
+		identity += " · " + m.snap.ObservedAt.Local().Format("15:04:05")
+	}
+	if sample.TS.IsZero() {
+		return styledPack([]string{identity, "health unavailable"}, m.width, "   ")
+	}
+	loadToken := "ok"
+	switch view.LoadLevel(sample.Load1, sample.Cores) {
+	case "critical":
+		loadToken = "crit"
+	case "warning":
+		loadToken = "warn"
+	}
+	health := []string{headerGauge("mem", sample.MemUsed, sample.MemTotal, m.opts.NoColor), headerGauge("swap", sample.SwapUsed, sample.SwapTotal, m.opts.NoColor), "load " + view.TokenStyle(loadToken, m.opts.NoColor).Render(fmt.Sprintf("%.1f", sample.Load1)) + fmt.Sprintf("/%d", sample.Cores), "disk " + humanBytes(sample.DiskFree)}
+	right := strings.Join(health, "   ")
+	if lipgloss.Width(identity)+lipgloss.Width(right)+2 <= m.width {
+		return identity + strings.Repeat(" ", m.width-lipgloss.Width(identity)-lipgloss.Width(right)) + right
+	}
+	return styledPack(append([]string{identity}, health...), m.width, "   ")
 }
 func (m *app) footer() string {
 	hints := []string{"0 Home", "m machine", "enter detail", "/ filter", "s sort", "g group by project", "o open terminal"}
+	if m.tab == homeTab {
+		hints = []string{"0-6 tabs", "↑↓ move", "enter open", "/ filter", "m machine"}
+	}
 	if m.tmuxTarget() != "" {
 		hints = append(hints, "a attach tmux")
 	}
@@ -109,7 +138,19 @@ func (m *app) footer() string {
 	if m.tab == 5 {
 		hints = append([]string{"x clean (confirm)", "r refresh candidates"}, hints...)
 	}
-	text := pack(hints, m.width, " · ")
+	caps := []string{}
+	for _, hint := range hints {
+		key, label, _ := strings.Cut(hint, " ")
+		style := view.TokenStyle("ink", m.opts.NoColor)
+		if !m.opts.NoColor {
+			style = style.Background(view.ThemeColor("sunk"))
+		}
+		caps = append(caps, style.Render(" "+key+" ")+" "+view.TokenStyle("muted", m.opts.NoColor).Render(label))
+	}
+	text := styledPack(caps, m.width, "  ")
+	if m.opts.NoColor {
+		text = pack(hints, m.width, " · ")
+	}
 	var names []string
 	for name, f := range m.snap.Freshness {
 		sourceName := name

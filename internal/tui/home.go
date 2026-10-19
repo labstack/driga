@@ -2,11 +2,11 @@ package tui
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"charm.land/lipgloss/v2"
 	"github.com/NimbleMarkets/ntcharts/v2/barchart"
-	"github.com/NimbleMarkets/ntcharts/v2/sparkline"
 	"github.com/labstack/driga/internal/cleanup"
 	"github.com/labstack/driga/internal/view"
 )
@@ -25,7 +25,7 @@ func (m *app) needsYou() []tabRow {
 	rows := []tabRow{}
 	for _, a := range view.NeedsYou(inbox, agents, m.snap.AgentDetails) {
 		key := fmt.Sprintf("attention:%s:%d", a.MachineID, a.ID)
-		row := tabRow{machine: a.MachineID, key: key, agent: a.ID, cells: []string{"", a.State, a.Project, a.Summary}}
+		row := tabRow{attention: &a, machine: a.MachineID, key: key, agent: a.ID, cells: []string{"", a.State, a.Project, a.Summary}}
 		if a.Inbox != nil {
 			item := a.Inbox.InboxItem
 			item.MachineID = a.MachineID
@@ -60,52 +60,123 @@ func homeColumns(width int) int {
 	return 1
 }
 
-func panel(title, body string, width int) string {
-	inner := max(1, width-4)
-	lines := strings.Split(title+"\n"+body, "\n")
-	for i := range lines {
-		lines[i] = truncate(lines[i], inner)
+// panel keeps detail panes consistent with Home's rounded frames.
+func panel(title, body string, width int) string { return framedPanel(title, "", body, width, true) }
+
+func framedPanel(title, hint, body string, width int, noColor bool) string {
+	width = max(4, width)
+	inner := width - 4
+	border := view.TokenStyle("line", noColor)
+	heading := " " + truncate(clean(title), max(1, width-6)) + " "
+	hint = clean(hint)
+	room := width - 2 - lipgloss.Width(heading) - 2
+	right := ""
+	if room > 4 && hint != "" {
+		right = " " + truncate(hint, room-2) + " "
 	}
-	return lipgloss.NewStyle().Border(lipgloss.NormalBorder()).Padding(0, 1).Width(width).Render(strings.Join(lines, "\n"))
+	headingStyle := view.TokenStyle("ink", noColor)
+	if !noColor {
+		headingStyle = headingStyle.Bold(true)
+	}
+	top := border.Render("╭") + headingStyle.Render(heading) + border.Render(strings.Repeat("─", max(0, width-2-lipgloss.Width(heading)-lipgloss.Width(right)))) + view.TokenStyle("faint", noColor).Render(right) + border.Render("╮")
+	lines := []string{top}
+	for _, line := range strings.Split(body, "\n") {
+		line = truncate(line, inner)
+		lines = append(lines, border.Render("│")+" "+line+strings.Repeat(" ", max(0, inner-lipgloss.Width(line)))+" "+border.Render("│"))
+	}
+	lines = append(lines, border.Render("╰"+strings.Repeat("─", width-2)+"╯"))
+	return strings.Join(lines, "\n")
 }
 
 func (m *app) homeView() string {
 	cols := homeColumns(m.width)
-	w := (m.width - (cols - 1)) / cols
-	inner := max(1, w-4)
+	needsW, statesW, machineW := m.width, m.width, m.width
+	if cols == 3 {
+		needsW = m.width / 2
+		statesW = (m.width - needsW - 2) * 2 / 5
+		machineW = m.width - needsW - statesW - 2
+	}
+	if cols == 2 {
+		needsW = (m.width - 1) * 3 / 5
+		statesW = m.width - needsW - 1
+		machineW = statesW
+	}
+	dim := view.TokenStyle("faint", m.opts.NoColor)
+	mid := view.TokenStyle("muted", m.opts.NoColor)
 	needs := []string{}
-	// Keep the selected attention row visible even when the queue is long.
 	start := max(0, m.cursors[homeTab]-5)
 	for i := start; i < min(len(m.rows), start+6); i++ {
 		r := m.rows[i]
-		mark := "  "
-		if i == m.cursors[homeTab] {
-			mark = "› "
+		a := r.attention
+		state := r.cells[1]
+		title := r.cells[3]
+		location := r.cells[2]
+		adapter := ""
+		age := ""
+		if a != nil {
+			if a.Title != "" {
+				title = a.Title
+			}
+			adapter = a.Adapter
+			if d, ok := m.snap.AgentDetails[a.ID]; ok && d.Session.Branch != "" {
+				location += " · " + d.Session.Branch
+			}
+			if !a.At.IsZero() {
+				age = duration(m.snap.ObservedAt.Sub(a.At))
+			}
 		}
-		state := clean(r.cells[1])
-		origin := ""
-		if r.machine != "" && len(m.snap.Machines.Rows) > 1 {
-			origin = clean(m.machineName(r.machine)) + " · "
+		inner := needsW - 4
+		prefix := m.stateText("▌", state) + " " + m.stateText(fmt.Sprintf("%-8s", state), state) + " " + mid.Render(fmt.Sprintf("%-6s", truncate(clean(adapter), 6))) + " "
+		inline := needsW >= 76
+		locationWidth := 0
+		if inline {
+			locationWidth = min(24, max(0, (inner-lipgloss.Width(prefix)-lipgloss.Width(age))/2))
 		}
-		needs = append(needs, mark+origin+m.stateText(state)+" · "+clean(r.cells[2])+" · "+clean(r.cells[3]))
+		available := max(1, inner-lipgloss.Width(prefix)-lipgloss.Width(age)-locationWidth-2)
+		text := truncate(clean(title), available)
+		line := prefix + text
+		if inline {
+			line += strings.Repeat(" ", max(1, available-lipgloss.Width(text)+1)) + dim.Render(truncate(clean(location), locationWidth))
+		}
+		line += strings.Repeat(" ", max(1, inner-lipgloss.Width(line+age))) + m.stateText(age, state)
+		if i == m.cursors[homeTab] && !m.opts.NoColor {
+			line = lipgloss.NewStyle().Background(view.ThemeColor("sunk")).Render(line)
+		}
+		needs = append(needs, line)
+		if !inline {
+			needs = append(needs, dim.Render("  "+truncate(clean(location), inner-2)))
+		}
 	}
 	if len(needs) == 0 {
 		needs = append(needs, "Nothing needs you")
 	}
+	if len(m.rows) > 6 {
+		needs = append(needs, dim.Render(fmt.Sprintf("%d more · 3 Inbox", len(m.rows)-6)))
+	}
 	counts := map[string]int{}
-	m.eachAgent(func(r view.AgentRow) { counts[strings.TrimPrefix(r.Label, "~")]++ })
 	total := 0
-	for _, n := range counts {
-		total += n
-	}
-	states := []string{}
-	for _, state := range []string{"working", "waiting", "stalled?", "idle", "finished", "dead", "unknown"} {
-		if counts[state] == 0 && (state == "dead" || state == "unknown") {
-			continue
+	m.eachAgent(func(a view.AgentRow) { counts[strings.TrimPrefix(a.Label, "~")]++; total++ })
+	stateOrder := []string{"working", "waiting", "stalled?", "idle", "finished", "dead", "unknown"}
+	segmented := ""
+	legend := []string{}
+	used := 0
+	seen := 0
+	for _, state := range stateOrder {
+		n := counts[state]
+		seen += n
+		end := seen * (statesW - 4) / max(1, total)
+		if n > 0 {
+			segmented += m.stateText(strings.Repeat("█", end-used), state)
+			used = end
 		}
-		label := fmt.Sprintf("%-8s %3d ", state, counts[state])
-		states = append(states, m.stateText(label)+bar(float64(counts[state]), float64(max(1, total)), max(1, inner-13), view.StateStyle(state, m.opts.NoColor)))
+		if n > 0 || state != "dead" && state != "unknown" {
+			legend = append(legend, m.stateText(fmt.Sprintf("● %d %s", n, state), state))
+		}
 	}
+	if total == 0 {
+		segmented = dim.Render(strings.Repeat("░", statesW-4))
+	}
+	states := segmented + "\n" + styledPack(legend, statesW-4, "  ")
 	machine := []string{}
 	hosts := m.snap.Machine.Machines
 	if len(hosts) == 0 {
@@ -115,69 +186,105 @@ func (m *app) homeView() string {
 		if !m.machineVisible(host.MachineID) {
 			continue
 		}
-		s := host.Sample
-		name := clean(m.machineName(host.MachineID))
-		if m.machineStale(host.MachineID) {
-			name += " (stale)"
+		sample := host.Sample
+		if len(hosts) > 1 {
+			machine = append(machine, mid.Render(clean(m.machineName(host.MachineID))))
 		}
-		machine = append(machine, name)
-		if s.TS.IsZero() {
+		if sample.TS.IsZero() {
 			machine = append(machine, "Health unavailable")
 			continue
 		}
 		for _, metric := range []struct {
 			name        string
 			used, total uint64
-		}{{"Mem", s.MemUsed, s.MemTotal}, {"Swap", s.SwapUsed, s.SwapTotal}} {
+		}{{"memory", sample.MemUsed, sample.MemTotal}, {"swap", sample.SwapUsed, sample.SwapTotal}} {
 			if metric.total == 0 {
-				machine = append(machine, metric.name+" unavailable")
+				machine = append(machine, mid.Render(metric.name+" unavailable"))
 				continue
 			}
-			machine = append(machine, fmt.Sprintf("%s %.0f%% · %s/%s", metric.name, view.GaugePercent(metric.used, metric.total), humanBytes(metric.used), humanBytes(metric.total)), gaugeBar(metric.used, metric.total, inner, m.opts.NoColor))
+			n := max(1, machineW-4-14)
+			machine = append(machine, mid.Render(fmt.Sprintf("%-7s", metric.name))+gaugeBar(metric.used, metric.total, n, m.opts.NoColor)+" "+view.GaugeStyle(metric.used, metric.total, m.opts.NoColor).Render(fmt.Sprintf("%3.0f%%", view.GaugePercent(metric.used, metric.total))), dim.Render(fmt.Sprintf("        %s/%s", humanBytes(metric.used), humanBytes(metric.total))))
 		}
-		machine = append(machine, fmt.Sprintf("Load %.1f / %d cores · disk free %s", s.Load1, s.Cores, humanBytes(s.DiskFree)))
-		for _, a := range m.snap.Activity.Machines {
-			if a.MachineID == host.MachineID {
-				machine = append(machine, "load", activitySpark(a.Buckets, inner, true))
-			}
+		token := "ok"
+		if view.LoadLevel(sample.Load1, sample.Cores) == "critical" {
+			token = "crit"
+		} else if view.LoadLevel(sample.Load1, sample.Cores) == "warning" {
+			token = "warn"
 		}
+		machine = append(machine, mid.Render("load    ")+view.TokenStyle(token, m.opts.NoColor).Render(fmt.Sprintf("%.1f", sample.Load1))+dim.Render(fmt.Sprintf(" / %d cores", sample.Cores)), mid.Render("disk    ")+humanBytes(sample.DiskFree)+dim.Render(" free"))
 	}
 	if len(machine) == 0 {
 		machine = append(machine, "Health unavailable")
 	}
-	activity := []string{"60m · peaks when condensed · · = gap"}
+	activity := []string{}
+	sparkW := max(1, m.width-4-8-10)
 	for _, a := range m.snap.Activity.Machines {
 		if !m.machineVisible(a.MachineID) {
 			continue
 		}
-		name := clean(m.machineName(a.MachineID))
-		if a.Stale || m.machineStale(a.MachineID) {
-			name += " (stale)"
+		if len(m.snap.Activity.Machines) > 1 {
+			activity = append(activity, mid.Render(clean(m.machineName(a.MachineID))))
 		}
-		activity = append(activity, name, "events/min", activitySpark(a.Buckets, inner, false))
-		if !view.ActivityHasEvents(a.Buckets) {
-			activity = append(activity, strings.Split(wrapText(view.EventsEmpty, inner), "\n")...)
+		eventsNow, loadNow := "—", "—"
+		if len(a.Buckets) > 0 {
+			last := a.Buckets[len(a.Buckets)-1]
+			if last.Sample != nil || last.Events > 0 {
+				eventsNow = fmt.Sprintf("%d/min", last.Events)
+			}
+			if last.Sample != nil {
+				loadNow = fmt.Sprintf("%.1f", last.Sample.Load1)
+			}
 		}
-		activity = append(activity, "load", activitySpark(a.Buckets, inner, true))
+		activity = append(activity, dim.Render("events  ")+styledSpark(a.Buckets, sparkW, false, m.opts.NoColor)+"  "+view.TokenStyle("idle", m.opts.NoColor).Render(eventsNow), dim.Render("load    ")+styledSpark(a.Buckets, sparkW, true, m.opts.NoColor)+"  "+view.TokenStyle("ink", m.opts.NoColor).Render(loadNow))
+		cores := 0
+		first := -1
+		for i, b := range a.Buckets {
+			if b.Sample != nil {
+				cores = b.Sample.Cores
+			}
+			if first < 0 && (b.Sample != nil || b.Events > 0) {
+				first = i
+			}
+		}
+		if cores > 0 {
+			activity = append(activity, view.TokenStyle("crit", m.opts.NoColor).Render(fmt.Sprintf("        ┄ %d cores reference", cores)))
+		}
+		if first > 0 {
+			activity = append(activity, dim.Render(fmt.Sprintf("        no history before collector start · %dm collected", len(a.Buckets)-first)))
+		}
 		if !view.ActivityHasSamples(a.Buckets) {
-			activity = append(activity, strings.Split(wrapText(view.HistoryEmpty, inner), "\n")...)
+			activity = append(activity, dim.Render(view.HistoryEmpty))
+		}
+		if !view.ActivityHasEvents(a.Buckets) {
+			activity = append(activity, dim.Render(view.EventsEmpty))
 		}
 	}
-	if len(activity) == 1 {
-		activity = append(activity, strings.Split(wrapText(view.HistoryEmpty, inner), "\n")...)
-		activity = append(activity, strings.Split(wrapText(view.EventsEmpty, inner), "\n")...)
+	if len(activity) == 0 {
+		activity = append(activity, dim.Render(view.HistoryEmpty), dim.Render(view.EventsEmpty))
 	}
-	projects := []string{}
+	axis := []string{"−60m", "−45m", "−30m", "−15m", "now"}
+	axisLine := ""
+	for i, label := range axis {
+		pos := i * (sparkW - 3) / 4
+		axisLine += strings.Repeat(" ", max(0, pos-lipgloss.Width(axisLine))) + label
+	}
+	activity = append(activity, dim.Render("        "+axisLine))
+	projectW := m.width
+	leftW := m.width
+	if cols == 3 {
+		projectW = needsW + statesW + 1
+		leftW = machineW
+	}
+	projects := []string{dim.Render("PROJECT         AGENTS                         BRANCH          DIRTY  ↑   LATEST")}
 	for _, p := range view.SortedProjects(m.snap.Projects.Rows) {
 		if !m.machineVisible(p.MachineID) {
 			continue
 		}
-		dots, branch, title := "", "", ""
 		agents := []view.AgentRow{}
+		branch, title := "", ""
 		m.eachAgent(func(a view.AgentRow) {
 			if a.MachineID == p.MachineID && a.Project == p.Status.Repo.Name {
 				agents = append(agents, a)
-				dots += view.StateStyle(a.Label, m.opts.NoColor).Render("●")
 				if branch == "" {
 					branch = a.Branch
 				}
@@ -186,13 +293,6 @@ func (m *app) homeView() string {
 				}
 			}
 		})
-		if len(agents) > 5 {
-			parts := []string{}
-			for _, state := range view.StateCounts(agents) {
-				parts = append(parts, view.StateStyle(state.Label, m.opts.NoColor).Render(fmt.Sprintf("%d %s", state.Count, state.Label)))
-			}
-			dots = strings.Join(parts, " · ")
-		}
 		detail := m.snap.ProjectDetails[p.Status.Repo.ID]
 		if branch == "" && len(detail.WorktreeRows) > 0 {
 			branch = detail.WorktreeRows[0].Branch
@@ -202,17 +302,35 @@ func (m *app) homeView() string {
 		} else if len(p.Status.Where) > 0 {
 			title = p.Status.Where[0].Text
 		}
-		line := fmt.Sprintf("%s %s · %s · dirty %d · ↑%d · %s", clean(p.Status.Repo.Name), dots, clean(branch), p.Dirty, p.Unpushed, clean(title))
+		mini := ""
+		parts := []string{}
+		segments := 0
+		for _, state := range view.StateCounts(agents) {
+			n := min(state.Count, max(0, 6-segments))
+			mini += m.stateText(strings.Repeat("▮", n), state.Label)
+			segments += n
+			parts = append(parts, fmt.Sprintf("%d %s", state.Count, state.Label))
+		}
+		mini += dim.Render(strings.Repeat("▯", max(0, 6-segments)))
+		summary := strings.Join(parts, " · ")
+		if summary == "" {
+			summary = "quiet"
+		}
+		name := fmt.Sprintf("%-14s", truncate(clean(p.Status.Repo.Name), 14))
+		line := name + " " + mini + " " + fmt.Sprintf("%-22s", truncate(summary, 22)) + " " + fmt.Sprintf("%-15s", truncate(clean(branch), 15)) + fmt.Sprintf(" %5d %3d  ", p.Dirty, p.Unpushed) + clean(title)
+		if projectW < 90 {
+			line = name + " " + mini + " " + summary + "\n  " + clean(branch) + fmt.Sprintf(" · dirty %d · ↑%d · ", p.Dirty, p.Unpushed) + clean(title)
+		}
 		if p.Status.LiveAgents == 0 && p.Status.Activity == "idle" && !m.opts.NoColor {
 			line = lipgloss.NewStyle().Faint(true).Render(line)
 		}
 		projects = append(projects, line)
 	}
-	if len(projects) == 0 {
+	if len(projects) == 1 {
 		projects = append(projects, "No projects")
 	}
 	summary := m.visibleSummary()
-	leftovers := []string{fmt.Sprintf("%d orphans · ~%.1f MB reclaimable", summary.Orphans, float64(summary.Reclaim)/(1<<20))}
+	leftovers := []string{fmt.Sprintf("orphans    %d · ~%s reclaimable", summary.Orphans, humanBytes(summary.Reclaim))}
 	ready, refused := 0, 0
 	var history int64
 	for _, c := range m.snap.Cleanup {
@@ -221,42 +339,86 @@ func (m *app) homeView() string {
 		}
 		if c.Kind == cleanup.History {
 			history += c.Size
-			continue
 		}
-		if c.Kind != cleanup.Worktree {
-			continue
-		}
-		if c.Status == "ready" {
-			ready++
-		} else {
-			refused++
+		if c.Kind == cleanup.Worktree {
+			if c.Status == "ready" {
+				ready++
+			} else {
+				refused++
+			}
 		}
 	}
 	if m.snap.Cleanup == nil {
-		leftovers = append(leftovers, "Worktrees: not loaded (6 Cleanup)")
+		leftovers = append(leftovers, "worktrees  not loaded · 6 Cleanup")
 	} else {
-		leftovers = append(leftovers, fmt.Sprintf("Worktrees: %d ready · %d refused/review", ready, refused))
+		leftovers = append(leftovers, fmt.Sprintf("worktrees  %d ready · %d kept", ready, refused))
 	}
 	if history > 0 {
-		leftovers = append(leftovers, fmt.Sprintf("Agent history: %.1f MB measured", float64(history)/(1<<20)))
+		leftovers = append(leftovers, fmt.Sprintf("history    %.1f MB measured", float64(history)/(1<<20)))
+	} else {
+		leftovers = append(leftovers, dim.Render("history    not measured · r in Cleanup"))
 	}
-	panels := []string{panel(fmt.Sprintf("Needs you (%d)", len(m.rows)), strings.Join(needs, "\n"), w), panel("Agent states", strings.Join(states, "\n"), w), panel("Machine", strings.Join(machine, "\n"), w), panel("Activity", strings.Join(activity, "\n"), w), panel("Projects", strings.Join(projects, "\n"), w), panel("Leftovers", strings.Join(leftovers, "\n"), w)}
-	rows := []string{}
-	for i := 0; i < len(panels); i += cols {
-		parts := []string{}
-		for j := i; j < min(i+cols, len(panels)); j++ {
-			if j > i {
-				parts = append(parts, " ")
-			}
-			parts = append(parts, panels[j])
+	sourceNames := []string{}
+	for name := range m.snap.Freshness {
+		if strings.Contains(name, "hook") || strings.Contains(name, "spool") || strings.Contains(name, "otlp") {
+			sourceNames = append(sourceNames, name)
 		}
-		rows = append(rows, lipgloss.JoinHorizontal(lipgloss.Top, parts...))
+	}
+	sort.Strings(sourceNames)
+	for _, name := range sourceNames {
+		f := m.snap.Freshness[name]
+		status := "source healthy"
+		token := "working"
+		if f.Status == "not-yet-receiving" {
+			status = "waiting for first event"
+			token = "waiting"
+		} else if f.Stale || f.LastError != "" {
+			status = "stale"
+			token = "waiting"
+		} else if f.LastOKAt.IsZero() {
+			status = "no events received"
+			token = "finished"
+		}
+		label := "hooks"
+		if strings.Contains(name, "otlp") {
+			label = "telemetry"
+		}
+		leftovers = append(leftovers, mid.Render(label+"  ")+view.TokenStyle(token, m.opts.NoColor).Render("● "+clean(name)+" · "+status))
+	}
+	frame := func(title, hint, body string, width int) string {
+		return framedPanel(title, hint, body, width, m.opts.NoColor)
+	}
+	needsPanel := frame(fmt.Sprintf("Needs you %d", len(m.rows)), "enter open · x ack", strings.Join(needs, "\n"), needsW)
+	statesPanel := frame(fmt.Sprintf("Agents %d", total), "by state", states, statesW)
+	machinePanel := frame("Machine", "", strings.Join(machine, "\n"), machineW)
+	rows := []string{}
+	switch cols {
+	case 3:
+		rows = append(rows, lipgloss.JoinHorizontal(lipgloss.Top, needsPanel, " ", statesPanel, " ", machinePanel))
+	case 2:
+		rows = append(rows, lipgloss.JoinHorizontal(lipgloss.Top, needsPanel, " ", statesPanel+"\n"+machinePanel))
+	default:
+		rows = append(rows, needsPanel, statesPanel, machinePanel)
+	}
+	rows = append(rows, frame("Activity · 60 min", "events/min · load · ┄ cores", strings.Join(activity, "\n"), m.width))
+	pp := frame("Projects", "2 Projects for all", strings.Join(projects, "\n"), projectW)
+	lp := frame("Leftovers", "6 Cleanup", strings.Join(leftovers, "\n"), leftW)
+	if cols == 3 {
+		rows = append(rows, lipgloss.JoinHorizontal(lipgloss.Top, pp, " ", lp))
+	} else {
+		rows = append(rows, pp, lp)
 	}
 	return strings.Join(rows, "\n")
 }
 
-func (m *app) stateText(label string) string {
-	return view.StateStyle(strings.Fields(label)[0], m.opts.NoColor).Render(label)
+func (m *app) stateText(text string, label ...string) string {
+	state := text
+	if len(label) > 0 {
+		state = label[0]
+	} else if fields := strings.Fields(text); len(fields) > 0 {
+		state = fields[0]
+	}
+	return view.StateStyle(state, m.opts.NoColor).Render(text)
 }
 
 func bar(value, total float64, width int, style lipgloss.Style) string {
@@ -277,48 +439,69 @@ func gaugeBar(used, total uint64, width int, noColor bool) string {
 	return view.GaugeStyle(used, total, noColor).Render(strings.Repeat("█", filled)) + track
 }
 
+// activitySpark uses two braille columns per cell. Missing collection remains dots.
 func activitySpark(buckets []view.ActivityBucket, width int, load bool) string {
+	return styledSpark(buckets, width, load, true)
+}
+
+func styledSpark(buckets []view.ActivityBucket, width int, load, noColor bool) string {
 	if len(buckets) == 0 {
 		return view.HistoryEmpty
 	}
 	width = max(1, width)
-	values := make([]float64, width)
-	valid := make([]bool, width)
+	count := width * 2
+	values := make([]float64, count)
+	valid := make([]bool, count)
 	ceiling := 1.0
-	for x := range width {
+	first := -1
+	for i, b := range buckets {
+		if b.Sample != nil || b.Events > 0 {
+			first = i
+			break
+		}
+	}
+	for x := range count {
+		from := x * len(buckets) / count
+		to := min(len(buckets), max(from+1, (x+1)*len(buckets)/count))
 		valid[x] = true
-		for i := x * len(buckets) / width; i < max(x*len(buckets)/width+1, (x+1)*len(buckets)/width); i++ {
+		for i := from; i < to; i++ {
 			b := buckets[i]
 			v := float64(b.Events)
+			if first < 0 || i < first {
+				valid[x] = false
+				continue
+			}
 			if load {
 				if b.Sample == nil {
 					valid[x] = false
 					continue
 				}
 				v = b.Sample.Load1
+				ceiling = max(ceiling, float64(b.Sample.Cores))
 			}
 			values[x] = max(values[x], v)
 		}
 		ceiling = max(ceiling, values[x])
 	}
-	// Render contiguous runs separately so ntcharts never receives gap-as-zero data.
+	bits := [][]rune{{0x40, 0x04, 0x02, 0x01}, {0x80, 0x20, 0x10, 0x08}}
+	token := "idle"
+	if load {
+		token = "ink"
+	}
 	var out strings.Builder
-	for x := 0; x < width; {
-		if !valid[x] {
-			out.WriteString("·")
-			x++
+	for x := 0; x < count; x += 2 {
+		if !valid[x] || !valid[x+1] {
+			out.WriteString(view.TokenStyle("faint", noColor).Render("·"))
 			continue
 		}
-		end := x + 1
-		for end < width && valid[end] {
-			end++
+		r := rune(0x2800)
+		for column := 0; column < 2; column++ {
+			height := min(4, int(values[x+column]/ceiling*4+.5))
+			for y := 0; y < height; y++ {
+				r |= bits[column][y]
+			}
 		}
-		s := sparkline.New(end-x, 1)
-		s.SetMax(ceiling)
-		s.PushAll(values[x:end])
-		s.Draw()
-		out.WriteString(s.View())
-		x = end
+		out.WriteString(view.TokenStyle(token, noColor).Render(string(r)))
 	}
 	return out.String()
 }

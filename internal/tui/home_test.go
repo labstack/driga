@@ -15,12 +15,12 @@ import (
 
 func TestHomeInitialAndKeyZero(t *testing.T) {
 	m := setup(t, fixture(), Options{})
-	if !strings.Contains(m.View().Content, "[0 Home]") {
+	if m.(*app).tab != homeTab || !strings.Contains(m.View().Content, "0 Home") {
 		t.Fatal(m.View().Content)
 	}
 	m = key(m, '1')
 	m = key(m, '0')
-	if !strings.Contains(m.View().Content, "[0 Home]") {
+	if m.(*app).tab != homeTab || !strings.Contains(m.View().Content, "0 Home") {
 		t.Fatal(m.View().Content)
 	}
 	m = key(m, '?')
@@ -38,7 +38,7 @@ func TestHomeWidths(t *testing.T) {
 		m := setup(t, s, Options{})
 		m, _ = m.Update(tea.WindowSizeMsg{Width: width, Height: 100})
 		text := m.View().Content
-		for _, title := range []string{"Needs you", "Agent states", "Machine", "Activity", "Projects", "Leftovers"} {
+		for _, title := range []string{"Needs you", "Agents", "Machine", "Activity", "Projects", "Leftovers"} {
 			if !strings.Contains(text, title) {
 				t.Errorf("width %d missing %s", width, title)
 			}
@@ -138,11 +138,8 @@ func TestHomePanelsFitWithoutClipping(t *testing.T) {
 			if lipgloss.Width(line) > width {
 				t.Fatalf("width %d: %q", width, line)
 			}
-			if strings.Contains(line, "working") && !strings.Contains(line, "█") {
-				t.Fatalf("state bar wrapped: %q", line)
-			}
 		}
-		if strings.Count(strings.Split(m.homeView(), "\n")[0], "┌") != homeColumns(width) {
+		if strings.Count(strings.Split(m.homeView(), "\n")[0], "╭") != homeColumns(width) {
 			t.Fatal("wrong column count", width)
 		}
 		if strings.Contains(bar(1, 1, 20, lipgloss.NewStyle()), "\n") {
@@ -159,7 +156,7 @@ func TestAgentDetailUsesStateColors(t *testing.T) {
 	m := setup(t, s, Options{}).(*app)
 	m.opts.NoColor = false
 	key(m, tea.KeyEnter)
-	if !strings.Contains(m.View().Content, "\x1b[31m") {
+	if !strings.Contains(m.View().Content, view.StateStyle("stalled?", false).Render("stalled?")) {
 		t.Fatalf("detail state lacks red: %q", m.View().Content)
 	}
 }
@@ -181,7 +178,7 @@ func TestHomeFleetAttentionKeepsFields(t *testing.T) {
 	if len(m.rows) != 2 || m.rows[0].cells[1] != "waiting" || m.rows[0].cells[2] != "peer-project" {
 		t.Fatalf("attention fields shifted: %+v", m.rows)
 	}
-	if !strings.Contains(m.View().Content, "peer needs input") {
+	if !strings.Contains(m.View().Content, "remote title") || !strings.Contains(m.View().Content, "peer-project") {
 		t.Fatal(m.View().Content)
 	}
 }
@@ -210,7 +207,7 @@ func TestHomeLoadsLeftoversAndScrolls(t *testing.T) {
 	}
 	m = key(m, tea.KeyPgDown)
 	m = key(m, tea.KeyPgDown)
-	if !strings.Contains(m.View().Content, "1 ready · 1 refused") {
+	if !strings.Contains(m.View().Content, "1 ready · 1 kept") {
 		t.Fatal(m.View().Content)
 	}
 }

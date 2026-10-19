@@ -113,7 +113,7 @@ func TestNeedsYouDedupeCapAndIdentity(t *testing.T) {
 		t.Errorf("got %d attention items, want 8", len(p.Needs))
 	}
 	body := request(s, "GET", "/", s.token).Body.String()
-	if strings.Count(body, `class="item stripe finished"`)+strings.Count(body, `class="item stripe waiting"`) != 8 {
+	if strings.Count(body, `class="strip finished"`)+strings.Count(body, `class="strip waiting"`) != 8 {
 		t.Error("attention cap missing")
 	}
 	for _, text := range []string{"2 more in Inbox", "claude", "codex", "2m ago", "Fixture project", "&lt;script&gt;alert(1)&lt;/script&gt;"} {

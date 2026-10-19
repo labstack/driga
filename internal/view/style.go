@@ -12,18 +12,15 @@ func StateStyle(label string, noColor bool) lipgloss.Style {
 	if noColor {
 		return s
 	}
-	switch strings.TrimPrefix(label, "~") {
-	case "working":
-		return s.Foreground(lipgloss.Color("2"))
-	case "waiting":
-		return s.Foreground(lipgloss.Color("3"))
-	case "stalled?", "dead":
-		return s.Foreground(lipgloss.Color("1"))
-	case "idle":
-		return s.Foreground(lipgloss.Color("#5fafff"))
-	case "finished":
-		return s.Faint(true)
+	token := strings.TrimSuffix(strings.TrimPrefix(label, "~"), "?")
+	if token == "dead" {
+		token = "stalled"
 	}
+	switch token {
+	case "working", "waiting", "stalled", "idle", "finished":
+		return TokenStyle(token, noColor)
+	}
+
 	return s
 }
 
@@ -48,12 +45,26 @@ func GaugeLevel(used, total uint64) string {
 }
 
 func GaugeStyle(used, total uint64, noColor bool) lipgloss.Style {
-	state := "working"
+	token := "ok"
 	switch GaugeLevel(used, total) {
 	case "critical":
-		state = "stalled?"
+		token = "crit"
 	case "warning":
-		state = "waiting"
+		token = "warn"
 	}
-	return StateStyle(state, noColor)
+	return TokenStyle(token, noColor)
+}
+
+// LoadLevel compares the measured load with this machine's capacity.
+func LoadLevel(load float64, cores int) string {
+	if cores <= 0 {
+		return "normal"
+	}
+	if load > float64(cores) {
+		return "critical"
+	}
+	if load >= float64(cores)*.75 {
+		return "warning"
+	}
+	return "normal"
 }

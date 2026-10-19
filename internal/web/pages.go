@@ -105,7 +105,7 @@ func (s *Server) loadPage(r *http.Request) (pageData, int, error) {
 		}
 		p.Project, p.Title = d, "Project detail"
 	}
-	if (p.Page == "/" || p.Page == "/cleanup") && (p.Scope == "all" || p.Scope == snap.LocalMachineID) && s.opts.CleanupList != nil {
+	if (p.Scope == "all" || p.Scope == snap.LocalMachineID) && s.opts.CleanupList != nil {
 		p.Cleanup, err = s.opts.CleanupList(r.Context())
 		if err != nil {
 			p.CleanupError = err.Error()
@@ -212,6 +212,51 @@ func templateFuncs() template.FuncMap {
 				Scope string
 				All   bool
 			}{row, scope, all}
+		},
+		"navActive": func(path, page string) bool { return path == page || path != "/" && strings.HasPrefix(page, path+"/") },
+		"navCount": func(p pageData, name string) int {
+			switch name {
+			case "Agents":
+				return len(p.AgentRows)
+			case "Projects":
+				return len(p.Projects.Rows)
+			case "Inbox":
+				return len(p.Inbox.Rows)
+			case "Orphans":
+				return len(p.Orphans.Rows)
+			case "Machines":
+				return len(p.Machines.Rows)
+			case "Cleanup":
+				return len(p.Cleanup)
+			}
+			return 0
+		},
+		"lower": strings.ToLower,
+		"add":   func(a, b int) int { return a + b },
+		"initial": func(s string) string {
+			if s == "" {
+				return "?"
+			}
+			if s == "codex" {
+				return "X"
+			}
+			return strings.ToUpper(string([]rune(s)[0]))
+		},
+		"stateSummary": func(states []view.StateCount) string {
+			parts := []string{}
+			for _, s := range states {
+				parts = append(parts, fmt.Sprintf("%d %s", s.Count, s.Label))
+			}
+			return strings.Join(parts, " · ")
+		},
+		"loadLevel": view.LoadLevel,
+		"cores": func(buckets []view.ActivityBucket) int {
+			for i := len(buckets) - 1; i >= 0; i-- {
+				if buckets[i].Sample != nil {
+					return buckets[i].Sample.Cores
+				}
+			}
+			return 0
 		},
 		"chartData": func(buckets []view.ActivityBucket) string {
 			times, events, loads := []any{}, []any{}, []any{}

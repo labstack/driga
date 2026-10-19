@@ -71,7 +71,7 @@ func TestTUIMachineScopeCountsAndHealth(t *testing.T) {
 	s.snap.Machine = view.MachineView{MachineID: "local", Sample: model.MachineSample{MemUsed: 100 << 20, MemTotal: 200 << 20}, Machines: []view.MachineView{{MachineID: "local", Sample: model.MachineSample{MemUsed: 100 << 20, MemTotal: 200 << 20}}, {MachineID: "remote", Sample: model.MachineSample{MemUsed: 300 << 20, MemTotal: 400 << 20}}}}
 	m := setup(t, s, Options{})
 	m = key(m, 'm')
-	if !strings.Contains(m.View().Content, "1 agents") {
+	if !strings.Contains(m.View().Content, "1 Agents 1") {
 		t.Fatal(m.View().Content)
 	}
 	m = key(m, 'm')

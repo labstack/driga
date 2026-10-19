@@ -15,16 +15,17 @@ import (
 )
 
 type tabRow struct {
-	cleanup *cleanup.Candidate
-	machine string
-	stale   bool
-	key     string
-	cells   []string
-	agent   int64
-	project int64
-	cwd     string
-	inbox   *model.InboxItem
-	orphan  *model.Orphan
+	attention *view.Attention
+	cleanup   *cleanup.Candidate
+	machine   string
+	stale     bool
+	key       string
+	cells     []string
+	agent     int64
+	project   int64
+	cwd       string
+	inbox     *model.InboxItem
+	orphan    *model.Orphan
 }
 
 func (m *app) tabVisible(tab int) bool {
@@ -67,23 +68,65 @@ func (m *app) tabBar() string {
 			orphans++
 		}
 	}
-	names := []string{fmt.Sprintf("Agents(%d)", s.Agents), fmt.Sprintf("Projects(%d)", projects), fmt.Sprintf("Inbox(%d)", inbox), fmt.Sprintf("Orphans(%d)", orphans), "Machine", "Cleanup"}
-	// Keep stable key numbers even when project scope hides a tab.
-	tabs := []string{"0 Home"}
-	if m.tab == homeTab {
-		tabs[0] = "[0 Home]"
+	cleanupCount := 0
+	if m.machineVisible(m.localMachine()) {
+		cleanupCount = len(m.snap.Cleanup)
 	}
+	names := []string{fmt.Sprintf("Agents %d", s.Agents), fmt.Sprintf("Projects %d", projects), "Inbox", fmt.Sprintf("Orphans %d", orphans), "Machine", fmt.Sprintf("Cleanup %d", cleanupCount)}
+	tabs := []string{}
+	active := func(label string, selected bool) string {
+		style := view.TokenStyle("muted", m.opts.NoColor)
+		if selected && m.opts.NoColor {
+			return "[" + label + "]"
+		}
+		if selected {
+			style = view.TokenStyle("ink", m.opts.NoColor)
+			if !m.opts.NoColor {
+				style = style.Bold(true).Underline(true)
+			}
+		}
+		return style.Render(label)
+	}
+	tabs = append(tabs, active("0 Home", m.tab == homeTab))
 	for i, name := range names {
 		if !m.tabVisible(i) {
 			continue
 		}
-		label := fmt.Sprintf("%d %s", i+1, name)
-		if i == m.tab {
-			label = "[" + label + "]"
+		label := active(fmt.Sprintf("%d %s", i+1, name), m.tab == i)
+		if i == 2 && m.opts.NoColor {
+			label = active(fmt.Sprintf("%d %s %d", i+1, name, inbox), m.tab == i)
+		}
+		if i == 2 && !m.opts.NoColor {
+			token := "faint"
+			if inbox > 0 {
+				token = "waiting"
+			}
+			label += " " + view.TokenStyle(token, m.opts.NoColor).Render(fmt.Sprint(inbox))
 		}
 		tabs = append(tabs, label)
 	}
-	return pack(tabs, m.width, "  ")
+	return styledPack(tabs, m.width, "   ")
+}
+
+// styledPack keeps ANSI styling while wrapping only at item boundaries.
+func styledPack(parts []string, width int, separator string) string {
+	lines := []string{}
+	line := ""
+	for _, part := range parts {
+		part = truncate(part, width)
+		if line != "" && lipgloss.Width(line+separator+part) > width {
+			lines = append(lines, line)
+			line = ""
+		}
+		if line != "" {
+			line += separator
+		}
+		line += part
+	}
+	if line != "" {
+		lines = append(lines, line)
+	}
+	return strings.Join(lines, "\n")
 }
 
 func (m *app) rebuild() {

@@ -19,6 +19,7 @@ import (
 
 	"github.com/labstack/driga/internal/cleanup"
 	"github.com/labstack/driga/internal/store"
+	"github.com/labstack/driga/internal/view"
 	"github.com/labstack/driga/internal/viewer"
 )
 
@@ -46,6 +47,7 @@ type Server struct {
 	token     string
 	templates *template.Template
 	static    http.Handler
+	themeCSS  string
 	mu        sync.Mutex
 	clients   map[chan struct{}]bool
 	ready     chan struct{}
@@ -84,7 +86,7 @@ func New(source Source, opts Options) (*Server, error) {
 	}
 	return &Server{
 		source: source, opts: opts, token: base64.RawURLEncoding.EncodeToString(token),
-		templates: t, static: http.StripPrefix("/static/", http.FileServer(http.FS(static))),
+		themeCSS: view.ThemeCSS(), templates: t, static: http.StripPrefix("/static/", http.FileServer(http.FS(static))),
 		clients: map[chan struct{}]bool{}, ready: make(chan struct{}),
 	}, nil
 }
@@ -161,6 +163,13 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie(cookieName)
 	if err != nil || !s.validToken(cookie.Value) {
 		http.Error(w, "unauthorized", 401)
+		return
+	}
+	if r.URL.Path == "/static/theme.css" {
+		w.Header().Set("Content-Type", "text/css; charset=utf-8")
+		if r.Method != http.MethodHead {
+			_, _ = fmt.Fprint(w, s.themeCSS)
+		}
 		return
 	}
 	if strings.HasPrefix(r.URL.Path, "/static/") {

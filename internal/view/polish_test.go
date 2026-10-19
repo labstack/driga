@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"charm.land/lipgloss/v2"
 	"github.com/labstack/driga/internal/collector"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/store"
@@ -63,17 +62,17 @@ func TestGaugeLevels(t *testing.T) {
 	}
 	for _, tc := range []struct {
 		used  uint64
-		state string
-	}{{20, "working"}, {75, "waiting"}, {95, "stalled?"}} {
-		if !reflect.DeepEqual(GaugeStyle(tc.used, 100, false).GetForeground(), StateStyle(tc.state, false).GetForeground()) {
-			t.Error("gauge color differs from state color")
+		token string
+	}{{20, "ok"}, {75, "warn"}, {95, "crit"}} {
+		if !reflect.DeepEqual(GaugeStyle(tc.used, 100, false).GetForeground(), TokenStyle(tc.token, false).GetForeground()) {
+			t.Error("gauge color differs from semantic level token")
 		}
 	}
 }
 
 func TestIdleIsExplicitBlueAndNoColor(t *testing.T) {
 	for _, state := range []string{"idle", "~idle"} {
-		if !reflect.DeepEqual(StateStyle(state, false).GetForeground(), lipgloss.Color("#5fafff")) {
+		if !reflect.DeepEqual(StateStyle(state, false).GetForeground(), ThemeColor("idle")) {
 			t.Error("idle must use explicit blue, independent of terminal palette")
 		}
 		if StateStyle(state, true).Render("idle") != "idle" {

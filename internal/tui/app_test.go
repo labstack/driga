@@ -81,12 +81,12 @@ func execute(t *testing.T, m tea.Model, cmd tea.Cmd) tea.Model {
 func TestTabSwitching(t *testing.T) {
 	m := setup(t, fixture(), Options{})
 	m = key(m, '3')
-	if !strings.Contains(m.View().Content, "[3 Inbox(1)]") {
+	if m.(*app).tab != 2 || !strings.Contains(m.View().Content, "3 Inbox 1") {
 		t.Fatal(m.View().Content)
 	}
 	for _, c := range []rune{'1', '2', '4', '5'} {
 		m = key(m, c)
-		if !strings.Contains(m.View().Content, "["+string(c)+" ") {
+		if m.(*app).tab != int(c-'1') || !strings.Contains(m.View().Content, string(c)+" ") {
 			t.Fatal(m.View().Content)
 		}
 	}
@@ -100,7 +100,7 @@ func TestDetailDoesNotAck(t *testing.T) {
 		t.Fatal(m.View().Content, calls)
 	}
 	m = key(m, tea.KeyEscape)
-	if !strings.Contains(m.View().Content, "[3 Inbox(1)]") {
+	if m.(*app).tab != 2 || !strings.Contains(m.View().Content, "3 Inbox 1") {
 		t.Fatal(m.View().Content)
 	}
 }
@@ -223,12 +223,12 @@ func TestProjectHidesEmptyTabs(t *testing.T) {
 	s := fixture()
 	s.snap.Orphans.Rows = nil
 	m := setup(t, s, Options{Project: "/tmp/repo"})
-	text := m.View().Content
-	if strings.Contains(text, "2 Projects") || strings.Contains(text, "4 Orphans") || !strings.Contains(text, "3 Inbox(1)") {
+	text := m.(*app).tabBar()
+	if strings.Contains(text, "2 Projects") || strings.Contains(text, "4 Orphans") || !strings.Contains(text, "3 Inbox 1") {
 		t.Fatal(text)
 	}
 	m = key(m, '4')
-	if strings.Contains(m.View().Content, "[4 ") {
+	if m.(*app).tab == 3 {
 		t.Fatal(m.View().Content)
 	}
 }
