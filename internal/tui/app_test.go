@@ -21,6 +21,7 @@ import (
 	"github.com/labstack/driga/internal/spool"
 	"github.com/labstack/driga/internal/store"
 	"github.com/labstack/driga/internal/view"
+	"github.com/labstack/driga/internal/viewer"
 )
 
 type fakeSource struct {
@@ -558,7 +559,7 @@ func TestProjectScopedCollection(t *testing.T) {
 	a := scopedTestAdapter{obs: []model.SessionObs{{ExternalID: "inside", Cwd: project}, {ExternalID: "outside", Cwd: other}}}
 	d := collector.Deps{Cfg: config.Default(), Adapters: []adapter.Adapter{a}}
 	d.Cfg.Roots = []string{home}
-	scoped, err := scopeDeps(d, project)
+	scoped, err := viewer.ScopeDeps(d, project)
 	if err != nil {
 		t.Fatal(err)
 	}

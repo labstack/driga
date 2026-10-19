@@ -381,6 +381,22 @@ viewers only at `fleet.share_text = "snippets"`.
 tools, and no user, project or local settings. Both refuse to run if the
 installed `claude` lacks a required flag.
 
+## Web dashboard
+
+`driga web` serves a read-only dashboard for the same data in your browser:
+
+```sh
+driga web            # prints a one-time URL such as http://127.0.0.1:53817/?token=…
+driga web --open     # also opens it
+```
+
+It listens on loopback only (`--listen` refuses other addresses), runs as its own
+process so the collector's footprint is unchanged, and updates live as the collector
+writes. The token in the printed URL sets a cookie for that browser; restarting
+`driga web` issues a new token. Pages: Home, Agents, Projects, Inbox, Orphans,
+Machines and Cleanup (listing only). Nothing in the browser can kill, acknowledge or
+clean up in this version.
+
 ## MCP registration
 
 `driga mcp` exposes thirteen read-only tools over stdio with the same schema-1 view

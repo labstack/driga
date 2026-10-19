@@ -8,6 +8,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/cookiejar"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -186,12 +190,30 @@ func TestSmoke(t *testing.T) {
 	// Cleanup refuses when a live agent hides its cwd (non-dumpable agents
 	// on Linux); unreadable non-agent processes are reported as evidence. That is the
 	// host's state, not a smoke failure, so only that refusal skips the check.
-	if _, errout, err := local.try("cleanup"); err != nil && strings.Contains(errout, "cannot inspect cwd") {
-		t.Logf("cleanup checks skipped: %s", strings.TrimSpace(errout))
-	} else if cs := local.data("cleanup"); field(cs, "path", "smoke-topic") {
-		t.Fatalf("unidle worktree offered: %s", cs)
-	} else if cs := local.data("cleanup", "--why"); !field(cs, "status", "refused") || !field(cs, "path", "smoke-topic") {
-		t.Fatalf("--why lacks refused worktree: %s", cs)
+	for _, why := range []bool{false, true} {
+		args := []string{"cleanup", "--json"}
+		if why {
+			args = append(args, "--why")
+		}
+		out, errout, err := local.try(args...)
+		if err != nil && strings.Contains(errout, "cannot inspect cwd") {
+			t.Logf("cleanup checks skipped: %s", strings.TrimSpace(errout))
+			break
+		}
+		if err != nil {
+			t.Fatalf("cleanup: %v: %s", err, errout)
+		}
+		var compact bytes.Buffer
+		if err := json.Compact(&compact, []byte(out)); err != nil {
+			t.Fatal(err)
+		}
+		cs := compact.String()
+		if !why && field(cs, "path", "smoke-topic") {
+			t.Fatalf("unidle worktree offered: %s", cs)
+		}
+		if why && (!field(cs, "status", "refused") || !field(cs, "path", "smoke-topic")) {
+			t.Fatalf("--why lacks refused worktree: %s", cs)
+		}
 	}
 	// The agent count includes whatever agents the host is running, so only
 	// the line's fixed parts are checked.
@@ -201,6 +223,7 @@ func TestSmoke(t *testing.T) {
 			t.Fatalf("summary lacks %q: %s", part, summary)
 		}
 	}
+	local.webSmoke()
 
 	// Fleet: the local node serves on loopback; a viewer with an empty HOME
 	// pairs and must see the served session through the stream.
@@ -245,6 +268,49 @@ func TestSmoke(t *testing.T) {
 	}, func() string { return "serve:\n" + serveLog.String() + "\nviewer:\n" + viewerLog.String() })
 	if machines := viewer.data("machines"); !field(machines, "name", "smoke-peer") {
 		t.Fatalf("peer missing from machines: %s", machines)
+	}
+}
+
+func (n node) webSmoke() {
+	n.t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var out, errout logBuffer
+	cmd := n.cmd(ctx, "web", "--listen", "127.0.0.1:0")
+	cmd.Stdout, cmd.Stderr = &out, &errout
+	if err := cmd.Start(); err != nil {
+		n.t.Fatal(err)
+	}
+	defer func() { cancel(); _ = cmd.Wait() }()
+	var address string
+	eventually(n.t, 10*time.Second, func() bool {
+		for _, line := range strings.Fields(out.String()) {
+			if strings.HasPrefix(line, "http://") {
+				address = line
+				return true
+			}
+		}
+		return false
+	}, func() string { return out.String() + errout.String() })
+	u, err := url.Parse(address)
+	if err != nil || u.Query().Get("token") == "" {
+		n.t.Fatalf("tokenized URL: %s %v", address, err)
+	}
+	jar, _ := cookiejar.New(nil)
+	client := &http.Client{Jar: jar, Timeout: 30 * time.Second}
+	for _, target := range []string{address, "http://" + u.Host + "/agents"} {
+		resp, err := client.Get(target)
+		if err != nil {
+			n.t.Fatal(err)
+		}
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil || resp.StatusCode != 200 || !strings.Contains(string(body), "Smoke title") {
+			n.t.Fatalf("web: %d %v %s", resp.StatusCode, err, body)
+		}
+		if resp.Request.URL.Query().Has("token") {
+			n.t.Fatal("token was not removed")
+		}
 	}
 }
 

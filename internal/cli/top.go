@@ -6,12 +6,10 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/labstack/driga/internal/cleanup"
 	"github.com/labstack/driga/internal/config"
-	"github.com/labstack/driga/internal/store"
 	"github.com/labstack/driga/internal/tui"
 	"github.com/labstack/driga/internal/view"
 )
@@ -25,51 +23,15 @@ func (TopCmd) Run(g *Globals) error {
 	if err != nil {
 		return err
 	}
-	since, err := parseSince(g.Since, time.Now())
-	if err != nil {
-		return err
-	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	st, _, err := decideMode(ctx, g)
+	source, _, closeSource, err := openViewer(ctx, g, cfg, view.Filter{})
 	if err != nil {
 		return err
 	}
-	f := view.Filter{Project: g.Project, Since: since}
-	var source tui.Source
-	if st != nil {
-		defer st.Close()
-		s := tui.NewStoreSource(st, config.DataDir(), f)
-		s.ResolveFilter = func(r view.Reader, f view.Filter) (view.Filter, error) {
-			resolved, err := resolveViewFilter(g, r, f, g.Project)
-			if g.Project == "" {
-				resolved.Scope = store.Scope{}
-			}
-			return resolved, err
-		}
-		source = s
-	} else {
-		d, err := NewDeps(cfg)
-		if err != nil {
-			return err
-		}
-		s, err := tui.NewLiveSnapshotSource(d, config.DataDir(), f)
-		if err != nil {
-			return err
-		}
-		s.ResolveFilter = func(r view.Reader, f view.Filter) (view.Filter, error) {
-			resolved, err := resolveViewFilter(g, r, f, g.Project)
-			if g.Project == "" {
-				resolved.Scope = store.Scope{}
-			}
-			return resolved, err
-		}
-		s.Start(ctx)
-		defer s.Close()
-		source = s
-	}
+	defer closeSource()
 	opts := tui.Options{Machine: g.Machine, Project: g.Project, NoColor: g.NoColor, OpenCmd: cfg.OpenCmd, DataDir: config.DataDir(), Context: ctx}
 	opts.CleanupList = func(ctx context.Context) ([]cleanup.Candidate, error) {
 		envelope, err := cleanupRead(ctx, g, "", false, true)

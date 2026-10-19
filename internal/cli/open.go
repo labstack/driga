@@ -13,6 +13,8 @@ import (
 	"github.com/labstack/driga/internal/collector"
 	"github.com/labstack/driga/internal/config"
 	"github.com/labstack/driga/internal/store"
+	"github.com/labstack/driga/internal/view"
+	"github.com/labstack/driga/internal/viewer"
 )
 
 // OpenReader opens fresh daemon data read-only, or collects a disposable snapshot.
@@ -111,4 +113,40 @@ func snapshotHint(w io.Writer, now time.Time) {
 		return
 	}
 	fmt.Fprintln(w, "snapshot · no history — run 'driga service install' for inbox & history")
+}
+
+// openViewer shares daemon selection, scoped views and disposable collection.
+func openViewer(ctx context.Context, g *Globals, cfg config.Config, f view.Filter) (viewer.ScopedSource, string, func(), error) {
+	since, err := parseSince(g.Since, time.Now())
+	if err != nil {
+		return nil, "", nil, err
+	}
+	st, mode, err := decideMode(ctx, g)
+	if err != nil {
+		return nil, "", nil, err
+	}
+	f.Project, f.Since = g.Project, since
+	resolve := func(r view.Reader, f view.Filter) (view.Filter, error) {
+		resolved, err := resolveViewFilter(g, r, f, g.Project)
+		if g.Project == "" {
+			resolved.Scope = store.Scope{}
+		}
+		return resolved, err
+	}
+	if st != nil {
+		s := viewer.NewStoreSource(st, config.DataDir(), f)
+		s.ResolveFilter = resolve
+		return s, mode, func() { _ = st.Close() }, nil
+	}
+	d, err := NewDeps(cfg)
+	if err != nil {
+		return nil, "", nil, err
+	}
+	s, err := viewer.NewLiveSnapshotSource(d, config.DataDir(), f)
+	if err != nil {
+		return nil, "", nil, err
+	}
+	s.ResolveFilter = resolve
+	s.Start(ctx)
+	return s, mode, func() { _ = s.Close() }, nil
 }

@@ -48,6 +48,7 @@ type Root struct {
 	Orphans   OrphansCmd   `cmd:"" help:"List orphan process trees."`
 	Machines  MachinesCmd  `cmd:"" help:"List known machines and their connection health."`
 	Machine   MachineCmd   `cmd:"" help:"Show machine health."`
+	Web       WebCmd       `cmd:"" help:"Open a read-only browser dashboard on loopback."`
 	Top       TopCmd       `cmd:"" help:"Open the interactive session viewer."`
 	Mcp       McpCmd       `cmd:"" help:"Serve read-only MCP tools over stdio."`
 
