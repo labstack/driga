@@ -5,7 +5,7 @@ import "context"
 // ResetMachineID re-stamps local rows, preserves remote rows and starts a new
 // feed epoch. The caller must hold the collector's exclusive writer lock.
 func (s *Store) ResetMachineID(ctx context.Context) error {
-	id, err := randomID()
+	id, err := newMachineID()
 	if err != nil {
 		return err
 	}

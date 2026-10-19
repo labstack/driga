@@ -55,6 +55,9 @@ func (c CollectCmd) Run(g *Globals) error {
 		return err
 	}
 	defer st.Close()
+	if err := collector.MigrateSpool(ctx, d, st); err != nil {
+		return err
+	}
 	r, err := collector.Pass(ctx, d, st, collector.Plan{Procs: true, Machine: true, Git: true, GitFull: true, Cwds: true, Sockets: true})
 	if err != nil {
 		return err
@@ -77,6 +80,6 @@ func collectorLogging() (func(), error) {
 		sink = io.MultiWriter(sink, os.Stderr)
 	}
 	previous := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(sink, nil)))
+	slog.SetDefault(slog.New(logfile.TextHandler(sink)))
 	return func() { slog.SetDefault(previous) }, nil
 }

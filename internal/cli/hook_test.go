@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -11,6 +12,8 @@ import (
 	"time"
 
 	"github.com/alecthomas/kong"
+	"github.com/labstack/driga/internal/config"
+	"github.com/labstack/driga/internal/logfile"
 	"github.com/labstack/driga/internal/spool"
 )
 
@@ -22,6 +25,45 @@ func hookTestEnv(t *testing.T) string {
 	t.Setenv("DRIGA_SPOOL_DIR", dir)
 	t.Setenv("DRIGA_CONFIG", filepath.Join(home, "config.toml"))
 	return dir
+}
+
+func TestHookUsesRuntimeSpoolAndStructuredRotatedErrors(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("DRIGA_CONFIG", filepath.Join(home, "config.toml"))
+	t.Setenv("DRIGA_SPOOL_DIR", "")
+	t.Setenv("XDG_STATE_HOME", filepath.Join(home, "state"))
+	cmd := HookCmd{Adapter: "claude", Event: "Stop"}
+	if err := cmd.Run(&Globals{Stdin: strings.NewReader(`{"session_id":"new-location"}`)}); err != nil {
+		t.Fatal(err)
+	}
+	events, _, err := spool.Drain(config.SpoolDir(), nil)
+	if err != nil || len(events) != 1 {
+		t.Fatal(events, err)
+	}
+	if _, err := os.Stat(filepath.Join(home, ".driga/events")); !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+	path := filepath.Join(config.SpoolDir(), "hook-errors.log")
+	if err := os.WriteFile(path, []byte(strings.Repeat("x", int(logfile.MaxSize))), 0600); err != nil {
+		t.Fatal(err)
+	}
+	hookLogError(fmt.Errorf("bad\nlevel=INFO ghp_secret"))
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, field := range []string{"level=ERROR", "event=hook_failed", "err="} {
+		if !strings.Contains(string(b), field) {
+			t.Fatalf("missing %s in %.300s", field, b)
+		}
+	}
+	if strings.Contains(string(b), "ghp_secret") || strings.Count(string(b), "\n") != 1 {
+		t.Fatalf("unsafe diagnostic: %.300s", b)
+	}
+	if info, err := os.Stat(path + ".1"); err != nil || info.Size() > logfile.MaxSize {
+		t.Fatal(info, err)
+	}
 }
 
 func TestHookIgnoresInternal(t *testing.T) {

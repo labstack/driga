@@ -171,6 +171,9 @@ func Run(ctx context.Context, d Deps, dataDir string) error {
 		return err
 	}
 	defer st.Close()
+	if err := MigrateSpool(ctx, d, st); err != nil {
+		return err
+	}
 	// Commit export-policy changes before any listener can serve the retained
 	// feed. The first pass may spend a long time collecting recent histories.
 	if err := st.Tx(ctx, func(tx *store.Tx) error {
@@ -294,7 +297,7 @@ func Run(ctx context.Context, d Deps, dataDir string) error {
 				return err
 			}
 			for name, message := range r.SourceErrors {
-				slog.Warn("collector source failed", "source", name, "error", message)
+				slog.Warn("collector source failed", "event", "collector_source_failed", "source", name, "err", message)
 			}
 			// Long source reads must leave a full cadence before collecting
 			// again, rather than keeping the collector continuously busy.
@@ -321,7 +324,7 @@ func Run(ctx context.Context, d Deps, dataDir string) error {
 				return err
 			}
 			if err := spool.Prune(d.SpoolDir, d.now()); err != nil {
-				slog.Warn("spool prune failed", "error", err)
+				slog.Warn("spool prune failed", "event", "spool_prune_failed", "err", scrub.Scrub(err.Error()))
 			}
 			lastPrune = clock.Now()
 			if server != nil {
@@ -372,7 +375,7 @@ func startFleetServer(ctx context.Context, d Deps, dataDir string, failures chan
 		return nil, nil
 	}
 	fail := func(err error) (*fleet.Server, func()) {
-		slog.Warn("fleet serving unavailable", "error", err)
+		slog.Warn("fleet serving unavailable", "event", "fleet_serve_failed", "err", scrub.Scrub(err.Error()))
 		select {
 		case failures <- err:
 		default:

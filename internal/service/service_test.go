@@ -56,3 +56,22 @@ func TestServiceConfigLinux(t *testing.T) {
 		t.Fatal(got)
 	}
 }
+
+func TestServiceCarriesConfigurationEnvironment(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DRIGA_CAPTURE_TEXT", "snippets")
+	t.Setenv("DRIGA_SUMMARIES_ENABLED", "true")
+	t.Setenv("DRIGA_INTERNAL", "1")
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(t.TempDir(), "config"))
+	for _, goos := range []string{"darwin", "linux"} {
+		c := configForOS("/opt/driga", goos)
+		for _, name := range []string{"DRIGA_CAPTURE_TEXT", "DRIGA_SUMMARIES_ENABLED", "XDG_CONFIG_HOME"} {
+			if c.EnvVars[name] == "" {
+				t.Fatal("missing service env", name)
+			}
+		}
+		if c.EnvVars["DRIGA_INTERNAL"] != "" {
+			t.Fatal("internal test marker propagated")
+		}
+	}
+}

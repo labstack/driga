@@ -319,7 +319,7 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 			if err := intakeInput(tx, *s, events, &in, now); err != nil {
 				return err
 			}
-			s.Label, s.Heuristic, s.Evidence = derive.Label(in, now, derive.Thresholds{StuckAfter: d.Cfg.StuckAfter})
+			s.Label, s.Heuristic, s.Evidence = derive.Label(in, now, derive.Thresholds{StalledAfter: d.Cfg.StalledAfter})
 		}
 		parents = derive.LinkParents(ss, idx)
 		if err := explicitParents(tx, ss, parents); err != nil {
@@ -535,7 +535,7 @@ func drainSpool(d Deps, tx *store.Tx, now time.Time, source func(string, error) 
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".jsonl") || !spool.RecentDay(entry.Name(), d.spoolSince) {
 			continue
 		}
-		o, _, err := tx.GetOffset("spool/" + entry.Name())
+		o, _, err := tx.GetOffset(spoolOffsetPrefix(d) + entry.Name())
 		if err != nil {
 			return nil, err
 		}
@@ -546,7 +546,7 @@ func drainSpool(d Deps, tx *store.Tx, now time.Time, source func(string, error) 
 		return nil, err
 	}
 	for name, o := range next {
-		if err := tx.SetOffset("spool/"+name, o); err != nil {
+		if err := tx.SetOffset(spoolOffsetPrefix(d)+name, o); err != nil {
 			return nil, err
 		}
 	}

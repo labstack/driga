@@ -6,7 +6,7 @@ Status: approved 2026-10-18 · Date: 2026-10-18 · Name: **Driga** (from Sanskri
 
 Developers increasingly run several AI coding agents in parallel — interactive CLIs (Claude Code, Codex, Gemini CLI, …), headless runs (`codex exec`, `claude -p`), agents embedded in desktop apps or editor plugins — across many repos and worktrees, often with one agent supervising others. They lose track of:
 
-- which agent is doing what, where, and whether it is working, waiting for them, stuck, or dead;
+- which agent is doing what, where, and whether it is working, waiting for them, stalled, or dead;
 - where each project stands (last thing done, next step, uncommitted work at risk);
 - what the machine itself is doing: helper processes left behind by finished sessions pile up unnoticed. (Motivating incident on the author's Mac: nine orphaned agent-plugin daemons held ~3.8 GB across 352 processes and swap filled.)
 
@@ -21,7 +21,7 @@ It will be open-sourced later, so v1 makes OSS-friendly choices now (config over
 2. Project view: every repo with live agents, dirty/unpushed state, worktree count, last activity, and a "where it stands" line.
 3. Orphan detection: process trees left behind by dead agent sessions, with memory totals and the exact command to remove them.
 4. Machine health: memory pressure, swap, load, disk, plus memory used by agent processes grouped by type.
-5. Attention inbox: sessions waiting for the user, stuck, or finished and not yet looked at.
+5. Attention inbox: sessions waiting for the user, stalled, or finished and not yet looked at.
 6. File-conflict warnings: two live agents editing the same file or sharing one worktree.
 7. Fast: any CLI command < 200 ms; TUI refresh every 1 s without visible lag.
 8. Lightweight: background collector RSS < 50 MB, < 1% avg CPU.
@@ -48,7 +48,7 @@ The author's Mac motivated Driga, but nothing may be tuned to it.
 - **No user-specific defaults**: no default project roots, terminal, shell, editor, or agent mix. Everything is discovered (agent session dirs, session cwds, `$TERM_PROGRAM`) or configured.
 - **Rules from mechanisms, not names**: liveness from pid/registry evidence, orphans from process ancestry and reparenting, activity from log growth. Name lists (helper signatures, agent binaries) live in a data file (`signatures.toml`) that ships with the binary and that users can extend; no detection depends on one person's tools.
 - **Adapters are version-gated**: each adapter declares the agent versions whose formats it was tested against; unknown versions run in tolerant mode and say so in `driga doctor` instead of guessing.
-- **Validation on held-out data**: thresholds (`stuck_after`, orphan age, activity windows) and state rules are tuned on one set of real histories and validated on a different set — sessions from other machines and other people (volunteers' scrubbed fixtures), and synthetic traces covering agents and versions the author doesn't use. A rule that only works on the tuning set doesn't ship.
+- **Validation on held-out data**: thresholds (`stalled_after`, orphan age, activity windows) and state rules are tuned on one set of real histories and validated on a different set — sessions from other machines and other people (volunteers' scrubbed fixtures), and synthetic traces covering agents and versions the author doesn't use. A rule that only works on the tuning set doesn't ship.
 - **Fixture corpus**: `testdata/fixtures/<adapter>/<version>/` from at least three machines before release; generator for synthetic process trees and session logs (crashes, partial lines, rotations, long-idle sessions, many-worktree repos, one-repo users).
 - **Configurable, documented defaults**: every threshold is in config with its rationale in docs.
 - **Small-setup first-class**: one agent + one repo + no daemon must be a good experience (journey 6), not a degenerate case of a 59-repo setup.
@@ -81,7 +81,7 @@ The author's Mac motivated Driga, but nothing may be tuned to it.
  terminal ─►│ driga <cmd> / driga top  (reader)              │
             │   └─ read SQLite (read-only conn) → table / JSON / TUI
             └────────────────────────────────────────────────┘
- agent hooks ─► driga hook <event>  (tiny, appends JSONL to ~/.driga/events/)
+ agent hooks ─► driga hook <event>  (tiny, appends JSONL to the runtime-resolved state spool)
 ```
 
 - **One writer** (the collector daemon), **many readers** (CLI/TUI). SQLite WAL makes this safe and fast.
@@ -145,11 +145,11 @@ The single displayed label is derived from those: `working · waiting · idle ·
 
 | Adapter | Rule (first match wins) |
 |---|---|
-| Claude | hook `Notification` newer than last activity ⇒ **waiting**; registry `busy` + transcript mtime < `stuck_after` ⇒ **working**; registry `busy` + no transcript growth for `stuck_after` + CPU < 1% ⇒ **stalled?**; hook `Stop` newer than last user prompt and not yet seen ⇒ **finished**; registry `idle`/`shell` ⇒ **idle**; registry file but pid gone ⇒ **dead** |
-| Codex TUI/exec | rollout mtime < 60 s + process alive ⇒ **working**; turn completed ⇒ **idle** (+ completion event ⇒ **finished**); process gone after completion ⇒ **finished**, without ⇒ **dead**; no growth > `stuck_after` mid-turn ⇒ **stalled?**. Codex approval-waiting is **not** inferred (a tool call without output doesn't prove a pending approval); it shows as `quiet` until Codex exposes a reliable signal |
+| Claude | hook `Notification` newer than last activity ⇒ **waiting**; registry `busy` + transcript mtime < `stalled_after` ⇒ **working**; registry `busy` + no transcript growth for `stalled_after` + CPU < 1% ⇒ **stalled?**; hook `Stop` newer than last user prompt and not yet seen ⇒ **finished**; registry `idle`/`shell` ⇒ **idle**; registry file but pid gone ⇒ **dead** |
+| Codex TUI/exec | rollout mtime < 60 s + process alive ⇒ **working**; turn completed ⇒ **idle** (+ completion event ⇒ **finished**); process gone after completion ⇒ **finished**, without ⇒ **dead**; no growth > `stalled_after` mid-turn ⇒ **stalled?**. Codex approval-waiting is **not** inferred (a tool call without output doesn't prove a pending approval); it shows as `quiet` until Codex exposes a reliable signal |
 | Unmatched agent-looking process | **unknown** |
 
-`stuck_after` default 10 min (config). Heuristic states render with a `~` marker.
+`stalled_after` default 10 min (config). Heuristic states render with a `~` marker.
 
 ### 7.1b Inbox semantics
 - Inbox items are **events**, not sessions: each completion event and each attention request is one item with a stable id (`adapter:session:event-offset`), deduplicated on replay after daemon restarts.
@@ -285,7 +285,7 @@ Git via `git` CLI (`os/exec`), not go-git. No fsnotify.
 # roots = ["~/code"]           # optional extra repo discovery; sessions' cwds are always used
 root_depth = 3
 exclude = ["**/node_modules", "**/.tmp/**"]
-stuck_after = "10m"
+stalled_after = "10m"
 orphan_min_age = "10m"
 capture_text = "titles"          # "titles" | "snippets"
 # no_service_hint = false

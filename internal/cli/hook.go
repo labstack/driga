@@ -6,11 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/labstack/driga/internal/config"
+	"github.com/labstack/driga/internal/logfile"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/scrub"
 	"github.com/labstack/driga/internal/spool"
@@ -140,14 +142,6 @@ func hookReadInput(input io.Reader) ([]byte, error) {
 }
 
 func hookLogError(err error) {
-	dir := config.SpoolDir()
-	if os.MkdirAll(dir, 0700) != nil {
-		return
-	}
-	f, openErr := os.OpenFile(filepath.Join(dir, "hook-errors.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
-	if openErr != nil {
-		return
-	}
-	defer f.Close()
-	_, _ = fmt.Fprintf(f, "%s %s\n", time.Now().UTC().Format(time.RFC3339Nano), scrub.Snippet(err.Error()))
+	w := &logfile.Writer{Path: filepath.Join(config.SpoolDir(), "hook-errors.log")}
+	slog.New(logfile.TextHandler(w)).Error("hook capture failed", "event", "hook_failed", "err", scrub.Snippet(err.Error()))
 }

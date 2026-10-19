@@ -22,13 +22,13 @@ type ServeCmd struct {
 // Run loads configuration and shares the collector's writer lock and lifecycle.
 func (c ServeCmd) Run(g *Globals) error {
 	applyCollectorMemoryLimit()
-	cfg, err := config.Load(config.Path())
+	overrides := map[string]any{"fleet.serve": true}
+	if c.Listen != "" {
+		overrides["fleet.listen"] = c.Listen
+	}
+	cfg, err := config.LoadWithOverrides(config.Path(), overrides)
 	if err != nil {
 		return err
-	}
-	cfg.Fleet.Serve = true
-	if c.Listen != "" {
-		cfg.Fleet.Listen = c.Listen
 	}
 	if _, err := fleet.CheckListen(cfg.Fleet.Listen, cfg.Fleet.AllowAnyAddress); err != nil {
 		return err
@@ -52,7 +52,7 @@ type FleetCmd struct {
 	Enroll  FleetEnrollCmd  `cmd:"" help:"Open a bounded pairing window."`
 	Add     FleetAddCmd     `cmd:"" help:"Pair with a serving machine."`
 	Revoke  FleetRevokeCmd  `cmd:"" help:"Revoke a viewer immediately."`
-	Remove  FleetRemoveCmd  `cmd:"" aliases:"unpair" help:"Remove a peer locally."`
+	Remove  FleetRemoveCmd  `cmd:"" help:"Remove a peer locally."`
 	Rekey   FleetRekeyCmd   `cmd:"" help:"Regenerate identity; invalidate all pairings."`
 	Peers   FleetPeersCmd   `cmd:"" help:"List paired machines."`
 	ID      FleetIDCmd      `cmd:"" help:"Print this machine's fleet device ID."`

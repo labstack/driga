@@ -21,7 +21,7 @@ import (
 func TestIdleFeedRateBounded(t *testing.T) {
 	d, st, _, _ := setup(t)
 	d.Cfg.Fleet.Serve = true
-	d.Cfg.StuckAfter = time.Hour
+	d.Cfg.StalledAfter = time.Hour
 	now := d.Now()
 	d.Now = func() time.Time { return now }
 	pass(t, d, st, Plan{Procs: true, Machine: true})

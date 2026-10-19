@@ -11,7 +11,7 @@ import (
 
 // Thresholds controls how long a busy session can be quiet before suspicion.
 type Thresholds struct {
-	StuckAfter time.Duration
+	StalledAfter time.Duration
 }
 
 // StateInput combines adapter, process, hook, and acknowledgment observations.
@@ -43,8 +43,8 @@ func Label(in StateInput, now time.Time, th Thresholds) (label string, heuristic
 			evidence += "; " + in.LastAPIError
 		}
 	}()
-	if th.StuckAfter <= 0 {
-		th.StuckAfter = 10 * time.Minute
+	if th.StalledAfter <= 0 {
+		th.StalledAfter = 10 * time.Minute
 	}
 	age := now.Sub(in.Obs.LastActivityAt)
 	quiet := "no log growth " + stateDuration(age)
@@ -72,14 +72,14 @@ func Label(in StateInput, now time.Time, th Thresholds) (label string, heuristic
 			}
 			return "dead", false, "registry present, process gone"
 		}
-		if in.Obs.PID != 0 && in.LastToolResult != nil && !in.LastToolResult.Before(in.Obs.LastActivityAt) && (in.LastStop == nil || in.LastToolResult.After(*in.LastStop)) && now.Sub(*in.LastToolResult) < th.StuckAfter {
+		if in.Obs.PID != 0 && in.LastToolResult != nil && !in.LastToolResult.Before(in.Obs.LastActivityAt) && (in.LastStop == nil || in.LastToolResult.After(*in.LastStop)) && now.Sub(*in.LastToolResult) < th.StalledAfter {
 			return "working", false, "OTLP activity " + stateDuration(now.Sub(*in.LastToolResult)) + " ago"
 		}
-		if in.Obs.PID != 0 && in.LastAPIRequest != nil && in.LastAPIRequest.After(in.Obs.LastActivityAt) && (in.LastStop == nil || in.LastAPIRequest.After(*in.LastStop)) && now.Sub(*in.LastAPIRequest) < th.StuckAfter {
+		if in.Obs.PID != 0 && in.LastAPIRequest != nil && in.LastAPIRequest.After(in.Obs.LastActivityAt) && (in.LastStop == nil || in.LastAPIRequest.After(*in.LastStop)) && now.Sub(*in.LastAPIRequest) < th.StalledAfter {
 			return "working", false, "API call " + stateDuration(now.Sub(*in.LastAPIRequest)) + " ago"
 		}
 		if in.Obs.RegistryStatus == "busy" {
-			if age < th.StuckAfter {
+			if age < th.StalledAfter {
 				return "working", false, "busy, " + quiet
 			}
 			if in.Proc == nil {
@@ -124,7 +124,7 @@ func Label(in StateInput, now time.Time, th Thresholds) (label string, heuristic
 		if age < time.Minute {
 			return "working", false, "process alive, activity " + stateDuration(age) + " ago"
 		}
-		if in.Obs.TurnOpen && age >= th.StuckAfter {
+		if in.Obs.TurnOpen && age >= th.StalledAfter {
 			return "stalled", false, "turn open, " + quiet
 		}
 		if !in.Obs.TurnOpen {

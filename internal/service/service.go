@@ -35,7 +35,13 @@ func configForOS(binPath, goos string) *ks.Config {
 	escape := strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;", "'", "&apos;", "{", "&#123;")
 	template := strings.ReplaceAll(launchdConfig, "LOG_PATH", escape.Replace(logPathForOS(goos)))
 	env := map[string]string{"HOME": config.ExpandHome("~")}
-	for _, key := range []string{"DRIGA_CONFIG", "DRIGA_DATA_DIR", "DRIGA_SPOOL_DIR", "CODEX_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS"} {
+	keys := []string{"DRIGA_CONFIG", "DRIGA_DATA_DIR", "DRIGA_SPOOL_DIR", "CODEX_HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS"}
+	for _, setting := range config.Settings() {
+		if name := setting.EnvName(); name != "" {
+			keys = append(keys, name)
+		}
+	}
+	for _, key := range keys {
 		if value := os.Getenv(key); value != "" {
 			env[key] = value
 		}

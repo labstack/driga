@@ -59,8 +59,31 @@ func TestConfigShowDefaults(t *testing.T) {
 	if err := toml.Unmarshal(out.Bytes(), &values); err != nil {
 		t.Fatal(err)
 	}
-	if values["capture_text"] != "titles" || values["stuck_after"] != "10m" || values["orphan_min_age"] != "10m" {
+	if values["capture_text"] != "titles" || values["stalled_after"] != "10m" || values["orphan_min_age"] != "10m" {
 		t.Fatal(values)
+	}
+}
+
+func TestConfigShowValueSources(t *testing.T) {
+	g, out := initFixture(t, "")
+	if err := os.MkdirAll(filepath.Dir(config.Path()), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(config.Path(), []byte("capture_text = 'titles'\n[summaries]\nmodel = 'custom'\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("DRIGA_CAPTURE_TEXT", "snippets")
+	if err := (ConfigShowCmd{}).Run(g); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"# source: env\ncapture_text = 'snippets'", "# source: file\nmodel = 'custom'", "# source: default\nroot_depth = 3"} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("missing %q in %s", want, out)
+		}
+	}
+	var values map[string]any
+	if err := toml.Unmarshal(out.Bytes(), &values); err != nil {
+		t.Fatal(err)
 	}
 }
 

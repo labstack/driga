@@ -19,7 +19,7 @@ import (
 
 func TestFleetPairCommandWiring(t *testing.T) {
 	readEnv(t)
-	for _, args := range [][]string{{"fleet", "enroll", "--help"}, {"fleet", "add", "--help"}, {"fleet", "revoke", "--help"}, {"fleet", "remove", "--help"}, {"fleet", "unpair", "--help"}, {"fleet", "rekey", "--help"}, {"machine", "reset-id", "--help"}} {
+	for _, args := range [][]string{{"fleet", "enroll", "--help"}, {"fleet", "add", "--help"}, {"fleet", "revoke", "--help"}, {"fleet", "remove", "--help"}, {"fleet", "rekey", "--help"}, {"machine", "reset-id", "--help"}} {
 		var out, errs bytes.Buffer
 		if code := run(args, "test", strings.NewReader(""), &out, &errs); code != 0 {
 			t.Errorf("%v: %d %s", args, code, &errs)
@@ -45,7 +45,7 @@ func TestFleetRemoveKeepsRowsAndPurgeDeletesRemoteOnly(t *testing.T) {
 		if err := fleet.SavePeers(dir, []fleet.Peer{{Name: "vm", MachineID: "remote"}}); err != nil {
 			t.Fatal(err)
 		}
-		args := []string{"fleet", "unpair", "vm"}
+		args := []string{"fleet", "remove", "vm"}
 		if purge {
 			args = append(args, "--purge")
 		}

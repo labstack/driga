@@ -31,14 +31,15 @@ type FleetEnrollCmd struct {
 
 // Run asks for confirmation locally or returns immediately for a pinned viewer.
 func (c FleetEnrollCmd) Run(g *Globals) error {
-	cfg, err := config.Load(config.Path())
+	overrides := map[string]any{}
+	if c.Window != 0 {
+		overrides["fleet.enroll_window"] = c.Window.String()
+	}
+	cfg, err := config.LoadWithOverrides(config.Path(), overrides)
 	if err != nil {
 		return err
 	}
-	window := c.Window
-	if window == 0 {
-		window = cfg.Fleet.EnrollWindow
-	}
+	window := cfg.Fleet.EnrollWindow
 	ctx, stop := pairCommandContext()
 	defer stop()
 	status, err := fleet.Control(ctx, config.DataDir(), fleet.ControlRequest{Op: "status"})

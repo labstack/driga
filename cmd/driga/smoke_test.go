@@ -96,7 +96,7 @@ func (n node) data(args ...string) string {
 		Data   json.RawMessage `json:"data"`
 	}
 	out := n.run(append(args, "--json")...)
-	if err := json.Unmarshal([]byte(out), &envelope); err != nil || envelope.Schema != 1 {
+	if err := json.Unmarshal([]byte(out), &envelope); err != nil || envelope.Schema != 2 {
 		n.t.Fatalf("driga %v: bad envelope %v: %s", args, err, out)
 	}
 	var compact bytes.Buffer

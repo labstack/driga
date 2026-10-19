@@ -4,6 +4,7 @@ package logfile
 import (
 	"errors"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
@@ -11,6 +12,16 @@ import (
 )
 
 const MaxSize int64 = 10 << 20
+
+// TextHandler keeps collector/hook diagnostic fields and UTC instants consistent.
+func TextHandler(w io.Writer) *slog.TextHandler {
+	return slog.NewTextHandler(w, &slog.HandlerOptions{ReplaceAttr: func(_ []string, a slog.Attr) slog.Attr {
+		if a.Key == slog.TimeKey && a.Value.Kind() == slog.KindTime {
+			a.Value = slog.TimeValue(a.Value.Time().UTC())
+		}
+		return a
+	}})
+}
 
 // Writer keeps at most MaxSize bytes plus one bounded .1 file. Rotation copies
 // the old tail and truncates in place: launchd's open stdout/stderr descriptors

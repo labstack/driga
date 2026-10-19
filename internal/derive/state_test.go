@@ -93,7 +93,7 @@ func TestLabel(t *testing.T) {
 			if strings.HasPrefix(tt.name, "codex gone") || strings.HasPrefix(tt.name, "gemini gone") {
 				tt.in.Proc = nil
 			}
-			label, heuristic, evidence := Label(tt.in, now, Thresholds{StuckAfter: 10 * time.Minute})
+			label, heuristic, evidence := Label(tt.in, now, Thresholds{StalledAfter: 10 * time.Minute})
 			if label != tt.label || heuristic != tt.heuristic {
 				t.Fatalf("Label = (%q, %v), want (%q, %v); %s", label, heuristic, tt.label, tt.heuristic, evidence)
 			}
@@ -124,7 +124,7 @@ func TestBusyQuietWithCPUIsUnknown(t *testing.T) {
 			Obs:  model.SessionObs{Adapter: "claude", PID: 10, RegistryStatus: "busy", LastActivityAt: now.Add(-14 * time.Minute)},
 			Proc: &model.Proc{CPUPercent: cpu},
 		}
-		label, heuristic, evidence := Label(in, now, Thresholds{StuckAfter: 10 * time.Minute})
+		label, heuristic, evidence := Label(in, now, Thresholds{StalledAfter: 10 * time.Minute})
 		if label != "unknown" || heuristic || !strings.Contains(evidence, "14m") || !strings.Contains(evidence, "CPU") {
 			t.Fatalf("CPU %v: got %q, heuristic=%v, evidence=%q", cpu, label, heuristic, evidence)
 		}

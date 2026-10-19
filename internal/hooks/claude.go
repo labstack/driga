@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -494,7 +495,42 @@ func writeDiff(d Diff, dryRun bool, now time.Time) error {
 	if err := d.Check(); err != nil {
 		return err
 	}
-	return renameSettings(f.Name(), path)
+	if err := renameSettings(f.Name(), path); err != nil {
+		return err
+	}
+	return pruneBackups(d.Path)
+}
+
+// Prune only recognized regular backups after a successful settings write.
+// Keep the newest five per settings path, including the only backup.
+func pruneBackups(path string) error {
+	entries, err := os.ReadDir(filepath.Dir(path))
+	if err != nil {
+		return err
+	}
+	type backup struct {
+		name  string
+		stamp int64
+	}
+	var backups []backup
+	prefix := filepath.Base(path) + ".driga-bak-"
+	for _, entry := range entries {
+		if !strings.HasPrefix(entry.Name(), prefix) || !entry.Type().IsRegular() {
+			continue
+		}
+		stamp, err := strconv.ParseInt(strings.TrimPrefix(entry.Name(), prefix), 10, 64)
+		if err == nil {
+			backups = append(backups, backup{entry.Name(), stamp})
+		}
+	}
+	sort.Slice(backups, func(i, j int) bool { return backups[i].stamp > backups[j].stamp })
+	var errs []error
+	for _, b := range backups[min(5, len(backups)):] {
+		if err := os.Remove(filepath.Join(filepath.Dir(path), b.name)); err != nil && !errors.Is(err, os.ErrNotExist) {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
 }
 
 // Check refuses byte changes, creation/deletion, and symlink retargets since preview.

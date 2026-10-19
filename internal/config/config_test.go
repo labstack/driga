@@ -14,7 +14,7 @@ import (
 
 func TestDefaults(t *testing.T) {
 	c := config.Default()
-	if c.RootDepth != 3 || c.StuckAfter != 10*time.Minute || c.OrphanMinAge != 10*time.Minute {
+	if c.RootDepth != 3 || c.StalledAfter != 10*time.Minute || c.OrphanMinAge != 10*time.Minute {
 		t.Fatal(c)
 	}
 	if c.CaptureText != "titles" || len(c.Roots) != 0 {
@@ -45,7 +45,7 @@ func TestLoadOverrides(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	p := filepath.Join(t.TempDir(), "c.toml")
-	body := "stuck_after = \"3m\"\nroots = [\"~/code\"]\ncapture_text = \"snippets\"\n[adapters.codex]\nenabled = false\n"
+	body := "stalled_after = \"3m\"\nroots = [\"~/code\"]\ncapture_text = \"snippets\"\n[adapters.codex]\nenabled = false\n"
 	if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -53,7 +53,7 @@ func TestLoadOverrides(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.StuckAfter != 3*time.Minute || c.CaptureText != "snippets" {
+	if c.StalledAfter != 3*time.Minute || c.CaptureText != "snippets" {
 		t.Fatal(c)
 	}
 	if diff := cmp.Diff([]string{filepath.Join(home, "code")}, c.Roots); diff != "" {
@@ -89,12 +89,18 @@ func TestPathsHonorEnv(t *testing.T) {
 	t.Setenv("DRIGA_SPOOL_DIR", "")
 	t.Setenv("DRIGA_CONFIG", "")
 	t.Setenv("HOME", "/h")
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("XDG_STATE_HOME", "")
 	wantData := "/h/Library/Application Support/driga"
 	if runtime.GOOS == "linux" {
 		t.Setenv("XDG_DATA_HOME", "")
 		wantData = "/h/.local/share/driga"
 	}
-	if config.DataDir() != wantData || config.SpoolDir() != "/h/.driga/events" || config.Path() != "/h/.config/driga/config.toml" {
+	wantSpool := wantData + "/events"
+	if runtime.GOOS == "linux" {
+		wantSpool = "/h/.local/state/driga/events"
+	}
+	if config.DataDir() != wantData || config.SpoolDir() != wantSpool || config.Path() != "/h/.config/driga/config.toml" {
 		t.Fatal(config.DataDir(), config.SpoolDir(), config.Path())
 	}
 }

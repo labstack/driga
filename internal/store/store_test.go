@@ -48,7 +48,7 @@ func TestMigrateAndRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "data ?#", "driga.db")
 	s := openTest(t, path, ReadWrite)
 	now := time.Date(2026, 10, 18, 12, 0, 0, 123456789, time.UTC)
-	if len(s.MachineID()) != 32 {
+	if len(s.MachineID()) != 36 {
 		t.Fatalf("machine ID: %q", s.MachineID())
 	}
 	machine := model.Machine{MachineID: s.MachineID(), Name: "host", State: "local", ID: s.MachineID(), Hostname: "host", OS: "os", Arch: "arch", Cores: 8, MemTotal: 123, FirstSeen: now, LastSeen: now}

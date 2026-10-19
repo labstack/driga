@@ -276,7 +276,7 @@ func applyIntake(ctx context.Context, d Deps, st *store.Store, b intake.Batch) (
 			if err := intakeInput(tx, *s, events, &in, now); err != nil {
 				return err
 			}
-			s.Label, s.Heuristic, s.Evidence = derive.Label(in, now, derive.Thresholds{StuckAfter: d.Cfg.StuckAfter})
+			s.Label, s.Heuristic, s.Evidence = derive.Label(in, now, derive.Thresholds{StalledAfter: d.Cfg.StalledAfter})
 			// Fold activity after labeling so the optional fact can support idle registries.
 			if in.LastToolResult != nil && in.LastToolResult.After(s.LastActivityAt) {
 				s.LastActivityAt = *in.LastToolResult

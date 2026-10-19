@@ -9,6 +9,7 @@ import (
 
 	"github.com/labstack/driga/internal/fleet"
 	"github.com/labstack/driga/internal/model"
+	"github.com/labstack/driga/internal/scrub"
 	"github.com/labstack/driga/internal/store"
 )
 
@@ -136,7 +137,7 @@ func (f *fleetPullers) reload(ctx context.Context, d Deps, st *store.Store, hasS
 }
 func (f *fleetPullers) wake(ctx context.Context, d Deps, st *store.Store, hasServer bool, watched bool) error {
 	if err := f.reload(ctx, d, st, hasServer); err != nil {
-		slog.Warn("fleet peers reload failed", "error", err)
+		slog.Warn("fleet peers reload failed", "event", "fleet_peers_reload_failed", "err", scrub.Scrub(err.Error()))
 	}
 	for _, p := range f.peers {
 		p.puller.SetPresence(watched)
@@ -210,7 +211,7 @@ apply:
 		if err != nil && ctx.Err() == nil {
 			// Each peer owns its transaction and completion result. A malformed
 			// batch leaves its cursor unchanged without rolling back other peers.
-			slog.Warn("fleet apply failed", "machine_id", b.MachineID, "error", err)
+			slog.Warn("fleet apply failed", "event", "fleet_apply_failed", "machine_id", b.MachineID, "err", scrub.Scrub(err.Error()))
 		}
 	}
 	return nil

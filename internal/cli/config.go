@@ -9,7 +9,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
-	"sort"
 	"strings"
 	"time"
 
@@ -44,11 +43,11 @@ func (ConfigShowCmd) Run(g *Globals) error {
 	if g.JSON {
 		return errors.New("config show prints TOML; --json is not supported")
 	}
-	cfg, err := config.Load(config.Path())
+	cfg, sources, err := config.LoadWithSources(config.Path())
 	if err != nil {
 		return err
 	}
-	_, err = io.WriteString(commandOutput(g), configText(cfg, false, nil))
+	_, err = io.WriteString(commandOutput(g), configTextSources(cfg, false, nil, sources))
 	return err
 }
 
@@ -138,93 +137,64 @@ func durationText(d time.Duration) string {
 }
 
 func configText(c config.Config, commented bool, chosen map[string]bool) string {
+	return configTextSources(c, commented, chosen, nil)
+}
+
+func configTextSources(c config.Config, commented bool, chosen map[string]bool, sources map[string]string) string {
 	var b strings.Builder
 	defaults := config.Default()
 	if commented {
-		b.WriteString("# Driga configuration. Commented settings use built-in defaults.\n# Roots add repo discovery; session working directories are always discovered.\n# Snippets are opt-in, scrubbed, and limited to 200 characters.\n# open_cmd is auto-detected when empty; {cwd} is the session directory.\n\n")
+		b.WriteString("# Driga configuration. Commented settings use built-in defaults.\n# Precedence: explicit flags > environment > this file > defaults.\n# Restart collector after changes; CLI/hooks reload per invocation.\n# Roots add repo discovery; session working directories are always discovered.\n# Snippets are opt-in, scrubbed, and limited to 200 characters.\n# open_cmd is auto-detected when empty; {cwd} is the session directory.\n\n")
 	}
-	list := func(v []string) []string {
-		if v == nil {
-			return []string{}
+	value := func(s config.Setting, c config.Config) any {
+		v := s.Value(c)
+		switch s.Type {
+		case "duration":
+			return durationText(v.(time.Duration))
+		case "size":
+			return fmt.Sprint(v)
+		case "list":
+			if v.([]string) == nil {
+				return []string{}
+			}
 		}
 		return v
 	}
-	line := func(key string, value, def any) {
-		if commented && !chosen[key] && reflect.DeepEqual(value, def) {
-			b.WriteString("# ")
+	sectionOf := func(key string) string {
+		i := strings.LastIndexByte(key, '.')
+		if i < 0 {
+			return ""
 		}
-		// All supplied values are strings, booleans, integers, or string slices.
-		data, _ := toml.Marshal(map[string]any{key: value})
-		b.Write(data)
+		return key[:i]
 	}
-	line("roots", list(c.Roots), list(defaults.Roots))
-	line("root_depth", c.RootDepth, defaults.RootDepth)
-	line("exclude", list(c.Exclude), list(defaults.Exclude))
-	line("stuck_after", durationText(c.StuckAfter), durationText(defaults.StuckAfter))
-	line("orphan_min_age", durationText(c.OrphanMinAge), durationText(defaults.OrphanMinAge))
-	line("capture_text", c.CaptureText, defaults.CaptureText)
-	line("no_service_hint", c.NoServiceHint, defaults.NoServiceHint)
-	line("open_cmd", c.OpenCmd, defaults.OpenCmd)
-	names := make([]string, 0, len(c.Adapters))
-	for name := range c.Adapters {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	for _, name := range names {
-		b.WriteByte('\n')
-		_, exists := defaults.Adapters[name]
-		active := !commented || !exists || c.Adapters[name] != defaults.Adapters[name]
-		// Marshal the header so extension adapter names remain valid TOML keys.
-		data, _ := toml.Marshal(map[string]any{"adapters": map[string]any{name: map[string]any{"enabled": c.Adapters[name].Enabled}}})
-		for _, text := range strings.Split(strings.TrimSpace(string(data)), "\n") {
-			if text == "[adapters]" || text == "" {
-				continue
+	definitions := config.Settings()
+	section := ""
+	for _, s := range definitions {
+		next := sectionOf(s.Key)
+		if next != section {
+			section = next
+			b.WriteByte('\n')
+			active := !commented
+			for _, peer := range definitions {
+				if sectionOf(peer.Key) == section && (chosen[peer.Key] || !reflect.DeepEqual(value(peer, c), value(peer, defaults))) {
+					active = true
+				}
 			}
 			if !active {
 				b.WriteString("# ")
 			}
-			b.WriteString(text + "\n")
+			fmt.Fprintf(&b, "[%s]\n", section)
 		}
+		if sources != nil {
+			fmt.Fprintf(&b, "# source: %s\n", sources[s.Key])
+		}
+		if commented && !chosen[s.Key] && reflect.DeepEqual(value(s, c), value(s, defaults)) {
+			b.WriteString("# ")
+		}
+		key := strings.TrimPrefix(s.Key, section+".")
+		data, _ := toml.Marshal(map[string]any{key: value(s, c)})
+		b.Write(data)
 	}
-	b.WriteByte('\n')
-	if commented && reflect.DeepEqual(list(c.ExtraSignatures), list(defaults.ExtraSignatures)) {
-		b.WriteString("# ")
-	}
-	b.WriteString("[orphans]\n")
-	line("extra_signatures", list(c.ExtraSignatures), list(defaults.ExtraSignatures))
-	b.WriteByte('\n')
-	if commented && c.Summaries == defaults.Summaries {
-		b.WriteString("# ")
-	}
-	b.WriteString("[summaries]\n")
-	line("enabled", c.Summaries.Enabled, defaults.Summaries.Enabled)
-	line("model", c.Summaries.Model, defaults.Summaries.Model)
-	b.WriteByte('\n')
-	if commented && reflect.DeepEqual(c.Cleanup, defaults.Cleanup) {
-		b.WriteString("# ")
-	}
-	b.WriteString("[cleanup]\n")
-	line("worktree_idle", durationText(c.Cleanup.WorktreeIdle), durationText(defaults.Cleanup.WorktreeIdle))
-	line("low_disk_percent", c.Cleanup.LowDiskPercent, defaults.Cleanup.LowDiskPercent)
-	line("low_disk_bytes", fmt.Sprint(c.Cleanup.LowDiskBytes), fmt.Sprint(defaults.Cleanup.LowDiskBytes))
-	line("regenerable", c.Cleanup.Regenerable, defaults.Cleanup.Regenerable)
-	b.WriteByte('\n')
-	if commented && c.Fleet == defaults.Fleet {
-		b.WriteString("# ")
-	}
-	b.WriteString("[fleet]\n")
-	line("serve", c.Fleet.Serve, defaults.Fleet.Serve)
-	line("listen", c.Fleet.Listen, defaults.Fleet.Listen)
-	line("share_text", c.Fleet.ShareText, defaults.Fleet.ShareText)
-	line("enroll_window", durationText(c.Fleet.EnrollWindow), durationText(defaults.Fleet.EnrollWindow))
-	line("allow_any_address", c.Fleet.AllowAnyAddress, defaults.Fleet.AllowAnyAddress)
-	b.WriteByte('\n')
-	if commented && c.Intake == defaults.Intake {
-		b.WriteString("# ")
-	}
-	b.WriteString("[intake]\n")
-	line("otlp", c.Intake.OTLP, defaults.Intake.OTLP)
-	line("listen", c.Intake.Listen, defaults.Intake.Listen)
 	return b.String()
 }
 

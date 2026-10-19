@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/pressly/goose/v3"
 	_ "modernc.org/sqlite" // Register the pure-Go sqlite driver.
 )
@@ -154,7 +155,7 @@ func Open(path string, mode Mode) (_ *Store, retErr error) {
 		if err := errors.Join(migrateErr, fkErr); err != nil {
 			return nil, fmt.Errorf("migrate: %w", err)
 		}
-		id, err := randomID()
+		id, err := newMachineID()
 		if err != nil {
 			return nil, err
 		}
@@ -182,6 +183,14 @@ func randomID() (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(b[:]), nil
+}
+
+func newMachineID() (string, error) {
+	id, err := uuid.NewV7()
+	if err != nil {
+		return "", err
+	}
+	return id.String(), nil
 }
 
 // MachineID returns the persistent identity stamped on writes by this store.

@@ -2,3 +2,6 @@
 /dist
 *.db*
 .superpowers/
+.env
+.env*
+!.env.example
