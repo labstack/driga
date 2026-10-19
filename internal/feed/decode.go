@@ -22,6 +22,8 @@ type DecodedProcs struct {
 func Decode(kind Kind, payload []byte) (any, error) {
 	var row any
 	switch kind {
+	case Summary:
+		row = new(SummaryRow)
 	case Machine:
 		row = new(model.Machine)
 	case Session:

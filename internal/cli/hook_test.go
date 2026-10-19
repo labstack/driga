@@ -22,6 +22,17 @@ func hookTestEnv(t *testing.T) string {
 	return dir
 }
 
+func TestHookIgnoresInternal(t *testing.T) {
+	dir := hookTestEnv(t)
+	t.Setenv("DRIGA_INTERNAL", "1")
+	if err := (HookCmd{Adapter: "claude", Event: "Stop"}).Run(&Globals{Stdin: strings.NewReader(`{"session_id":"internal"}`)}); err != nil {
+		t.Fatal(err)
+	}
+	if entries, err := os.ReadDir(dir); !os.IsNotExist(err) && (err != nil || len(entries) != 0) {
+		t.Fatal(entries, err)
+	}
+}
+
 func TestHookCommandFastAndExitZero(t *testing.T) {
 	dir := hookTestEnv(t)
 	cmd := HookCmd{Adapter: "claude", Event: "Stop"}

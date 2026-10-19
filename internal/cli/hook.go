@@ -28,6 +28,9 @@ type HookCmd struct {
 // Run always succeeds so failures cannot interrupt the invoking agent. Errors
 // are recorded privately in the spool directory without including raw payloads.
 func (h HookCmd) Run(g *Globals) error {
+	if os.Getenv("DRIGA_INTERNAL") == "1" {
+		return nil
+	}
 	if err := h.append(g); err != nil {
 		hookLogError(err)
 	}

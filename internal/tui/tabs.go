@@ -8,11 +8,13 @@ import (
 
 	"charm.land/bubbles/v2/table"
 	"charm.land/lipgloss/v2"
+	"github.com/labstack/driga/internal/cleanup"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/view"
 )
 
 type tabRow struct {
+	cleanup *cleanup.Candidate
 	machine string
 	stale   bool
 	key     string
@@ -39,6 +41,8 @@ func (m *app) tabVisible(tab int) bool {
 		return len(m.snap.Orphans.Rows) > 0
 	case 4:
 		return !m.snap.Machine.Sample.TS.IsZero() || len(m.snap.Machine.Memory) > 0
+	case 5:
+		return len(m.snap.Cleanup) > 0 || m.opts.CleanupList != nil
 	}
 	return false
 }
@@ -60,7 +64,7 @@ func (m *app) tabBar() string {
 			orphans++
 		}
 	}
-	names := []string{fmt.Sprintf("Agents(%d)", s.Agents), fmt.Sprintf("Projects(%d)", projects), fmt.Sprintf("Inbox(%d)", inbox), fmt.Sprintf("Orphans(%d)", orphans), "Machine"}
+	names := []string{fmt.Sprintf("Agents(%d)", s.Agents), fmt.Sprintf("Projects(%d)", projects), fmt.Sprintf("Inbox(%d)", inbox), fmt.Sprintf("Orphans(%d)", orphans), "Machine", "Cleanup"}
 	// Keep stable key numbers even when project scope hides a tab.
 	var tabs []string
 	for i, name := range names {
@@ -78,7 +82,7 @@ func (m *app) tabBar() string {
 
 func (m *app) rebuild() {
 	if !m.tabVisible(m.tab) {
-		for i := 0; i < 5; i++ {
+		for i := 0; i < 6; i++ {
 			if m.tabVisible(i) {
 				m.tab = i
 				break
@@ -103,6 +107,12 @@ func (m *app) rebuild() {
 		rows = append(rows, r)
 	}
 	switch m.tab {
+	case 5:
+		titles = []string{"", "KIND", "STATUS", "PATH"}
+		weights = []int{2, 10, 18, 50}
+		for _, c := range m.snap.Cleanup {
+			add(tabRow{machine: m.snap.LocalMachineID, key: c.ID, cleanup: &c, cwd: c.Path, cells: []string{"", string(c.Kind), c.Status, c.Path}})
+		}
 	case 0:
 		titles = []string{"", "STATE", "AGENT", "PROJECT", "BRANCH", "TITLE / LAST PROMPT", "AGE", "MEM"}
 		weights = []int{2, 10, 8, 10, 10, 24, 6, 6}
@@ -155,6 +165,12 @@ func (m *app) rebuild() {
 			if len(r.Status.Where) > 0 {
 				p := r.Status.Where[0]
 				where = fmt.Sprintf("%s (%s, %s)", p.Text, p.Source, duration(m.snap.ObservedAt.Sub(p.At)))
+				if p.Source == "claude" {
+					where = fmt.Sprintf("%s · claude %s", p.Text, duration(m.snap.ObservedAt.Sub(p.At)))
+				}
+				if p.Stale {
+					where += " (stale)"
+				}
 			}
 			name := r.Status.Repo.Name
 			if r.Worktrees > 0 {

@@ -27,6 +27,8 @@ func (m *app) openDetail(r tabRow) {
 		}
 	}
 	switch {
+	case r.cleanup != nil:
+		fmt.Fprintln(&buf, cleanupDetail(*r.cleanup))
 	case r.inbox != nil:
 		fmt.Fprintf(&buf, "Inbox %s · %s\n%s\n", clean(r.inbox.ID), clean(r.inbox.Kind), clean(r.inbox.Summary))
 		if d, ok := m.snap.AgentDetails[r.agent]; ok {

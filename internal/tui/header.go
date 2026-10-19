@@ -84,6 +84,9 @@ func (m *app) footer() string {
 	if m.tab == 2 {
 		hints = append(hints, "x/space ack", "X ack all")
 	}
+	if m.tab == 1 {
+		hints = append([]string{"S summarize"}, hints...)
+	}
 	if m.tab == 3 {
 		hints = append(hints, "k kill", "K force")
 		if m.snap.Mode == "snapshot" {
@@ -91,6 +94,9 @@ func (m *app) footer() string {
 		}
 	}
 	hints = append(hints, "esc back", "? help", "q quit")
+	if m.tab == 5 {
+		hints = append([]string{"x clean (confirm)", "r refresh candidates"}, hints...)
+	}
 	text := pack(hints, m.width, " · ")
 	var names []string
 	for name, f := range m.snap.Freshness {
@@ -136,6 +142,9 @@ func (m *app) bodyHeight() int {
 }
 func (m *app) confirmationText() string {
 	c := m.confirm
+	if c.kind == "cleanup" {
+		return wrapText("Clean "+c.cleanup.ID+"? [y/N]\n"+cleanupDetail(c.cleanup), m.width)
+	}
 	if c.kind == "ack-all" {
 		return fmt.Sprintf("Acknowledge %d inbox items? [y/N]\ndriga inbox ack --all", len(c.ids))
 	}
@@ -170,7 +179,7 @@ func (m *app) View() tea.View {
 		body = m.viewport.View()
 	}
 	if m.help {
-		body = wrapText("1–5 tabs · ↑/↓ or j/k move · enter detail · esc back\nm cycle machine scope · / filter · enter apply · esc clear · s sort: state, age, mem, project\ng group by project · →/← expand/collapse families and worktrees\nx/space acknowledge Inbox · X acknowledge all (confirm)\nk kill orphan (confirm) · K force (two confirmations)\no open terminal · ? close help · q / ctrl+c quit", m.width)
+		body = wrapText("1–6 tabs · ↑/↓ or j/k move · enter detail · esc back\nm cycle machine scope · / filter · enter apply · esc clear · s sort: state, age, mem, project · S summarize selected project\ng group by project · →/← expand/collapse families and worktrees\nx/space acknowledge Inbox · X acknowledge all (confirm)\nk kill orphan (confirm) · K force (two confirmations)\no open terminal · ? close help · q / ctrl+c quit", m.width)
 		if m.tmuxTarget() != "" {
 			body += "\na attach tmux"
 		}

@@ -22,7 +22,7 @@ func (tx *Tx) ClearRemoteRows(machine string) error {
 	if machine == "" || machine == tx.localID {
 		return fmt.Errorf("refuse to purge local or empty machine_id")
 	}
-	for _, table := range []string{"session_files", "handoffs", "inbox_items", "procs", "events", "sessions", "worktrees", "repos", "orphans", "machine_samples", "offsets", "sources", "gaps"} {
+	for _, table := range []string{"session_files", "handoffs", "summaries", "inbox_items", "procs", "events", "sessions", "worktrees", "repos", "orphans", "machine_samples", "offsets", "sources", "gaps"} {
 		if err := tx.exec("DELETE FROM "+table+" WHERE machine_id=?", machine); err != nil {
 			return err
 		}
@@ -117,6 +117,23 @@ func (tx *Tx) DeleteRemote(kind feed.Kind, key string) error {
 	}
 	stamp := func(s string) (int64, error) { at, e := time.Parse(time.RFC3339Nano, s); return unix(at), e }
 	switch kind {
+	case feed.Summary:
+		var v []json.RawMessage
+		if err := json.Unmarshal([]byte(key), &v); err != nil {
+			return err
+		}
+		if len(v) != 2 {
+			return fmt.Errorf("invalid summary key")
+		}
+		var path string
+		var used bool
+		if err := json.Unmarshal(v[0], &path); err != nil {
+			return err
+		}
+		if err := json.Unmarshal(v[1], &used); err != nil {
+			return err
+		}
+		return tx.exec("DELETE FROM summaries WHERE machine_id=? AND used_snippets=? AND project_id IN(SELECT id FROM repos WHERE machine_id=? AND path=?)", tx.machineID, used, tx.machineID, path)
 	case feed.Session, feed.SessionFiles:
 		v, e := parts(2)
 		if e != nil {

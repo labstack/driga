@@ -17,6 +17,7 @@ import (
 	"github.com/alecthomas/kong"
 	"github.com/labstack/driga/internal/cli"
 	"github.com/labstack/driga/internal/model"
+	"github.com/labstack/driga/internal/platform"
 	"github.com/labstack/driga/internal/store"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -40,6 +41,7 @@ func toolCases(id int64) []toolCase {
 		{"driga_machine", map[string]any{"machine": "local"}, []string{"machine", "--machine", "local"}},
 		{"driga_machines", nil, []string{"machines"}},
 		{"driga_doctor", nil, []string{"doctor"}},
+		{"driga_cleanup_candidates", nil, []string{"cleanup"}},
 	}
 }
 
@@ -47,6 +49,7 @@ func fixture(t *testing.T) (*store.Store, int64) {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("XDG_STATE_HOME", filepath.Join(home, "state"))
 	t.Setenv("CODEX_HOME", filepath.Join(home, ".codex"))
 	t.Setenv("DRIGA_DATA_DIR", filepath.Join(home, "data"))
 	t.Setenv("DRIGA_SPOOL_DIR", filepath.Join(home, "spool"))
@@ -121,7 +124,7 @@ func connect(t *testing.T, g *cli.Globals) *sdk.ClientSession {
 }
 
 func globals() *cli.Globals {
-	return &cli.Globals{Machine: "all", Version: "test", Stdout: io.Discard, Stderr: io.Discard}
+	return &cli.Globals{Machine: "all", Version: "test", Stdout: io.Discard, Stderr: io.Discard, CleanupPlatform: &platform.Fake{}}
 }
 
 func call(t *testing.T, cs *sdk.ClientSession, tc toolCase) *sdk.CallToolResult {

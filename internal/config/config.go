@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"math"
 	"net"
 	"os"
 	"path/filepath"
@@ -31,6 +32,21 @@ type Config struct {
 	ExtraSignatures []string
 	Fleet           FleetConfig
 	Intake          IntakeConfig
+	Summaries       SummariesConfig
+	Cleanup         CleanupConfig
+}
+
+// CleanupConfig bounds eligibility and regenerable ignored directories.
+type CleanupConfig struct {
+	WorktreeIdle   time.Duration
+	LowDiskPercent float64
+	LowDiskBytes   uint64
+	Regenerable    []string
+}
+
+type SummariesConfig struct {
+	Enabled bool
+	Model   string
 }
 
 // FleetConfig controls optional fleet serving and text sharing.
@@ -64,11 +80,14 @@ func Default() Config {
 		StuckAfter:   10 * time.Minute,
 		OrphanMinAge: 10 * time.Minute,
 		CaptureText:  "titles",
+		Summaries:    SummariesConfig{Model: "haiku"},
+		Cleanup:      CleanupConfig{WorktreeIdle: 168 * time.Hour, LowDiskPercent: 10, LowDiskBytes: 10 << 30, Regenerable: []string{"node_modules/", "target/", ".venv/", "venv/", "dist/", "build/", ".next/", "__pycache__/", ".gradle/", ".terraform/"}},
 		Fleet:        FleetConfig{ShareText: "titles", EnrollWindow: 10 * time.Minute},
 		Intake:       IntakeConfig{Listen: "127.0.0.1:7418"},
 		Adapters: map[string]AdapterConfig{
 			"claude": {Enabled: true},
 			"codex":  {Enabled: true},
+			"gemini": {Enabled: true},
 		},
 	}
 }
@@ -89,6 +108,16 @@ type fileAdapter struct {
 }
 
 type file struct {
+	Cleanup struct {
+		WorktreeIdle   *duration `toml:"worktree_idle"`
+		LowDiskPercent *float64  `toml:"low_disk_percent"`
+		LowDiskBytes   *string   `toml:"low_disk_bytes"`
+		Regenerable    []string  `toml:"regenerable"`
+	} `toml:"cleanup"`
+	Summaries struct {
+		Enabled *bool   `toml:"enabled"`
+		Model   *string `toml:"model"`
+	} `toml:"summaries"`
 	Roots         []string               `toml:"roots"`
 	RootDepth     *int                   `toml:"root_depth"`
 	Exclude       []string               `toml:"exclude"`
@@ -133,6 +162,59 @@ func Load(path string) (Config, error) {
 		for i, r := range f.Roots {
 			c.Roots[i] = ExpandHome(r)
 		}
+	}
+	if f.Cleanup.WorktreeIdle != nil {
+		if f.Cleanup.WorktreeIdle.d < 0 {
+			return c, fmt.Errorf("cleanup.worktree_idle must be non-negative")
+		}
+		c.Cleanup.WorktreeIdle = f.Cleanup.WorktreeIdle.d
+	}
+	if f.Cleanup.LowDiskPercent != nil {
+		v := *f.Cleanup.LowDiskPercent
+		if math.IsNaN(v) || math.IsInf(v, 0) || v < 0 || v > 100 {
+			return c, fmt.Errorf("cleanup.low_disk_percent must be between 0 and 100")
+		}
+		c.Cleanup.LowDiskPercent = v
+	}
+	if f.Cleanup.LowDiskBytes != nil {
+		v := *f.Cleanup.LowDiskBytes
+		mult := uint64(1)
+		for suffix, n := range map[string]uint64{"GiB": 1 << 30, "MiB": 1 << 20, "KiB": 1 << 10} {
+			if strings.HasSuffix(v, suffix) {
+				v = strings.TrimSpace(strings.TrimSuffix(v, suffix))
+				mult = n
+				break
+			}
+		}
+		n, err := strconv.ParseUint(v, 10, 64)
+		if err != nil || n > ^uint64(0)/mult {
+			return c, fmt.Errorf("invalid cleanup.low_disk_bytes")
+		}
+		c.Cleanup.LowDiskBytes = n * mult
+	}
+	if f.Cleanup.Regenerable != nil {
+		seen := map[string]bool{}
+		for _, p := range c.Cleanup.Regenerable {
+			seen[p] = true
+		}
+		for _, p := range f.Cleanup.Regenerable {
+			if p == "" || filepath.IsAbs(p) || strings.Contains(p, "..") || strings.Trim(p, "/") == "" {
+				return c, fmt.Errorf("invalid cleanup.regenerable path %q", p)
+			}
+			if !seen[p] {
+				c.Cleanup.Regenerable = append(c.Cleanup.Regenerable, p)
+				seen[p] = true
+			}
+		}
+	}
+	if f.Summaries.Enabled != nil {
+		c.Summaries.Enabled = *f.Summaries.Enabled
+	}
+	if f.Summaries.Model != nil {
+		if strings.TrimSpace(*f.Summaries.Model) == "" {
+			return c, fmt.Errorf("config %s: summaries.model must not be empty", path)
+		}
+		c.Summaries.Model = *f.Summaries.Model
 	}
 	if f.RootDepth != nil {
 		if *f.RootDepth < 0 {

@@ -43,6 +43,7 @@ type SnapshotData struct {
 	SessionFiles  []json.RawMessage `json:"session_files"`
 	Events        []json.RawMessage `json:"events"`
 	Handoffs      []json.RawMessage `json:"handoffs"`
+	Summaries     []json.RawMessage `json:"summaries"`
 	Repos         []json.RawMessage `json:"repos"`
 	Worktrees     []json.RawMessage `json:"worktrees"`
 	Procs         []json.RawMessage `json:"procs"`
@@ -86,7 +87,7 @@ func snapshotRows[T any](ctx context.Context, tx *sql.Tx, table, machine, suffix
 				continue
 			}
 			name := strings.Split(f.Tag.Get("json"), ",")[0]
-			if name == "" || name == "-" || name == "completions" || name == "files_touched" {
+			if name == "" || name == "-" || name == "completions" || name == "files_touched" || name == "parent_external_id" {
 				continue
 			}
 			switch name {

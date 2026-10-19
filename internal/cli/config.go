@@ -185,6 +185,22 @@ func configText(c config.Config, commented bool, chosen map[string]bool) string 
 	}
 	b.WriteString("[orphans]\n")
 	line("extra_signatures", list(c.ExtraSignatures), list(defaults.ExtraSignatures))
+	b.WriteByte('\n')
+	if commented && c.Summaries == defaults.Summaries {
+		b.WriteString("# ")
+	}
+	b.WriteString("[summaries]\n")
+	line("enabled", c.Summaries.Enabled, defaults.Summaries.Enabled)
+	line("model", c.Summaries.Model, defaults.Summaries.Model)
+	b.WriteByte('\n')
+	if commented && reflect.DeepEqual(c.Cleanup, defaults.Cleanup) {
+		b.WriteString("# ")
+	}
+	b.WriteString("[cleanup]\n")
+	line("worktree_idle", durationText(c.Cleanup.WorktreeIdle), durationText(defaults.Cleanup.WorktreeIdle))
+	line("low_disk_percent", c.Cleanup.LowDiskPercent, defaults.Cleanup.LowDiskPercent)
+	line("low_disk_bytes", fmt.Sprint(c.Cleanup.LowDiskBytes), fmt.Sprint(defaults.Cleanup.LowDiskBytes))
+	line("regenerable", c.Cleanup.Regenerable, defaults.Cleanup.Regenerable)
 	return b.String()
 }
 

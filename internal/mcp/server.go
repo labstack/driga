@@ -32,6 +32,7 @@ type Options struct {
 	Logger  *slog.Logger
 	Read    func(context.Context, Query, Builder) (view.Envelope, error)
 	Doctor  func(context.Context) (view.Envelope, error)
+	Cleanup func(context.Context, string, bool) (view.Envelope, error)
 }
 
 type machineInput struct {
@@ -129,6 +130,18 @@ func NewServer(o Options) *sdk.Server {
 	})
 	register(s, "driga_doctor", "Read setup and collection diagnostics.", func(ctx context.Context, _ struct{}) (view.Envelope, error) {
 		return o.Doctor(ctx)
+	})
+	register(s, "driga_cleanup_candidates", "Inspect local disk cleanup candidates read-only. Sizes are opt-in; this tool never removes anything.", func(ctx context.Context, in struct {
+		Kind  string `json:"kind,omitempty"`
+		Sizes bool   `json:"sizes,omitempty"`
+	}) (view.Envelope, error) {
+		if in.Kind != "" && in.Kind != "worktree" && in.Kind != "scratch" && in.Kind != "history" {
+			return view.Envelope{}, fmt.Errorf("unknown cleanup kind %q", in.Kind)
+		}
+		if o.Cleanup == nil {
+			return view.Envelope{}, fmt.Errorf("cleanup inspection unavailable")
+		}
+		return o.Cleanup(ctx, in.Kind, in.Sizes)
 	})
 	return s
 }

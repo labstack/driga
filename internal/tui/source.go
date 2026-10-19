@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/labstack/driga/internal/adapter"
+	"github.com/labstack/driga/internal/cleanup"
 	"github.com/labstack/driga/internal/collector"
 	"github.com/labstack/driga/internal/config"
 	"github.com/labstack/driga/internal/gitscan"
@@ -27,6 +28,7 @@ type Source interface {
 
 // Snapshot holds the shared views and the evidence needed by detail panes.
 type Snapshot struct {
+	Cleanup []cleanup.Candidate
 	view.Envelope
 	LocalMachineID string
 	Machines       view.MachinesView
@@ -130,7 +132,9 @@ func (s *StoreSource) load(ctx context.Context, mode string) (Snapshot, error) {
 		}
 		collect(snap.Agents.Rows)
 		for _, i := range snap.Inbox.Rows {
-			ids[i.SessionID] = true
+			if i.SessionID != 0 {
+				ids[i.SessionID] = true
+			}
 		}
 		for id := range ids {
 			d, err := view.Agent(tx, id, now, f.Scope)

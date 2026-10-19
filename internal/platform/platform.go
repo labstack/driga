@@ -30,6 +30,11 @@ type SocketProber interface {
 	ExternalPeers(ctx context.Context, pids []int32) (map[int32]bool, error)
 }
 
+// FileProber fails closed if open file descriptors cannot be inspected.
+type FileProber interface {
+	OpenFiles(context.Context, string) (bool, error)
+}
+
 // SameStart compares a kernel create time with a recorded process start.
 // Registries may be written up to a minute after exec, or round a second early.
 func SameStart(create, recorded time.Time) bool {

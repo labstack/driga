@@ -14,7 +14,7 @@ func (s *Store) ResetMachineID(ctx context.Context) error {
 		return err
 	}
 	err = s.Tx(ctx, func(tx *Tx) error {
-		for _, table := range []string{"meta", "machines", "repos", "worktrees", "sessions", "session_files", "events", "handoffs", "procs", "orphans", "machine_samples", "offsets", "inbox_items", "sources", "gaps"} {
+		for _, table := range []string{"meta", "machines", "repos", "worktrees", "sessions", "session_files", "events", "handoffs", "summaries", "procs", "orphans", "machine_samples", "offsets", "inbox_items", "sources", "gaps"} {
 			if err := tx.exec("UPDATE "+table+" SET machine_id=? WHERE machine_id=?", id, s.machineID); err != nil {
 				return err
 			}

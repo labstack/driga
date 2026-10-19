@@ -1,12 +1,13 @@
 # Driga
 
-Driga is a CLI and terminal UI for Claude Code and Codex sessions, project status,
-an attention inbox, file overlaps, orphaned helpers, and machine health on macOS
-and Linux. It reads agent metadata and local Git state without an API key.
-Collection stays local unless you configure fleet peers. v1.5 adds optional
-fleet pull over pinned mutual TLS, read-only MCP tools, and loopback OTLP intake.
-The collector's <50 MB RSS budget remains a release target pending measurement,
-including serving two fleet viewers.
+Driga is a CLI and terminal UI for Claude Code, Codex, Gemini CLI and Antigravity
+(`agy`) sessions, project status, an attention inbox, file overlaps, orphaned
+helpers, disk cleanup, and machine health on macOS and Linux. It reads agent
+metadata and local Git state without an API key. Collection stays local unless you
+configure fleet peers. v1.5 added optional fleet pull over pinned mutual TLS,
+read-only MCP tools, and loopback OTLP intake. v1.6 adds Gemini/agy, `driga cleanup`,
+opt-in `claude -p` project summaries, and `driga ask`. The collector stays under
+50 MB RSS in `scripts/footprint.sh`, including while serving two fleet viewers.
 
 ## Install
 
@@ -131,9 +132,19 @@ Defaults and their purpose:
 | `intake.otlp` | `false` | Enable optional metadata-only OTLP/HTTP JSON. |
 | `intake.listen` | `127.0.0.1:7418` | Loopback only. |
 | `no_service_hint` | `false` | Allow a once-daily service hint in snapshot mode. |
+| `summaries.enabled` | `false` | `driga summarize` runs only after this opt-in. |
+| `summaries.model` | `haiku` | Model passed to `claude -p` for summaries. |
+| `cleanup.worktree_idle` | `168h` | Minimum idle time before a worktree is a candidate. |
+| `cleanup.low_disk_percent` / `cleanup.low_disk_bytes` | `10` / `10GiB` | Inbox `low-disk` item below the smaller of the two. |
+| `cleanup.regenerable` | `node_modules/`, `target/`, `.venv/`, … | Ignored directories that may leave with a worktree; extends the defaults. |
 
-Both adapters are enabled by default. Override them with `[adapters.claude]` or
-`[adapters.codex]` and `enabled = false`. `open_cmd` optionally configures the TUI's
+The Claude, Codex and Gemini adapters are enabled by default. Override them with
+`[adapters.<name>]` and `enabled = false`. Gemini CLI sessions are read from
+`~/.gemini/tmp/*/chats/` (or `$GEMINI_CLI_HOME`). Antigravity (`agy`) keeps a
+closed SQLite format, so v1.6 shows `agy` sessions from the process table only;
+`driga doctor` says so. `driga dev agy-schema` prints table and column names and
+row counts — never values — from your own `agy` databases, so support can be built
+from its output. `open_cmd` optionally configures the TUI's
 terminal-opening command using `{cwd}`; otherwise the terminal is detected.
 
 | Data | Default path | Override |
@@ -305,6 +316,58 @@ Before enrolling a cloned VM, stop its collector and run
 `driga machine reset-id` **on the clone**, then restart and re-pair. This creates a
 new machine ID and certificate and invalidates old pairings. `driga fleet rekey`
 rotates only the certificate, also requiring a stopped collector and re-pairing.
+
+## Cleanup
+
+`driga cleanup` lists disk that agents left behind. Nothing is removed
+automatically, and nothing is removed on another machine.
+
+```sh
+driga cleanup                       # candidates with evidence
+driga cleanup --sizes               # walk sizes on demand (30 s cap per walk)
+driga cleanup <id> --dry-run        # print the exact commands
+driga cleanup <id>                  # re-verify, then ask y/N
+driga cleanup --kind worktree --all # every ready worktree; skips anything changed
+```
+
+- **Worktrees**: a linked worktree (never the main or a locked one) with no live
+  session or process inside, no tracked or untracked changes, commits merged
+  into the default branch or pushed, and idle for `cleanup.worktree_idle`. The
+  action is `git worktree remove`, `git branch -d` only when merged (never `-D`),
+  and `git worktree prune`. Ignored build output (`cleanup.regenerable`) leaves
+  with the worktree; any other ignored file (`.env`, local databases) makes the
+  candidate `needs-review`, and acting on it needs `--include-ignored`.
+- **Scratch**: a Claude Code per-session temp directory whose session is dead or
+  finished for 24 h and has no open files. It is moved to the trash (macOS Trash,
+  or the freedesktop trash on Linux), never deleted.
+- **History**: agent history sizes by age. Report only; use the agent's own
+  retention setting (Claude Code: `cleanupPeriodDays`).
+
+Every check runs again just before acting; if anything changed, the action is
+refused with the reason. Each attempt is appended to `cleanup.log` in the data
+directory. The TUI has a Cleanup tab, and `driga_cleanup_candidates` is a
+read-only MCP tool.
+
+## Summaries and ask
+
+Both run your installed `claude` CLI, on demand only; Driga never calls a model in
+the background and has no API key.
+
+```sh
+driga summarize [project...]   # needs [summaries] enabled = true
+driga ask "which agents are waiting on me?"
+```
+
+`summarize` sends the project name, branches, dirty/ahead/behind counts, the last
+five commit subjects, recent session titles and — only with
+`capture_text = "snippets"` — handoff text. It never sends transcript lines, file
+contents or paths. It runs `claude -p --safe-mode --no-session-persistence --tools ""`
+with a $0.05 budget cap. A summary built from handoff text is shared with fleet
+viewers only at `fleet.share_text = "snippets"`.
+
+`ask` runs `claude -p` with only the read-only `driga mcp` tools, no built-in
+tools, and no user, project or local settings. Both refuse to run if the
+installed `claude` lacks a required flag.
 
 ## MCP registration
 

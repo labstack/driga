@@ -95,7 +95,14 @@ func Label(in StateInput, now time.Time, th Thresholds) (label string, heuristic
 			return "idle", false, "registry " + in.Obs.RegistryStatus
 		}
 		return "unknown", false, "no recognized Claude registry or hook state"
-	case "codex":
+	case "agy":
+		if in.Proc == nil {
+			return "dead", false, "agy process gone; unsupported-version: transcript schema not yet supported"
+		}
+		return "unknown", false, "agy process alive; unsupported-version: title/state schema not yet supported"
+	case "codex", "gemini":
+		// Gemini follows Codex without hooks: an open tool call may still be
+		// executing, so neither ever infers a permission wait.
 		if in.Obs.Hosted {
 			if age < time.Minute {
 				return "working", true, "hosted session, activity " + stateDuration(age) + " ago"

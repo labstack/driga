@@ -212,6 +212,28 @@ func collectSources(ctx context.Context, d Deps, st *store.Store, p Plan, state 
 			procs = storedProcs
 		}
 		reconcileSessions(r.sessions, procs, d.Plat, now)
+		// agy has no supported transcript schema yet. Its only session
+		// evidence is the sampled executable, PID identity, cwd and liveness.
+		for _, proc := range procs {
+			if proc.Agent != "agy" || proc.Role != "interactive" || !d.Plat.Alive(proc.PID, proc.StartTime) {
+				continue
+			}
+			id := fmt.Sprintf("pid:%d:%d", proc.PID, proc.StartTime.UnixNano())
+			i := -1
+			for j, s := range r.sessions {
+				if s.Adapter == "agy" && s.ExternalID == id {
+					i = j
+					break
+				}
+			}
+			if i < 0 {
+				i = len(r.sessions)
+				r.sessions = append(r.sessions, model.Session{})
+			}
+			s := &r.sessions[i]
+			s.SessionObs = model.SessionObs{Adapter: "agy", ExternalID: id, Origin: "interactive", PID: proc.PID, ProcStart: proc.StartTime, StartedAt: proc.StartTime, Cwd: proc.Cwd}
+			s.EndedAt = nil
+		}
 		if p.Git {
 			r.git, r.gitErr = collectGit(ctx, d, r.sessions, p.GitFull, now)
 		}

@@ -17,6 +17,9 @@ func TestLabel(t *testing.T) {
 	codex := func(open, hosted bool, age time.Duration) StateInput {
 		return StateInput{Obs: model.SessionObs{Adapter: "codex", PID: 10, TurnOpen: open, Hosted: hosted, LastActivityAt: ago(age)}, Proc: &model.Proc{}}
 	}
+	gemini := func(open bool, age time.Duration) StateInput {
+		return StateInput{Obs: model.SessionObs{Adapter: "gemini", PID: 10, TurnOpen: open, LastActivityAt: ago(age)}, Proc: &model.Proc{}}
+	}
 	notification, stop := ago(time.Minute), ago(2*time.Minute)
 	tests := []struct {
 		name, label, evidence string
@@ -54,6 +57,12 @@ func TestLabel(t *testing.T) {
 		{name: "hosted old completed", label: "idle", heuristic: true, in: codex(false, true, 48*time.Hour)},
 		{name: "hosted open quiet", label: "unknown", heuristic: true, in: codex(true, true, time.Hour)},
 		{name: "hosted minute boundary", label: "unknown", heuristic: true, in: codex(true, true, time.Minute)},
+		{name: "gemini recent", label: "working", in: gemini(true, time.Second)},
+		{name: "gemini open tool never waiting", label: "unknown", in: gemini(true, 2*time.Minute)},
+		{name: "gemini quiet open", label: "stalled?", in: gemini(true, 14*time.Minute)},
+		{name: "gemini completed alive", label: "idle", in: gemini(false, time.Hour)},
+		{name: "gemini gone open", label: "dead", in: gemini(true, time.Hour)},
+		{name: "gemini gone completed", label: "finished", in: gemini(false, time.Hour)},
 		{name: "unknown adapter", label: "unknown", in: StateInput{Obs: model.SessionObs{Adapter: "other"}}},
 	}
 	for _, tt := range tests {
@@ -81,7 +90,7 @@ func TestLabel(t *testing.T) {
 			if strings.HasPrefix(tt.name, "claude dead") {
 				tt.in.Obs.PID = 0
 			}
-			if strings.HasPrefix(tt.name, "codex gone") {
+			if strings.HasPrefix(tt.name, "codex gone") || strings.HasPrefix(tt.name, "gemini gone") {
 				tt.in.Proc = nil
 			}
 			label, heuristic, evidence := Label(tt.in, now, Thresholds{StuckAfter: 10 * time.Minute})

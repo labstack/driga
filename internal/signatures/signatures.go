@@ -14,6 +14,7 @@ import (
 type Role string
 
 const (
+	RoleInternal    Role = "internal"    // Driga's own Claude invocation.
 	RoleInteractive Role = "interactive" // An interactive agent session.
 	RoleHeadless    Role = "headless"    // A non-interactive agent run.
 	RoleHost        Role = "host"        // A long-lived host of multiple threads.

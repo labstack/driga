@@ -262,6 +262,12 @@ func renderProjects(w io.Writer, v ProjectsView, now time.Time) {
 		if len(r.Status.Where) > 0 {
 			p := r.Status.Where[0]
 			where = fmt.Sprintf("%s (%s, %s)", cell(p.Text), cell(p.Source), age(now.Sub(p.At)))
+			if p.Source == "claude" {
+				where = fmt.Sprintf("%s · claude %s", cell(p.Text), age(now.Sub(p.At)))
+			}
+			if p.Stale {
+				where += " (stale)"
+			}
 		}
 		fmt.Fprint(w, machinePrefix(multi, r.MachineID, r.MachineFresh))
 		fmt.Fprintf(w, "%s\t%s\t%d\t%d\t%d\t%d\t%s\n", cell(r.Status.Repo.Name), r.Status.Activity, r.Status.LiveAgents, r.Dirty, r.Unpushed, r.Worktrees, where)

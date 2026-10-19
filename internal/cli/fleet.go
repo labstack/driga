@@ -39,6 +39,11 @@ func (c ServeCmd) Run(g *Globals) error {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	restore, err := collectorLogging()
+	if err != nil {
+		return err
+	}
+	defer restore()
 	return collector.Run(ctx, d, config.DataDir())
 }
 

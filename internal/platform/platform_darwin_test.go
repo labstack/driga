@@ -108,58 +108,11 @@ func fakeCommand(t *testing.T, name, body string) string {
 	return dir
 }
 
-func TestCwdsBatchesAndPartialOutput(t *testing.T) {
-	dir := fakeCommand(t, "lsof", `[ "$#" -eq 6 ] && [ "$1" = -a ] && [ "$2" = -d ] && [ "$3" = cwd ] && [ "$4" = -Fpn ] && [ "$5" = -p ] || exit 2
-printf '%s\n' "$6" >> "$LSOF_CALLS"
-IFS=,
-for pid in $6; do
-  printf 'p%s\nfcwd\nn/a b/ç\n' "$pid"
-done
-exit 1
-`)
-	log := filepath.Join(dir, "calls")
-	t.Setenv("LSOF_CALLS", log)
-	pids := make([]int32, 401)
-	for i := range pids {
-		pids[i] = int32(i + 1)
-	}
-	got, err := platform.New().Cwds(context.Background(), pids)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, pid := range pids {
-		if got[pid] != "/a b/ç" {
-			t.Fatalf("cwd for %d = %q", pid, got[pid])
-		}
-	}
-	b, err := os.ReadFile(log)
-	if err != nil {
-		t.Fatal(err)
-	}
-	calls := strings.Split(strings.TrimSpace(string(b)), "\n")
-	if len(calls) != 3 {
-		t.Fatalf("got %d calls; want 3", len(calls))
-	}
-	for _, call := range calls {
-		if n := len(strings.Split(call, ",")); n > 200 {
-			t.Fatalf("batch contains %d pids", n)
-		}
-	}
-}
-
 func TestCwdsEmpty(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	got, err := platform.New().Cwds(context.Background(), nil)
 	if err != nil || len(got) != 0 {
 		t.Fatalf("Cwds(nil) = %v, %v", got, err)
-	}
-}
-
-func TestCwdsCommandError(t *testing.T) {
-	fakeCommand(t, "lsof", "printf 'p12\\nn/partial\\n'\nexit 2\n")
-	got, err := platform.New().Cwds(context.Background(), []int32{12})
-	if err == nil || got[12] != "/partial" {
-		t.Fatalf("Cwds = %v, %v; want partial output and error", got, err)
 	}
 }
 
@@ -169,16 +122,6 @@ func TestCwdsCanceled(t *testing.T) {
 	_, err := platform.New().Cwds(ctx, []int32{int32(os.Getpid())})
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("Cwds canceled error = %v", err)
-	}
-}
-
-func TestCwdsTimeout(t *testing.T) {
-	// exec keeps cancellation confined to the test's own command process.
-	fakeCommand(t, "lsof", "printf 'p12\\nn/partial\\n'\nexec /bin/sleep 12\n")
-	start := time.Now()
-	got, err := platform.New().Cwds(context.Background(), []int32{12})
-	if !errors.Is(err, context.DeadlineExceeded) || got[12] != "/partial" || time.Since(start) > 11*time.Second {
-		t.Fatalf("Cwds = %v, %v after %s; want partial output and 10s timeout", got, err, time.Since(start))
 	}
 }
 
@@ -301,17 +244,50 @@ func TestProcsRescanSeesExec(t *testing.T) {
 		}
 		return ""
 	}
-	if got := find(); !strings.Contains(got, "read _") {
-		t.Fatalf("before exec cmdline = %q", got)
+	// argv is unreadable for a moment after spawn; an empty cmdline is not cached.
+	deadline := time.Now().Add(5 * time.Second)
+	for got := find(); !strings.Contains(got, "read _"); got = find() {
+		if time.Now().After(deadline) {
+			t.Fatalf("before exec cmdline = %q", got)
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 	if _, err := stdin.Write([]byte("\n")); err != nil {
 		t.Fatal(err)
 	}
-	deadline := time.Now().Add(5 * time.Second)
+	deadline = time.Now().Add(5 * time.Second)
 	for got := find(); got != "/bin/sleep 30"; got = find() {
 		if time.Now().After(deadline) {
 			t.Fatalf("after exec cmdline = %q, want /bin/sleep 30", got)
 		}
 		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+func TestCwdsAllOwnProcessesQuickly(t *testing.T) {
+	// Cleanup inspects every process the user owns; lsof batches took ~15 s for
+	// 1,700 processes and hit the 10 s deadline.
+	ctx := context.Background()
+	p := platform.New()
+	procs, err := p.Procs(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pids := make([]int32, 0, len(procs))
+	for _, proc := range procs {
+		if proc.OwnerKnown && proc.OwnerUID == uint32(os.Getuid()) {
+			pids = append(pids, proc.PID)
+		}
+	}
+	started := time.Now()
+	cwds, err := p.Cwds(ctx, pids)
+	if err != nil {
+		t.Fatalf("%d pids: %v", len(pids), err)
+	}
+	if elapsed := time.Since(started); elapsed > 3*time.Second {
+		t.Fatalf("Cwds for %d pids took %v", len(pids), elapsed)
+	}
+	if wd, _ := os.Getwd(); cwds[int32(os.Getpid())] != wd {
+		t.Fatalf("own cwd = %q, want %q", cwds[int32(os.Getpid())], wd)
 	}
 }

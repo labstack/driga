@@ -272,6 +272,7 @@ func (p procFS) Machine(ctx context.Context) (model.MachineSample, error) {
 		return s, fmt.Errorf("disk usage: %w", err)
 	}
 	s.DiskFree = usage.Free
+	s.DiskTotal = usage.Total
 	return s, ctx.Err()
 }
 

@@ -4,13 +4,17 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"syscall"
 
 	"github.com/labstack/driga/internal/collector"
 	"github.com/labstack/driga/internal/config"
+	"github.com/labstack/driga/internal/logfile"
+	"github.com/labstack/driga/internal/service"
 	"github.com/labstack/driga/internal/store"
 )
 
@@ -34,6 +38,11 @@ func (c CollectCmd) Run(g *Globals) error {
 	defer stop()
 	dir := config.DataDir()
 	if !c.Once {
+		restore, err := collectorLogging()
+		if err != nil {
+			return err
+		}
+		defer restore()
 		return collector.Run(ctx, d, dir)
 	}
 	lock, err := collector.Lock(dir)
@@ -56,4 +65,18 @@ func (c CollectCmd) Run(g *Globals) error {
 	}
 	_, err = fmt.Fprintf(out, "Collected %d sessions, %d processes, %d samples (%d source errors).\n", r.Sessions, r.Procs, r.Samples, len(r.SourceErrors))
 	return err
+}
+
+func collectorLogging() (func(), error) {
+	w := &logfile.Writer{Path: service.LogPath()}
+	if _, err := w.Write(nil); err != nil {
+		return nil, err
+	}
+	var sink io.Writer = w
+	if runtime.GOOS == "linux" {
+		sink = io.MultiWriter(sink, os.Stderr)
+	}
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(sink, nil)))
+	return func() { slog.SetDefault(previous) }, nil
 }

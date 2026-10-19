@@ -6,6 +6,7 @@ import (
 	"github.com/labstack/driga/internal/adapter"
 	"github.com/labstack/driga/internal/adapter/claude"
 	"github.com/labstack/driga/internal/adapter/codex"
+	"github.com/labstack/driga/internal/adapter/gemini"
 	"github.com/labstack/driga/internal/collector"
 	"github.com/labstack/driga/internal/config"
 	"github.com/labstack/driga/internal/gitscan"
@@ -19,5 +20,5 @@ func NewDeps(cfg config.Config) (collector.Deps, error) {
 	if err != nil {
 		return collector.Deps{}, err
 	}
-	return collector.Deps{Cfg: cfg, Plat: platform.New(), Adapters: []adapter.Adapter{claude.New(), codex.New()}, Sigs: sigs, Git: gitscan.NewScanner(4), SpoolDir: config.SpoolDir(), Now: time.Now, State: collector.NewState()}, nil
+	return collector.Deps{Cfg: cfg, Plat: platform.New(), Adapters: []adapter.Adapter{claude.New(), codex.New(), gemini.New()}, Sigs: sigs, Git: gitscan.NewScanner(4), SpoolDir: config.SpoolDir(), Now: time.Now, State: collector.NewState()}, nil
 }

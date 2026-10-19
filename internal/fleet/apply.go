@@ -103,7 +103,7 @@ func ApplyBatch(tx *store.Tx, b Batch, now time.Time) error {
 			kind feed.Kind
 			rows []json.RawMessage
 		}{
-			{feed.Repo, d.Repos}, {feed.Worktree, d.Worktrees}, {feed.Session, d.Sessions}, {feed.SessionFiles, d.SessionFiles}, {feed.Event, d.Events}, {feed.Handoff, d.Handoffs}, {feed.Inbox, d.InboxItems}, {feed.Orphan, d.Orphans}, {feed.Source, d.Sources}, {feed.Gap, d.Gaps},
+			{feed.Repo, d.Repos}, {feed.Worktree, d.Worktrees}, {feed.Session, d.Sessions}, {feed.SessionFiles, d.SessionFiles}, {feed.Event, d.Events}, {feed.Handoff, d.Handoffs}, {feed.Summary, d.Summaries}, {feed.Inbox, d.InboxItems}, {feed.Orphan, d.Orphans}, {feed.Source, d.Sources}, {feed.Gap, d.Gaps},
 		}
 		for _, g := range groups {
 			for _, p := range g.rows {
@@ -314,6 +314,11 @@ func applyRow(r *store.MachineTx, m *model.Machine, kind feed.Kind, payload []by
 	keyed := kind == feed.Event || kind == feed.Handoff || kind == feed.MachineSample || kind == feed.Gap
 	translateTimes(reflect.ValueOf(row), offset, now, !keyed)
 	switch v := row.(type) {
+	case *feed.SummaryRow:
+		v.ProjectID, err = repoID(r, v.RepoPath)
+		if err == nil {
+			err = r.UpsertSummary(v.Summary)
+		}
 	case *model.Machine:
 		m.Hostname, m.OS, m.Arch, m.Cores, m.MemTotal, m.DrigaVersion = v.Hostname, v.OS, v.Arch, v.Cores, v.MemTotal, v.DrigaVersion
 	case *feed.SessionRow:

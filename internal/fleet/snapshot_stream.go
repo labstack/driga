@@ -165,6 +165,14 @@ func (s *Server) streamSnapshotTx(ctx context.Context, tx *sql.Tx, out io.Writer
 	}); err != nil {
 		return err
 	}
+	if err := array("summaries", func(emit func([]byte) error) error {
+		return snapshotRows[model.Summary](ctx, tx, "summaries", local, "", func(v model.Summary) error {
+			_, p := feed.Encode(feed.Summary, feed.SummaryRow{Summary: v, RepoPath: repoPaths[v.ProjectID]}, share)
+			return emit(p)
+		})
+	}); err != nil {
+		return err
+	}
 	if err := array("sessions", func(emit func([]byte) error) error {
 		return snapshotRows[model.Session](ctx, tx, "sessions", local, "", func(v model.Session) error {
 			if !include[v.ID] {

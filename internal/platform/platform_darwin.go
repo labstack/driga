@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -35,6 +36,7 @@ func (d darwinPlatform) Procs(ctx context.Context) ([]model.Proc, error) {
 	if err != nil {
 		return nil, err
 	}
+	uid := uint32(os.Getuid())
 	out := make([]model.Proc, 0, len(kprocs))
 	seen := make(map[int32]struct{}, len(kprocs))
 	for i := range kprocs {
@@ -63,13 +65,20 @@ func (d darwinPlatform) Procs(ctx context.Context) ([]model.Proc, error) {
 			return cmdline, exe, err
 		})
 		if err != nil {
-			continue
+			// argv is briefly unreadable while a new child execs. Keep our own
+			// processes so kill re-verification still sees a changed tree; other
+			// users' argv is never readable and stays out, as before.
+			if k.Eproc.Pcred.P_ruid != uid {
+				continue
+			}
+			cmdline, exe = "", ""
 		}
 		seen[pid] = struct{}{}
 		out = append(out, model.Proc{
 			PID: pid, PPID: k.Eproc.Ppid, StartTime: time.UnixMilli(start),
 			RSS: rss.RSS, CPUSeconds: times.User + times.System,
 			Cmdline: cmdline, Exe: exe,
+			OwnerUID: k.Eproc.Ucred.Uid, OwnerKnown: true, // effective uid: setuid helpers such as login are not inspectable
 		})
 	}
 	d.idents.retain(seen)
@@ -97,6 +106,7 @@ func (darwinPlatform) Machine(ctx context.Context) (model.MachineSample, error) 
 		return sample, fmt.Errorf("disk usage: %w", err)
 	}
 	sample.DiskFree = usage.Free
+	sample.DiskTotal = usage.Total
 	avg, err := load.AvgWithContext(ctx)
 	if err != nil {
 		return sample, fmt.Errorf("load average: %w", err)
@@ -119,28 +129,19 @@ func (darwinPlatform) Machine(ctx context.Context) (model.MachineSample, error) 
 func (darwinPlatform) Cwds(ctx context.Context, pids []int32) (map[int32]string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	cwds := make(map[int32]string)
-	ids := make([]string, 0, len(pids))
+	// proc_pidinfo(PROC_PIDVNODEPATHINFO) is a syscall per pid; lsof needed
+	// ~15 s for the 1,700 processes a cleanup check inspects. A process that
+	// exited or belongs to another user is simply absent from the result.
+	cwds := make(map[int32]string, len(pids))
 	for _, pid := range pids {
-		if pid > 0 {
-			ids = append(ids, strconv.FormatInt(int64(pid), 10))
-		}
-	}
-	for offset := 0; offset < len(ids); offset += 200 {
 		if err := ctx.Err(); err != nil {
 			return cwds, err
 		}
-		end := min(offset+200, len(ids))
-		out, err := exec.CommandContext(ctx, "lsof", "-a", "-d", "cwd", "-Fpn", "-p", strings.Join(ids[offset:end], ",")).Output()
-		for pid, cwd := range ParseLsofCwd(out) {
+		if pid <= 0 {
+			continue
+		}
+		if cwd, err := (&process.Process{Pid: pid}).CwdWithContext(ctx); err == nil && cwd != "" {
 			cwds[pid] = cwd
-		}
-		if ctx.Err() != nil {
-			return cwds, ctx.Err()
-		}
-		var exitErr *exec.ExitError
-		if err != nil && !(errors.As(err, &exitErr) && exitErr.ExitCode() == 1) {
-			return cwds, fmt.Errorf("lsof cwd: %w", err)
 		}
 	}
 	return cwds, nil

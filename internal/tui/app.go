@@ -13,6 +13,7 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
+	"github.com/labstack/driga/internal/cleanup"
 	"github.com/labstack/driga/internal/config"
 	"github.com/labstack/driga/internal/derive"
 	"github.com/labstack/driga/internal/fleet"
@@ -24,17 +25,20 @@ import (
 
 // Options configures scope, appearance, and injectable action dependencies.
 type Options struct {
-	Machine     string
-	Project     string
-	NoColor     bool
-	OpenCmd     string
-	TermProgram string
-	Now         func() time.Time
-	Exec        func([]string) error
-	Kill        func(context.Context, model.Orphan, []int32, bool) (kill.Result, error)
-	Spool       func(model.HookEvent) error
-	DataDir     string
-	Context     context.Context
+	Machine      string
+	Project      string
+	NoColor      bool
+	OpenCmd      string
+	TermProgram  string
+	Now          func() time.Time
+	Exec         func([]string) error
+	Kill         func(context.Context, model.Orphan, []int32, bool) (kill.Result, error)
+	Spool        func(model.HookEvent) error
+	Summarize    func(context.Context, string) error
+	CleanupList  func(context.Context) ([]cleanup.Candidate, error)
+	CleanupApply func(context.Context, cleanup.Candidate) (cleanup.Result, error)
+	DataDir      string
+	Context      context.Context
 	// LookupTmux resolves an ancestor pane PID to its tmux session.
 	LookupTmux func(context.Context, []int32) (string, error)
 }
@@ -48,7 +52,7 @@ type app struct {
 	pollPending   bool
 	version       int64
 	tab           int
-	cursors       [5]int
+	cursors       [6]int
 	expanded      map[string]bool
 	filter        textinput.Model
 	filtering     bool
@@ -67,11 +71,12 @@ type app struct {
 	width, height int
 }
 type confirmation struct {
-	kind   string
-	orphan model.Orphan
-	force  bool
-	items  []model.InboxItem
-	ids    []string
+	cleanup cleanup.Candidate
+	kind    string
+	orphan  model.Orphan
+	force   bool
+	items   []model.InboxItem
+	ids     []string
 }
 type tickMsg struct{}
 type heartbeatMsg struct{ err error }
@@ -82,8 +87,17 @@ type refreshMsg struct {
 	err     error
 }
 type actionMsg struct {
-	status string
-	err    error
+	status    string
+	err       error
+	cleanupID string
+}
+type cleanupMsg struct {
+	candidates []cleanup.Candidate
+	err        error
+}
+type cleanupSizeMsg struct {
+	candidate cleanup.Candidate
+	err       error
 }
 
 // New creates a Bubble Tea v2 model. Collection and actions run only in commands.
@@ -202,6 +216,9 @@ func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status = "refresh: " + msg.err.Error()
 		}
 		if msg.changed {
+			if msg.snap.Cleanup == nil {
+				msg.snap.Cleanup = m.snap.Cleanup
+			}
 			m.snap = msg.snap
 			m.version = msg.version
 			m.loaded = true
@@ -211,8 +228,44 @@ func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.rebuild()
 		}
 		return m, nil
+	case cleanupMsg:
+		m.busy = false
+		if msg.err != nil {
+			m.status = "cleanup: " + msg.err.Error()
+		} else {
+			m.snap.Cleanup = msg.candidates
+		}
+		m.rebuild()
+	case cleanupSizeMsg:
+		m.busy = false
+		if msg.err != nil {
+			m.status = "size: " + msg.err.Error()
+			return m, nil
+		}
+		for i, c := range m.snap.Cleanup {
+			if c.ID == msg.candidate.ID {
+				m.snap.Cleanup[i] = msg.candidate
+			}
+		}
+		if m.detail && m.detailRow != nil && m.detailRow.cleanup != nil && m.detailRow.cleanup.ID == msg.candidate.ID {
+			r := *m.detailRow
+			r.cleanup = &msg.candidate
+			m.openDetail(r)
+		}
+		m.rebuild()
 	case actionMsg:
 		m.busy = false
+		if msg.cleanupID != "" && msg.err == nil {
+			cs := []cleanup.Candidate{}
+			for _, c := range m.snap.Cleanup {
+				if c.ID != msg.cleanupID {
+					cs = append(cs, c)
+				}
+			}
+			m.snap.Cleanup = cs
+			m.detail = false
+			m.detailRow = nil
+		}
 		m.status = msg.status
 		if msg.err != nil {
 			if m.status != "" {
@@ -263,17 +316,52 @@ func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.help {
 			return m, nil
 		}
-		if k >= "1" && k <= "5" {
+		if k >= "1" && k <= "6" {
 			tab := int(k[0] - '1')
 			if m.tabVisible(tab) {
 				m.tab = tab
 				m.detail = false
 				m.showAckPending()
 				m.rebuild()
+				if tab == 5 && m.opts.CleanupList != nil && !m.busy {
+					return m, m.loadCleanup()
+				}
 			}
 			return m, nil
 		}
 		switch k {
+		case "r":
+			if m.tab == 5 && m.opts.CleanupList != nil && !m.busy {
+				m.detail = false
+				return m, m.loadCleanup()
+			}
+		case "S":
+			if m.tab == 1 && !m.busy {
+				if row, ok := m.selected(); ok {
+					if m.remote(row.machine) {
+						m.status = "summarize is local-only"
+						return m, nil
+					}
+					if m.opts.Summarize == nil {
+						m.status = "run driga summarize for this project"
+						return m, nil
+					}
+					run, ctx, path := m.opts.Summarize, m.opts.Context, row.cwd
+					for _, project := range m.snap.Projects.Rows {
+						if project.MachineID == row.machine && project.Status.Repo.ID == row.project {
+							path = project.Status.Repo.Path
+							break
+						}
+					}
+					m.busy = true
+					return m, func() tea.Msg {
+						if err := run(ctx, path); err != nil {
+							return actionMsg{err: err}
+						}
+						return actionMsg{status: "summary queued for collection"}
+					}
+				}
+			}
 		case "m":
 			m.cycleMachine()
 			m.detail = false
@@ -299,8 +387,28 @@ func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "enter":
 			if r, ok := m.selected(); ok {
 				m.openDetail(r)
+				if r.cleanup != nil && !m.busy {
+					m.busy = true
+					c, ctx := *r.cleanup, m.opts.Context
+					now := m.opts.Now()
+					return m, func() tea.Msg {
+						var err error
+						c, err = cleanup.Measure(ctx, c, now)
+						return cleanupSizeMsg{c, err}
+					}
+				}
 			}
 		case "x", "space", " ":
+			if m.tab == 5 && !m.busy {
+				if r, ok := m.selected(); ok && r.cleanup != nil {
+					if r.cleanup.Status != "ready" {
+						m.status = "use driga cleanup " + r.cleanup.ID + " --include-ignored for needs-review; history is report-only"
+					} else if m.opts.CleanupApply != nil {
+						m.confirm = &confirmation{kind: "cleanup", cleanup: *r.cleanup}
+					}
+				}
+				return m, nil
+			}
 			if m.tab == 2 && !m.busy {
 				if r, ok := m.selected(); ok && r.inbox != nil {
 					return m, m.ack([]model.InboxItem{*r.inbox})
@@ -383,6 +491,14 @@ func (m *app) confirmKey(k string) tea.Cmd {
 	m.confirm = nil
 	if c.kind == "ack-all" {
 		return m.ack(c.items)
+	}
+	if c.kind == "cleanup" {
+		run, ctx := m.opts.CleanupApply, m.opts.Context
+		m.busy = true
+		return func() tea.Msg {
+			_, err := run(ctx, c.cleanup)
+			return actionMsg{status: "cleanup " + c.cleanup.ID, err: err, cleanupID: c.cleanup.ID}
+		}
 	}
 	if c.kind == "kill" && c.force {
 		c.kind = "force"

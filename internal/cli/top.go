@@ -2,12 +2,14 @@ package cli
 
 import (
 	"context"
+	"io"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/labstack/driga/internal/cleanup"
 	"github.com/labstack/driga/internal/config"
 	"github.com/labstack/driga/internal/store"
 	"github.com/labstack/driga/internal/tui"
@@ -69,6 +71,29 @@ func (TopCmd) Run(g *Globals) error {
 		source = s
 	}
 	opts := tui.Options{Machine: g.Machine, Project: g.Project, NoColor: g.NoColor, OpenCmd: cfg.OpenCmd, DataDir: config.DataDir(), Context: ctx}
+	opts.CleanupList = func(ctx context.Context) ([]cleanup.Candidate, error) {
+		envelope, err := cleanupRead(ctx, g, "", false)
+		if err != nil {
+			return nil, err
+		}
+		return envelope.Data.([]cleanup.Candidate), nil
+	}
+	opts.CleanupApply = func(ctx context.Context, c cleanup.Candidate) (cleanup.Result, error) {
+		env, _, closeFn, err := openCleanup(ctx, g)
+		if err != nil {
+			return cleanup.Result{}, err
+		}
+		defer closeFn()
+		return cleanup.Apply(ctx, env, c, cleanup.ApplyOpts{})
+	}
+	opts.Summarize = func(ctx context.Context, path string) error {
+		local := *g
+		local.Machine = "local"
+		local.Project = ""
+		local.JSON = false
+		local.Stdout = io.Discard
+		return (SummarizeCmd{Projects: []string{path}}).run(ctx, &local)
+	}
 	programOpts := []tea.ProgramOption{tea.WithContext(ctx)}
 	if g.Stdin != nil {
 		programOpts = append(programOpts, tea.WithInput(g.Stdin))

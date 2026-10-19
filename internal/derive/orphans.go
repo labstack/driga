@@ -75,6 +75,16 @@ func FindOrphans(idx ProcIndex, sessions []model.Session, sigs *signatures.Set, 
 	candidates := make(map[int32]model.Orphan)
 	for _, pid := range idx.pids {
 		r := idx.procs[pid]
+		internal := r.Role == string(signatures.RoleInternal)
+		for _, ancestor := range idx.Ancestors(pid) {
+			if idx.procs[ancestor].Role == string(signatures.RoleInternal) {
+				internal = true
+				break
+			}
+		}
+		if internal {
+			continue
+		}
 		if _, ok := livePIDs[pid]; ok {
 			continue
 		}
@@ -109,6 +119,10 @@ func FindOrphans(idx ProcIndex, sessions []model.Session, sigs *signatures.Set, 
 		probed := true
 		var matched string
 		for _, p := range tree {
+			if p.Role == string(signatures.RoleInternal) {
+				idle = false
+				break
+			}
 			if p.CPUPercent != 0 || options.externalPeers[p.PID] {
 				idle = false
 				break

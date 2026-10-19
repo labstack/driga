@@ -2,6 +2,27 @@
 # Every pattern starts at the executable token, never at an arbitrary argument.
 
 [[signature]]
+name = "driga-internal"
+agent = "claude"
+role = "internal"
+match = ['^(?:[^[:space:]]*/)?claude[[:space:]]+(?:[^[:space:]]+[[:space:]]+)*--name[[:space:]]+driga-internal([[:space:]]|$)']
+
+[[signature]]
+name = "agy-interactive"
+agent = "agy"
+role = "interactive"
+match = ['^(?:[^[:space:]]*/)?agy([[:space:]]|$)']
+
+[[signature]]
+name = "gemini-interactive"
+agent = "gemini"
+role = "interactive"
+match = [
+  '^(?:[^[:space:]]*/)?gemini([[:space:]]|$)',
+  '^(?:[^[:space:]]*/)?node[[:space:]]+[^[:space:]]*/@google/gemini-cli/[^[:space:]]*/index\.js([[:space:]]|$)',
+]
+
+[[signature]]
 name = "desktop-app"
 role = "app"
 app_bundle = true

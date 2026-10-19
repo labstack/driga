@@ -18,6 +18,7 @@ type machineReads interface {
 	Repos() ([]model.Repo, error)
 	Worktrees(int64) ([]model.Worktree, error)
 	Handoffs(int64, int) ([]model.CompletionEvent, error)
+	Summaries(int64) ([]model.Summary, error)
 	SessionFiles(time.Time) (map[int64][]model.FileTouch, error)
 	Events(string, string, time.Time) ([]model.Event, error)
 	Inbox(time.Time, bool) ([]model.InboxItem, error)

@@ -168,6 +168,9 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 				if err := tx.InsertSample(sample); err != nil {
 					return err
 				}
+				if err := lowDiskInbox(tx, d.Cfg.Cleanup, sample, now); err != nil {
+					return err
+				}
 				sample.MachineID = tx.MachineID()
 				if err := appendFeed(tx, feed.MachineSample, sample, share, now); err != nil {
 					return err
@@ -204,6 +207,11 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 
 		for i := range ss {
 			s := &ss[i]
+			if s.Adapter == "agy" {
+				if err := tx.SetMeta("warn:agy:unsupported-version", "process-level; title/state schema not yet supported"); err != nil {
+					return err
+				}
+			}
 			s.Title = scrub.Scrub(s.Title)
 			if d.Cfg.CaptureSnippets() {
 				s.LastPrompt = scrub.Snippet(s.LastPrompt)
@@ -254,6 +262,9 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 		idx := derive.NewProcIndex(procs)
 		// Inbox grouping needs parent IDs before labels consume the unseen items.
 		parents := derive.LinkParents(ss, idx)
+		if err := explicitParents(tx, ss, parents); err != nil {
+			return err
+		}
 		for _, item := range derive.InboxItems(ss, parents, hooks, baseline) {
 			if err := tx.UpsertInboxItem(item); err != nil {
 				return err
@@ -306,6 +317,9 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 			s.Label, s.Heuristic, s.Evidence = derive.Label(in, now, derive.Thresholds{StuckAfter: d.Cfg.StuckAfter})
 		}
 		parents = derive.LinkParents(ss, idx)
+		if err := explicitParents(tx, ss, parents); err != nil {
+			return err
+		}
 		for i := range ss {
 			ss[i].ParentID = nil
 			if id, ok := parents[ss[i].ID]; ok {
@@ -428,6 +442,57 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 
 func sessionKey(a, id string) string { return a + "\x00" + id }
 
+// Keep unresolved adapter references in transactional metadata so a parent
+// first seen after a collector restart can still be linked. Session row IDs
+// are resolved only through the local machine's store view.
+func explicitParents(tx *store.Tx, ss []model.Session, parents map[int64]int64) error {
+	stored, err := tx.Sessions(store.SessionFilter{IncludeEnded: true})
+	if err != nil {
+		return err
+	}
+	ids := make(map[string]int64, len(stored))
+	for _, s := range stored {
+		ids[sessionKey(s.Adapter, s.ExternalID)] = s.ID
+	}
+	for _, s := range ss {
+		key := "session-parent:" + sessionKey(s.Adapter, s.ExternalID)
+		ref := s.ParentExternalID
+		if ref != "" {
+			if err := tx.SetMeta(key, ref); err != nil {
+				return err
+			}
+		} else {
+			ref, err = tx.Meta(key)
+			if err != nil && !errors.Is(err, store.ErrNotFound) {
+				return err
+			}
+		}
+		if ref == "" {
+			continue
+		}
+		// Explicit evidence also suppresses an unrelated inferred parent while
+		// the referenced row is still missing.
+		delete(parents, s.ID)
+		id := ids[sessionKey(s.Adapter, ref)]
+		if id == 0 || id == s.ID {
+			continue
+		}
+		seen := map[int64]bool{s.ID: true}
+		cycle := false
+		for p := id; p != 0; p = parents[p] {
+			if seen[p] {
+				cycle = true
+				break
+			}
+			seen[p] = true
+		}
+		if !cycle {
+			parents[s.ID] = id
+		}
+	}
+	return nil
+}
+
 func configurePassFeed(d Deps, tx *store.Tx) (bool, error) {
 	enabled := d.Cfg.Fleet.Serve && !d.snapshot
 	if !enabled && !d.snapshot {
@@ -478,6 +543,20 @@ func drainSpool(d Deps, tx *store.Tx, now time.Time, source func(string, error) 
 	}
 	var hooks []model.HookEvent
 	for _, ev := range events {
+		if ev.Event == "summary" {
+			if ev.Summary == nil || ev.MachineID != tx.MachineID() {
+				continue
+			}
+			s := *ev.Summary
+			if s.UsedSnippets && !d.Cfg.CaptureSnippets() {
+				continue
+			}
+			s.Text = scrub.Snippet(s.Text)
+			if err := tx.UpsertSummary(s); err != nil {
+				return nil, err
+			}
+			continue
+		}
 		if ev.Event == "ack" {
 			if ev.MachineID != "" && ev.MachineID != tx.MachineID() {
 				if err := tx.ForMachine(ev.MachineID).MarkAckPending(ev.Message, now); err != nil {
@@ -536,6 +615,9 @@ func passFeedRows(tx *store.Tx, now time.Time, share feed.ShareText) (map[string
 	rows := make(map[string]passFeedRow)
 	add := func(kind feed.Kind, row any) {
 		key, payload := feed.Encode(kind, row, share)
+		if payload == nil {
+			return
+		}
 		comparisonRow := row
 		switch v := row.(type) {
 		case feed.SessionRow:
@@ -623,7 +705,19 @@ func passFeedRows(tx *store.Tx, now time.Time, share feed.ShareText) (map[string
 	if err != nil {
 		return nil, err
 	}
+	summaries, err := tx.Summaries(0)
+	if err != nil {
+		return nil, err
+	}
+	for _, s := range summaries {
+		add(feed.Summary, feed.SummaryRow{Summary: s, RepoPath: repoPaths[s.ProjectID]})
+	}
 	for _, i := range items {
+		// Cleanup's machine-level attention stays local. The v1.5 feed
+		// requires session keys; never publish an empty session reference.
+		if i.Kind == "low-disk" && i.SessionID == 0 {
+			continue
+		}
 		add(feed.Inbox, feed.InboxRow{InboxItem: i, Session: keys[i.SessionID]})
 	}
 	orphans, err := tx.Orphans()
@@ -651,7 +745,7 @@ func passFeedRows(tx *store.Tx, now time.Time, share feed.ShareText) (map[string
 
 func appendPassChanges(tx *store.Tx, before, after map[string]passFeedRow, now time.Time) error {
 	// Stable order also keeps repositories ahead of their referencing checkouts.
-	order := map[feed.Kind]int{feed.Machine: 0, feed.Repo: 1, feed.Worktree: 2, feed.Session: 3, feed.SessionFiles: 4, feed.Inbox: 5, feed.Orphan: 6, feed.Source: 7}
+	order := map[feed.Kind]int{feed.Machine: 0, feed.Repo: 1, feed.Worktree: 2, feed.Session: 3, feed.SessionFiles: 4, feed.Inbox: 5, feed.Orphan: 6, feed.Source: 7, feed.Summary: 8}
 	var changed []passFeedRow
 	for id, row := range after {
 		publish := !bytes.Equal(before[id].comparison, row.comparison)
@@ -701,6 +795,9 @@ func appendPassChanges(tx *store.Tx, before, after map[string]passFeedRow, now t
 
 func mergeObs(dst *model.SessionObs, src model.SessionObs) {
 	dst.Adapter, dst.ExternalID = src.Adapter, src.ExternalID
+	if src.ParentExternalID != "" {
+		dst.ParentExternalID = src.ParentExternalID
+	}
 	// One identity per path (Review Focus 3): /tmp vs /private/tmp, /var vs
 	// /private/var and symlinked repos must compare equal to git's paths.
 	if src.Cwd != "" {
@@ -747,6 +844,14 @@ func mergeObs(dst *model.SessionObs, src model.SessionObs) {
 	}
 	dst.Completions = append(dst.Completions, src.Completions...)
 	dst.FilesTouched = append(dst.FilesTouched, src.FilesTouched...)
+	if src.Adapter == "gemini" {
+		// Gemini observations are complete folds, including rewinds and
+		// recovery snapshots. Timestamps and titles can move backwards.
+		dst.Title, dst.LastPrompt = src.Title, src.LastPrompt
+		dst.LastActivityAt, dst.LastPromptAt = src.LastActivityAt, src.LastPromptAt
+		dst.TurnOpen = src.TurnOpen
+		dst.Completions, dst.FilesTouched = src.Completions, src.FilesTouched
+	}
 }
 
 func linkCodex(ss []model.Session, procs []model.Proc, plat platform.Platform) {
@@ -756,7 +861,7 @@ func linkCodex(ss []model.Session, procs []model.Proc, plat platform.Platform) {
 		if s.PID != 0 {
 			used[s.PID] = true
 		}
-		if s.Adapter == "codex" && s.PID == 0 && !s.Hosted && s.Cwd != "" && !s.StartedAt.IsZero() {
+		if (s.Adapter == "codex" || s.Adapter == "gemini" && s.ParentExternalID == "") && s.PID == 0 && !s.Hosted && s.Cwd != "" && !s.StartedAt.IsZero() {
 			order = append(order, i)
 		}
 	}
@@ -772,7 +877,7 @@ func linkCodex(ss []model.Session, procs []model.Proc, plat platform.Platform) {
 		var best *model.Proc
 		for j := range procs {
 			p := &procs[j]
-			if used[p.PID] || p.Agent != "codex" || (p.Role != "interactive" && p.Role != "headless") || p.Cwd == "" || p.StartTime.IsZero() || p.StartTime.After(s.StartedAt.Add(5*time.Second)) || !plat.Alive(p.PID, p.StartTime) {
+			if used[p.PID] || p.Agent != s.Adapter || (p.Role != "interactive" && p.Role != "headless") || p.Cwd == "" || p.StartTime.IsZero() || p.StartTime.After(s.StartedAt.Add(5*time.Second)) || !plat.Alive(p.PID, p.StartTime) {
 				continue
 			}
 			if gitscan.NormalizePath(p.Cwd) != gitscan.NormalizePath(s.Cwd) {

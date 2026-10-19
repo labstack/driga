@@ -15,11 +15,15 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/labstack/driga/internal/cleanup"
 	"github.com/labstack/driga/internal/collector"
 	"github.com/labstack/driga/internal/config"
 	"github.com/labstack/driga/internal/hooks"
+	"github.com/labstack/driga/internal/logfile"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/platform"
+	"github.com/labstack/driga/internal/service"
+	"github.com/labstack/driga/internal/signatures"
 	"github.com/labstack/driga/internal/store"
 )
 
@@ -58,6 +62,27 @@ type DoctorDeps struct {
 func Doctor(ctx context.Context, d DoctorDeps) []Check {
 	checks := []Check{}
 	add := func(name, status, detail, fix string) { checks = append(checks, Check{name, status, detail, fix}) }
+	for _, entry := range []struct{ name, path string }{
+		{"storage:db", filepath.Join(d.DataDir, "driga.db")},
+		{"storage:wal", filepath.Join(d.DataDir, "driga.db-wal")},
+		{"storage:spool", config.SpoolDir()},
+		{"storage:log", service.LogPath()},
+		{"storage:cleanup-log", filepath.Join(d.DataDir, "cleanup.log")},
+	} {
+		size, capped, err := cleanup.WalkSize(ctx, entry.path)
+		status, detail := "info", fmt.Sprintf("%d bytes", size)
+		if capped {
+			detail = "≥" + detail
+		}
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			status = "warn"
+			detail = err.Error()
+		}
+		if strings.Contains(entry.name, "log") {
+			detail += fmt.Sprintf("; cap %d bytes (10 MiB), one rotated file", logfile.MaxSize)
+		}
+		add(entry.name, status, detail, "")
+	}
 	if err := ctx.Err(); err != nil {
 		add("doctor", "fail", err.Error(), "rerun driga doctor")
 		return checks
@@ -123,6 +148,14 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 		if err != nil {
 			add("collector-rss", "fail", err.Error(), "check database access; run driga service restart")
 		} else {
+			sigs, _ := signatures.Load(nil)
+			for _, p := range procs {
+				sig, ok := sigs.Match(p.Cmdline, p.Exe)
+				if p.Agent == "agy" || ok && sig.Agent == "agy" {
+					add("agy", "info", "process-level (schema not yet supported)", "")
+					break
+				}
+			}
 			var rss uint64
 			found := false
 			for _, p := range procs {
@@ -138,6 +171,15 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 				status, fix = "warn", "driga service restart; inspect driga service logs"
 			}
 			add("collector-rss", status, detail, fix)
+		}
+	}
+	if info, err := os.Stat(filepath.Join(d.Home, ".gemini", "antigravity-cli")); err == nil && info.IsDir() {
+		found := false
+		for _, c := range checks {
+			found = found || c.Name == "agy"
+		}
+		if !found {
+			add("agy", "info", "process-level (schema not yet supported)", "")
 		}
 	}
 	codexHome := d.CodexHome
@@ -160,6 +202,12 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 			dirs = []string{filepath.Join(d.Home, ".claude", "sessions"), filepath.Join(d.Home, ".claude", "projects")}
 		case "codex":
 			dirs = []string{filepath.Join(codexHome, "sessions")}
+		case "gemini":
+			home := os.Getenv("GEMINI_CLI_HOME")
+			if home == "" {
+				home = d.Home
+			}
+			dirs = []string{filepath.Join(home, ".gemini", "tmp")}
 		}
 		found := false
 		for _, dir := range dirs {

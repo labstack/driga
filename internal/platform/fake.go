@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/labstack/driga/internal/model"
@@ -22,8 +23,9 @@ type Fake struct {
 	peers   map[int32][]int32
 	// subreaper comes from an optional subreaper.json {"uid":N} plus a
 	// synthetic proc/ tree beside the fixture.
-	procRoot string
-	uid      *int
+	procRoot  string
+	uid       *int
+	openFiles []string
 }
 
 var _ SubreaperFinder = (*Fake)(nil)
@@ -68,6 +70,9 @@ func LoadFake(dir string) (*Fake, error) {
 	if err := read("peers.json", &f.peers, true); err != nil {
 		return nil, err
 	}
+	if err := read("open-files.json", &f.openFiles, true); err != nil {
+		return nil, err
+	}
 	seen := map[int32]bool{}
 	for _, p := range f.procs {
 		if p.PID <= 0 || p.StartTime.IsZero() || seen[p.PID] {
@@ -83,6 +88,16 @@ func LoadFake(dir string) (*Fake, error) {
 	}
 	f.uid, f.procRoot = sub.UID, filepath.Join(dir, "proc")
 	return f, nil
+}
+
+func (f *Fake) OpenFiles(ctx context.Context, path string) (bool, error) {
+	for _, p := range f.openFiles {
+		rel, err := filepath.Rel(path, p)
+		if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return true, ctx.Err()
+		}
+	}
+	return false, ctx.Err()
 }
 
 // ExternalPeers returns optional fixture sockets/listeners and peer pid links.

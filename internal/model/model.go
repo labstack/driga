@@ -42,10 +42,17 @@ type Proc struct {
 	Role       string    `json:"role,omitempty"`
 	Agent      string    `json:"agent,omitempty"`
 	SessionID  int64     `json:"session_id,omitempty"`
+	// OwnerUID is the real uid when OwnerKnown; live inspection only, never
+	// stored or shared.
+	OwnerUID   uint32 `json:"-"`
+	OwnerKnown bool   `json:"-"`
 }
 
 // MachineSample is one machine-health reading.
 type MachineSample struct {
+	// DiskTotal is live inspection data for the collector's low-disk threshold.
+	// It is not a new persisted column.
+	DiskTotal     uint64    `json:"-"`
 	MachineID     string    `json:"machine_id"`
 	TS            time.Time `json:"ts"`
 	MemUsed       uint64    `json:"mem_used"`
@@ -92,25 +99,26 @@ type Worktree struct {
 
 // SessionObs is what an adapter observed about one agent session.
 type SessionObs struct {
-	Adapter        string            `json:"adapter"`
-	ExternalID     string            `json:"external_id"`
-	Origin         string            `json:"origin"`
-	Version        string            `json:"version,omitempty"`
-	PID            int32             `json:"pid"`
-	ProcStart      time.Time         `json:"proc_start"`
-	Cwd            string            `json:"cwd"`
-	Branch         string            `json:"branch,omitempty"`
-	Title          string            `json:"title,omitempty"`
-	LastPrompt     string            `json:"last_prompt,omitempty"`
-	RegistryStatus string            `json:"registry_status,omitempty"`
-	StartedAt      time.Time         `json:"started_at"`
-	LastActivityAt time.Time         `json:"last_activity_at"`
-	LastPromptAt   time.Time         `json:"last_prompt_at"`
-	Hosted         bool              `json:"hosted"`
-	Completions    []CompletionEvent `json:"completions,omitempty"`
-	FilesTouched   []FileTouch       `json:"files_touched,omitempty"`
-	TurnOpen       bool              `json:"turn_open"`
-	SourcePath     string            `json:"source_path,omitempty"`
+	ParentExternalID string            `json:"parent_external_id,omitempty"`
+	Adapter          string            `json:"adapter"`
+	ExternalID       string            `json:"external_id"`
+	Origin           string            `json:"origin"`
+	Version          string            `json:"version,omitempty"`
+	PID              int32             `json:"pid"`
+	ProcStart        time.Time         `json:"proc_start"`
+	Cwd              string            `json:"cwd"`
+	Branch           string            `json:"branch,omitempty"`
+	Title            string            `json:"title,omitempty"`
+	LastPrompt       string            `json:"last_prompt,omitempty"`
+	RegistryStatus   string            `json:"registry_status,omitempty"`
+	StartedAt        time.Time         `json:"started_at"`
+	LastActivityAt   time.Time         `json:"last_activity_at"`
+	LastPromptAt     time.Time         `json:"last_prompt_at"`
+	Hosted           bool              `json:"hosted"`
+	Completions      []CompletionEvent `json:"completions,omitempty"`
+	FilesTouched     []FileTouch       `json:"files_touched,omitempty"`
+	TurnOpen         bool              `json:"turn_open"`
+	SourcePath       string            `json:"source_path,omitempty"`
 }
 
 // CompletionEvent is one finished turn.
@@ -129,9 +137,10 @@ type FileTouch struct {
 }
 
 // HookEvent is one line in the spool. Event is one of
-// Stop|Notification|SessionStart|SessionEnd|notify|ack; for ack, Message is
-// the inbox item id.
+// Stop|Notification|SessionStart|SessionEnd|notify|ack|summary; for ack, Message
+// is the inbox item id. A summary event carries Summary instead of hook text.
 type HookEvent struct {
+	Summary   *Summary  `json:"summary,omitempty"`
 	MachineID string    `json:"machine_id,omitempty"`
 	TS        time.Time `json:"ts"`
 	Adapter   string    `json:"adapter"`
@@ -139,6 +148,18 @@ type HookEvent struct {
 	Cwd       string    `json:"cwd,omitempty"`
 	Event     string    `json:"event"`
 	Message   string    `json:"message,omitempty"`
+}
+
+// Summary records the inputs' digest and provenance, never the input text.
+type Summary struct {
+	MachineID    string    `json:"machine_id"`
+	ProjectID    int64     `json:"project_id"`
+	InputHash    string    `json:"input_hash"`
+	StateHash    string    `json:"state_hash"`
+	Text         string    `json:"text"`
+	Model        string    `json:"model"`
+	UsedSnippets bool      `json:"used_snippets"`
+	CreatedAt    time.Time `json:"created_at"`
 }
 
 // Session is a stored session with derived fields.

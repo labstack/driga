@@ -32,6 +32,7 @@ const (
 	SessionFiles  Kind = "session_files"
 	Event         Kind = "event"
 	Handoff       Kind = "handoff"
+	Summary       Kind = "summary"
 	Inbox         Kind = "inbox"
 	Repo          Kind = "repo"
 	Worktree      Kind = "worktree"
@@ -108,6 +109,11 @@ type InboxRow struct {
 // WorktreeRow supplies the repository path for a checkout.
 type WorktreeRow struct {
 	model.Worktree
+	RepoPath string `json:"repo_path"`
+}
+
+type SummaryRow struct {
+	model.Summary
 	RepoPath string `json:"repo_path"`
 }
 
@@ -221,6 +227,14 @@ func metadataCommand(command string) string {
 func Encode(kind Kind, row any, share ShareText) (key string, payload []byte) {
 	var data any = row
 	switch kind {
+	case Summary:
+		s, ok := row.(SummaryRow)
+		if !ok || share != Titles && share != Snippets || s.UsedSnippets && share != Snippets {
+			return "", nil
+		}
+		key = Key(s.RepoPath, s.UsedSnippets)
+		s.Text = scrub.Snippet(s.Text)
+		data = s
 	case Machine:
 		m, ok := row.(model.Machine)
 		if !ok {
@@ -396,7 +410,7 @@ func Encode(kind Kind, row any, share ShareText) (key string, payload []byte) {
 	if kind != Inbox && kind != Orphan {
 		delete(v, "id")
 	}
-	for _, field := range []string{"parent_id", "parent_session_id", "repo_id", "worktree_id", "session_id"} {
+	for _, field := range []string{"parent_id", "parent_session_id", "repo_id", "worktree_id", "session_id", "project_id"} {
 		delete(v, field)
 	}
 	b, err := json.Marshal(v)

@@ -197,7 +197,7 @@ func projectRow(r Reader, repo model.Repo, ss []model.Session, now time.Time) (P
 	if err != nil {
 		return row, nil, nil, err
 	}
-	hs, err := r.Handoffs(repo.ID, 3)
+	hs, err := r.Handoffs(repo.ID, 0)
 	if err != nil {
 		return row, nil, nil, err
 	}
@@ -205,6 +205,14 @@ func projectRow(r Reader, repo model.Repo, ss []model.Session, now time.Time) (P
 	row.Status = ProjectStatus{Repo: status.Repo, Activity: status.Activity, AtRisk: nonNil(status.AtRisk), LiveAgents: status.LiveAgents, Where: []WherePart{}}
 	for _, part := range status.Where {
 		row.Status.Where = append(row.Status.Where, WherePart{MachineID: r.MachineID(), Source: part.Source, Text: part.Text, At: part.At})
+	}
+	summaries, err := r.Summaries(repo.ID)
+	if err != nil {
+		return row, nil, nil, err
+	}
+	if len(summaries) > 0 {
+		s := summaries[0]
+		row.Status.Where = []WherePart{{MachineID: r.MachineID(), Source: "claude", Text: s.Text, At: s.CreatedAt, Stale: s.StateHash != derive.SummaryStateHash(repo, wts, ss, hs, now, s.UsedSnippets)}}
 	}
 	row.Worktrees = len(wts)
 	for _, w := range wts {

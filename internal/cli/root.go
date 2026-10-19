@@ -8,18 +8,21 @@ import (
 	"time"
 
 	"github.com/alecthomas/kong"
+	"github.com/labstack/driga/internal/platform"
 )
 
 // Globals are flags shared by every command.
 type Globals struct {
-	Machine        string        `default:"all" help:"Scope views to a machine name, ID, device-ID prefix, local, or all."`
-	cachedMachines bool          `kong:"-"`
-	JSON           bool          `help:"Print versioned JSON instead of tables."`
-	Project        string        `help:"Scope views to one project (path, name, or '.')."`
-	Since          string        `help:"Only show items since a duration ago or 'yesterday'."`
-	Snapshot       bool          `help:"Force snapshot mode (one-shot collect, no history)."`
-	NoColor        bool          `name:"no-color" help:"Disable colors."`
-	Watch          time.Duration `help:"Re-render every interval (e.g. 2s)." placeholder:"DUR"`
+	// CleanupPlatform injects read-only inspection for embedded callers/tests.
+	CleanupPlatform platform.Platform `kong:"-"`
+	Machine         string            `default:"all" help:"Scope views to a machine name, ID, device-ID prefix, local, or all."`
+	cachedMachines  bool              `kong:"-"`
+	JSON            bool              `help:"Print versioned JSON instead of tables."`
+	Project         string            `help:"Scope views to one project (path, name, or '.')."`
+	Since           string            `help:"Only show items since a duration ago or 'yesterday'."`
+	Snapshot        bool              `help:"Force snapshot mode (one-shot collect, no history)."`
+	NoColor         bool              `name:"no-color" help:"Disable colors."`
+	Watch           time.Duration     `help:"Re-render every interval (e.g. 2s)." placeholder:"DUR"`
 
 	Version string    `kong:"-"`
 	Stdout  io.Writer `kong:"-"`
@@ -35,6 +38,9 @@ type Root struct {
 	Agents    AgentsCmd    `cmd:"" help:"List agents grouped by family."`
 	Agent     AgentCmd     `cmd:"" help:"Show session detail."`
 	Projects  ProjectsCmd  `cmd:"" help:"List project status."`
+	Summarize SummarizeCmd `cmd:"" help:"Refresh opt-in local project summaries through Claude."`
+	Ask       AskCmd       `cmd:"" help:"Ask Claude a question using Driga's read-only tools."`
+	Cleanup   CleanupCmd   `cmd:"" help:"Inspect and explicitly clean local agent disk candidates."`
 	Where     WhereCmd     `cmd:"" help:"Show where a project stands."`
 	Inbox     InboxCmd     `cmd:"" help:"List attention and completion events."`
 	Conflicts ConflictsCmd `cmd:"" help:"Show current and recent overlaps."`
@@ -54,6 +60,7 @@ type Root struct {
 	Hook       HookCmd    `cmd:"" hidden:"" help:"Record an agent hook."`
 	Hooks      HooksCmd   `cmd:"" help:"Manage agent hooks."`
 	Feed       FeedCmd    `cmd:"" hidden:"" help:"Inspect the local fleet feed."`
+	Dev        DevCmd     `cmd:"" hidden:"" help:"Inspect unsupported agent formats."`
 	VersionCmd VersionCmd `cmd:"" name:"version" help:"Print the driga version."`
 }
 
