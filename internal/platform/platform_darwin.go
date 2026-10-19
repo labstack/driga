@@ -16,36 +16,35 @@ import (
 	"github.com/shirou/gopsutil/v4/load"
 	"github.com/shirou/gopsutil/v4/mem"
 	"github.com/shirou/gopsutil/v4/process"
+	"golang.org/x/sys/unix"
 )
 
-type darwinPlatform struct{}
+type darwinPlatform struct{ idents *identCache }
 
 var _ SocketProber = darwinPlatform{}
 
 // New returns the macOS host collector.
-func New() Platform { return darwinPlatform{} }
+func New() Platform { return darwinPlatform{idents: &identCache{}} }
 
-func (darwinPlatform) Procs(ctx context.Context) ([]model.Proc, error) {
+func (d darwinPlatform) Procs(ctx context.Context) ([]model.Proc, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	procs, err := process.ProcessesWithContext(ctx)
+	// One sysctl yields pid, ppid, start time and command name for every process.
+	kprocs, err := unix.SysctlKinfoProcSlice("kern.proc.all")
 	if err != nil {
 		return nil, err
 	}
-	out := make([]model.Proc, 0, len(procs))
-	for _, p := range procs {
+	out := make([]model.Proc, 0, len(kprocs))
+	seen := make(map[int32]struct{}, len(kprocs))
+	for i := range kprocs {
 		if err := ctx.Err(); err != nil {
 			return out, err
 		}
-		ppid, err := p.PpidWithContext(ctx)
-		if err != nil {
-			continue
-		}
-		start, err := p.CreateTimeWithContext(ctx)
-		if err != nil {
-			continue
-		}
+		k := &kprocs[i]
+		pid := k.Proc.P_pid
+		start := k.Proc.P_starttime.Sec*1000 + int64(k.Proc.P_starttime.Usec)/1000
+		p := &process.Process{Pid: pid}
 		rss, err := p.MemoryInfoWithContext(ctx)
 		if err != nil {
 			continue
@@ -54,20 +53,26 @@ func (darwinPlatform) Procs(ctx context.Context) ([]model.Proc, error) {
 		if err != nil {
 			continue
 		}
-		cmdline, err := p.CmdlineWithContext(ctx)
+		key := identKey{start: start, comm: unix.ByteSliceToString(k.Proc.P_comm[:])}
+		cmdline, exe, err := d.idents.get(pid, key, func() (string, string, error) {
+			cmdline, err := p.CmdlineWithContext(ctx)
+			if err != nil {
+				return "", "", err
+			}
+			exe, err := p.ExeWithContext(ctx)
+			return cmdline, exe, err
+		})
 		if err != nil {
 			continue
 		}
-		exe, err := p.ExeWithContext(ctx)
-		if err != nil {
-			continue
-		}
+		seen[pid] = struct{}{}
 		out = append(out, model.Proc{
-			PID: p.Pid, PPID: ppid, StartTime: time.UnixMilli(start),
+			PID: pid, PPID: k.Eproc.Ppid, StartTime: time.UnixMilli(start),
 			RSS: rss.RSS, CPUSeconds: times.User + times.System,
 			Cmdline: cmdline, Exe: exe,
 		})
 	}
+	d.idents.retain(seen)
 	return out, nil
 }
 

@@ -5,7 +5,9 @@ import (
 	"errors"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -249,5 +251,67 @@ func TestMachinePressureFailure(t *testing.T) {
 				t.Fatalf("pressure command was not bounded: %v", elapsed)
 			}
 		})
+	}
+}
+
+func TestProcsRescanReusesIdentity(t *testing.T) {
+	// Collectors rescan every few seconds; re-reading every process's argv and
+	// environment each pass dominated a serving collector's allocation rate.
+	ctx := context.Background()
+	alloc := func(p platform.Platform) uint64 {
+		var before, after runtime.MemStats
+		runtime.ReadMemStats(&before)
+		if _, err := p.Procs(ctx); err != nil {
+			t.Fatal(err)
+		}
+		runtime.ReadMemStats(&after)
+		return after.TotalAlloc - before.TotalAlloc
+	}
+	warm := platform.New()
+	cold := alloc(warm)
+	again := alloc(warm)
+	t.Logf("first scan %d bytes, rescan %d bytes", cold, again)
+	if again*3 > cold {
+		t.Fatalf("rescan allocated %d bytes, first scan %d; want under a third", again, cold)
+	}
+}
+
+func TestProcsRescanSeesExec(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	cmd := exec.Command("/bin/sh", "-c", "read _; exec /bin/sleep 30")
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = cmd.Process.Kill(); _ = cmd.Wait() }()
+	p := platform.New()
+	find := func() string {
+		procs, err := p.Procs(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, proc := range procs {
+			if proc.PID == int32(cmd.Process.Pid) {
+				return proc.Cmdline
+			}
+		}
+		return ""
+	}
+	if got := find(); !strings.Contains(got, "read _") {
+		t.Fatalf("before exec cmdline = %q", got)
+	}
+	if _, err := stdin.Write([]byte("\n")); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for got := find(); got != "/bin/sleep 30"; got = find() {
+		if time.Now().After(deadline) {
+			t.Fatalf("after exec cmdline = %q, want /bin/sleep 30", got)
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 }

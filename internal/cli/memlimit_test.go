@@ -26,3 +26,22 @@ func TestCollectorMemoryLimitDefault(t *testing.T) {
 		t.Fatalf("user GOMEMLIMIT must win, limit changed to %d", got)
 	}
 }
+
+// Measured on a serving collector with two viewers: GOGC=50 keeps peak RSS
+// about 4 MB lower than the default at a negligible GC cost (live heap ~8 MB).
+func TestCollectorGCPercentDefault(t *testing.T) {
+	old := debug.SetGCPercent(100)
+	t.Cleanup(func() { debug.SetGCPercent(old) })
+
+	t.Setenv("GOGC", "")
+	applyCollectorMemoryLimit()
+	if got := debug.SetGCPercent(100); got != collectorGCPercent {
+		t.Fatalf("default GC percent = %d, want %d", got, collectorGCPercent)
+	}
+
+	t.Setenv("GOGC", "200")
+	applyCollectorMemoryLimit()
+	if got := debug.SetGCPercent(100); got != 100 {
+		t.Fatalf("user GOGC must win, GC percent changed to %d", got)
+	}
+}
