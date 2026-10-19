@@ -104,7 +104,7 @@ func (m *app) homeView() string {
 	dim := view.TokenStyle("faint", m.opts.NoColor)
 	mid := view.TokenStyle("muted", m.opts.NoColor)
 	needs := []string{}
-	start := max(0, m.cursors[homeTab]-5)
+	start := m.homeNeedsTop
 	for i := start; i < min(len(m.rows), start+6); i++ {
 		r := m.rows[i]
 		a := r.attention
@@ -217,7 +217,7 @@ func (m *app) homeView() string {
 		machine = append(machine, "Health unavailable")
 	}
 	activity := []string{}
-	sparkW := max(1, m.width-4-8-10)
+	sparkW := min(60, max(1, m.width-4-8-18-2))
 	for _, a := range m.snap.Activity.Machines {
 		if !m.machineVisible(a.MachineID) {
 			continue
@@ -225,17 +225,7 @@ func (m *app) homeView() string {
 		if len(m.snap.Activity.Machines) > 1 {
 			activity = append(activity, mid.Render(clean(m.machineName(a.MachineID))))
 		}
-		eventsNow, loadNow := "—", "—"
-		if len(a.Buckets) > 0 {
-			last := a.Buckets[len(a.Buckets)-1]
-			if last.Sample != nil || last.Events > 0 {
-				eventsNow = fmt.Sprintf("%d/min", last.Events)
-			}
-			if last.Sample != nil {
-				loadNow = fmt.Sprintf("%.1f", last.Sample.Load1)
-			}
-		}
-		activity = append(activity, dim.Render("events  ")+styledSpark(a.Buckets, sparkW, false, m.opts.NoColor)+"  "+view.TokenStyle("idle", m.opts.NoColor).Render(eventsNow), dim.Render("load    ")+styledSpark(a.Buckets, sparkW, true, m.opts.NoColor)+"  "+view.TokenStyle("ink", m.opts.NoColor).Render(loadNow))
+		activity = append(activity, activityRow(a.Buckets, m.width-4, false, m.opts.NoColor), activityRow(a.Buckets, m.width-4, true, m.opts.NoColor))
 		cores := 0
 		first := -1
 		for i, b := range a.Buckets {
@@ -452,71 +442,94 @@ func gaugeBar(used, total uint64, width int, noColor bool) string {
 	return view.GaugeStyle(used, total, noColor).Render(strings.Repeat("█", filled)) + track
 }
 
-// activitySpark uses two braille columns per cell. Missing collection remains dots.
+// activitySpark renders one block per minute, binning peaks when space is tight.
+// A bin containing a missing minute remains a dim dot rather than inventing history.
 func activitySpark(buckets []view.ActivityBucket, width int, load bool) string {
 	return styledSpark(buckets, width, load, true)
 }
 
 func styledSpark(buckets []view.ActivityBucket, width int, load, noColor bool) string {
-	if len(buckets) == 0 {
-		return view.HistoryEmpty
-	}
-	width = max(1, width)
-	count := width * 2
-	values := make([]float64, count)
-	valid := make([]bool, count)
+	count := min(max(1, width), len(buckets))
 	ceiling := 1.0
-	first := -1
-	for i, b := range buckets {
-		if b.Sample != nil || b.Events > 0 {
-			first = i
-			break
+	for _, b := range buckets {
+		if load && b.Sample != nil {
+			ceiling = max(ceiling, b.Sample.Load1, float64(b.Sample.Cores))
+		} else if !load {
+			ceiling = max(ceiling, float64(b.Events))
 		}
 	}
-	for x := range count {
-		from := x * len(buckets) / count
-		to := min(len(buckets), max(from+1, (x+1)*len(buckets)/count))
-		valid[x] = true
-		for i := from; i < to; i++ {
-			b := buckets[i]
-			v := float64(b.Events)
-			if first < 0 || i < first {
-				valid[x] = false
-				continue
-			}
+	glyphs := []rune("▁▂▃▄▅▆▇█")
+	var out strings.Builder
+	for x := 0; x < count; x++ {
+		from, to := x*len(buckets)/count, (x+1)*len(buckets)/count
+		value, valid, critical := 0.0, true, false
+		for _, b := range buckets[from:to] {
 			if load {
 				if b.Sample == nil {
-					valid[x] = false
+					valid = false
 					continue
 				}
-				v = b.Sample.Load1
-				ceiling = max(ceiling, float64(b.Sample.Cores))
+				value = max(value, b.Sample.Load1)
+				critical = critical || b.Sample.Cores > 0 && b.Sample.Load1 > float64(b.Sample.Cores)
+			} else {
+				if b.Sample == nil && b.Events == 0 {
+					valid = false
+				}
+				value = max(value, float64(b.Events))
 			}
-			values[x] = max(values[x], v)
 		}
-		ceiling = max(ceiling, values[x])
-	}
-	bits := [][]rune{{0x40, 0x04, 0x02, 0x01}, {0x80, 0x20, 0x10, 0x08}}
-	token := "idle"
-	if load {
-		token = "ink"
-	}
-	var out strings.Builder
-	for x := 0; x < count; x += 2 {
-		if !valid[x] || !valid[x+1] {
+		if !valid {
 			out.WriteString(view.TokenStyle("faint", noColor).Render("·"))
 			continue
 		}
-		r := rune(0x2800)
-		for column := 0; column < 2; column++ {
-			height := min(4, int(values[x+column]/ceiling*4+.5))
-			for y := 0; y < height; y++ {
-				r |= bits[column][y]
+		token := "idle"
+		if load {
+			token = "ink"
+			if critical {
+				token = "crit"
 			}
 		}
-		out.WriteString(view.TokenStyle(token, noColor).Render(string(r)))
+		level := min(7, max(0, int(value/ceiling*8)-1))
+		out.WriteString(view.TokenStyle(token, noColor).Render(string(glyphs[level])))
 	}
 	return out.String()
+}
+
+func activityRow(buckets []view.ActivityBucket, width int, load, noColor bool) string {
+	label, current, peak, token := "events  ", "—", 0.0, "idle"
+	for _, b := range buckets {
+		if load {
+			if b.Sample != nil {
+				peak = max(peak, b.Sample.Load1)
+			}
+		} else {
+			peak = max(peak, float64(b.Events))
+		}
+	}
+	if len(buckets) > 0 {
+		last := buckets[len(buckets)-1]
+		if load {
+			if last.Sample != nil {
+				current = fmt.Sprintf("%.1f", last.Sample.Load1)
+				if last.Sample.Cores > 0 && last.Sample.Load1 > float64(last.Sample.Cores) {
+					token = "crit"
+				}
+			}
+		} else if last.Sample != nil || last.Events > 0 {
+			current = fmt.Sprintf("%d/min", last.Events)
+		}
+	}
+	summary := fmt.Sprintf("%s max %.0f", current, peak)
+	if load {
+		label = "load    "
+		if token != "crit" {
+			token = "ink"
+		}
+		summary = fmt.Sprintf("%s max %.1f", current, peak)
+	}
+	// Reserve the same value column for both rows and the shared time axis.
+	spark := styledSpark(buckets, max(1, width-8-max(18, lipgloss.Width(summary))-2), load, noColor)
+	return view.TokenStyle("faint", noColor).Render(label) + spark + strings.Repeat(" ", max(2, width-8-lipgloss.Width(spark)-lipgloss.Width(summary))) + view.TokenStyle(token, noColor).Render(summary)
 }
 
 func (m *app) splitDetail() bool { return m.tab == 0 && m.width >= 140 && !m.detail }

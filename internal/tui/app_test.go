@@ -399,7 +399,8 @@ func TestStaleWithoutDatabaseWrite(t *testing.T) {
 	now = now.Add(time.Minute)
 	m, cmd := m.Update(tickMsg{})
 	m = execute(t, m, cmd)
-	if s.loads != 1 || !strings.Contains(m.View().Content, "(stale procs 1m0s)") {
+	key(m, '?')
+	if s.loads != 1 || !strings.Contains(m.View().Content, "(stale procs 1m0s)") || !strings.Contains(m.(*app).header(), "intake · attention") {
 		t.Fatal(m.View().Content, s.loads)
 	}
 }

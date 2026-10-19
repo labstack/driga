@@ -5,23 +5,38 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
+	"unicode/utf16"
 
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/platform"
 )
 
-// projectSlug mirrors Claude Code: every non-alphanumeric rune becomes "-".
-// Claude shortens names over 200 characters with a hash suffix; such dirs are
-// not matched, so their scratch is never offered (fail closed).
+// projectSlug mirrors the observed Claude Code 2.1.303 directory encoding:
+// replace each non-ASCII-alphanumeric UTF-16 unit with '-', and above 200 units
+// append '-' plus abs(signed 32-bit 31*h+unit hash of the original path) in base 36
+// to the first 200 encoded characters. JS's non-Unicode regex splits surrogates.
 func projectSlug(cwd string) string {
-	return strings.Map(func(r rune) rune {
-		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' {
-			return r
+	units := utf16.Encode([]rune(cwd))
+	slug := make([]byte, len(units))
+	var hash int32
+	for i, unit := range units {
+		hash = hash*31 + int32(unit)
+		slug[i] = '-'
+		if unit >= 'a' && unit <= 'z' || unit >= 'A' && unit <= 'Z' || unit >= '0' && unit <= '9' {
+			slug[i] = byte(unit)
 		}
-		return '-'
-	}, cwd)
+	}
+	if len(slug) <= 200 {
+		return string(slug)
+	}
+	h := int64(hash) // Widen before abs: Math.abs(-2147483648) is positive in JS.
+	if h < 0 {
+		h = -h
+	}
+	return string(slug[:200]) + "-" + strconv.FormatInt(h, 36)
 }
 func validSessionID(id string) bool {
 	return id != "" && id != "." && !strings.Contains(id, "..") && !strings.ContainsAny(id, "/\\\x00")

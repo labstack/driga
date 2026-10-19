@@ -88,6 +88,9 @@ func (m *app) header() string {
 		status = "snapshot · no history"
 	}
 	identity := badge.Render(" driga ") + "  " + clean(host) + m.fleetHeader() + " · " + status
+	if state, _ := m.intake(); state != "" {
+		identity += " · intake · " + view.TokenStyle(map[string]string{"receiving": "working", "waiting": "muted", "attention": "warn"}[state], m.opts.NoColor).Render(state)
+	}
 	if !m.snap.ObservedAt.IsZero() {
 		identity += " · " + m.snap.ObservedAt.Local().Format("15:04:05")
 	}
@@ -151,21 +154,42 @@ func (m *app) footer() string {
 	if m.opts.NoColor {
 		text = pack(hints, m.width, " · ")
 	}
-	var names []string
-	for name, f := range m.snap.Freshness {
+	return text
+}
+
+// intake summarizes source health without treating quiet event sources as stale.
+// Detailed ages remain available in help, including between collector refreshes.
+func (m *app) intake() (string, []string) {
+	state := ""
+	notes := []string{}
+	names := []string{}
+	for name := range m.snap.Freshness {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		f := m.snap.Freshness[name]
+		if state == "" {
+			state = "receiving"
+		}
+		if f.Status == "not_yet_receiving" {
+			notes = append(notes, clean(name)+": not-yet-receiving")
+			if state != "attention" {
+				state = "waiting"
+			}
+			if f.LastError == "" && !f.Stale {
+				continue
+			}
+		}
+		if f.Status == "last_event" {
+			notes = append(notes, fmt.Sprintf("%s: last event %s ago", clean(name), duration(m.opts.Now().Sub(f.LastOKAt))))
+			if !f.Stale && f.LastError == "" {
+				continue
+			}
+		}
 		sourceName := name
 		if _, tail, ok := strings.Cut(name, "/"); ok {
 			sourceName = tail
-		}
-		if f.Status == "not_yet_receiving" {
-			text += "\n" + truncate(clean(name)+": not-yet-receiving", m.width)
-			continue
-		}
-		if f.Status == "last_event" {
-			text += "\n" + truncate(fmt.Sprintf("%s: last event %s ago", clean(name), duration(m.opts.Now().Sub(f.LastOKAt))), m.width)
-			if !f.Stale {
-				continue
-			}
 		}
 		interval := view.SourceInterval(sourceName, collector.Cadence(0))
 		for _, machine := range m.snap.Machines.Rows {
@@ -175,24 +199,21 @@ func (m *app) footer() string {
 		}
 		stale := f.Stale || m.snap.Mode != "snapshot" && (f.LastOKAt.IsZero() || m.opts.Now().Sub(f.LastOKAt) > 3*interval)
 		if stale {
-			names = append(names, name)
+			state = "attention"
+			age := time.Duration(f.AgeMS) * time.Millisecond
+			if !f.LastOKAt.IsZero() {
+				age = m.opts.Now().Sub(f.LastOKAt)
+			}
+			notes = append(notes, fmt.Sprintf("(stale %s %s)", clean(name), duration(age)))
+		}
+		if f.LastError != "" {
+			state = "attention"
+			notes = append(notes, clean(name)+": "+clean(f.LastError))
 		}
 	}
-	sort.Strings(names)
-	for _, name := range names {
-		f := m.snap.Freshness[name]
-		age := time.Duration(f.AgeMS) * time.Millisecond
-		if !f.LastOKAt.IsZero() {
-			age = m.opts.Now().Sub(f.LastOKAt)
-		}
-		line := truncate(fmt.Sprintf("(stale %s %s)", clean(name), duration(age)), m.width)
-		if !m.opts.NoColor {
-			line = lipgloss.NewStyle().Faint(true).Render(line)
-		}
-		text += "\n" + line
-	}
-	return text
+	return state, notes
 }
+
 func (m *app) bodyHeight() int {
 	overhead := lipgloss.Height(m.header()) + lipgloss.Height(m.tabBar()) + lipgloss.Height(m.footer()) + 3
 	return max(2, m.height-overhead)
@@ -246,9 +267,13 @@ func (m *app) View() tea.View {
 		body = m.viewport.View()
 	}
 	if m.help {
-		body = wrapText("0 Home · 1–6 tabs · ↑/↓ or j/k move · enter detail · esc back\nm cycle machine scope · / filter · enter apply · esc clear · s sort: state, age, mem, project · S summarize selected project\ng group by project · →/← expand/collapse families and worktrees\nx/space acknowledge Needs you / Inbox · X acknowledge all Inbox (confirm)\npgup/pgdown scroll Home · k kill orphan (confirm) · K force (two confirmations)\no open terminal · ? close help · q / ctrl+c quit", m.width)
+		body = wrapText("0 Home · 1–6 tabs · ↑/↓ or j/k move · enter detail · esc back\nm cycle machine scope · / filter · enter apply · esc clear · s sort: state, age, mem, project · S summarize selected project\ng group by project · →/← expand/collapse families and worktrees\nx/space acknowledge Needs you / Inbox · X acknowledge all Inbox (confirm)\nclick select · click selected row to open · wheel scroll\npgup/pgdown scroll Home · k kill orphan (confirm) · K force (two confirmations)\no open terminal · ? close help · q / ctrl+c quit", m.width)
 		if m.tmuxTarget() != "" {
 			body += "\na attach tmux"
+		}
+		_, notes := m.intake()
+		if len(notes) > 0 {
+			body += "\n" + wrapText(strings.Join(notes, "\n"), m.width)
 		}
 	}
 	if m.confirm != nil {
@@ -273,5 +298,6 @@ func (m *app) View() tea.View {
 	}
 	v := tea.NewView(strings.Join(lines, "\n"))
 	v.AltScreen = true
+	v.MouseMode = tea.MouseModeCellMotion
 	return v
 }

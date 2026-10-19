@@ -54,6 +54,7 @@ type app struct {
 	tab              int
 	cursors          [7]int
 	homeOffset       int
+	homeNeedsTop     int
 	cleanupRequested bool
 	expanded         map[string]bool
 	filter           textinput.Model
@@ -289,6 +290,10 @@ func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status += msg.err.Error()
 		}
 		m.rebuild()
+	case tea.MouseClickMsg:
+		return m, m.mouseClick(msg)
+	case tea.MouseWheelMsg:
+		return m, m.mouseWheel(msg)
 	case tea.KeyPressMsg:
 		k := msg.String()
 		if k == "ctrl+c" {
@@ -422,22 +427,7 @@ func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.rebuild()
 			}
 		case "enter":
-			if m.splitDetail() {
-				return m, nil
-			}
-			if r, ok := m.selected(); ok {
-				m.openDetail(r)
-				if r.cleanup != nil && !m.busy {
-					m.busy = true
-					c, ctx := *r.cleanup, m.opts.Context
-					now := m.opts.Now()
-					return m, func() tea.Msg {
-						var err error
-						c, err = cleanup.Measure(ctx, c, now)
-						return cleanupSizeMsg{c, err}
-					}
-				}
-			}
+			return m, m.openSelected(false)
 		case "x", "space", " ":
 			if m.tab == 5 && !m.busy {
 				if r, ok := m.selected(); ok && r.cleanup != nil {

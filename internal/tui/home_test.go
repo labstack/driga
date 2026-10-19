@@ -240,8 +240,8 @@ func TestHomeGaugeTrackAndPercent(t *testing.T) {
 func TestActivityFullWidthAndEmptyNotes(t *testing.T) {
 	buckets := make([]view.ActivityBucket, 60)
 	buckets[59] = view.ActivityBucket{Events: 3, Sample: &model.MachineSample{Load1: 2}}
-	if got := lipgloss.Width(activitySpark(buckets, 90, true)); got != 90 {
-		t.Errorf("spark width %d, want 90", got)
+	if got := lipgloss.Width(activitySpark(buckets, 90, true)); got != 60 {
+		t.Errorf("spark width %d, want one column for each of 60 minutes", got)
 	}
 	for _, withBuckets := range []bool{false, true} {
 		s := fixture()
@@ -332,12 +332,13 @@ func TestHomeSameNamedReposStaySeparate(t *testing.T) {
 	}
 }
 
-func TestEventDrivenFooterReportsLastEvent(t *testing.T) {
+func TestEventDrivenHelpReportsLastEvent(t *testing.T) {
 	s := fixture()
 	at := s.snap.ObservedAt.Add(-24 * time.Hour)
 	s.snap.Freshness = map[string]view.Fresh{"otlp": {LastOKAt: at, Status: "last_event"}, "sockets": {LastOKAt: at, Status: "last_event"}}
 	m := setup(t, s, Options{}).(*app)
-	if strings.Contains(m.footer(), "stale") || !strings.Contains(m.footer(), "last event") {
-		t.Fatal(m.footer())
+	key(m, '?')
+	if strings.Contains(m.footer(), "last event") || !strings.Contains(m.header(), "intake · receiving") || !strings.Contains(m.View().Content, "last event") || strings.Contains(m.View().Content, "stale") {
+		t.Fatal(m.View().Content)
 	}
 }

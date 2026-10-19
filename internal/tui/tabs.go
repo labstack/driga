@@ -51,6 +51,11 @@ func (m *app) tabVisible(tab int) bool {
 	return false
 }
 func (m *app) tabBar() string {
+	text, _ := m.tabLayout()
+	return text
+}
+
+func (m *app) tabLayout() (string, []tabHit) {
 	s := m.visibleSummary()
 	projects, inbox, orphans := 0, 0, 0
 	for _, r := range m.snap.Projects.Rows {
@@ -74,6 +79,7 @@ func (m *app) tabBar() string {
 	}
 	names := []string{fmt.Sprintf("Agents %d", s.Agents), fmt.Sprintf("Projects %d", projects), "Inbox", fmt.Sprintf("Orphans %d", orphans), "Machine", fmt.Sprintf("Cleanup %d", cleanupCount)}
 	tabs := []string{}
+	indices := []int{homeTab}
 	active := func(label string, selected bool) string {
 		style := view.TokenStyle("muted", m.opts.NoColor)
 		if selected && m.opts.NoColor {
@@ -104,8 +110,23 @@ func (m *app) tabBar() string {
 			label += " " + view.TokenStyle(token, m.opts.NoColor).Render(fmt.Sprint(inbox))
 		}
 		tabs = append(tabs, label)
+		indices = append(indices, i)
 	}
-	return styledPack(tabs, m.width, "   ")
+	hits := []tabHit{}
+	x, y := 0, 0
+	for i, label := range tabs {
+		w := lipgloss.Width(truncate(label, m.width))
+		if x > 0 && x+3+w > m.width {
+			x = 0
+			y++
+		}
+		if x > 0 {
+			x += 3
+		}
+		hits = append(hits, tabHit{x: x, y: y, width: w, tab: indices[i]})
+		x += w
+	}
+	return styledPack(tabs, m.width, "   "), hits
 }
 
 // styledPack keeps ANSI styling while wrapping only at item boundaries.
@@ -296,6 +317,10 @@ func (m *app) rebuild() {
 	}
 	m.rows = rows
 	m.cursors[m.tab] = min(max(0, m.cursors[m.tab]), max(0, len(rows)-1))
+	if m.tab == homeTab {
+		m.homeNeedsTop = max(0, min(m.homeNeedsTop, m.cursors[homeTab]))
+		m.homeNeedsTop = max(m.homeNeedsTop, m.cursors[homeTab]-5)
+	}
 	columns := make([]table.Column, len(titles))
 	sum := 0
 	for _, w := range weights {
@@ -342,13 +367,21 @@ func (m *app) rebuild() {
 		styles.Header = style.Bold(true)
 		styles.Selected = lipgloss.NewStyle().Reverse(true)
 	}
-	m.table.SetRows(nil)
+	// Retain scrolling within a list, including when clicking a visible row.
+	// Column-count changes require clearing old cells before changing columns.
+	if len(m.table.Columns()) != len(columns) {
+		m.table = table.New(table.WithFocused(true))
+	}
 	m.table.SetStyles(styles)
 	m.table.SetColumns(columns)
 	m.table.SetRows(cells)
 	m.table.SetWidth(tableWidth)
 	m.table.SetHeight(m.bodyHeight())
-	m.table.SetCursor(m.cursors[m.tab])
+	if delta := m.cursors[m.tab] - m.table.Cursor(); delta < 0 {
+		m.table.MoveUp(-delta)
+	} else {
+		m.table.MoveDown(delta)
+	}
 	m.filter.SetWidth(max(1, m.width-2))
 	m.viewport.SetWidth(m.width)
 	m.viewport.SetHeight(m.bodyHeight())
