@@ -33,6 +33,7 @@ func toolCases(id int64) []toolCase {
 	return []toolCase{
 		{"get_summary", nil, []string{"summary"}},
 		{"get_activity", map[string]any{"machine": "local"}, []string{"activity", "--machine", "local"}},
+		{"get_flow", map[string]any{"id": id, "machine": "local"}, []string{"flow", fmt.Sprint(id), "--machine", "local"}},
 		{"list_agents", map[string]any{"all": true, "machine": "local", "project": "api"}, []string{"agents", "--all", "--machine", "local", "--project", "api"}},
 		{"get_agent", map[string]any{"id": id, "machine": "local"}, []string{"agent", fmt.Sprint(id), "--machine", "local"}},
 		{"list_projects", map[string]any{"active": true, "at_risk": true}, []string{"projects", "--active", "--at-risk"}},

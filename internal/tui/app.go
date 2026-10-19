@@ -21,6 +21,7 @@ import (
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/platform"
 	"github.com/labstack/driga/internal/spool"
+	"github.com/labstack/driga/internal/view"
 )
 
 // Options configures scope, appearance, and injectable action dependencies.
@@ -44,6 +45,11 @@ type Options struct {
 }
 
 type app struct {
+	flow             view.FlowView
+	flowID           int64
+	flowOffset       int
+	flowPulse        map[string]time.Time
+	flowSeen         map[string]bool
 	machineScope     string
 	src              Source
 	opts             Options
@@ -52,7 +58,7 @@ type app struct {
 	pollPending      bool
 	version          int64
 	tab              int
-	cursors          [7]int
+	cursors          [8]int
 	homeOffset       int
 	homeNeedsTop     int
 	cleanupRequested bool
@@ -197,6 +203,42 @@ func heartbeat(dir string, now time.Time) error {
 
 func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case flowEventMsg:
+		m.recordFlowEvent(msg.event)
+	case flowMsg:
+		if msg.id != m.flowID || msg.scope != m.machineScope {
+			return m, nil
+		}
+		if msg.err != nil {
+			m.status = "flow: " + msg.err.Error()
+			return m, nil
+		}
+		var selectedID int64
+		if i := m.cursors[flowTab]; i < len(m.flow.Children) {
+			selectedID = m.flow.Children[i].ID
+		}
+		m.flow = msg.flow
+		if m.flowSeen == nil {
+			m.flowSeen = map[string]bool{}
+		}
+		for _, e := range m.flow.Tail {
+			m.flowSeen[e.Key] = true
+		}
+		if m.flowID == 0 && m.flow.Lead != nil {
+			m.flowID = m.flow.Lead.ID
+		}
+		for i, n := range m.flow.Children {
+			if n.ID == selectedID {
+				m.cursors[flowTab] = i
+			}
+		}
+		if m.snap.AgentDetails == nil {
+			m.snap.AgentDetails = map[int64]view.AgentView{}
+		}
+		for id, d := range msg.details {
+			m.snap.AgentDetails[id] = d
+		}
+		m.rebuild()
 	case tea.WindowSizeMsg:
 		m.width = max(1, msg.Width)
 		m.height = max(1, msg.Height)
@@ -231,6 +273,17 @@ func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if msg.snap.Cleanup == nil {
 				msg.snap.Cleanup = m.snap.Cleanup
 			}
+			if m.loaded && m.tab == flowTab {
+				seen := map[string]bool{}
+				for _, e := range m.snap.Tail {
+					seen[e.Key] = true
+				}
+				for _, e := range msg.snap.Tail {
+					if !seen[e.Key] {
+						m.recordFlowEvent(e)
+					}
+				}
+			}
 			m.snap = msg.snap
 			m.version = msg.version
 			m.loaded = true
@@ -238,6 +291,9 @@ func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.loaded {
 			m.showAckPending()
 			m.rebuild()
+		}
+		if msg.changed && m.tab == flowTab {
+			return m, m.loadFlow()
 		}
 		if m.loaded && m.tab == homeTab && !m.cleanupRequested && m.snap.Cleanup == nil && m.opts.CleanupList != nil && !m.busy {
 			m.cleanupRequested = true
@@ -336,22 +392,62 @@ func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.help {
 			return m, nil
 		}
-		if k >= "0" && k <= "6" {
+		if k >= "0" && k <= "7" {
 			tab := int(k[0] - '1')
 			if k == "0" {
 				tab = homeTab
 			}
+			if k == "7" {
+				tab = flowTab
+			}
 			if m.tabVisible(tab) {
+				if tab == flowTab && m.tab != flowTab {
+					if r, ok := m.selected(); ok && r.agent != 0 {
+						m.flowID = r.agent
+					}
+				}
 				m.tab = tab
 				m.homeOffset = 0
 				m.detail = false
 				m.showAckPending()
 				m.rebuild()
+				if tab == flowTab {
+					return m, m.loadFlow()
+				}
 				if tab == 5 && m.opts.CleanupList != nil && !m.busy {
 					return m, m.loadCleanup()
 				}
 			}
 			return m, nil
+		}
+		if m.tab == flowTab && !m.detail {
+			switch k {
+			case "[", "]":
+				delta := 1
+				if k == "[" {
+					delta = -1
+				}
+				m.flowSession(delta)
+				return m, m.loadFlow()
+			case "j", "down", "k", "up":
+				if len(m.flow.Children) > 0 {
+					delta := 1
+					if k == "k" || k == "up" {
+						delta = -1
+					}
+					m.cursors[flowTab] = (m.cursors[flowTab] + delta + len(m.flow.Children)) % len(m.flow.Children)
+					m.rebuild()
+					m.flowEnsureVisible()
+				}
+				return m, nil
+			case "pgdown", "pgup":
+				delta := m.bodyHeight()
+				if k == "pgup" {
+					delta = -delta
+				}
+				m.flowOffset = max(0, m.flowOffset+delta)
+				return m, nil
+			}
 		}
 		switch k {
 		case "pgdown", "pgup":
@@ -406,6 +502,15 @@ func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "m":
 			m.cycleMachine()
+			if m.tab == flowTab {
+				m.flowID = 0
+				m.flow = view.FlowView{}
+				m.flowOffset = 0
+				m.flowPulse = nil
+				m.flowSeen = nil
+				m.rebuild()
+				return m, m.loadFlow()
+			}
 			m.detail = false
 			m.showAckPending()
 			m.rebuild()

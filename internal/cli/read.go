@@ -328,3 +328,17 @@ func pathWithin(path, root string) bool {
 	rel, err := filepath.Rel(root, path)
 	return err == nil && !filepath.IsAbs(rel) && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
+
+// FlowCmd reads a family; omitted ID selects the newest live interactive session.
+type FlowCmd struct {
+	ID int64 `arg:"" optional:"" help:"Internal session ID (defaults to most recently active live interactive session)."`
+}
+
+func (c FlowCmd) Run(g *Globals) error {
+	return runRead(g, view.Filter{}, "", func(r view.Reader, f view.Filter, now time.Time) (any, error) {
+		if c.ID < 0 {
+			return nil, fmt.Errorf("session id must be positive")
+		}
+		return view.Flow(r, f, c.ID, now)
+	})
+}

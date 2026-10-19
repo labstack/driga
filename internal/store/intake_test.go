@@ -8,7 +8,6 @@ import (
 	"testing/fstest"
 	"time"
 
-	"github.com/labstack/driga/internal/model"
 	"github.com/pressly/goose/v3"
 )
 
@@ -36,8 +35,11 @@ func TestMigration0004PreservesSessions(t *testing.T) {
 	if _, err = db.Exec("INSERT INTO meta VALUES ('old','machine_id','old')"); err != nil {
 		t.Fatal(err)
 	}
-	q := &Tx{querier: querier{conn: db, ctx: context.Background(), machineID: "old"}}
-	id, err := q.UpsertSession(model.Session{SessionObs: model.SessionObs{Adapter: "claude", ExternalID: "existing"}, Label: "idle"})
+	row, err := db.Exec(`INSERT INTO sessions(machine_id,adapter,external_id,origin,version,pid,proc_start,cwd,branch,title,last_prompt,registry_status,state,state_heuristic,evidence,started_at,last_activity_at,hosted,turn_open,source_path) VALUES('old','claude','existing','','',0,0,'','','','','','idle',0,'',0,0,0,0,'')`)
+	var id int64
+	if err == nil {
+		id, err = row.LastInsertId()
+	}
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -43,3 +43,16 @@ func TestCollectionLimitsAndEnums(t *testing.T) {
 		}
 	}
 }
+
+func TestFlowLimitBoundsNestedArrays(t *testing.T) {
+	_, id := fixture(t)
+	cs := connect(t, globals())
+	r, err := cs.CallTool(context.Background(), &sdk.CallToolParams{Name: "get_flow", Arguments: map[string]any{"id": id, "limit": 1}})
+	if err != nil || r.IsError {
+		t.Fatal(r, err)
+	}
+	e := r.StructuredContent.(map[string]any)
+	if e["truncated"] != true {
+		t.Fatal(e)
+	}
+}

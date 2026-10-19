@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/labstack/driga/internal/derive"
@@ -143,6 +144,12 @@ func recordIntakeError(ctx context.Context, d Deps, st *store.Store, cause error
 }
 
 func intakeInput(tx *store.Tx, s model.Session, events []model.Event, in *derive.StateInput, now time.Time) error {
+	for _, e := range events {
+		if !strings.HasPrefix(e.Kind, "otlp:") && e.TS.After(in.LastHookAt) {
+			in.LastHook = e.Kind
+			in.LastHookAt = e.TS
+		}
+	}
 	if s.Adapter != "claude" {
 		return nil
 	}
@@ -268,7 +275,7 @@ func applyIntake(ctx context.Context, d Deps, st *store.Store, b intake.Batch) (
 			if err := tx.SetIntakeState(s.ID, state); err != nil {
 				return err
 			}
-			event := model.Event{MachineID: tx.MachineID(), Adapter: "claude", ExternalID: s.ExternalID, TS: f.TS, Kind: "otlp:" + f.Name, Summary: scrub.Snippet(f.Summary)}
+			event := model.Event{MachineID: tx.MachineID(), Adapter: "claude", ExternalID: s.ExternalID, TS: f.TS, Kind: "otlp:" + f.Name, Metadata: f.Metadata, Summary: scrub.Snippet(f.Summary)}
 			if err := tx.InsertEvent(event); err != nil {
 				return err
 			}
@@ -305,7 +312,9 @@ func applyIntake(ctx context.Context, d Deps, st *store.Store, b intake.Batch) (
 			if err := intakeInput(tx, *s, events, &in, now); err != nil {
 				return err
 			}
-			s.Label, s.Heuristic, s.Evidence = derive.Label(in, now, derive.Thresholds{StalledAfter: d.Cfg.StalledAfter})
+			mixed := derive.LabelWithEvidence(in, now, derive.Thresholds{StalledAfter: d.Cfg.StalledAfter})
+			s.Mixer = &mixed
+			s.Label, s.Heuristic, s.Evidence = mixed.Verdict, mixed.Heuristic, mixed.Evidence
 			// Fold activity after labeling so the optional fact can support idle registries.
 			if in.LastToolResult != nil && in.LastToolResult.After(s.LastActivityAt) {
 				s.LastActivityAt = *in.LastToolResult

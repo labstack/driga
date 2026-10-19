@@ -22,6 +22,10 @@ maintainer-owned and is deliberately unchanged.
 | driga_doctor | inspect_setup |
 | driga_cleanup_candidates | list_cleanup_candidates |
 
+`get_flow` is the additional family-detail tool: optional positive `id` selects a
+lead or descendant; omission selects the newest live interactive lead. It also
+accepts `machine`, `project`, and the same bounded `limit` contract below.
+
 All tools are read-only and safe to retry; inbox reads never acknowledge items.
 Tool descriptions explain use, scope, inputs, limits, and result meaning. The SDK
 advertises typed input/output schemas. `id` and `project` are required for the

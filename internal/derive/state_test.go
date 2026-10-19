@@ -94,6 +94,23 @@ func TestLabel(t *testing.T) {
 				tt.in.Proc = nil
 			}
 			label, heuristic, evidence := Label(tt.in, now, Thresholds{StalledAfter: 10 * time.Minute})
+			mixed := LabelWithEvidence(tt.in, now, Thresholds{StalledAfter: 10 * time.Minute})
+			if mixed.Verdict != label || mixed.Heuristic != heuristic || mixed.Evidence != evidence || len(mixed.Rows) != 4 {
+				t.Fatalf("mixer disagrees: %+v", mixed)
+			}
+			agree := 0
+			for _, row := range mixed.Rows {
+				if row.Strength < 0 || row.Strength > 1 {
+					t.Fatal(row)
+				}
+				if row.Supports {
+					agree++
+				}
+			}
+			if mixed.Agreement != agree {
+				t.Fatal(mixed)
+			}
+
 			if label != tt.label || heuristic != tt.heuristic {
 				t.Fatalf("Label = (%q, %v), want (%q, %v); %s", label, heuristic, tt.label, tt.heuristic, evidence)
 			}
@@ -128,5 +145,60 @@ func TestBusyQuietWithCPUIsUnknown(t *testing.T) {
 		if label != "unknown" || heuristic || !strings.Contains(evidence, "14m") || !strings.Contains(evidence, "CPU") {
 			t.Fatalf("CPU %v: got %q, heuristic=%v, evidence=%q", cpu, label, heuristic, evidence)
 		}
+	}
+}
+
+func TestMixerStateInputsProperty(t *testing.T) {
+	now := time.Date(2026, 10, 19, 12, 0, 0, 0, time.UTC)
+	for _, adapter := range []string{"claude", "codex", "gemini", "agy", "other"} {
+		for _, status := range []string{"", "busy", "idle", "shell"} {
+			for _, age := range []time.Duration{0, time.Minute, 10 * time.Minute, 24 * time.Hour} {
+				for _, cpu := range []float64{-1, 0, 0.99, 1, 5} {
+					for _, hosted := range []bool{false, true} {
+						for _, open := range []bool{false, true} {
+							in := StateInput{Obs: model.SessionObs{Adapter: adapter, PID: 10, RegistryStatus: status, Hosted: hosted, TurnOpen: open, LastActivityAt: now.Add(-age)}}
+							if cpu >= 0 {
+								in.Proc = &model.Proc{CPUPercent: cpu}
+							}
+							for _, at := range []time.Time{{}, now.Add(-2 * time.Minute), now} {
+								if !at.IsZero() {
+									in.LastStop = &at
+									in.LastAPIRequest = &at
+									in.Unseen = true
+								}
+								m := LabelWithEvidence(in, now, Thresholds{})
+								l, h, e := Label(in, now, Thresholds{})
+								if m.Verdict != l || m.Heuristic != h || m.Evidence != e || len(m.Rows) != 4 {
+									t.Fatal(in, m)
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+func TestMixerMissingAndConflictingSignals(t *testing.T) {
+	now := time.Date(2026, 10, 19, 12, 0, 0, 0, time.UTC)
+	missing := LabelWithEvidence(StateInput{Obs: model.SessionObs{Adapter: "claude"}}, now, Thresholds{})
+	for _, r := range missing.Rows {
+		if r.Strength != 0 || r.Supports {
+			t.Fatal("missing signal gained support", r)
+		}
+	}
+	stop, tool := now.Add(-time.Hour), now.Add(-time.Second)
+	mixed := LabelWithEvidence(StateInput{Obs: model.SessionObs{Adapter: "claude", PID: 1, RegistryStatus: "idle", LastActivityAt: stop}, Proc: &model.Proc{CPUPercent: 18}, LastStop: &stop, LastToolResult: &tool, Unseen: true}, now, Thresholds{})
+	if mixed.Verdict != "working" || mixed.Rows[0].Supports || mixed.Rows[1].Supports || !mixed.Rows[2].Supports || mixed.Rows[2].Age != time.Second || mixed.Rows[3].CPUPercent == nil || *mixed.Rows[3].CPUPercent != 18 {
+		t.Fatal(mixed)
+	}
+}
+
+func TestMixerMissingClaudeSampleIsNotProcessDeath(t *testing.T) {
+	now := time.Now()
+	m := LabelWithEvidence(StateInput{Obs: model.SessionObs{Adapter: "claude", PID: 1, RegistryStatus: "busy", LastActivityAt: now.Add(-time.Hour)}}, now, Thresholds{})
+	if m.Verdict != "stalled" || m.Rows[3].Alive != nil || m.Rows[3].Strength != 0 {
+		t.Fatal(m)
 	}
 }

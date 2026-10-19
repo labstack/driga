@@ -81,6 +81,16 @@ const readDescription = ` Use this to inspect collected state without changing i
 func NewServer(o Options) *sdk.Server {
 	s := sdk.NewServer(&sdk.Implementation{Name: "driga", Version: o.Version}, &sdk.ServerOptions{Logger: o.Logger})
 	s.AddReceivingMiddleware(preserveEnvelope)
+	register(s, "get_flow", "Inspect one session family, retained usage, worker activity and the four state signals. Optional id from list_agents selects its lead; omit for the newest live interactive session. Missing telemetry measurements are omitted; usage covers retained api_request events only.", func(ctx context.Context, in struct {
+		ID      int64  `json:"id,omitempty"`
+		Machine string `json:"machine,omitempty"`
+		Project string `json:"project,omitempty"`
+	}) (view.Envelope, error) {
+		if in.ID < 0 {
+			return view.Envelope{}, fmt.Errorf("id must be positive")
+		}
+		return o.Read(ctx, Query{Machine: in.Machine, Project: in.Project}, func(r view.Reader, f view.Filter, now time.Time) (any, error) { return view.Flow(r, f, in.ID, now) })
+	})
 	register(s, "get_activity", "Read the last sixty minutes of machine samples and event counts.", func(ctx context.Context, in machineInput) (view.Envelope, error) {
 		return o.Read(ctx, Query{Machine: in.Machine}, func(r view.Reader, f view.Filter, now time.Time) (any, error) { return view.Activity(r, f, now) })
 	})
@@ -162,7 +172,7 @@ func register[In any](s *sdk.Server, name, description string, read func(context
 	}
 	minLimit, maxLimit := float64(1), float64(500)
 	schema.Properties["limit"] = &jsonschema.Schema{Type: "integer", Minimum: &minLimit, Maximum: &maxLimit, Default: json.RawMessage("100"), Description: "Maximum total array entries, including nested collections; 1–500, default 100."}
-	if name == "get_agent" {
+	if name == "get_agent" || name == "get_flow" {
 		schema.Properties["id"].Minimum = &minLimit
 	}
 	if name == "inspect_project" {

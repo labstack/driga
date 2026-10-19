@@ -258,19 +258,27 @@ func (q *querier) Worktrees(repoID int64) ([]model.Worktree, error) {
 	})
 }
 
-const sessionColumns = "machine_id,adapter,external_id,parent_session_id,origin,version,pid,proc_start,cwd,branch,repo_id,worktree_id,title,last_prompt,registry_status,state,state_heuristic,evidence,started_at,last_activity_at,last_prompt_at,hosted,turn_open,ended_at,source_path"
+const sessionColumns = "machine_id,adapter,external_id,parent_session_id,origin,version,pid,proc_start,cwd,branch,repo_id,worktree_id,title,last_prompt,registry_status,state,state_heuristic,evidence,started_at,last_activity_at,last_prompt_at,hosted,turn_open,ended_at,source_path,mixer"
 
 // UpsertSession stores every scalar observation and derived session field.
 // Completions and FilesTouched are persisted separately by the collector.
 func (tx *Tx) UpsertSession(s model.Session) (int64, error) {
-	return tx.upsertID("sessions", sessionColumns, "machine_id,adapter,external_id", tx.machineID, s.Adapter, s.ExternalID, s.ParentID, s.Origin, s.Version, s.PID, unix(s.ProcStart), s.Cwd, s.Branch, s.RepoID, s.WorktreeID, s.Title, s.LastPrompt, s.RegistryStatus, s.Label, s.Heuristic, s.Evidence, unix(s.StartedAt), unix(s.LastActivityAt), unix(s.LastPromptAt), s.Hosted, s.TurnOpen, nullableTime(s.EndedAt), s.SourcePath)
+	mixer, err := json.Marshal(s.Mixer)
+	if err != nil {
+		return 0, err
+	}
+	return tx.upsertID("sessions", sessionColumns, "machine_id,adapter,external_id", tx.machineID, s.Adapter, s.ExternalID, s.ParentID, s.Origin, s.Version, s.PID, unix(s.ProcStart), s.Cwd, s.Branch, s.RepoID, s.WorktreeID, s.Title, s.LastPrompt, s.RegistryStatus, s.Label, s.Heuristic, s.Evidence, unix(s.StartedAt), unix(s.LastActivityAt), unix(s.LastPromptAt), s.Hosted, s.TurnOpen, nullableTime(s.EndedAt), s.SourcePath, string(mixer))
 }
 
 func scanSession(s scanner) (model.Session, error) {
 	var m model.Session
 	var start, procStart, activity, promptAt int64
 	var ended sql.NullInt64
-	err := s.Scan(&m.ID, &m.MachineID, &m.Adapter, &m.ExternalID, &m.ParentID, &m.Origin, &m.Version, &m.PID, &procStart, &m.Cwd, &m.Branch, &m.RepoID, &m.WorktreeID, &m.Title, &m.LastPrompt, &m.RegistryStatus, &m.Label, &m.Heuristic, &m.Evidence, &start, &activity, &promptAt, &m.Hosted, &m.TurnOpen, &ended, &m.SourcePath)
+	var mixer string
+	err := s.Scan(&m.ID, &m.MachineID, &m.Adapter, &m.ExternalID, &m.ParentID, &m.Origin, &m.Version, &m.PID, &procStart, &m.Cwd, &m.Branch, &m.RepoID, &m.WorktreeID, &m.Title, &m.LastPrompt, &m.RegistryStatus, &m.Label, &m.Heuristic, &m.Evidence, &start, &activity, &promptAt, &m.Hosted, &m.TurnOpen, &ended, &m.SourcePath, &mixer)
+	if err == nil {
+		err = json.Unmarshal([]byte(mixer), &m.Mixer)
+	}
 	m.ProcStart, m.StartedAt, m.LastActivityAt, m.LastPromptAt, m.EndedAt = fromUnix(procStart), fromUnix(start), fromUnix(activity), fromUnix(promptAt), timePointer(ended)
 	return m, err
 }
@@ -511,7 +519,11 @@ func (q *querier) SetMeta(key, value string) error {
 
 // InsertEvent records an event and keeps the newest 200 for that adapter/session.
 func (tx *Tx) InsertEvent(e model.Event) error {
-	if err := tx.exec("INSERT INTO events (machine_id,adapter,external_id,ts,kind,summary) VALUES (?,?,?,?,?,?)", tx.machineID, e.Adapter, e.ExternalID, unix(e.TS), e.Kind, e.Summary); err != nil {
+	metadata, err := json.Marshal(e.Metadata)
+	if err != nil {
+		return err
+	}
+	if err := tx.exec("INSERT INTO events (machine_id,adapter,external_id,ts,kind,summary,metadata) VALUES (?,?,?,?,?,?,?)", tx.machineID, e.Adapter, e.ExternalID, unix(e.TS), e.Kind, e.Summary, string(metadata)); err != nil {
 		return err
 	}
 	if err := tx.exec(`INSERT INTO event_minutes(machine_id,minute,count) VALUES(?,?,1)
@@ -525,25 +537,29 @@ func (tx *Tx) InsertEvent(e model.Event) error {
 func scanEvent(s scanner) (model.Event, error) {
 	var e model.Event
 	var ts int64
-	err := s.Scan(&e.MachineID, &e.Adapter, &e.ExternalID, &ts, &e.Kind, &e.Summary)
+	var metadata string
+	err := s.Scan(&e.MachineID, &e.Adapter, &e.ExternalID, &ts, &e.Kind, &e.Summary, &metadata)
+	if err == nil {
+		err = json.Unmarshal([]byte(metadata), &e.Metadata)
+	}
 	e.TS = fromUnix(ts)
 	return e, err
 }
 
 // Events returns a session's events at or after since, oldest first.
 func (q *querier) Events(adapter, externalID string, since time.Time) ([]model.Event, error) {
-	return readMany(q, "SELECT machine_id,adapter,external_id,ts,kind,summary FROM events WHERE machine_id=? AND adapter=? AND external_id=? AND ts>=? ORDER BY ts,id", []any{q.machineID, adapter, externalID, unix(since)}, scanEvent)
+	return readMany(q, "SELECT machine_id,adapter,external_id,ts,kind,summary,metadata FROM events WHERE machine_id=? AND adapter=? AND external_id=? AND ts>=? ORDER BY ts,id", []any{q.machineID, adapter, externalID, unix(since)}, scanEvent)
 }
 
 // RecentEvents reads a bounded tail, newest first, including equal timestamps.
 func (q *querier) RecentEvents(until time.Time, limit int) ([]model.Event, error) {
 	limit = max(0, min(limit, 200))
-	return readMany(q, "SELECT machine_id,adapter,external_id,ts,kind,summary FROM events WHERE machine_id=? AND ts<=? ORDER BY ts DESC,id DESC LIMIT ?", []any{q.machineID, unix(until), limit}, scanEvent)
+	return readMany(q, "SELECT machine_id,adapter,external_id,ts,kind,summary,metadata FROM events WHERE machine_id=? AND ts<=? ORDER BY ts DESC,id DESC LIMIT ?", []any{q.machineID, unix(until), limit}, scanEvent)
 }
 
 // LatestEvents returns events across sessions at or after since, newest first.
 func (q *querier) LatestEvents(since time.Time) ([]model.Event, error) {
-	return readMany(q, "SELECT machine_id,adapter,external_id,ts,kind,summary FROM events WHERE machine_id=? AND ts>=? ORDER BY ts DESC,id DESC", []any{q.machineID, unix(since)}, scanEvent)
+	return readMany(q, "SELECT machine_id,adapter,external_id,ts,kind,summary,metadata FROM events WHERE machine_id=? AND ts>=? ORDER BY ts DESC,id DESC", []any{q.machineID, unix(since)}, scanEvent)
 }
 
 // InsertHandoff records a session's completion text.

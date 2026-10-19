@@ -26,3 +26,10 @@
   const result=parse(command); assert(result.error && !result.url && !result.theme, "invalid " + command);
  }
 })();
+
+if (DrigaConsole.parseCommand("flow 42").url !== "/flow?id=42&machine=all") throw Error("flow command");
+if (DrigaConsole.parseCommand("flow").url !== "/flow?machine=all") throw Error("default flow command");
+
+var flowEvent={machine_id:"local",adapter:"claude",external_id:"lead",key:"event-1"};
+if (!DrigaConsole.familyEvent(flowEvent,"local",["claude:lead"],new Set())) throw Error("family pulse missing");
+if (DrigaConsole.familyEvent(flowEvent,"peer",["claude:lead"],new Set()) || DrigaConsole.familyEvent(flowEvent,"local",["claude:other"],new Set()) || DrigaConsole.familyEvent(flowEvent,"local",["claude:lead"],new Set(["event-1"]))) throw Error("spurious family pulse");

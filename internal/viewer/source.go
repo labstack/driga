@@ -465,3 +465,47 @@ func (s *LiveSnapshotSource) collectionInterval(now time.Time) time.Duration {
 	}
 	return 5 * time.Second
 }
+
+// FlowSource loads one family on demand without expanding every overview row.
+type FlowSource interface {
+	LoadFlow(context.Context, store.Scope, int64) (view.FlowView, error)
+}
+
+func (s *StoreSource) LoadFlow(ctx context.Context, scope store.Scope, id int64) (view.FlowView, error) {
+	var result view.FlowView
+	err := s.st.Tx(ctx, func(tx *store.Tx) error {
+		f := s.Filter
+		var err error
+		if s.ResolveFilter != nil {
+			f, err = s.ResolveFilter(tx, f)
+		} else if f.Project != "" && s.ResolveProject != nil {
+			f.Project, err = s.ResolveProject(tx, f.Project)
+		}
+		if err != nil {
+			return err
+		}
+		if scope.Machines != nil {
+			allowed := []string{}
+			for _, id := range scope.Machines {
+				if f.Scope.Machines == nil {
+					allowed = append(allowed, id)
+				} else {
+					for _, a := range f.Scope.Machines {
+						if a == id {
+							allowed = append(allowed, id)
+						}
+					}
+				}
+			}
+			f.Scope = store.Scope{Machines: allowed}
+		}
+		result, err = view.Flow(tx, f, id, s.Now())
+		return err
+	})
+	return result, err
+}
+func (s *LiveSnapshotSource) LoadFlow(ctx context.Context, scope store.Scope, id int64) (view.FlowView, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.StoreSource.LoadFlow(ctx, scope, id)
+}

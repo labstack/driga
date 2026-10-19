@@ -18,7 +18,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/scrub"
+	"math"
 )
 
 const maxBody = 8 << 20
@@ -29,6 +31,7 @@ var errOversize = errors.New("OTLP body exceeds 8 MiB")
 
 // Fact contains only the metadata needed to annotate an existing Claude session.
 type Fact struct {
+	Metadata                         *model.EventMetadata
 	SessionID, Name, Source, Summary string
 	TS, Start                        time.Time
 }
@@ -129,9 +132,10 @@ func (v *uint64Value) UnmarshalJSON(raw []byte) error {
 }
 
 type value struct {
-	String string      `json:"stringValue"`
-	Int    *int64Value `json:"intValue"`
-	// Other AnyValue variants (bool/double/bytes/array/kvlist/empty) are not
+	String string          `json:"stringValue"`
+	Double json.RawMessage `json:"doubleValue"`
+	Int    *int64Value     `json:"intValue"`
+	// Other AnyValue variants (bool/bytes/array/kvlist/empty) are not
 	// metadata we consume. Leave them unmaterialized, including nested content.
 }
 type attribute struct {
@@ -180,10 +184,25 @@ func attributes(attrs []attribute, dropped *int) map[string]string {
 		}
 		// An allowlist also keeps unknown content-bearing attributes out of facts.
 		switch a.Key {
-		case "service.name", "session.id", "event.name", "source", "tool_name", "status_code", "attempt", "from_mode", "to_mode", "agent_type", "total_tool_uses", "status":
+		case "model", "input_tokens", "output_tokens", "cost_usd", "service.name", "session.id", "event.name", "source", "tool_name", "status_code", "attempt", "from_mode", "to_mode", "agent_type", "total_tool_uses", "status":
 			v := a.Value.String
 			if a.Value.Int != nil {
 				v = strconv.FormatInt(int64(*a.Value.Int), 10)
+			}
+			if len(a.Value.Double) > 0 {
+				// Materialize doubles only for the allowlist; special values
+				// on unknown attributes must not change content dropping.
+				var number json.Number
+				if json.Unmarshal(a.Value.Double, &number) == nil {
+					v = number.String()
+				} else {
+					var special string
+					if json.Unmarshal(a.Value.Double, &special) == nil {
+						v = special
+					} else {
+						v = ""
+					}
+				}
 			}
 			out[a.Key] = v
 		}
@@ -307,6 +326,18 @@ func Decode(r io.Reader, path string) (Batch, error) {
 		if ts == 0 || f.SessionID == "" || len(f.SessionID) > 256 {
 			b.Rejected++
 			return
+		}
+		m := &model.EventMetadata{Model: scrub.Snippet(attrs["model"]), Tool: scrub.Snippet(attrs["tool_name"])}
+		for key, dest := range map[string]**int64{"input_tokens": &m.InputTokens, "output_tokens": &m.OutputTokens} {
+			if n, err := strconv.ParseInt(attrs[key], 10, 64); err == nil && n >= 0 {
+				*dest = &n
+			}
+		}
+		if n, err := strconv.ParseFloat(attrs["cost_usd"], 64); err == nil && n >= 0 && !math.IsNaN(n) && !math.IsInf(n, 0) {
+			m.CostUSD = &n
+		}
+		if m.Model != "" || m.Tool != "" || m.InputTokens != nil || m.OutputTokens != nil || m.CostUSD != nil {
+			f.Metadata = m
 		}
 		b.Facts = append(b.Facts, f)
 	}

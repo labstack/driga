@@ -42,6 +42,7 @@ type Root struct {
 	Globals
 
 	Summary   SummaryCmd   `cmd:"" default:"1" help:"Show a one-screen summary."`
+	Flow      FlowCmd      `cmd:"" help:"Show a session family and its state signals."`
 	Activity  ActivityCmd  `cmd:"" help:"Show the last hour of machine activity."`
 	Agents    AgentsCmd    `cmd:"" help:"List agents grouped by family."`
 	Agent     AgentCmd     `cmd:"" help:"Show session detail."`
@@ -190,7 +191,7 @@ func supportsJSON(command string) bool {
 		return false
 	}
 	switch words[0] {
-	case "summary", "activity", "agents", "agent", "projects", "where", "conflicts", "machines", "cleanup", "ask", "summarize", "doctor", "version", "dev", "feed":
+	case "flow", "summary", "activity", "agents", "agent", "projects", "where", "conflicts", "machines", "cleanup", "ask", "summarize", "doctor", "version", "dev", "feed":
 		return true
 	case "inbox", "orphans", "machine":
 		return len(words) < 2 || words[1] == "list" || words[1] == "show"

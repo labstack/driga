@@ -20,7 +20,7 @@ import (
 
 type navItem struct{ Path, Name string }
 
-var navigation = []navItem{{"/", "Home"}, {"/agents", "Agents"}, {"/projects", "Projects"}, {"/inbox", "Inbox"}, {"/orphans", "Orphans"}, {"/machines", "Machines"}, {"/cleanup", "Cleanup"}}
+var navigation = []navItem{{"/", "Home"}, {"/agents", "Agents"}, {"/projects", "Projects"}, {"/inbox", "Inbox"}, {"/orphans", "Orphans"}, {"/machines", "Machines"}, {"/cleanup", "Cleanup"}, {"/flow", "Flow"}}
 
 type projectCard struct {
 	view.ProjectRow
@@ -28,8 +28,10 @@ type projectCard struct {
 	States        []view.StateCount
 }
 type pageData struct {
-	LastEvents    string
-	AttentionOnly bool
+	Flow                   view.FlowView
+	FlowPrevious, FlowNext string
+	LastEvents             string
+	AttentionOnly          bool
 	viewer.Snapshot
 	Title, Page, Scope, RefreshURL, CleanupError string
 	Nav                                          []navItem
@@ -49,7 +51,7 @@ type pageData struct {
 func (s *Server) loadPage(r *http.Request) (pageData, int, error) {
 	p := pageData{Nav: navigation, Page: r.URL.Path, Scope: r.URL.Query().Get("machine"), All: r.URL.Query().Get("all") == "1"}
 	switch p.Page {
-	case "/", "/activity", "/agents", "/projects", "/inbox", "/orphans", "/machines", "/cleanup":
+	case "/", "/activity", "/agents", "/projects", "/inbox", "/orphans", "/machines", "/cleanup", "/flow":
 	default:
 		if !strings.HasPrefix(p.Page, "/agents/") && !strings.HasPrefix(p.Page, "/projects/") {
 			return p, 404, fmt.Errorf("page not found")
@@ -102,7 +104,7 @@ func (s *Server) loadPage(r *http.Request) (pageData, int, error) {
 	q := r.URL.Query()
 	refresh, _ := url.Parse(p.RefreshURL)
 	values := refresh.Query()
-	for _, key := range []string{"state", "project", "why"} {
+	for _, key := range []string{"state", "project", "why", "id"} {
 		if q.Has(key) {
 			values.Set(key, q.Get(key))
 		}
@@ -181,6 +183,40 @@ func (s *Server) loadPage(r *http.Request) (pageData, int, error) {
 		p.Cleanup, err = s.cachedCleanup(r.Context())
 		if err != nil {
 			p.CleanupError = err.Error()
+		}
+	}
+	if p.Page == "/flow" {
+		id := int64(0)
+		if q.Has("id") {
+			id, err = strconv.ParseInt(q.Get("id"), 10, 64)
+			if err != nil || id <= 0 {
+				return p, 400, fmt.Errorf("invalid session id")
+			}
+		}
+		if source, ok := s.source.(viewer.FlowSource); ok {
+			scope := store.Scope{}
+			if p.Scope != "all" {
+				scope.Machines = []string{p.Scope}
+			}
+			p.Flow, err = source.LoadFlow(r.Context(), scope, id)
+			if err != nil {
+				return p, 404, err
+			}
+		}
+		if p.Flow.Lead != nil {
+			p.Tail = p.Flow.Tail
+			choices := []view.AgentRow{}
+			for _, a := range snap.Agents.Rows {
+				if a.Origin != "hosted" {
+					choices = append(choices, a)
+				}
+			}
+			for i, a := range choices {
+				if a.ID == p.Flow.Lead.ID {
+					p.FlowPrevious = pageLink("/flow", p.Scope, p.All) + "&id=" + fmt.Sprint(choices[(i+len(choices)-1)%len(choices)].ID)
+					p.FlowNext = pageLink("/flow", p.Scope, p.All) + "&id=" + fmt.Sprint(choices[(i+1)%len(choices)].ID)
+				}
+			}
 		}
 	}
 	p.prepare()
@@ -309,6 +345,17 @@ func (p *pageData) prepare() {
 
 func templateFuncs() template.FuncMap {
 	return template.FuncMap{
+		"dollars": func(v *float64) string {
+			if v == nil {
+				return ""
+			}
+			return fmt.Sprintf("%.4f", *v)
+		},
+		"flowSpark": view.FlowSpark,
+		"signalBars": func(strength float64) string {
+			n := max(0, min(18, int(strength*18+0.5)))
+			return strings.Repeat("▮", n) + strings.Repeat("▯", 18-n)
+		},
 		"familyData": func(row view.AgentRow, scope string, all bool) any {
 			return struct {
 				Row   view.AgentRow
@@ -429,6 +476,10 @@ func templateFuncs() template.FuncMap {
 func humanBytes(value any) string {
 	var n float64
 	switch v := value.(type) {
+	case *uint64:
+		if v != nil {
+			n = float64(*v)
+		}
 	case uint64:
 		n = float64(v)
 	case int64:

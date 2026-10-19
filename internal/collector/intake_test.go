@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -405,5 +406,41 @@ func TestIntakeListeningIsNotAReceivedEvent(t *testing.T) {
 		if source.Name == "otlp" && !source.LastOKAt.Equal(d.now()) {
 			t.Fatal("received batch must record successful intake")
 		}
+	}
+}
+
+func TestFlowMetadataStoredWithoutContent(t *testing.T) {
+	for _, capture := range []string{"none", "titles", "snippets"} {
+		t.Run(capture, func(t *testing.T) {
+			d, st, _, _ := setup(t)
+			d.Cfg.CaptureText = capture
+			if _, err := Pass(context.Background(), d, st, Plan{}); err != nil {
+				t.Fatal(err)
+			}
+			raw := `{"resourceLogs":[{"resource":{"attributes":[{"key":"service.name","value":{"stringValue":"claude-code"}}]},"scopeLogs":[{"logRecords":[{"timeUnixNano":"` + strconv.FormatInt(d.now().UnixNano(), 10) + `","attributes":[{"key":"session.id","value":{"stringValue":"one"}},{"key":"event.name","value":{"stringValue":"api_request"}},{"key":"model","value":{"stringValue":"claude-test"}},{"key":"input_tokens","value":{"intValue":"120"}},{"key":"cost_usd","value":{"doubleValue":0.12}},{"key":"prompt","value":{"stringValue":"PRIVATE_PROMPT"}},{"key":"response","value":{"stringValue":"PRIVATE_RESPONSE"}}],"body":{"stringValue":"PRIVATE_BODY"}}]}]}]}`
+			b, err := intake.Decode(strings.NewReader(raw), "/v1/logs")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err = applyIntake(context.Background(), d, st, b); err != nil {
+				t.Fatal(err)
+			}
+			events, err := st.Events("claude", "one", time.Time{})
+			if err != nil || len(events) == 0 {
+				t.Fatal(events, err)
+			}
+			m := events[len(events)-1].Metadata
+			if m == nil || m.Model != "claude-test" || m.InputTokens == nil || *m.InputTokens != 120 {
+				t.Fatal(m)
+			}
+			sessions, _ := st.Sessions(store.SessionFilter{})
+			stored, _ := json.Marshal([]any{events, sessions})
+			if strings.Contains(string(stored), "PRIVATE_") {
+				t.Fatal("OTLP content retained")
+			}
+			if sessions[0].Mixer == nil || sessions[0].Mixer.Verdict != sessions[0].Label {
+				t.Fatal("mixer not stored with label")
+			}
+		})
 	}
 }

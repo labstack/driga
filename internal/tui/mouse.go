@@ -19,7 +19,7 @@ func (m *app) mouseClick(msg tea.MouseClickMsg) tea.Cmd {
 	for _, h := range hits {
 		if msg.Y == lipgloss.Height(m.header())+h.y && msg.X >= h.x && msg.X < h.x+h.width {
 			// Keep tab switching, cleanup loading and cursor retention identical to keys.
-			code := rune('1' + h.tab)
+			code := rune('0' + mapTabNumber(h.tab))
 			if h.tab == homeTab {
 				code = '0'
 			}
@@ -28,6 +28,18 @@ func (m *app) mouseClick(msg tea.MouseClickMsg) tea.Cmd {
 		}
 	}
 	if m.help || m.detail || !m.loaded {
+		return nil
+	}
+	if m.tab == flowTab {
+		base := lipgloss.Height(m.header()) + lipgloss.Height(m.tabBar()) + 1
+		y := msg.Y - base + min(m.flowOffset, max(0, lipgloss.Height(m.flowView())-m.bodyHeight()))
+		for _, h := range m.flowWorkerHits() {
+			if msg.X >= h.x && msg.X < h.x+h.width && y >= h.y && y < h.y+h.height {
+				m.cursors[flowTab] = h.index
+				m.rebuild()
+				return nil
+			}
+		}
 		return nil
 	}
 	row, ok := m.mouseRow(msg.X, msg.Y)
@@ -102,6 +114,10 @@ func (m *app) mouseWheel(msg tea.MouseWheelMsg) tea.Cmd {
 	}
 	if m.detail {
 		m.viewport.SetYOffset(max(0, m.viewport.YOffset()+delta))
+		return nil
+	}
+	if m.tab == flowTab {
+		m.flowOffset = max(0, m.flowOffset+delta)
 		return nil
 	}
 	if m.tab == homeTab {

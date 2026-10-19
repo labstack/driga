@@ -319,7 +319,9 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 			if err := intakeInput(tx, *s, events, &in, now); err != nil {
 				return err
 			}
-			s.Label, s.Heuristic, s.Evidence = derive.Label(in, now, derive.Thresholds{StalledAfter: d.Cfg.StalledAfter})
+			mixed := derive.LabelWithEvidence(in, now, derive.Thresholds{StalledAfter: d.Cfg.StalledAfter})
+			s.Mixer = &mixed
+			s.Label, s.Heuristic, s.Evidence = mixed.Verdict, mixed.Heuristic, mixed.Evidence
 		}
 		parents = derive.LinkParents(ss, idx)
 		if err := explicitParents(tx, ss, parents); err != nil {
@@ -633,6 +635,17 @@ func passFeedRows(tx *store.Tx, now time.Time, share feed.ShareText) (map[string
 			// Evidence is an observation at the feed row's timestamp. Keep its
 			// readable sampled age, but age alone must not publish every wake.
 			v.Evidence = evidenceDuration.ReplaceAllString(v.Evidence, "<age>")
+			if v.Mixer != nil {
+				mixed := *v.Mixer
+				mixed.ObservedAt = time.Time{}
+				mixed.Evidence = evidenceDuration.ReplaceAllString(mixed.Evidence, "<age>")
+				mixed.Rows = append([]model.StateSignal(nil), mixed.Rows...)
+				for i := range mixed.Rows {
+					mixed.Rows[i].Age = 0
+					mixed.Rows[i].Strength = 0
+				}
+				v.Mixer = &mixed
+			}
 			comparisonRow = v
 		case model.SourceStatus:
 			failed := !v.LastErrorAt.IsZero() && !v.LastErrorAt.Before(v.LastOKAt)

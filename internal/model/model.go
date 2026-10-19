@@ -164,9 +164,10 @@ type Summary struct {
 
 // Session is a stored session with derived fields.
 type Session struct {
-	MachineID string `json:"machine_id"`
-	ID        int64  `json:"id"`
-	ParentID  *int64 `json:"parent_id,omitempty"`
+	Mixer     *StateMixer `json:"mixer,omitempty"`
+	MachineID string      `json:"machine_id"`
+	ID        int64       `json:"id"`
+	ParentID  *int64      `json:"parent_id,omitempty"`
 	SessionObs
 	RepoID     *int64     `json:"repo_id,omitempty"`
 	WorktreeID *int64     `json:"worktree_id,omitempty"`
@@ -241,10 +242,11 @@ type Gap struct {
 
 // Event is a stored hook event attributed to a session.
 type Event struct {
-	MachineID  string    `json:"machine_id"`
-	Adapter    string    `json:"adapter"`
-	ExternalID string    `json:"external_id"`
-	TS         time.Time `json:"occurred_at"`
-	Kind       string    `json:"kind"`
-	Summary    string    `json:"summary,omitempty"`
+	Metadata   *EventMetadata `json:"metadata,omitempty"`
+	MachineID  string         `json:"machine_id"`
+	Adapter    string         `json:"adapter"`
+	ExternalID string         `json:"external_id"`
+	TS         time.Time      `json:"occurred_at"`
+	Kind       string         `json:"kind"`
+	Summary    string         `json:"summary,omitempty"`
 }

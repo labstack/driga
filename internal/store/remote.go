@@ -86,7 +86,11 @@ func (tx *Tx) ApplyEvent(e model.Event) error {
 		return err
 	}
 	if exists {
-		return tx.exec(`UPDATE events SET summary=? WHERE machine_id=? AND adapter=? AND external_id=? AND ts=? AND kind=?`, e.Summary, tx.machineID, e.Adapter, e.ExternalID, unix(e.TS), e.Kind)
+		metadata, err := json.Marshal(e.Metadata)
+		if err != nil {
+			return err
+		}
+		return tx.exec(`UPDATE events SET summary=?,metadata=? WHERE machine_id=? AND adapter=? AND external_id=? AND ts=? AND kind=?`, e.Summary, string(metadata), tx.machineID, e.Adapter, e.ExternalID, unix(e.TS), e.Kind)
 	}
 	return tx.InsertEvent(e)
 }

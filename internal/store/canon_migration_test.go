@@ -21,7 +21,7 @@ func TestCanonMigrationRewritesPersistedContracts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = p.Up(context.Background()); err != nil {
+	if _, err = p.UpTo(context.Background(), 7); err != nil {
 		t.Fatal(err)
 	}
 	_, err = db.Exec(`INSERT INTO meta VALUES('old','machine_id','old');

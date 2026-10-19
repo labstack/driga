@@ -33,7 +33,7 @@ func (m *app) tabVisible(tab int) bool {
 		return true
 	}
 	switch tab {
-	case homeTab:
+	case homeTab, flowTab:
 		return true
 	case 0:
 		return len(m.snap.Agents.Rows) > 0
@@ -77,7 +77,7 @@ func (m *app) tabLayout() (string, []tabHit) {
 	if m.machineVisible(m.localMachine()) {
 		cleanupCount = len(m.snap.Cleanup)
 	}
-	names := []string{fmt.Sprintf("Agents %d", s.Agents), fmt.Sprintf("Projects %d", projects), "Inbox", fmt.Sprintf("Orphans %d", orphans), "Machine", fmt.Sprintf("Cleanup %d", cleanupCount)}
+	names := []string{fmt.Sprintf("Agents %d", s.Agents), fmt.Sprintf("Projects %d", projects), "Inbox", fmt.Sprintf("Orphans %d", orphans), "Machine", fmt.Sprintf("Cleanup %d", cleanupCount), "Flow"}
 	tabs := []string{}
 	indices := []int{homeTab}
 	active := func(label string, selected bool) string {
@@ -95,10 +95,13 @@ func (m *app) tabLayout() (string, []tabHit) {
 	}
 	tabs = append(tabs, active("0 Home", m.tab == homeTab))
 	for i, name := range names {
+		if name == "Flow" {
+			i = flowTab
+		}
 		if !m.tabVisible(i) {
 			continue
 		}
-		label := active(fmt.Sprintf("%d %s", i+1, name), m.tab == i)
+		label := active(fmt.Sprintf("%d %s", mapTabNumber(i), name), m.tab == i)
 		if i == 2 && m.opts.NoColor {
 			label = active(fmt.Sprintf("%d %s %d", i+1, name, inbox), m.tab == i)
 		}
@@ -177,6 +180,16 @@ func (m *app) rebuild() {
 		rows = append(rows, r)
 	}
 	switch m.tab {
+	case flowTab:
+		titles = []string{"", "STATE", "WORKER"}
+		weights = []int{2, 10, 40}
+		nodes := m.flow.Children
+		if len(nodes) == 0 && m.flow.Lead != nil {
+			nodes = []view.FlowNode{*m.flow.Lead}
+		}
+		for _, n := range nodes {
+			add(tabRow{machine: n.MachineID, key: fmt.Sprint(n.ID), agent: n.ID, cells: []string{"", n.Label, n.Title}})
+		}
 	case homeTab:
 		titles = []string{"", "STATE", "PROJECT", "SUMMARY"}
 		weights = []int{2, 10, 14, 40}
@@ -417,4 +430,11 @@ func agentAge(d time.Duration) string {
 		return "—"
 	}
 	return duration(d)
+}
+
+func mapTabNumber(tab int) int {
+	if tab == flowTab {
+		return 7
+	}
+	return tab + 1
 }

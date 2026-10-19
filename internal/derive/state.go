@@ -16,6 +16,8 @@ type Thresholds struct {
 
 // StateInput combines adapter, process, hook, and acknowledgment observations.
 type StateInput struct {
+	LastHook                                     string
+	LastHookAt                                   time.Time
 	Obs                                          model.SessionObs
 	Proc                                         *model.Proc
 	LastNotification, LastStop                   *time.Time
@@ -37,7 +39,12 @@ func Display(label string, heuristic bool) string {
 }
 
 // Label returns a state, whether it is heuristic, and human-readable evidence.
-func Label(in StateInput, now time.Time, th Thresholds) (label string, heuristic bool, evidence string) {
+func Label(in StateInput, now time.Time, th Thresholds) (string, bool, string) {
+	m := LabelWithEvidence(in, now, th)
+	return m.Verdict, m.Heuristic, m.Evidence
+}
+
+func label(in StateInput, now time.Time, th Thresholds) (label string, heuristic bool, evidence string) {
 	defer func() {
 		if (label == "working" || label == "stalled") && in.LastAPIError != "" {
 			evidence += "; " + in.LastAPIError

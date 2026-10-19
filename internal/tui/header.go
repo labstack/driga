@@ -113,8 +113,11 @@ func (m *app) header() string {
 }
 func (m *app) footer() string {
 	hints := []string{"0 Home", "m machine", "enter detail", "/ filter", "s sort", "g group by project", "o open terminal"}
+	if m.tab == flowTab {
+		hints = []string{"7 flow", "[ ] session", "j k worker", "enter open", "pgup/pgdown scroll", "● real event (1s)"}
+	}
 	if m.tab == homeTab {
-		hints = []string{"0-6 tabs", "↑↓ move", "enter open", "/ filter", "m machine"}
+		hints = []string{"0-7 tabs", "↑↓ move", "enter open", "/ filter", "m machine"}
 	}
 	if m.tmuxTarget() != "" {
 		hints = append(hints, "a attach tmux")
@@ -254,6 +257,10 @@ func (m *app) View() tea.View {
 		lines := strings.Split(m.homeView(), "\n")
 		offset := min(m.homeOffset, max(0, len(lines)-m.bodyHeight()))
 		body = strings.Join(lines[offset:], "\n")
+	} else if m.tab == flowTab {
+		lines := strings.Split(m.flowView(), "\n")
+		offset := min(m.flowOffset, max(0, len(lines)-m.bodyHeight()))
+		body = strings.Join(lines[offset:], "\n")
 	} else if m.splitDetail() {
 		body = m.agentsSplitView()
 	}
@@ -267,7 +274,7 @@ func (m *app) View() tea.View {
 		body = m.viewport.View()
 	}
 	if m.help {
-		body = wrapText("0 Home · 1–6 tabs · ↑/↓ or j/k move · enter detail · esc back\nm cycle machine scope · / filter · enter apply · esc clear · s sort: state, age, mem, project · S summarize selected project\ng group by project · →/← expand/collapse families and worktrees\nx/space acknowledge Needs you / Inbox · X acknowledge all Inbox (confirm)\nclick select · click selected row to open · wheel scroll\npgup/pgdown scroll Home · k kill orphan (confirm) · K force (two confirmations)\no open terminal · ? close help · q / ctrl+c quit", m.width)
+		body = wrapText("0 Home · 1–7 tabs · ↑/↓ or j/k move · enter detail · esc back\n7 Flow · [ / ] session · j/k worker · enter open · pgup/pgdown scroll · dot on connector = real family event (1s)\nm cycle machine scope · / filter · enter apply · esc clear · s sort: state, age, mem, project · S summarize selected project\ng group by project · →/← expand/collapse families and worktrees\nx/space acknowledge Needs you / Inbox · X acknowledge all Inbox (confirm)\nclick select · click selected row to open · wheel scroll\npgup/pgdown scroll Home · k kill orphan (confirm) · K force (two confirmations)\no open terminal · ? close help · q / ctrl+c quit", m.width)
 		if m.tmuxTarget() != "" {
 			body += "\na attach tmux"
 		}

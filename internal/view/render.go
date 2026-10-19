@@ -13,6 +13,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/term"
+	"github.com/labstack/driga/internal/derive"
 	"github.com/labstack/driga/internal/model"
 )
 
@@ -56,6 +57,20 @@ func Render(w io.Writer, v any, opts RenderOpts) error {
 		return StateStyle(s, false).Render(cell(s))
 	}
 	switch x := v.(type) {
+	case FlowView:
+		if x.Lead == nil {
+			fmt.Fprintln(tw, "No live interactive session.")
+			break
+		}
+		fmt.Fprintf(tw, "lead · %s · %s · %s\n", cell(x.Lead.Adapter), cell(x.Lead.Title), label(derive.Display(x.Lead.Label, x.Lead.Heuristic)))
+		fmt.Fprintf(tw, "project %s · %s\n", cell(x.Lead.Project), cell(x.Lead.Branch))
+		for _, r := range x.Mixer.Rows {
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%.2f\t%t\n", r.Name, cell(r.Reading), age(r.Age), r.Strength, r.Supports)
+		}
+		fmt.Fprintf(tw, "verdict %s · %d of 4 agree\n", x.Mixer.Verdict, x.Mixer.Agreement)
+		for _, c := range x.Children {
+			fmt.Fprintf(tw, "%s\t%d\t%s\t%s\t%s\t%s\n", c.Kind, c.ID, cell(c.Title), label(derive.Display(c.Label, c.Heuristic)), FlowSpark(c.Activity), age(c.Elapsed))
+		}
 	case ActivityView:
 		fmt.Fprintln(tw, "MACHINE\tWINDOW\tSAMPLES\tEVENTS\tLATEST LOAD")
 		for _, m := range x.Machines {

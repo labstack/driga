@@ -22,6 +22,10 @@
     function url(path) {
       return {url: path + "?" + Object.keys(query).sort().map(k => encodeURIComponent(k) + "=" + encodeURIComponent(query[k]).replace(/%20/g, "+")).join("&")};
     }
+    if (verb === "flow") {
+      if (tokens.length > 1 || tokens.length && !/^[1-9][0-9]*$/.test(tokens[0])) return error("Use flow [<id>]");
+      if (tokens.length) query.id = tokens[0]; return url("/flow");
+    }
     if (verb === "theme") {
       if (tokens.length === 1 && ["mocha", "latte", "system"].includes(tokens[0])) return {theme: tokens[0]};
       return error("Use theme mocha|latte|system");
@@ -41,7 +45,10 @@
     if (!tokens.length && ["home", "projects", "inbox", "orphans", "machines", "cleanup", "activity"].includes(verb)) return url(verb === "home" ? "/" : "/" + verb);
     return error("Unknown command · ? for help");
   }
-  globalThis.DrigaConsole = Object.freeze({parseCommand});
+  function familyEvent(event, machine, sessions, seen) {
+    return event.machine_id === machine && sessions.includes(event.adapter + ":" + event.external_id) && !seen.has(event.key);
+  }
+  globalThis.DrigaConsole = Object.freeze({parseCommand, familyEvent});
   if (typeof document === "undefined") return;
 
   const root = document.documentElement;
@@ -131,8 +138,9 @@
     const all = rows(pane); if (!all.length) return;
     const row = all[(index + all.length) % all.length];
     all.forEach(el => el.classList.toggle("sel", el === row));
-    selected = row.getAttribute("href") || String(all.indexOf(row));
+    selected = row.getAttribute("href") || row.dataset.session || String(all.indexOf(row));
     row.scrollIntoView({block: "nearest"});
+     if (row.matches("[data-worker]")) inspectWorker(row);
   }
   function filterPane(pane, focus = true) {
     const paneIndex = panes().indexOf(pane);
@@ -160,7 +168,11 @@
     if (display.length) { tail.replaceChildren(...display); if (!paused) tail.scrollTop = tail.scrollHeight; }
   }
   function ingestTail(events) {
+    const flow = document.querySelector("[data-flow]");
+    const members = flow ? Array.from(flow.querySelectorAll("[data-session]")).map(el => el.dataset.session) : [];
     for (const e of events) {
+      if (flow && !familyEvent(e, flow.dataset.machine, members, new Set())) continue;
+      if (flow && tailStarted && !tailNodes.has(e.key)) pulseFlow(e.adapter + ":" + e.external_id);
       if (tailNodes.has(e.key)) continue;
       const row = document.createElement("div"); row.dataset.row = ""; row.dataset.eventKey = e.key;
       row.title = [e.machine, e.adapter, e.kind, e.summary].join(" · ");
@@ -179,7 +191,7 @@
 
   const input = document.getElementById("cmdline"), menu = document.getElementById("command-menu"), error = document.getElementById("command-error"), help = document.getElementById("help");
   let suggestions = [], choice = -1;
-  const commands = ["agents", ...states.map(s => "agents --state " + s), "agents --all", "agents --project <name>", "where <project>", "projects", "inbox", "orphans", "machines", "cleanup", "cleanup --why", "activity", "theme mocha", "theme latte", "theme system", "ack <id>", "inbox ack <id>", "kill <id>", "orphans kill <id>", "cleanup apply", "hooks install"];
+  const commands = ["flow", "flow <id>", "agents", ...states.map(s => "agents --state " + s), "agents --all", "agents --project <name>", "where <project>", "projects", "inbox", "orphans", "machines", "cleanup", "cleanup --why", "activity", "theme mocha", "theme latte", "theme system", "ack <id>", "inbox ack <id>", "kill <id>", "orphans kill <id>", "cleanup apply", "hooks install"];
   const mutating = command => parseCommand(command).error === readOnly;
   function closeMenu() { menu.hidden = true; input.setAttribute("aria-expanded", "false"); input.removeAttribute("aria-activedescendant"); choice = -1; }
   function complete() {
@@ -199,6 +211,14 @@
     input.setAttribute("aria-activedescendant", "command-option-" + choice);
   }
   function showError(message) { error.textContent = message; error.hidden = false; input.setAttribute("aria-invalid", "true"); }
+  function selectedFlowURL(target) {
+    const url = new URL(target, location.href);
+    if (url.pathname !== "/flow" || url.searchParams.has("id")) return target;
+    const row = document.querySelector("[data-row].sel[href*='/agents/']");
+    const path = row ? new URL(row.href).pathname : location.pathname;
+    if (/^\/agents\/[1-9][0-9]*$/.test(path)) url.searchParams.set("id", path.split("/").pop());
+    return url.toString();
+  }
   function runCommand() {
     const scope = document.querySelector(".status").dataset.scope || "all";
     const result = parseCommand(input.value, scope);
@@ -207,7 +227,7 @@
     try { localStorage.setItem("driga-command-history", JSON.stringify(history)); } catch (_) { /* History is optional. */ }
     error.hidden = true; input.removeAttribute("aria-invalid"); closeMenu();
     if (result.theme) { setTheme(result.theme); input.value = ""; input.blur(); }
-    else window.location.assign(result.url);
+    else window.location.assign(selectedFlowURL(result.url));
   }
   document.getElementById("command-form").addEventListener("submit", event => { event.preventDefault(); runCommand(); });
   input.addEventListener("input", () => { complete(); error.hidden = true; input.removeAttribute("aria-invalid"); });
@@ -231,6 +251,8 @@
   document.addEventListener("click", event => {
     if (!event.target.closest(".cmd")) closeMenu();
     if (event.target.closest("[data-pause-tail]")) pauseTail();
+    const flowNav = event.target.closest('[data-window="7"]');
+    if (flowNav && !document.querySelector("[data-flow]")) flowNav.href = selectedFlowURL(flowNav.href);
     const pane = event.target.closest("[data-pane]");
     if (pane) { focusPane(panes().indexOf(pane), false); const row = event.target.closest("[data-row]"); if (row) selectRow(pane, rows(pane).indexOf(row)); }
   });
@@ -245,8 +267,33 @@
       if (event.key === "Escape" && event.target.closest(".filter")) { event.preventDefault(); filters.delete(focused); const pane = panes()[focused]; pane.querySelectorAll("[data-row]").forEach(el => { el.hidden = false; }); event.target.closest(".filter").remove(); focusPane(focused); }
       return;
     }
+    const flow = document.querySelector("[data-flow]");
+    if (flow && ["[", "]", "j", "k", "ArrowDown", "ArrowUp", "Enter"].includes(event.key)) {
+      event.preventDefault();
+      if (["[", "]"].includes(event.key)) {
+        const link = flow.querySelector(event.key === "[" ? "[data-flow-prev]" : "[data-flow-next]");
+        if (link && link.getAttribute("href")) link.click();
+      } else {
+        const workers = Array.from(flow.querySelectorAll("[data-worker]"));
+        let index = workers.findIndex(worker => worker.classList.contains("sel"));
+        if (event.key === "Enter") {
+          const worker = workers[index], lead = flow.querySelector("[data-flow-open]");
+          if (worker) window.location.assign(worker.dataset.open);
+          else if (lead) lead.click();
+        } else if (workers.length) {
+          index = (index + (["k", "ArrowUp"].includes(event.key) ? -1 : 1) + workers.length) % workers.length;
+          workers.forEach((worker, i) => {
+            worker.classList.toggle("sel", i === index);
+            worker.setAttribute("aria-pressed", String(i === index));
+          });
+          selected = workers[index].dataset.session;
+          inspectWorker(workers[index]); workers[index].scrollIntoView({block: "nearest"});
+        }
+      }
+      return;
+    }
     const pane = panes()[focused];
-    if (/^[0-6]$/.test(event.key)) { event.preventDefault(); document.querySelector('[data-window="' + event.key + '"]').click(); }
+    if (/^[0-7]$/.test(event.key)) { event.preventDefault(); document.querySelector('[data-window="' + event.key + '"]').click(); }
     else if (event.key === ":") { event.preventDefault(); input.focus(); }
     else if (event.key === "?") { event.preventDefault(); help.showModal(); }
     else if (event.key === "p") { event.preventDefault(); pauseTail(); }
@@ -259,19 +306,46 @@
     else if (event.key === "Tab" && pane && (event.target.matches("[data-pane]") || event.target.closest("[data-row]"))) { event.preventDefault(); focusPane(focused + (event.shiftKey ? -1 : 1)); }
     else if (event.key === "Escape") { closeMenu(); if (pane) { pane.querySelectorAll(".sel").forEach(el => el.classList.remove("sel")); focusPane(focused); } }
   });
+  function inspectWorker(worker) {
+    const title=document.querySelector("[data-worker-title]:not([data-worker])"),detail=document.querySelector("[data-worker-detail]:not([data-worker])");
+    if(title) title.textContent=worker.dataset.workerTitle;
+    if(detail) detail.textContent=worker.dataset.workerDetail;
+  }
+  function drawFlowWires() {
+    const stage=document.querySelector(".flow-stage"), svg=stage && stage.querySelector(".flow-wires"); if(!svg) return;
+    const lead=stage.querySelector(".flow-lead").getBoundingClientRect(), mixer=stage.querySelector(".flow-mixer").getBoundingClientRect(), bounds=stage.getBoundingClientRect();
+    const x1=lead.right-bounds.left,y1=lead.top-bounds.top+Math.min(150,lead.height/2),x2=mixer.left-bounds.left,y2=mixer.top-bounds.top+Math.min(150,mixer.height/2);
+    svg.querySelector("[data-wire-lead]").setAttribute("d",`M ${x1} ${y1} L ${x2} ${y2}`);
+    const right=mixer.right-bounds.left;
+    for(const path of svg.querySelectorAll("[data-wire]")){const node=Array.from(stage.querySelectorAll("[data-worker]")).find(w=>w.dataset.session===path.dataset.wire);if(!node)continue;const r=node.getBoundingClientRect(),x=r.left-bounds.left,y=r.top-bounds.top+r.height/2;path.setAttribute("d",`M ${right} ${y2} C ${(right+x)/2} ${y2} ${(right+x)/2} ${y} ${x} ${y}`);}
+    const last=stage.querySelector(".flow-workers").getBoundingClientRect();svg.querySelector("[data-wire-return]").setAttribute("d",`M ${last.left-bounds.left} ${last.bottom-bounds.top+10} C ${right} ${bounds.height} ${x1/2} ${bounds.height} ${x1/2} ${lead.bottom-bounds.top+6}`);
+  }
+  function pulseFlow(session) {
+    if(matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const svg=document.querySelector(".flow-wires");if(!svg)return;
+    const worker=Array.from(svg.querySelectorAll("[data-wire]")).find(p=>p.dataset.wire===session),path=worker||svg.querySelector("[data-wire-lead]");
+    if(!path || !path.getAttribute("d"))return;
+    const dot=document.createElementNS("http://www.w3.org/2000/svg","circle");dot.setAttribute("r","4");dot.setAttribute("class","flow-pulse");svg.append(dot);
+    const start=performance.now(),length=path.getTotalLength();
+    function frame(now){if(!dot.isConnected)return;const progress=(now-start)/1000;if(progress>=1){dot.remove();return;}const p=path.getPointAtLength(length*progress);dot.setAttribute("cx",String(p.x));dot.setAttribute("cy",String(p.y));requestAnimationFrame(frame);}requestAnimationFrame(frame);
+  }
   function refreshUI() {
     applyTheme(); focusPane(focused, false);
     panes().forEach((pane, i) => {
       for (const row of pane.querySelectorAll("[data-row]")) {
         if (!row.title) row.title = row.textContent.trim();
         row.querySelectorAll(".t,.l,.branch,.item p,dd").forEach(el => { if (!el.title) el.title = el.textContent; });
-        if (row.getAttribute("href") === selected) row.classList.add("sel");
+        if (row.matches("[data-worker]") && selected) {
+          const match = row.dataset.session === selected;
+          row.classList.toggle("sel", match); row.setAttribute("aria-pressed", String(match));
+        } else if (row.getAttribute("href") === selected) row.classList.add("sel");
       }
       if (filters.has(i)) { const value = filters.get(i); filterPane(pane, false); const field = pane.querySelector(".filter input"); field.value = value; pane.querySelectorAll("[data-row]").forEach(row => { row.hidden = !row.textContent.toLowerCase().includes(value.toLowerCase()); }); }
     });
     const tail = document.querySelector("[data-tail]");
     if (tail && !tailStarted) { tail.querySelectorAll("[data-event-key]").forEach(el => tailNodes.set(el.dataset.eventKey, el)); tailStarted = true; }
-    renderTail(); charts.draw();
+    const worker=document.querySelector("[data-worker].sel");if(worker)inspectWorker(worker);
+    renderTail(); charts.draw(); drawFlowWires();
   }
   let restorePane = false;
   document.addEventListener("htmx:beforeSwap", () => { restorePane = !!document.activeElement.closest("[data-pane]"); charts.dispose(); });
@@ -286,6 +360,7 @@
   const refresh = () => { const main = document.getElementById("main"); if (window.htmx) htmx.trigger(main, "console:refresh"); };
   stream.addEventListener("ready", refresh); stream.addEventListener("change", refresh);
   stream.addEventListener("tail", event => { try { ingestTail(JSON.parse(event.data)); } catch (_) { /* A reconnect will refresh the tail. */ } });
+  const flowObserver = new ResizeObserver(drawFlowWires); flowObserver.observe(document.getElementById("main"));
   const clock = setInterval(() => { document.querySelectorAll("[data-clock]").forEach(el => { el.textContent = new Date().toLocaleTimeString([], {hour12: false}); }); }, 1000);
-  window.addEventListener("pagehide", () => { stream.close(); charts.dispose(); clearInterval(clock); });
+  window.addEventListener("pagehide", () => { stream.close(); charts.dispose(); flowObserver.disconnect(); clearInterval(clock); });
 })();
