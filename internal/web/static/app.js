@@ -23,8 +23,8 @@
       return {url: path + "?" + Object.keys(query).sort().map(k => encodeURIComponent(k) + "=" + encodeURIComponent(query[k]).replace(/%20/g, "+")).join("&")};
     }
     if (verb === "theme") {
-      if (tokens.length === 1 && ["phosphor", "paper", "system"].includes(tokens[0])) return {theme: tokens[0]};
-      return error("Use theme phosphor|paper|system");
+      if (tokens.length === 1 && ["mocha", "latte", "system"].includes(tokens[0])) return {theme: tokens[0]};
+      return error("Use theme mocha|latte|system");
     }
     if (verb === "agents") {
       while (tokens.length) {
@@ -50,8 +50,10 @@
   const css = name => getComputedStyle(root).getPropertyValue("--" + name).trim();
   let preference = "system", history = [], historyIndex = 0, draft = "";
   try {
-    const saved = localStorage.getItem("driga-theme");
-    if (["phosphor", "paper", "system"].includes(saved)) preference = saved;
+    // Earlier builds stored phosphor/paper; they are the same dark/light roles.
+    const raw = localStorage.getItem("driga-theme");
+    const saved = ({phosphor: "mocha", paper: "latte"})[raw] || raw;
+    if (["mocha", "latte", "system"].includes(saved)) preference = saved;
     const stored = JSON.parse(localStorage.getItem("driga-command-history") || "[]");
     if (Array.isArray(stored)) history = stored.filter(s => typeof s === "string" && s.length <= 500).slice(-100);
   } catch (_) { /* Storage is optional. */ }
@@ -177,7 +179,7 @@
 
   const input = document.getElementById("cmdline"), menu = document.getElementById("command-menu"), error = document.getElementById("command-error"), help = document.getElementById("help");
   let suggestions = [], choice = -1;
-  const commands = ["agents", ...states.map(s => "agents --state " + s), "agents --all", "agents --project <name>", "where <project>", "projects", "inbox", "orphans", "machines", "cleanup", "cleanup --why", "activity", "theme phosphor", "theme paper", "theme system", "ack <id>", "inbox ack <id>", "kill <id>", "orphans kill <id>", "cleanup apply", "hooks install"];
+  const commands = ["agents", ...states.map(s => "agents --state " + s), "agents --all", "agents --project <name>", "where <project>", "projects", "inbox", "orphans", "machines", "cleanup", "cleanup --why", "activity", "theme mocha", "theme latte", "theme system", "ack <id>", "inbox ack <id>", "kill <id>", "orphans kill <id>", "cleanup apply", "hooks install"];
   const mutating = command => parseCommand(command).error === readOnly;
   function closeMenu() { menu.hidden = true; input.setAttribute("aria-expanded", "false"); input.removeAttribute("aria-activedescendant"); choice = -1; }
   function complete() {

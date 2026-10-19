@@ -17,7 +17,7 @@
  for (const state of ["working", "waiting", "stalled", "idle", "finished", "dead", "unknown"]) {
   assert(parse("agents --state " + state).url === "/agents?machine=all&state=" + encodeURIComponent(state), "state " + state);
  }
- for (const theme of ["phosphor", "paper", "system"]) assert(parse("theme " + theme).theme === theme, "theme " + theme);
+ for (const theme of ["mocha", "latte", "system"]) assert(parse("theme " + theme).theme === theme, "theme " + theme);
  assert(parse("agents", "peer&x").url === "/agents?machine=peer%26x", "scope is encoded");
  for (const command of ["ack 1", "inbox ack --all", "kill 42", "orphans kill 42", "cleanup apply", "cleanup --apply", "hooks install"]) {
   const result=parse(command); assert(result.error === "read-only in browser · use the CLI" && !result.url && !result.theme, command + " must not run");

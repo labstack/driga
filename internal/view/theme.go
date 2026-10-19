@@ -11,53 +11,57 @@ import (
 // ThemeToken is one semantic color shared by browser and terminal readers.
 type ThemeToken struct{ Name, Light, Dark string }
 
+// Catppuccin palettes (MIT): Latte for light, Mocha for dark. Mocha uses the
+// official colors. Latte's yellow, green, blue, peach and overlay grays fall
+// below 4.5:1 for text on its base, so those text roles use darker shades of
+// the same hue; bars and fills reuse them.
 var themeTokens = [...]ThemeToken{
-	{"ground", "#F4F6F9", "#0D1016"},
-	{"surface", "#FFFFFF", "#141922"},
-	{"sunk", "#EEF1F5", "#10141B"},
-	{"ink", "#141821", "#E7EBF2"},
-	{"muted", "#566074", "#9AA4B6"},
-	{"faint", "#8A93A5", "#6B7486"},
-	{"line", "#E1E5EC", "#232A36"},
-	{"strong", "#141821", "#E7EBF2"},
-	{"on-strong", "#FFFFFF", "#0D1016"},
-	{"working", "#18804F", "#45C985"},
-	{"working-bg", "#E2F4EA", "#11301F"},
-	{"waiting", "#9A5B00", "#F2B451"},
-	{"waiting-bg", "#FFF0D2", "#33260E"},
-	{"waiting-bar", "#E59A1E", "#F2B451"},
-	{"stalled", "#B7322A", "#FF7B70"},
-	{"stalled-bg", "#FDE4E1", "#3A1714"},
-	{"idle", "#2C5FBF", "#7FA8F5"},
-	{"idle-bg", "#E3ECFB", "#152645"},
-	{"finished", "#5F6878", "#A3ACBC"},
-	{"finished-bg", "#ECEEF2", "#1E2430"},
-	{"crit", "#C93A31", "#FF6B5F"},
-	{"warn", "#D98A14", "#F2B451"},
-	{"ok", "#2C5FBF", "#7FA8F5"},
+	{"ground", "#E6E9EF", "#181825"},
+	{"surface", "#EFF1F5", "#1E1E2E"},
+	{"sunk", "#DCE0E8", "#11111B"},
+	{"ink", "#4C4F69", "#CDD6F4"},
+	{"muted", "#5C5F77", "#A6ADC8"},
+	{"faint", "#5C5F77", "#A6ADC8"},
+	{"line", "#CCD0DA", "#313244"},
+	{"strong", "#4C4F69", "#CDD6F4"},
+	{"on-strong", "#EFF1F5", "#1E1E2E"},
+	{"working", "#256817", "#A6E3A1"},
+	{"working-bg", "#D3E4D5", "#364143"},
+	{"waiting", "#7A4C07", "#F9E2AF"},
+	{"waiting-bg", "#ECE1D2", "#454145"},
+	{"waiting-bar", "#DF8E1D", "#F9E2AF"},
+	{"stalled", "#B50C30", "#F38BA8"},
+	{"stalled-bg", "#EACDD7", "#443244"},
+	{"idle", "#1A5AD8", "#89B4FA"},
+	{"idle-bg", "#CEDBF5", "#313953"},
+	{"finished", "#5C5F77", "#A6ADC8"},
+	{"finished-bg", "#DADCE3", "#333446"},
+	{"crit", "#B50C30", "#F38BA8"},
+	{"warn", "#963F06", "#FAB387"},
+	{"ok", "#1A5AD8", "#89B4FA"},
 }
 
-// consoleTokens preserves the console mockup's roles without changing TUI colors.
+// consoleTokens maps the console's roles onto the same Catppuccin palettes.
 var consoleTokens = [...]ThemeToken{
-	{"bg", "#F1F2EE", "#0A0E13"}, {"pane", "#FAFAF7", "#0E141B"},
-	{"raise", "#ECEDE7", "#151D27"}, {"line", "#C9CDC4", "#233040"},
-	{"fg", "#1D211F", "#D9E1EA"}, {"mid", "#4E5650", "#93A1B3"},
-	{"dim", "#7C847E", "#5D6B7D"}, {"accent", "#B5590A", "#FFB547"},
-	{"on-accent", "#FFFFFF", "#1A1206"}, {"working", "#17784A", "#4BD08A"},
-	{"waiting", "#9A5B00", "#F5B84B"}, {"stalled", "#B3302A", "#FF7A6E"},
-	{"idle", "#2B5BB8", "#78A6F5"}, {"finished", "#5E6660", "#9AA6B6"},
-	{"crit", "#B3302A", "#FF6F62"}, {"warn", "#9A5B00", "#F5B84B"},
+	{"bg", "#EFF1F5", "#1E1E2E"}, {"pane", "#E6E9EF", "#181825"},
+	{"raise", "#CCD0DA", "#313244"}, {"line", "#BCC0CC", "#45475A"},
+	{"fg", "#4C4F69", "#CDD6F4"}, {"mid", "#5C5F77", "#BAC2DE"},
+	{"dim", "#5C5F77", "#A6ADC8"}, {"accent", "#7629D6", "#CBA6F7"},
+	{"on-accent", "#EFF1F5", "#1E1E2E"}, {"working", "#256817", "#A6E3A1"},
+	{"waiting", "#7A4C07", "#F9E2AF"}, {"stalled", "#B50C30", "#F38BA8"},
+	{"idle", "#1A5AD8", "#89B4FA"}, {"finished", "#5C5F77", "#A6ADC8"},
+	{"crit", "#B50C30", "#F38BA8"}, {"warn", "#963F06", "#FAB387"},
 }
 
 func consoleCSS() string {
-	var paper, phosphor strings.Builder
+	var latte, mocha strings.Builder
 	for _, t := range consoleTokens {
-		fmt.Fprintf(&paper, "--%s:%s;", t.Name, t.Light)
-		fmt.Fprintf(&phosphor, "--%s:%s;", t.Name, t.Dark)
+		fmt.Fprintf(&latte, "--%s:%s;", t.Name, t.Light)
+		fmt.Fprintf(&mocha, "--%s:%s;", t.Name, t.Dark)
 	}
-	return `:root,[data-theme="phosphor"]{` + phosphor.String() + "color-scheme:dark;}\n" +
-		`[data-theme="paper"]{` + paper.String() + "color-scheme:light;}\n" +
-		`@media (prefers-color-scheme: light){:root:not([data-theme="phosphor"]):not([data-theme="paper"]){` + paper.String() + "color-scheme:light;}}\n"
+	return `:root,[data-theme="mocha"]{` + mocha.String() + "color-scheme:dark;}\n" +
+		`[data-theme="latte"]{` + latte.String() + "color-scheme:light;}\n" +
+		`@media (prefers-color-scheme: light){:root:not([data-theme="mocha"]):not([data-theme="latte"]){` + latte.String() + "color-scheme:light;}}\n"
 }
 
 // ThemeTokens returns a copy so callers cannot change the shared palette.

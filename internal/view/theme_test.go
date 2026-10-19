@@ -55,20 +55,21 @@ func TestThemeTerminalParity(t *testing.T) {
 func TestConsoleThemeTokenParity(t *testing.T) {
 	css := ThemeCSS()
 	// A high-specificity legacy system selector must never override console tokens
-	// (especially paper selected while the OS uses dark mode).
+	// (especially latte selected while the OS uses dark mode).
 	if strings.Contains(css, `:root:not([data-theme="light"]):not([data-theme="dark"])`) {
 		t.Error("legacy automatic dark selector overrides named console palettes")
 	}
 
+	// Catppuccin Mocha (official) and Latte (text roles darkened for 4.5:1).
 	for _, set := range []string{
-		`--bg:#0A0E13;--pane:#0E141B;--raise:#151D27;--line:#233040;--fg:#D9E1EA;--mid:#93A1B3;--dim:#5D6B7D;--accent:#FFB547;--on-accent:#1A1206;--working:#4BD08A;--waiting:#F5B84B;--stalled:#FF7A6E;--idle:#78A6F5;--finished:#9AA6B6;--crit:#FF6F62;--warn:#F5B84B;`,
-		`--bg:#F1F2EE;--pane:#FAFAF7;--raise:#ECEDE7;--line:#C9CDC4;--fg:#1D211F;--mid:#4E5650;--dim:#7C847E;--accent:#B5590A;--on-accent:#FFFFFF;--working:#17784A;--waiting:#9A5B00;--stalled:#B3302A;--idle:#2B5BB8;--finished:#5E6660;--crit:#B3302A;--warn:#9A5B00;`,
+		`--bg:#1E1E2E;--pane:#181825;--raise:#313244;--line:#45475A;--fg:#CDD6F4;--mid:#BAC2DE;--dim:#A6ADC8;--accent:#CBA6F7;--on-accent:#1E1E2E;--working:#A6E3A1;--waiting:#F9E2AF;--stalled:#F38BA8;--idle:#89B4FA;--finished:#A6ADC8;--crit:#F38BA8;--warn:#FAB387;`,
+		`--bg:#EFF1F5;--pane:#E6E9EF;--raise:#CCD0DA;--line:#BCC0CC;--fg:#4C4F69;--mid:#5C5F77;--dim:#5C5F77;--accent:#7629D6;--on-accent:#EFF1F5;--working:#256817;--waiting:#7A4C07;--stalled:#B50C30;--idle:#1A5AD8;--finished:#5C5F77;--crit:#B50C30;--warn:#963F06;`,
 	} {
 		if !strings.Contains(css, set) {
 			t.Errorf("missing exact console token set %s", set)
 		}
 	}
-	for _, selector := range []string{`[data-theme="phosphor"]`, `[data-theme="paper"]`, `prefers-color-scheme: light`} {
+	for _, selector := range []string{`[data-theme="mocha"]`, `[data-theme="latte"]`, `prefers-color-scheme: light`} {
 		if !strings.Contains(css, selector) {
 			t.Errorf("missing %s", selector)
 		}
