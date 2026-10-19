@@ -96,6 +96,25 @@ func TestDoctorStaleSource(t *testing.T) {
 	requireCheck(t, Doctor(context.Background(), d), "source:git", "warn", "driga service restart")
 }
 
+func TestDoctorIntakeRejections(t *testing.T) {
+	d, st := doctorFixture(t)
+	d.Config.Intake.OTLP = true
+	for k, v := range map[string]string{"rejected": "6", "parse_failures": "4", "reject:invalid json": "4", "reject:invalid gzip": "2", "ignored": "8"} {
+		if err := st.SetMeta("otlp:"+k, v); err != nil {
+			t.Fatal(err)
+		}
+	}
+	c := requireCheck(t, Doctor(context.Background(), d), "otlp intake", "warn", "")
+	for _, want := range []string{"rejected: 6", "4 invalid json", "2 invalid gzip", "parse failures: 4", "ignored: 8"} {
+		if !strings.Contains(c.Detail, want) {
+			t.Fatalf("missing %q: %+v", want, c)
+		}
+	}
+	if strings.Contains(c.Detail, "no OTLP events since start") {
+		t.Fatal(c)
+	}
+}
+
 func TestDoctorUntestedVersion(t *testing.T) {
 	d, st := doctorFixture(t)
 	if err := st.SetMeta("warn:codex:untested_version", "unknown release"); err != nil {

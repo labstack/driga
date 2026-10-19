@@ -16,13 +16,13 @@ import (
 )
 
 type intakeResult struct {
-	rejected int
-	err      error
+	err error
 }
 type intakeRequest struct {
 	batch   intake.Batch
 	reply   chan intakeResult
 	failure error
+	stats   func() intake.Stats
 }
 
 func startIntake(ctx context.Context, d Deps, st *store.Store, requests chan<- intakeRequest) (func(), error) {
@@ -32,7 +32,11 @@ func startIntake(ctx context.Context, d Deps, st *store.Store, requests chan<- i
 	runCtx, cancel := context.WithCancel(ctx)
 	// Every writer remains on Run's goroutine, including startup diagnostics.
 	err := st.Tx(ctx, func(tx *store.Tx) error {
-		for _, key := range []string{"received", "dropped", "unmatched"} {
+		keys := []string{"received", "dropped", "unmatched", "ignored", "invalid_records", "rejected", "parse_failures"}
+		for _, reason := range intake.RejectionReasons() {
+			keys = append(keys, "reject:"+reason)
+		}
+		for _, key := range keys {
 			if err := tx.SetMeta("otlp:"+key, "0"); err != nil {
 				return err
 			}
@@ -58,8 +62,10 @@ func startIntake(ctx context.Context, d Deps, st *store.Store, requests chan<- i
 		cancel()
 		return nil, err
 	}
-	handler := intake.New(func(reqCtx context.Context, b intake.Batch) (int, error) {
-		req := intakeRequest{batch: b, reply: make(chan intakeResult, 1)}
+	var handler *intake.Handler
+	stats := func() intake.Stats { return handler.Stats() }
+	handler = intake.New(func(reqCtx context.Context, b intake.Batch) (int, error) {
+		req := intakeRequest{batch: b, reply: make(chan intakeResult, 1), stats: stats}
 		select {
 		case requests <- req:
 		case <-runCtx.Done():
@@ -71,11 +77,19 @@ func startIntake(ctx context.Context, d Deps, st *store.Store, requests chan<- i
 		}
 		select {
 		case result := <-req.reply:
-			return result.rejected, result.err
+			// Unmatched sessions are valid telemetry, acknowledged and counted.
+			return 0, result.err
 		case <-runCtx.Done():
 			return 0, intake.ErrBusy
 		case <-reqCtx.Done():
 			return 0, intake.ErrBusy
+		}
+	}, func() {
+		// Coalesce notifications under load. Every queued notification/batch
+		// reads the latest cumulative snapshot, so a full queue loses no counts.
+		select {
+		case requests <- intakeRequest{stats: stats}:
+		default:
 		}
 	})
 	done := make(chan struct{})
@@ -89,6 +103,21 @@ func startIntake(ctx context.Context, d Deps, st *store.Store, requests chan<- i
 		}
 	}()
 	return func() { cancel(); <-done }, nil
+}
+
+func recordIntakeStats(ctx context.Context, st *store.Store, s intake.Stats) error {
+	return st.Tx(ctx, func(tx *store.Tx) error {
+		counts := map[string]int64{"rejected": s.Rejected, "parse_failures": s.ParseFailures}
+		for _, reason := range intake.RejectionReasons() {
+			counts["reject:"+reason] = s.Reasons[reason]
+		}
+		for key, count := range counts {
+			if err := tx.SetMeta("otlp:"+key, strconv.FormatInt(count, 10)); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 func recordIntakeError(ctx context.Context, d Deps, st *store.Store, cause error) error {
@@ -285,7 +314,7 @@ func applyIntake(ctx context.Context, d Deps, st *store.Store, b intake.Batch) (
 				return err
 			}
 		}
-		for key, n := range map[string]int{"received": len(b.Facts) + b.Rejected, "dropped": b.Dropped, "unmatched": unmatched} {
+		for key, n := range map[string]int{"received": len(b.Facts) + b.Rejected + b.Ignored, "dropped": b.Dropped, "unmatched": unmatched, "ignored": b.Ignored, "invalid_records": b.Rejected} {
 			raw, err := tx.Meta("otlp:" + key)
 			if err != nil && !errors.Is(err, store.ErrNotFound) {
 				return err
@@ -295,7 +324,7 @@ func applyIntake(ctx context.Context, d Deps, st *store.Store, b intake.Batch) (
 				return err
 			}
 		}
-		if len(b.Facts)+b.Rejected > 0 {
+		if len(b.Facts)+b.Rejected+b.Ignored > 0 {
 			if err := tx.SetSourceOK("otlp", now); err != nil {
 				return err
 			}

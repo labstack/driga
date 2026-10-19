@@ -19,6 +19,7 @@ import (
 	"github.com/labstack/driga/internal/collector"
 	"github.com/labstack/driga/internal/config"
 	"github.com/labstack/driga/internal/hooks"
+	"github.com/labstack/driga/internal/intake"
 	"github.com/labstack/driga/internal/logfile"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/platform"
@@ -288,10 +289,31 @@ func doctorIntake(d DoctorDeps, held bool) Check {
 		c.Status = "ok"
 		c.Detail = "events received: " + count
 	}
+	rejected := read("rejected")
+	if rejected == "" {
+		rejected = "0"
+	}
+	if rejected != "0" {
+		c.Status = "warn"
+		if count == "" || count == "0" {
+			c.Detail = "no OTLP records accepted since start"
+		}
+		c.Fix = "check collector logs for otlp_request_rejected"
+	}
+	c.Detail += "; rejected: " + rejected
+	var reasons []string
+	for _, reason := range intake.RejectionReasons() {
+		if n := read("reject:" + reason); n != "" && n != "0" {
+			reasons = append(reasons, n+" "+reason)
+		}
+	}
+	if len(reasons) > 0 {
+		c.Detail += " (" + strings.Join(reasons, ", ") + ")"
+	}
 	if addr := read("listen"); addr != "" && held {
 		c.Detail = "listening on " + addr + "; " + c.Detail
 	}
-	for _, kv := range [][2]string{{"dropped", "content attributes dropped"}, {"unmatched", "unmatched OTLP sessions"}} {
+	for _, kv := range [][2]string{{"parse_failures", "parse failures"}, {"ignored", "ignored"}, {"invalid_records", "invalid records"}, {"dropped", "content attributes dropped"}, {"unmatched", "unmatched OTLP sessions"}} {
 		v := read(kv[0])
 		if v == "" {
 			v = "0"

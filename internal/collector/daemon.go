@@ -339,6 +339,23 @@ func Run(ctx context.Context, d Deps, dataDir string) error {
 		case <-timer.Chan():
 		case req := <-intakeRequests:
 			timer.Stop()
+			if req.stats != nil {
+				if err := recordIntakeStats(ctx, st, req.stats()); err != nil {
+					if req.reply != nil {
+						req.reply <- intakeResult{err: err}
+					}
+					if ctx.Err() != nil {
+						return nil
+					}
+					return err
+				}
+				if req.reply == nil {
+					if server != nil {
+						server.Notify()
+					}
+					continue
+				}
+			}
 			if req.failure != nil {
 				if err := recordIntakeError(ctx, d, st, req.failure); err != nil {
 					if ctx.Err() != nil {
@@ -351,8 +368,8 @@ func Run(ctx context.Context, d Deps, dataDir string) error {
 				}
 				continue
 			}
-			n, err := applyIntake(ctx, d, st, req.batch)
-			req.reply <- intakeResult{n, err}
+			_, err := applyIntake(ctx, d, st, req.batch)
+			req.reply <- intakeResult{err: err}
 			if err != nil {
 				if ctx.Err() != nil {
 					return nil

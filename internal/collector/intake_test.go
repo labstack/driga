@@ -1,10 +1,13 @@
 package collector
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"github.com/labstack/driga/internal/intake"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/store"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -121,6 +124,92 @@ func TestIntakeDaemonHTTP(t *testing.T) {
 	if dropped != "6" {
 		t.Fatal(dropped)
 	}
+	for i := 0; i < 2; i++ {
+		resp, err := client.Post("http://"+addr+"/v1/logs", "application/json", strings.NewReader("{"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != 400 {
+			t.Fatal(resp.StatusCode)
+		}
+	}
+	deadline = time.Now().Add(5 * time.Second)
+	for {
+		rejected, err := st.Meta("otlp:rejected")
+		if err == nil && rejected == "2" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("rejections not persisted: %q %v", rejected, err)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	for _, key := range []string{"parse_failures", "reject:invalid json"} {
+		if n, err := st.Meta("otlp:" + key); err != nil || n != "2" {
+			t.Fatal(key, n, err)
+		}
+	}
+	// A well-formed export for a session the adapters haven't discovered yet
+	// is acknowledged; the unmatched counter explains why no event is stored.
+	raw, err := os.ReadFile("../../testdata/fixtures/otlp/claude-code-2.1.303/05_v1_logs.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err = client.Post("http://"+addr+"/v1/logs", "application/json", bytes.NewReader(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil || resp.StatusCode != 200 || strings.TrimSpace(string(body)) != "{}" {
+		t.Fatal(resp.StatusCode, string(body), err)
+	}
+	if n, err := st.Meta("otlp:unmatched"); err != nil || n != "1" {
+		t.Fatal(n, err)
+	}
+}
+
+func TestIntakeRejectionsCoalesce(t *testing.T) {
+	d, st, _, _ := setup(t)
+	d.Cfg.Intake.OTLP = true
+	d.Cfg.Intake.Listen = "127.0.0.1:0"
+	requests := make(chan intakeRequest, 1)
+	stop, err := startIntake(context.Background(), d, st, requests)
+	if err != nil || stop == nil {
+		t.Fatalf("start: %v", err)
+	}
+	defer stop()
+	addr, err := st.Meta("otlp:listen")
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &http.Client{Timeout: 5 * time.Second}
+	for i := 0; i < 3; i++ {
+		resp, err := client.Post("http://"+addr+"/v1/logs", "application/json", strings.NewReader("{"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != 400 {
+			t.Fatal(resp.StatusCode)
+		}
+	}
+	// Only the first notification fits. It must read all three failures.
+	select {
+	case req := <-requests:
+		if req.stats == nil {
+			t.Fatal("missing stats")
+		}
+		if err := recordIntakeStats(context.Background(), st, req.stats()); err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("no rejection notification")
+	}
+	if n, err := st.Meta("otlp:reject:invalid json"); err != nil || n != "3" {
+		t.Fatal(n, err)
+	}
 }
 
 func TestIntakePromptAndSpanCloseAttention(t *testing.T) {
@@ -177,6 +266,68 @@ func TestIntakeNeverCreatesSessions(t *testing.T) {
 	v, _ := st.Meta("otlp:unmatched")
 	if v != "1" {
 		t.Fatal(v)
+	}
+}
+
+func TestIntakeClaudeCode21303Fixtures(t *testing.T) {
+	d, st, _, a := setup(t)
+	a.obs[0].ExternalID = "fixture-session"
+	a.obs[0].RegistryStatus = "idle"
+	if _, err := Pass(context.Background(), d, st, Plan{}); err != nil {
+		t.Fatal(err)
+	}
+	files, err := filepath.Glob("../../testdata/fixtures/otlp/claude-code-2.1.303/[0-9]*.json")
+	if err != nil || len(files) != 7 {
+		t.Fatal(files, err)
+	}
+	want := map[string]int{"mcp_server_connection": 4, "user_prompt": 1, "api_request": 2, "assistant_response": 1, "tool_result": 1, "tool_decision": 1}
+	for _, path := range files {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, err := intake.Decode(bytes.NewReader(raw), "/v1/logs")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if unmatched, err := applyIntake(context.Background(), d, st, b); err != nil || unmatched != 0 {
+			t.Fatal(unmatched, err)
+		}
+	}
+	events, err := st.Events("claude", "fixture-session", time.Time{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := make(map[string]int)
+	for _, e := range events {
+		got[strings.TrimPrefix(e.Kind, "otlp:")]++
+	}
+	for name, count := range want {
+		if got[name] != count {
+			t.Fatalf("events: %v; want %v", got, want)
+		}
+	}
+	if len(got) != len(want) {
+		t.Fatal(got)
+	}
+	ss, err := st.Sessions(store.SessionFilter{})
+	if err != nil || len(ss) != 1 || ss[0].Label != "working" || ss[0].LastPromptAt.IsZero() || ss[0].LastActivityAt.Before(ss[0].LastPromptAt) {
+		t.Fatal(ss, err)
+	}
+	state, err := st.IntakeState(ss[0].ID)
+	if err != nil || state.LastAPIRequest.IsZero() {
+		t.Fatal(state, err)
+	}
+	for key, want := range map[string]string{"received": "21", "ignored": "11", "invalid_records": "0", "unmatched": "0"} {
+		if got, err := st.Meta("otlp:" + key); err != nil || got != want {
+			t.Fatal(key, got, err)
+		}
+	}
+	stored, _ := json.Marshal(events)
+	for _, content := range []string{"<REDACTED>", "synthetic-user", "synthetic-organization"} {
+		if bytes.Contains(stored, []byte(content)) {
+			t.Fatal(string(stored))
+		}
 	}
 }
 func TestIntakeAnnotatesAndSurvivesPass(t *testing.T) {

@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"mime"
 	"net"
 	"net/http"
@@ -34,15 +35,104 @@ type Fact struct {
 
 // Batch is sanitized before it reaches the collector's single writer.
 type Batch struct {
-	Facts             []Fact
-	Dropped, Rejected int
+	Facts                      []Fact
+	Dropped, Rejected, Ignored int
+}
+
+// OTLP's protobuf JSON mapping accepts both strings and numbers for int64
+// and fixed64. Decode the original digits, never via float64 (timestamps lose
+// precision there). Null has the protobuf default value.
+type int64Value int64
+type uint64Value uint64
+
+// Protobuf JSON also permits exponent notation and integral decimal numbers.
+// Normalize the digits with bounded string operations, avoiding both float
+// rounding and allocations proportional to an attacker-supplied exponent.
+func integerDigits(raw []byte) (string, error) {
+	var n json.Number
+	if err := json.Unmarshal(raw, &n); err != nil {
+		return "", errors.New("invalid integer")
+	}
+	s := n.String()
+	negative := strings.HasPrefix(s, "-")
+	s = strings.TrimPrefix(s, "-")
+	var exponent int64
+	if i := strings.IndexAny(s, "eE"); i >= 0 {
+		var err error
+		exponent, err = strconv.ParseInt(s[i+1:], 10, 32)
+		if err != nil {
+			return "", errors.New("invalid integer")
+		}
+		s = s[:i]
+	}
+	if i := strings.IndexByte(s, '.'); i >= 0 {
+		exponent -= int64(len(s) - i - 1)
+		s = s[:i] + s[i+1:]
+	}
+	s = strings.TrimLeft(s, "0")
+	if s == "" {
+		return "0", nil
+	}
+	if exponent < 0 {
+		if exponent < -int64(len(s)) {
+			return "", errors.New("fractional integer")
+		}
+		cut := int64(len(s)) + exponent
+		if strings.Trim(s[cut:], "0") != "" {
+			return "", errors.New("fractional integer")
+		}
+		s = s[:cut]
+		exponent = 0
+	}
+	if int64(len(s))+exponent > 20 {
+		return "", errors.New("integer out of range")
+	}
+	s += strings.Repeat("0", int(exponent))
+	if negative {
+		s = "-" + s
+	}
+	return s, nil
+}
+
+func (v *int64Value) UnmarshalJSON(raw []byte) error {
+	if bytes.Equal(raw, []byte("null")) {
+		*v = 0
+		return nil
+	}
+	digits, err := integerDigits(raw)
+	if err != nil {
+		return errors.New("invalid int64")
+	}
+	x, err := strconv.ParseInt(digits, 10, 64)
+	if err != nil {
+		return errors.New("invalid int64")
+	}
+	*v = int64Value(x)
+	return nil
+}
+
+func (v *uint64Value) UnmarshalJSON(raw []byte) error {
+	if bytes.Equal(raw, []byte("null")) {
+		*v = 0
+		return nil
+	}
+	digits, err := integerDigits(raw)
+	if err != nil {
+		return errors.New("invalid fixed64")
+	}
+	x, err := strconv.ParseUint(digits, 10, 64)
+	if err != nil {
+		return errors.New("invalid fixed64")
+	}
+	*v = uint64Value(x)
+	return nil
 }
 
 type value struct {
-	String string   `json:"stringValue"`
-	Int    string   `json:"intValue"`
-	Bool   *bool    `json:"boolValue"`
-	Double *float64 `json:"doubleValue"`
+	String string      `json:"stringValue"`
+	Int    *int64Value `json:"intValue"`
+	// Other AnyValue variants (bool/double/bytes/array/kvlist/empty) are not
+	// metadata we consume. Leave them unmaterialized, including nested content.
 }
 type attribute struct {
 	Key   string `json:"key"`
@@ -52,9 +142,10 @@ type resource struct {
 	Attributes []attribute `json:"attributes"`
 }
 type record struct {
-	Time       string          `json:"timeUnixNano"`
-	Start      string          `json:"startTimeUnixNano"`
-	End        string          `json:"endTimeUnixNano"`
+	Time       uint64Value     `json:"timeUnixNano"`
+	Observed   uint64Value     `json:"observedTimeUnixNano"`
+	Start      uint64Value     `json:"startTimeUnixNano"`
+	End        uint64Value     `json:"endTimeUnixNano"`
 	Name       string          `json:"name"`
 	EventName  string          `json:"eventName"`
 	Body       json.RawMessage `json:"body"`
@@ -91,8 +182,8 @@ func attributes(attrs []attribute, dropped *int) map[string]string {
 		switch a.Key {
 		case "service.name", "session.id", "event.name", "source", "tool_name", "status_code", "attempt", "from_mode", "to_mode", "agent_type", "total_tool_uses", "status":
 			v := a.Value.String
-			if a.Value.Int != "" {
-				v = a.Value.Int
+			if a.Value.Int != nil {
+				v = strconv.FormatInt(int64(*a.Value.Int), 10)
 			}
 			out[a.Key] = v
 		}
@@ -128,7 +219,7 @@ func Decode(r io.Reader, path string) (Batch, error) {
 			}
 		}
 		if res["service.name"] != "claude-code" && res["service.name"] != "claude-code-desktop" {
-			b.Rejected++
+			b.Ignored++
 			return
 		}
 		name := attrs["event.name"]
@@ -136,25 +227,17 @@ func Decode(r io.Reader, path string) (Batch, error) {
 			name = r.EventName
 		}
 		ts := r.Time
+		if ts == 0 {
+			ts = r.Observed
+		}
 		if span {
 			name = r.Name
 			ts = r.End
 		}
-		if !strings.HasPrefix(name, "claude_code.") {
-			b.Rejected++
-			return
-		}
+		// Claude Code 2.1.303 emits bare event.name values. The service gate
+		// above keeps these aliases scoped to Claude; retain prefixed names too.
 		name = strings.TrimPrefix(name, "claude_code.")
-		n, err := strconv.ParseInt(ts, 10, 64)
-		if err != nil || n <= 0 || attrs["session.id"] == "" {
-			b.Rejected++
-			return
-		}
-		f := Fact{SessionID: attrs["session.id"], Name: name, TS: time.Unix(0, n).UTC()}
-		if len(f.SessionID) > 256 {
-			b.Rejected++
-			return
-		}
+		f := Fact{SessionID: attrs["session.id"], Name: name, TS: nanoTime(ts)}
 		switch name {
 		case "user_prompt", "api_request", "assistant_response":
 			if span {
@@ -211,14 +294,17 @@ func Decode(r io.Reader, path string) (Batch, error) {
 				f.Summary = "connection status changed"
 			}
 		case "tool.blocked_on_user", "interaction":
-			start, e := strconv.ParseInt(r.Start, 10, 64)
-			if !span || e != nil || start <= 0 || start > n {
+			if !span || r.Start == 0 || r.Start > ts {
 				b.Rejected++
 				return
 			}
-			f.Start = time.Unix(0, start).UTC()
+			f.Start = nanoTime(r.Start)
 			f.Summary = fmt.Sprintf("interval %s to %s", f.Start.Format(time.RFC3339Nano), f.TS.Format(time.RFC3339Nano))
 		default:
+			b.Ignored++
+			return
+		}
+		if ts == 0 || f.SessionID == "" || len(f.SessionID) > 256 {
 			b.Rejected++
 			return
 		}
@@ -246,31 +332,89 @@ func Decode(r io.Reader, path string) (Batch, error) {
 	return b, nil
 }
 
-type handler struct {
-	sink   func(context.Context, Batch) (int, error)
-	slots  chan struct{}
-	mu     sync.Mutex
-	window time.Time
-	count  int
+func nanoTime(n uint64Value) time.Time {
+	return time.Unix(int64(n/1_000_000_000), int64(n%1_000_000_000)).UTC()
+}
+
+// Stats counts rejected HTTP requests independently of successfully decoded
+// batches. Reasons are fixed labels and never include request content.
+type Stats struct {
+	Rejected, ParseFailures int64
+	Reasons                 map[string]int64
+}
+
+func RejectionReasons() []string {
+	return []string{"path", "method", "content type", "content encoding", "rate limit", "busy", "invalid gzip", "body too large", "invalid json"}
+}
+
+type Handler struct {
+	sink     func(context.Context, Batch) (int, error)
+	slots    chan struct{}
+	mu       sync.Mutex
+	window   time.Time
+	count    int
+	stats    Stats
+	lastLog  map[string]time.Time
+	onReject func()
 }
 
 // New returns a bounded OTLP handler. The sink must enqueue work for the collector.
-func New(sink func(context.Context, Batch) (int, error)) http.Handler {
-	return &handler{sink: sink, slots: make(chan struct{}, 16)}
+// Optional onReject is a nonblocking notification to persist a fresh Stats snapshot.
+func New(sink func(context.Context, Batch) (int, error), onReject ...func()) *Handler {
+	h := &Handler{sink: sink, slots: make(chan struct{}, 16), stats: Stats{Reasons: make(map[string]int64)}, lastLog: make(map[string]time.Time)}
+	if len(onReject) > 0 {
+		h.onReject = onReject[0]
+	}
+	return h
 }
 
-func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) Stats() Stats {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	s := Stats{Rejected: h.stats.Rejected, ParseFailures: h.stats.ParseFailures, Reasons: make(map[string]int64)}
+	for k, v := range h.stats.Reasons {
+		s.Reasons[k] = v
+	}
+	return s
+}
+
+func (h *Handler) reject(reason string, status int) {
+	h.mu.Lock()
+	h.stats.Rejected++
+	h.stats.Reasons[reason]++
+	if reason == "invalid json" {
+		h.stats.ParseFailures++
+	}
+	now := time.Now()
+	log := now.Sub(h.lastLog[reason]) >= time.Minute
+	if log {
+		h.lastLog[reason] = now
+	}
+	count := h.stats.Reasons[reason]
+	h.mu.Unlock()
+	if log {
+		slog.Warn("OTLP request rejected", "event", "otlp_request_rejected", "reason", reason, "status", status, "count", count)
+	}
+	if h.onReject != nil {
+		h.onReject()
+	}
+}
+
+func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/v1/logs" && r.URL.Path != "/v1/traces" && r.URL.Path != "/v1/metrics" {
+		h.reject("path", 404)
 		http.NotFound(w, r)
 		return
 	}
 	if r.Method != "POST" {
+		h.reject("method", 405)
 		w.Header().Set("Allow", "POST")
 		w.WriteHeader(405)
 		return
 	}
 	typ, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if err != nil || typ != "application/json" {
+		h.reject("content type", 415)
 		http.Error(w, "OTLP/HTTP JSON required", 415)
 		return
 	}
@@ -284,6 +428,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	limited := h.count > 10
 	h.mu.Unlock()
 	if limited {
+		h.reject("rate limit", 429)
 		w.Header().Set("Retry-After", "1")
 		w.WriteHeader(429)
 		return
@@ -292,6 +437,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case h.slots <- struct{}{}:
 		defer func() { <-h.slots }()
 	default:
+		h.reject("busy", 503)
 		w.Header().Set("Retry-After", "1")
 		w.WriteHeader(503)
 		return
@@ -302,22 +448,26 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "gzip":
 		z, e := gzip.NewReader(reader)
 		if e != nil {
+			h.reject("invalid gzip", 400)
 			http.Error(w, "invalid gzip", 400)
 			return
 		}
 		defer z.Close()
 		reader = z
 	default:
+		h.reject("content encoding", 415)
 		w.WriteHeader(415)
 		return
 	}
 	b, err := Decode(reader, r.URL.Path)
 	var sizeErr *http.MaxBytesError
 	if errors.Is(err, errOversize) || errors.As(err, &sizeErr) {
+		h.reject("body too large", 413)
 		w.WriteHeader(413)
 		return
 	}
 	if err != nil {
+		h.reject("invalid json", 400)
 		http.Error(w, "invalid OTLP JSON", 400)
 		return
 	}
@@ -331,6 +481,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if h.sink != nil {
 		n, e := h.sink(r.Context(), b)
 		if e != nil {
+			h.reject("busy", 503)
 			w.Header().Set("Retry-After", "1")
 			w.WriteHeader(503)
 			return
@@ -347,7 +498,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		key = "rejectedSpans"
 	}
 	// OTLP int64 response counters are string encoded too.
-	json.NewEncoder(w).Encode(map[string]any{"partialSuccess": map[string]any{key: strconv.Itoa(rejected), "errorMessage": "unsupported, invalid, or unmatched records"}})
+	json.NewEncoder(w).Encode(map[string]any{"partialSuccess": map[string]any{key: strconv.Itoa(rejected), "errorMessage": "invalid records"}})
 }
 
 // Listen refuses DNS names and every non-loopback bind address.
