@@ -22,6 +22,10 @@ func (m *app) openDetail(r tabRow) {
 		fmt.Fprintf(&buf, "Machine: %s · %s · last seen %s ago\n", m.machineName(r.machine), m.machineState(r.machine), m.machineAge(r.machine))
 	}
 	render := func(data any) {
+		if d, ok := data.(view.AgentView); ok {
+			buf.WriteString(agentDetail(d, m.width))
+			return
+		}
 		if err := view.Render(&buf, data, view.RenderOpts{NoColor: true, Envelope: m.snap.Envelope}); err != nil {
 			fmt.Fprintln(&buf, err)
 		}
@@ -72,9 +76,55 @@ func (m *app) openDetail(r tabRow) {
 	}
 	m.detail = true
 	m.detailRow = &r
-	m.detailText = buf.String()
+	lines := strings.Split(buf.String(), "\n")
+	for i, line := range lines {
+		lines[i] = truncate(clean(line), m.width)
+	}
+	m.detailText = strings.Join(lines, "\n")
 	m.viewport.SetContent(wrapText(m.detailText, m.width))
 	m.viewport.GotoTop()
+}
+
+func agentDetail(d view.AgentView, width int) string {
+	var buf strings.Builder
+	line := func(text string) { fmt.Fprintln(&buf, truncate(clean(text), width)) }
+	kv := func(key, value string) { line(key + ": " + value) }
+	s := d.Session
+	kv("ID", strconv.FormatInt(s.ID, 10))
+	kv("Agent", s.Adapter)
+	kv("State", d.Label)
+	kv("Origin", s.Origin)
+	kv("Cwd", s.Cwd)
+	kv("Branch", s.Branch)
+	kv("Title", s.Title)
+	kv("Evidence", s.Evidence)
+	kv("Observed at", d.ObservedAt.Format(time.RFC3339))
+	if s.LastPrompt != "" {
+		kv("Last prompt", s.LastPrompt)
+	}
+	if d.Resume != "" {
+		kv("Resume", d.Resume)
+	}
+	line("Files")
+	for _, f := range d.Files {
+		kv(f.TS.Format(time.RFC3339), f.Path)
+	}
+	pidWidth, ppidWidth, memWidth := 3, 4, 3
+	for _, p := range d.Procs {
+		pidWidth = max(pidWidth, len(strconv.Itoa(int(p.PID))))
+		ppidWidth = max(ppidWidth, len(strconv.Itoa(int(p.PPID))))
+		memWidth = max(memWidth, len(humanBytes(p.RSS)))
+	}
+	line(fmt.Sprintf("%-*s  %-*s  %-*s  COMMAND", pidWidth, "PID", ppidWidth, "PPID", memWidth, "MEM"))
+	for _, p := range d.Procs {
+		command := strings.Join(strings.Fields(clean(p.Cmdline)), " ")
+		line(fmt.Sprintf("%-*d  %-*d  %-*s  %s", pidWidth, p.PID, ppidWidth, p.PPID, memWidth, humanBytes(p.RSS), command))
+	}
+	line("Events")
+	for _, e := range d.Events {
+		kv(e.TS.Format(time.RFC3339)+" · "+e.Kind, e.Summary)
+	}
+	return buf.String()
 }
 
 // tmuxTarget relies on process ancestry, never the viewer's own TMUX variable.

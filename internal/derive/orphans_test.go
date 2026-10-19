@@ -99,6 +99,31 @@ func orphanFixture(t *testing.T) ([]model.Proc, *signatures.Set, time.Time) {
 	}, sigs, now
 }
 
+func TestCodexAppServerDaemonNeverOrphan(t *testing.T) {
+	_, sigs, now := orphanFixture(t)
+	const exe = "/Users/example/.codex/packages/app-server-daemon/releases/1.2.3/bin/codex"
+	for _, cmd := range []string{exe + " app-server --remote-control", exe + " app-server daemon pid-update 123", "codex app-server"} {
+		for _, classified := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/classified=%t", cmd, classified), func(t *testing.T) {
+				root := model.Proc{PID: 10, PPID: 1, Cmdline: cmd, StartTime: now.Add(-time.Hour)}
+				if classified {
+					sig, _ := sigs.Match(cmd, "")
+					root.Role = string(sig.Role)
+				}
+				procs := []model.Proc{root, {PID: 11, PPID: 10, Cmdline: "claude mcp serve", StartTime: root.StartTime}}
+				got := FindOrphans(NewProcIndex(procs), nil, sigs, now, 0, nil, WithSpawnMemory(map[string]int64{"10:" + fmt.Sprint(root.StartTime.Unix()): 99, "11:" + fmt.Sprint(root.StartTime.Unix()): 99}))
+				want := 0
+				if cmd == "codex app-server" {
+					want = 1
+				}
+				if len(got) != want {
+					t.Fatalf("orphans = %+v; want %d", got, want)
+				}
+			})
+		}
+	}
+}
+
 func TestOrphanBrokerTree(t *testing.T) {
 	procs, sigs, now := orphanFixture(t)
 	got := FindOrphans(NewProcIndex(procs), nil, sigs, now, 10*time.Minute, nil)

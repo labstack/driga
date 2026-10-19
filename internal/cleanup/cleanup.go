@@ -18,6 +18,7 @@ import (
 	"github.com/labstack/driga/internal/logfile"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/platform"
+	"github.com/labstack/driga/internal/signatures"
 	"github.com/labstack/driga/internal/store"
 )
 
@@ -56,6 +57,7 @@ type Candidate struct {
 type Env struct {
 	Store         *store.Store
 	Plat          platform.Platform
+	Sigs          *signatures.Set
 	Home, DataDir string
 	Now           time.Time
 	Cfg           config.CleanupConfig
@@ -121,10 +123,11 @@ func resolved(path string) string {
 func wtID(path string) string { return fmt.Sprintf("wt:%x", sha256.Sum256([]byte(path)))[:15] }
 
 type snapshot struct {
-	repos     []model.Repo
-	worktrees []model.Worktree
-	sessions  []model.Session
-	cwds      map[int32]string
+	repos      []model.Repo
+	worktrees  []model.Worktree
+	sessions   []model.Session
+	cwds       map[int32]string
+	unreadable int
 }
 
 func read(ctx context.Context, e Env) (snapshot, error) {
@@ -150,6 +153,13 @@ func read(ctx context.Context, e Env) (snapshot, error) {
 	if err != nil {
 		return s, err
 	}
+	sigs := e.Sigs
+	if sigs == nil {
+		sigs, err = signatures.Load(nil)
+		if err != nil {
+			return s, err
+		}
+	}
 	// Only the user's own processes can be inspected (other users' cwd is
 	// unreadable without root), so they alone gate cleanup. A process whose
 	// owner is unknown is treated as the user's own.
@@ -167,12 +177,30 @@ func read(ctx context.Context, e Env) (snapshot, error) {
 	if err == nil {
 		for _, p := range own {
 			if s.cwds[p.PID] == "" && e.Plat.Alive(p.PID, p.StartTime) {
-				return s, fmt.Errorf("cannot inspect cwd for live process %d", p.PID)
+				// Only a process identified as a non-agent may be skipped: one
+				// with no readable command line could be an agent.
+				sig, ok := sigs.Match(p.Cmdline, p.Exe)
+				if p.Cmdline == "" && p.Exe == "" || ok && agentSignature(sig) {
+					return s, fmt.Errorf("cannot inspect cwd for live process %d", p.PID)
+				}
+				s.unreadable++
 			}
 		}
 	}
 	return s, err
 }
+
+func agentSignature(sig signatures.Signature) bool {
+	if sig.Agent != "" {
+		return true
+	}
+	switch sig.Role {
+	case signatures.RoleInteractive, signatures.RoleHeadless, signatures.RoleHost, signatures.RoleHelper, signatures.RoleInternal, signatures.RoleService:
+		return true
+	}
+	return false
+}
+
 func List(ctx context.Context, e Env) ([]Candidate, error) {
 	s, err := read(ctx, e)
 	if err != nil {
@@ -186,6 +214,11 @@ func List(ctx context.Context, e Env) ([]Candidate, error) {
 		} else if e.Why && err.Error() != errMainWorktree {
 			// Main worktrees are never candidates; listing each one is noise.
 			cs = append(cs, Candidate{ID: wtID(w.Path), Kind: Worktree, Path: w.Path, Repo: c.Repo, Branch: c.Branch, Status: "refused", Evidence: []string{err.Error()}, Ignored: []IgnoredPath{}})
+		}
+	}
+	if s.unreadable > 0 {
+		for i := range cs {
+			cs[i].Evidence = append(cs[i].Evidence, fmt.Sprintf("%d processes with unreadable cwd were not checked", s.unreadable))
 		}
 	}
 	cs = append(cs, scratchCandidates(ctx, e, s)...)

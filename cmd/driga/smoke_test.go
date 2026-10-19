@@ -183,8 +183,8 @@ func TestSmoke(t *testing.T) {
 	local.run("orphans")
 	local.run("machine")
 	local.run("doctor")
-	// Cleanup inspects every live process the user owns and refuses outright
-	// when one hides its cwd (non-dumpable agents on Linux). That is the
+	// Cleanup refuses when a live agent hides its cwd (non-dumpable agents
+	// on Linux); unreadable non-agent processes are reported as evidence. That is the
 	// host's state, not a smoke failure, so only that refusal skips the check.
 	if _, errout, err := local.try("cleanup"); err != nil && strings.Contains(errout, "cannot inspect cwd") {
 		t.Logf("cleanup checks skipped: %s", strings.TrimSpace(errout))
@@ -196,7 +196,7 @@ func TestSmoke(t *testing.T) {
 	// The agent count includes whatever agents the host is running, so only
 	// the line's fixed parts are checked.
 	summary := local.run()
-	for _, part := range []string{" agents (", " working, ", "inbox ", "orphans ", "daemon"} {
+	for _, part := range []string{" agents (", " working, ", "inbox ", "orphans ", "snapshot"} {
 		if !strings.Contains(summary, part) {
 			t.Fatalf("summary lacks %q: %s", part, summary)
 		}

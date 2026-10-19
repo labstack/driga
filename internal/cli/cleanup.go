@@ -17,6 +17,7 @@ import (
 	"github.com/labstack/driga/internal/collector"
 	"github.com/labstack/driga/internal/config"
 	"github.com/labstack/driga/internal/platform"
+	"github.com/labstack/driga/internal/signatures"
 	"github.com/labstack/driga/internal/store"
 	"github.com/labstack/driga/internal/view"
 )
@@ -43,6 +44,10 @@ func openCleanup(ctx context.Context, g *Globals) (cleanup.Env, view.Envelope, f
 	if err != nil {
 		return env, envelope, nil, err
 	}
+	sigs, err := signatures.Load(cfg.ExtraSignatures)
+	if err != nil {
+		return env, envelope, nil, err
+	}
 	path := filepath.Join(config.DataDir(), "driga.db")
 	mode := "daemon"
 	st, err := store.Open(path, store.ReadOnly)
@@ -57,7 +62,7 @@ func openCleanup(ctx context.Context, g *Globals) (cleanup.Env, view.Envelope, f
 		return env, envelope, nil, err
 	}
 	closeFn := func() { _ = st.Close() }
-	env = cleanup.Env{Store: st, Plat: cleanupPlatform(), Home: config.ExpandHome("~"), DataDir: config.DataDir(), Cfg: cfg.Cleanup}
+	env = cleanup.Env{Store: st, Plat: cleanupPlatform(), Sigs: sigs, Home: config.ExpandHome("~"), DataDir: config.DataDir(), Cfg: cfg.Cleanup}
 	if g.CleanupPlatform != nil {
 		env.Plat = g.CleanupPlatform
 	}

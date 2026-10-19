@@ -15,6 +15,7 @@ type Role string
 
 const (
 	RoleInternal    Role = "internal"    // Driga's own Claude invocation.
+	RoleService     Role = "service"     // A managed background service; never an orphan
 	RoleInteractive Role = "interactive" // An interactive agent session.
 	RoleHeadless    Role = "headless"    // A non-interactive agent run.
 	RoleHost        Role = "host"        // A long-lived host of multiple threads.

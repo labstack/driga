@@ -513,6 +513,25 @@ func TestLiveSnapshotSource(t *testing.T) {
 	}
 }
 
+func TestInitialSnapshotLoadingMessage(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	s, err := NewLiveSnapshotSource(collector.Deps{Cfg: config.Default(), Plat: snapshotPlatform{}, SpoolDir: filepath.Join(home, "spool")}, home, view.Filter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	m := New(s, Options{DataDir: home, NoColor: true})
+	_ = m.Init() // Leave collection pending to inspect the first frame.
+	if text := m.View().Content; !strings.Contains(text, "Collecting a snapshot (no collector running)…") || strings.Contains(text, "Loading…") {
+		t.Fatal(text)
+	}
+	m = New(fixture(), Options{DataDir: home, NoColor: true})
+	if text := m.View().Content; !strings.Contains(text, "Loading…") || strings.Contains(text, "Collecting a snapshot") {
+		t.Fatal(text)
+	}
+}
+
 type scopedTestAdapter struct{ obs []model.SessionObs }
 
 func (scopedTestAdapter) Name() string             { return "test" }

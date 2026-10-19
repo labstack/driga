@@ -23,10 +23,7 @@ func sessions(r Reader, f Filter, now time.Time) ([]model.Session, error) {
 		return nil, err
 	}
 	result := []model.Session{}
-	for _, s := range ss {
-		if s.Hosted && now.Sub(s.LastActivityAt) > 24*time.Hour {
-			continue
-		}
+	for _, s := range visibleSessions(ss, f.All, now) {
 		if !f.Since.IsZero() && s.LastActivityAt.Before(f.Since) {
 			continue
 		}
@@ -241,7 +238,7 @@ func projectsLocal(r Reader, f Filter, now time.Time) (ProjectsView, error) {
 	if err != nil {
 		return v, err
 	}
-	ss = visibleSessions(ss, now)
+	ss = visibleSessions(ss, f.All, now)
 	for _, repo := range repos {
 		if f.Project != "" && repo.Path != f.Project {
 			continue
@@ -289,7 +286,7 @@ func whereLocal(r Reader, project string, now time.Time) (WhereView, error) {
 		if err != nil {
 			return v, err
 		}
-		v.ProjectRow, v.WorktreeRows, v.Handoffs, err = projectRow(r, repo, visibleSessions(ss, now), now)
+		v.ProjectRow, v.WorktreeRows, v.Handoffs, err = projectRow(r, repo, visibleSessions(ss, false, now), now)
 		if err != nil {
 			return v, err
 		}
@@ -299,10 +296,14 @@ func whereLocal(r Reader, project string, now time.Time) (WhereView, error) {
 	return v, fmt.Errorf("unknown project %q", project)
 }
 
-func visibleSessions(ss []model.Session, now time.Time) []model.Session {
+func visibleSessions(ss []model.Session, all bool, now time.Time) []model.Session {
 	result := []model.Session{}
+	maxIdle := time.Hour
+	if all {
+		maxIdle = 24 * time.Hour
+	}
 	for _, s := range ss {
-		if !s.Hosted || now.Sub(s.LastActivityAt) <= 24*time.Hour {
+		if !(s.Hosted || strings.HasPrefix(s.Origin, "hosted")) || now.Sub(s.LastActivityAt) <= maxIdle {
 			result = append(result, s)
 		}
 	}

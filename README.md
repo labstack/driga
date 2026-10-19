@@ -76,6 +76,11 @@ driga agents --machine vm-1
 driga agents --watch=2s
 ```
 
+Hosted sessions (marked hosted or with an origin starting with `hosted`) idle for
+more than one hour are hidden from default agent listings, project agent counts,
+and summary counts, including the TUI. `agents --all` includes hosted sessions
+with activity within the last 24 hours, alongside recently ended sessions.
+
 Data views merge paired machines by default. `--machine all|local|<name|id>`
 selects a scope; `--project .` resolves against local repositories only.
 Data views support `--json`, `--project <name|path|.>`, `--since <duration|yesterday>`,

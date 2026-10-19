@@ -47,6 +47,12 @@ role = "headless"
 match = ['^(?:[^[:space:]]*/)?codex[[:space:]]+exec([[:space:]]|$)']
 
 [[signature]]
+name = "codex-app-server-daemon"
+agent = "codex"
+role = "service"
+match = ['^[^[:space:]]*/\.codex/packages/app-server-daemon/(?:[^[:space:]]*/)?codex[[:space:]]+app-server([[:space:]]|$)']
+
+[[signature]]
 name = "codex-app-server"
 agent = "codex"
 role = "host"

@@ -596,10 +596,42 @@ func TestListIgnoresOtherUsersProcesses(t *testing.T) {
 	if !found {
 		t.Fatalf("worktree %s missing from %+v", wt, cs)
 	}
-	// An own process whose cwd cannot be read still blocks listing.
-	p.procs = append(p.procs, model.Proc{PID: 202, OwnerUID: uint32(os.Getuid()), OwnerKnown: true})
+	// An own agent whose cwd cannot be read still blocks listing.
+	p.procs = append(p.procs, model.Proc{PID: 202, Cmdline: "claude", OwnerUID: uint32(os.Getuid()), OwnerKnown: true})
 	if _, err := List(context.Background(), e); err == nil {
 		t.Fatal("unreadable own process cwd must fail closed")
+	}
+}
+
+func TestListUnreadableCwd(t *testing.T) {
+	// An empty command line means the process could not be identified (macOS
+	// keeps own processes whose argv was unreadable), so it fails closed too.
+	for _, cmd := range []string{"ssh-agent", "gpg-agent", "claude", "npx some-mcp-server", ""} {
+		t.Run(cmd, func(t *testing.T) {
+			e, p, _, wt := fixture(t)
+			p.alive = true
+			p.procs = []model.Proc{{PID: 202, Cmdline: cmd}}
+			cs, err := List(context.Background(), e)
+			if cmd == "claude" || cmd == "npx some-mcp-server" || cmd == "" {
+				if err == nil || !strings.Contains(err.Error(), "cannot inspect cwd for live process 202") {
+					t.Fatalf("unreadable agent cwd must fail closed: %v", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			found := false
+			for _, c := range cs {
+				if c.Kind == Worktree && !slices.Contains(c.Evidence, "1 processes with unreadable cwd were not checked") {
+					t.Fatalf("missing unreadable cwd evidence: %+v", c)
+				}
+				found = found || c.Path == wt
+			}
+			if !found {
+				t.Fatal("worktree candidate missing")
+			}
+		})
 	}
 }
 

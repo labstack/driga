@@ -62,10 +62,16 @@ func FindOrphans(idx ProcIndex, sessions []model.Session, sigs *signatures.Set, 
 		}
 	}
 	apps := make(map[string]bool)
-	if sigs != nil {
-		for _, pid := range idx.pids {
-			p := idx.procs[pid]
-			if sig, ok := sigs.Match(p.Cmdline, p.Exe); ok && sig.Role == signatures.RoleApp {
+	protected := make(map[int32]bool)
+	for _, pid := range idx.pids {
+		p := idx.procs[pid]
+		protected[pid] = p.Role == string(signatures.RoleInternal) || p.Role == string(signatures.RoleService)
+		if sigs != nil {
+			if sig, ok := sigs.Match(p.Cmdline, p.Exe); ok {
+				protected[pid] = protected[pid] || sig.Role == signatures.RoleInternal || sig.Role == signatures.RoleService
+				if sig.Role != signatures.RoleApp {
+					continue
+				}
 				if bundle := orphanBundle(p); bundle != "" {
 					apps[bundle] = true
 				}
@@ -75,14 +81,14 @@ func FindOrphans(idx ProcIndex, sessions []model.Session, sigs *signatures.Set, 
 	candidates := make(map[int32]model.Orphan)
 	for _, pid := range idx.pids {
 		r := idx.procs[pid]
-		internal := r.Role == string(signatures.RoleInternal)
+		managed := protected[pid]
 		for _, ancestor := range idx.Ancestors(pid) {
-			if idx.procs[ancestor].Role == string(signatures.RoleInternal) {
-				internal = true
+			if protected[ancestor] {
+				managed = true
 				break
 			}
 		}
-		if internal {
+		if managed {
 			continue
 		}
 		if _, ok := livePIDs[pid]; ok {
@@ -119,7 +125,7 @@ func FindOrphans(idx ProcIndex, sessions []model.Session, sigs *signatures.Set, 
 		var matched string
 		// visit applies the idle checks to one tree member; false stops the walk.
 		visit := func(p model.Proc) bool {
-			if p.Role == string(signatures.RoleInternal) {
+			if protected[p.PID] {
 				idle = false
 				return false
 			}

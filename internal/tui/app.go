@@ -198,6 +198,11 @@ func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = max(1, msg.Width)
 		m.height = max(1, msg.Height)
 		m.rebuild()
+		if m.detail && m.detailRow != nil {
+			offset := m.viewport.YOffset()
+			m.openDetail(*m.detailRow)
+			m.viewport.SetYOffset(offset)
+		}
 	case tickMsg:
 		if m.pollPending {
 			opts := m.opts

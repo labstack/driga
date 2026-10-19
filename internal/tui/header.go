@@ -179,6 +179,9 @@ func (m *app) View() tea.View {
 	}
 	if !m.loaded {
 		body = "Loading…"
+		if _, ok := m.src.(*LiveSnapshotSource); ok {
+			body = "Collecting a snapshot (no collector running)…"
+		}
 	}
 	if m.detail {
 		body = m.viewport.View()
