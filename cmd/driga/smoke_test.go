@@ -298,14 +298,22 @@ func (n node) webSmoke() {
 	}
 	jar, _ := cookiejar.New(nil)
 	client := &http.Client{Jar: jar, Timeout: 30 * time.Second}
-	for _, target := range []string{address, "http://" + u.Host + "/agents"} {
-		resp, err := client.Get(target)
+	// The transcript fixture has completed, so its title belongs to --all.
+	// Check default pages render too, then exercise the explicit history toggle.
+	for _, target := range []struct {
+		url     string
+		history bool
+	}{
+		{address, false}, {"http://" + u.Host + "/agents", false},
+		{"http://" + u.Host + "/?all=1", true}, {"http://" + u.Host + "/agents?all=1", true},
+	} {
+		resp, err := client.Get(target.url)
 		if err != nil {
 			n.t.Fatal(err)
 		}
 		body, err := io.ReadAll(resp.Body)
 		resp.Body.Close()
-		if err != nil || resp.StatusCode != 200 || !strings.Contains(string(body), "Smoke title") {
+		if err != nil || resp.StatusCode != 200 || target.history && !strings.Contains(string(body), "Smoke title") {
 			n.t.Fatalf("web: %d %v %s", resp.StatusCode, err, body)
 		}
 		if resp.Request.URL.Query().Has("token") {

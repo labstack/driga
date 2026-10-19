@@ -21,19 +21,10 @@ type navItem struct{ Path, Name string }
 
 var navigation = []navItem{{"/", "Home"}, {"/agents", "Agents"}, {"/projects", "Projects"}, {"/inbox", "Inbox"}, {"/orphans", "Orphans"}, {"/machines", "Machines"}, {"/cleanup", "Cleanup"}}
 
-type attention struct {
-	ID                             int64
-	State, Project, Title, Machine string
-	At                             time.Time
-}
-type stateCount struct {
-	Label string
-	Count int
-}
 type projectCard struct {
 	view.ProjectRow
 	Branch, Title string
-	Agents        []view.AgentRow
+	States        []view.StateCount
 }
 type pageData struct {
 	viewer.Snapshot
@@ -42,15 +33,18 @@ type pageData struct {
 	Agent                                        view.AgentView
 	Project                                      view.WhereView
 	AgentRows                                    []view.AgentRow
-	Needs                                        []attention
-	States                                       []stateCount
+	Needs                                        []view.Attention
+	NeedsMore                                    int
+	All                                          bool
+	StaleSources, StaleDetails, PendingSources   string
+	States                                       []view.StateCount
 	ProjectCards                                 []projectCard
 	Ready, Refused                               int
 	History                                      int64
 }
 
 func (s *Server) loadPage(r *http.Request) (pageData, int, error) {
-	p := pageData{Nav: navigation, Page: r.URL.Path, Scope: r.URL.Query().Get("machine")}
+	p := pageData{Nav: navigation, Page: r.URL.Path, Scope: r.URL.Query().Get("machine"), All: r.URL.Query().Get("all") == "1"}
 	switch p.Page {
 	case "/", "/agents", "/projects", "/inbox", "/orphans", "/machines", "/cleanup":
 	default:
@@ -58,7 +52,7 @@ func (s *Server) loadPage(r *http.Request) (pageData, int, error) {
 			return p, 404, fmt.Errorf("page not found")
 		}
 	}
-	snap, err := s.source.LoadScope(r.Context(), store.Scope{})
+	snap, err := s.source.LoadScope(r.Context(), store.Scope{}, p.All)
 	if err != nil {
 		return p, 500, err
 	}
@@ -82,13 +76,13 @@ func (s *Server) loadPage(r *http.Request) (pageData, int, error) {
 			return p, 400, fmt.Errorf("unknown or ambiguous machine scope")
 		}
 		p.Scope = matches[0]
-		snap, err = s.source.LoadScope(r.Context(), store.Scope{Machines: []string{p.Scope}})
+		snap, err = s.source.LoadScope(r.Context(), store.Scope{Machines: []string{p.Scope}}, p.All)
 		if err != nil {
 			return p, 500, err
 		}
 	}
 	p.Snapshot = snap
-	p.RefreshURL = p.Page + "?" + url.Values{"machine": {p.Scope}}.Encode()
+	p.RefreshURL = pageLink(p.Page, p.Scope, p.All)
 	p.Title = "Home"
 	for _, n := range navigation {
 		if p.Page == n.Path {
@@ -145,35 +139,37 @@ func (p *pageData) prepare() {
 	}
 	for _, label := range []string{"working", "waiting", "stalled?", "idle", "finished", "dead", "unknown"} {
 		if counts[label] > 0 || label != "dead" && label != "unknown" {
-			p.States = append(p.States, stateCount{label, counts[label]})
+			p.States = append(p.States, view.StateCount{Label: label, Count: counts[label]})
 		}
 	}
-	seen := map[int64]bool{}
-	for _, i := range p.Inbox.Rows {
-		if i.AckedAt != nil || i.Kind != "waiting" && i.Kind != "finished" && i.Kind != "worker-finished" {
-			continue
-		}
-		label := i.Kind
-		if i.Kind == "waiting" {
-			seen[i.SessionID] = true
-			if d := p.AgentDetails[i.SessionID]; strings.TrimPrefix(d.Label, "~") == "stalled?" {
-				label = d.Label
-			}
-		}
-		p.Needs = append(p.Needs, attention{i.SessionID, label, i.Project, i.Summary, i.MachineName, i.TS})
-	}
-	for _, a := range p.AgentRows {
-		state := strings.TrimPrefix(a.Label, "~")
-		if !seen[a.ID] && (state == "waiting" || state == "stalled?") {
-			p.Needs = append(p.Needs, attention{a.ID, a.Label, a.Project, a.Title, a.MachineName, p.AgentDetails[a.ID].Session.LastActivityAt})
+	p.Needs = view.NeedsYou(p.Inbox.Rows, p.Agents.Rows, p.AgentDetails)
+	p.NeedsMore = max(0, len(p.Needs)-8)
+	p.Needs = p.Needs[:min(8, len(p.Needs))]
+	names := []string{}
+	pending := []string{}
+	for name, f := range p.Freshness {
+		if f.Stale {
+			names = append(names, name)
+		} else if f.Status == "not-yet-receiving" {
+			pending = append(pending, name)
 		}
 	}
-	sort.SliceStable(p.Needs, func(i, j int) bool { return p.Needs[i].At.After(p.Needs[j].At) })
-	for _, project := range p.Projects.Rows {
+	sort.Strings(names)
+	sort.Strings(pending)
+	p.StaleSources = strings.Join(names, ", ")
+	details := []string{}
+	for _, name := range names {
+		f := p.Freshness[name]
+		details = append(details, fmt.Sprintf("%s: last successful reading %s; %s", name, f.LastOKAt.Format(time.RFC3339), f.LastError))
+	}
+	p.StaleDetails = strings.Join(details, "\n")
+	p.PendingSources = strings.Join(pending, ", ")
+	for _, project := range view.SortedProjects(p.Projects.Rows) {
 		card := projectCard{ProjectRow: project}
+		agents := []view.AgentRow{}
 		for _, a := range p.AgentRows {
 			if a.MachineID == project.MachineID && a.Project == project.Status.Repo.Name {
-				card.Agents = append(card.Agents, a)
+				agents = append(agents, a)
 				if card.Branch == "" {
 					card.Branch = a.Branch
 				}
@@ -182,6 +178,7 @@ func (p *pageData) prepare() {
 				}
 			}
 		}
+		card.States = view.StateCounts(agents)
 		d := p.ProjectDetails[project.Status.Repo.ID]
 		if card.Branch == "" && len(d.WorktreeRows) > 0 {
 			card.Branch = d.WorktreeRows[0].Branch
@@ -193,13 +190,6 @@ func (p *pageData) prepare() {
 		}
 		p.ProjectCards = append(p.ProjectCards, card)
 	}
-	sort.SliceStable(p.ProjectCards, func(i, j int) bool {
-		a, b := p.ProjectCards[i], p.ProjectCards[j]
-		if (a.Status.LiveAgents > 0) != (b.Status.LiveAgents > 0) {
-			return a.Status.LiveAgents > 0
-		}
-		return a.Status.Repo.Name < b.Status.Repo.Name
-	})
 	for _, c := range p.Cleanup {
 		if c.Kind == cleanup.History {
 			p.History += c.Size
@@ -216,11 +206,12 @@ func (p *pageData) prepare() {
 
 func templateFuncs() template.FuncMap {
 	return template.FuncMap{
-		"familyData": func(row view.AgentRow, scope string) any {
+		"familyData": func(row view.AgentRow, scope string, all bool) any {
 			return struct {
 				Row   view.AgentRow
 				Scope string
-			}{row, scope}
+				All   bool
+			}{row, scope, all}
 		},
 		"chartData": func(buckets []view.ActivityBucket) string {
 			times, events, loads := []any{}, []any{}, []any{}
@@ -250,7 +241,27 @@ func templateFuncs() template.FuncMap {
 				return "finished"
 			}
 		},
-		"bytes": humanBytes,
+		"bytes":      humanBytes,
+		"gaugeLevel": view.GaugeLevel,
+		"percent":    view.GaugePercent,
+		"hasSamples": view.ActivityHasSamples,
+		"hasEvents":  view.ActivityHasEvents,
+		"relative": func(at, now time.Time) string {
+			if at.IsZero() {
+				return "age unavailable"
+			}
+			age := max(time.Duration(0), now.Sub(at))
+			if age < time.Minute {
+				return "just now"
+			}
+			if age < time.Hour {
+				return fmt.Sprintf("%dm ago", int(age/time.Minute))
+			}
+			if age < 24*time.Hour {
+				return fmt.Sprintf("%dh ago", int(age/time.Hour))
+			}
+			return fmt.Sprintf("%dd ago", int(age/(24*time.Hour)))
+		},
 		"stamp": func(t time.Time) string {
 			if t.IsZero() {
 				return "Unavailable"
@@ -259,7 +270,7 @@ func templateFuncs() template.FuncMap {
 		},
 		"duration":    func(d time.Duration) string { return d.Round(time.Second).String() },
 		"machineName": func(m view.MachineRow) string { return view.MachineName(m.Machine) },
-		"link":        func(path, scope string) string { return path + "?" + url.Values{"machine": {scope}}.Encode() },
+		"link":        pageLink,
 		"agentPath":   func(id int64) string { return fmt.Sprint("/agents/", id) },
 		"projectPath": func(id int64) string { return fmt.Sprint("/projects/", id) },
 	}
@@ -280,4 +291,12 @@ func humanBytes(value any) string {
 		i++
 	}
 	return fmt.Sprintf("%.1f %s", n, units[i])
+}
+
+func pageLink(path, scope string, all ...bool) string {
+	q := url.Values{"machine": {scope}}
+	if len(all) > 0 && all[0] {
+		q.Set("all", "1")
+	}
+	return path + "?" + q.Encode()
 }

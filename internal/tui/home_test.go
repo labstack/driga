@@ -84,7 +84,7 @@ func TestHomeNeedsYouNewestFirstAndActions(t *testing.T) {
 	var ack string
 	m := setup(t, s, Options{Spool: func(e model.HookEvent) error { ack = e.Message; return nil }})
 	a := m.(*app)
-	if len(a.rows) != 2 || a.rows[0].inbox.ID != "new" || a.rows[1].inbox.ID != "old" {
+	if len(a.rows) != 1 || a.rows[0].inbox.ID != "new" {
 		t.Fatalf("rows: %+v", a.rows)
 	}
 	m = key(m, tea.KeyEnter)
@@ -191,8 +191,8 @@ func TestHomeCurrentAttentionNotHiddenByCompletion(t *testing.T) {
 	s.snap.Inbox.Rows[0].Kind = "finished"
 	s.snap.Agents.Rows[0].Label = "~stalled?"
 	m := setup(t, s, Options{}).(*app)
-	if len(m.rows) != 2 {
-		t.Fatalf("completion hid current stalled session: %+v", m.rows)
+	if len(m.rows) != 1 || m.rows[0].cells[1] != "~stalled?" {
+		t.Fatalf("session must appear once with its current stalled state: %+v", m.rows)
 	}
 }
 
@@ -212,5 +212,75 @@ func TestHomeLoadsLeftoversAndScrolls(t *testing.T) {
 	m = key(m, tea.KeyPgDown)
 	if !strings.Contains(m.View().Content, "1 ready · 1 refused") {
 		t.Fatal(m.View().Content)
+	}
+}
+
+func TestHomeGaugeTrackAndPercent(t *testing.T) {
+	s := fixture()
+	s.snap.Machine.Sample = model.MachineSample{TS: s.snap.ObservedAt, MemUsed: 90, MemTotal: 100, SwapUsed: 3, SwapTotal: 4}
+	m := setup(t, s, Options{}).(*app)
+	text := m.homeView()
+	for _, part := range []string{"90%", "75%", "░"} {
+		if !strings.Contains(text, part) {
+			t.Errorf("missing gauge %q", part)
+		}
+	}
+}
+
+func TestActivityFullWidthAndEmptyNotes(t *testing.T) {
+	buckets := make([]view.ActivityBucket, 60)
+	buckets[59] = view.ActivityBucket{Events: 3, Sample: &model.MachineSample{Load1: 2}}
+	if got := lipgloss.Width(activitySpark(buckets, 90, true)); got != 90 {
+		t.Errorf("spark width %d, want 90", got)
+	}
+	for _, withBuckets := range []bool{false, true} {
+		s := fixture()
+		if withBuckets {
+			s.snap.Activity.Machines = []view.ActivityMachine{{Buckets: make([]view.ActivityBucket, 60)}}
+		}
+		m := setup(t, s, Options{}).(*app)
+		for _, note := range []string{"History builds while the collector runs", "Events need agent hooks: driga hooks install"} {
+			if !strings.Contains(m.homeView(), note) {
+				t.Errorf("missing note %q", note)
+			}
+		}
+	}
+}
+
+func TestFooterCwdsAndPendingOTLP(t *testing.T) {
+	s := fixture()
+	s.snap.Freshness = map[string]view.Fresh{"cwds": {LastOKAt: s.snap.ObservedAt.Add(-20 * time.Second)}}
+	m := setup(t, s, Options{}).(*app)
+	if strings.Contains(m.footer(), "stale cwds") {
+		t.Fatal("cwd source uses procs cadence")
+	}
+}
+
+func TestHomeProjectsOrderAndAggregation(t *testing.T) {
+	s := fixture()
+	s.snap.Projects.Rows = []view.ProjectRow{
+		{Status: view.ProjectStatus{Repo: model.Repo{Name: "Quiet project"}, Activity: "idle"}},
+		{Status: view.ProjectStatus{Repo: model.Repo{Name: "Recent project"}, Where: []view.WherePart{{At: s.snap.ObservedAt}}}},
+		{Status: view.ProjectStatus{Repo: model.Repo{Name: "Live project"}, LiveAgents: 6}},
+	}
+	s.snap.Agents.Rows = nil
+	for i := 0; i < 6; i++ {
+		state := "idle"
+		if i < 2 {
+			state = "working"
+		}
+		s.snap.Agents.Rows = append(s.snap.Agents.Rows, view.AgentRow{ID: int64(i + 1), Label: state, Project: "Live project"})
+	}
+	m := setup(t, s, Options{}).(*app)
+	text := m.homeView()
+	if strings.Index(text, "Live project") > strings.Index(text, "Recent project") || strings.Index(text, "Recent project") > strings.Index(text, "Quiet project") {
+		t.Error("wrong project order")
+	}
+	if !strings.Contains(text, "2 working · 4 idle") {
+		t.Error("missing aggregated states")
+	}
+	m.opts.NoColor = false
+	if !strings.Contains(m.homeView(), "\x1b[2mQuiet project") {
+		t.Error("quiet project is not dimmed")
 	}
 }

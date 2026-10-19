@@ -422,6 +422,13 @@ func (tx *Tx) SetSourceOK(name string, at time.Time) error {
 	ON CONFLICT(machine_id,name) DO UPDATE SET last_ok_at=excluded.last_ok_at`, tx.machineID, name, unix(at))
 }
 
+// SetSourcePending records an enabled event source waiting for its first input.
+// A listener starting is not a successful read; clear previous-run diagnostics.
+func (tx *Tx) SetSourcePending(name string) error {
+	return tx.exec(`INSERT INTO sources (machine_id,name,last_ok_at,last_error,last_error_at) VALUES (?,?,0,'',0)
+ ON CONFLICT(machine_id,name) DO UPDATE SET last_ok_at=0,last_error='',last_error_at=0`, tx.machineID, name)
+}
+
 // SetSourceError records a source's last error without changing its last success.
 func (tx *Tx) SetSourceError(name, message string, at time.Time) error {
 	return tx.exec(`INSERT INTO sources (machine_id,name,last_error,last_error_at) VALUES (?,?,?,?)

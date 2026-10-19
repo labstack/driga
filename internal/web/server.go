@@ -30,7 +30,7 @@ const cookieName = "driga_token"
 
 // Source shares the TUI's consistent view transaction and live snapshot source.
 type Source interface {
-	LoadScope(context.Context, store.Scope) (viewer.Snapshot, error)
+	LoadScope(context.Context, store.Scope, ...bool) (viewer.Snapshot, error)
 	DataVersion(context.Context) (int64, error)
 }
 

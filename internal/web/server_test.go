@@ -221,7 +221,7 @@ func TestTokenEntropy(t *testing.T) {
 	}
 }
 
-func TestRecentFinishedSessionOnHomeAndAgents(t *testing.T) {
+func TestRecentFinishedSessionWithAllOnHomeAndAgents(t *testing.T) {
 	s, st, _, project := fixture(t)
 	if err := st.Tx(context.Background(), func(tx *store.Tx) error {
 		_, err := tx.UpsertSession(model.Session{SessionObs: model.SessionObs{Adapter: "claude", ExternalID: "finished", Title: "Recently finished", LastActivityAt: time.Now()}, RepoID: &project, Label: "finished", EndedAt: timePointer(time.Now())})
@@ -229,7 +229,7 @@ func TestRecentFinishedSessionOnHomeAndAgents(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	for _, path := range []string{"/", "/agents"} {
+	for _, path := range []string{"/?all=1", "/agents?all=1"} {
 		w := request(s, "GET", path, s.token)
 		if !strings.Contains(w.Body.String(), "Recently finished") {
 			t.Errorf("%s lacks recent completion", path)

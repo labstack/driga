@@ -11,6 +11,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/labstack/driga/internal/collector"
+	"github.com/labstack/driga/internal/view"
 )
 
 func humanBytes(n uint64) string {
@@ -111,17 +112,15 @@ func (m *app) footer() string {
 	text := pack(hints, m.width, " · ")
 	var names []string
 	for name, f := range m.snap.Freshness {
-		interval := collector.Cadence(0).Procs
 		sourceName := name
 		if _, tail, ok := strings.Cut(name, "/"); ok {
 			sourceName = tail
 		}
-		switch sourceName {
-		case "machine":
-			interval = collector.Cadence(0).Machine
-		case "git":
-			interval = 5 * time.Minute
+		if f.Status == "not-yet-receiving" {
+			text += "\n" + truncate(clean(name)+": not-yet-receiving", m.width)
+			continue
 		}
+		interval := view.SourceInterval(sourceName, collector.Cadence(0))
 		for _, machine := range m.snap.Machines.Rows {
 			if name == machine.MachineID {
 				interval = 15 * time.Second

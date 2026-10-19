@@ -49,7 +49,7 @@ func startIntake(ctx context.Context, d Deps, st *store.Store, requests chan<- i
 		return nil, recordIntakeError(ctx, d, st, err)
 	}
 	if err := st.Tx(ctx, func(tx *store.Tx) error {
-		if err := tx.SetSourceOK("otlp", d.now()); err != nil {
+		if err := tx.SetSourcePending("otlp"); err != nil {
 			return err
 		}
 		return tx.SetMeta("otlp:listen", ln.Addr().String())
@@ -295,8 +295,10 @@ func applyIntake(ctx context.Context, d Deps, st *store.Store, b intake.Batch) (
 				return err
 			}
 		}
-		if err := tx.SetSourceOK("otlp", now); err != nil {
-			return err
+		if len(b.Facts)+b.Rejected > 0 {
+			if err := tx.SetSourceOK("otlp", now); err != nil {
+				return err
+			}
 		}
 		after, err := passFeedRows(tx, now, share)
 		if err != nil {

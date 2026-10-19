@@ -5,8 +5,8 @@
 <script defer src="/static/vendor/htmx-2.0.4.min.js"></script><script defer src="/static/vendor/htmx-ext-sse-2.2.2.js"></script><script defer src="/static/vendor/uPlot-1.6.31.iife.min.js"></script><script defer src="/static/app.js"></script>
 </head>
 <body hx-ext="sse" sse-connect="/events"><a class="skip" href="#main">Skip to content</a>
-<aside class="rail"><a class="brand" href="{{link "/" .Scope}}" aria-label="Driga Home"><span class="brand-mark" aria-hidden="true">d.</span><span>driga<small>AGENT OBSERVATORY</small></span></a>
-<nav aria-label="Main navigation">{{$p := .}}{{range .Nav}}<a href="{{link .Path $p.Scope}}" {{if eq .Path $p.Page}}aria-current="page"{{end}}>{{.Name}}</a>{{end}}
+<aside class="rail"><a class="brand" href="{{link "/" .Scope .All}}" aria-label="Driga Home"><span class="brand-mark" aria-hidden="true">d.</span><span>driga<small>AGENT OBSERVATORY</small></span></a>
+<nav aria-label="Main navigation">{{$p := .}}{{range .Nav}}<a href="{{link .Path $p.Scope $p.All}}" {{if eq .Path $p.Page}}aria-current="page"{{end}}>{{.Name}}</a>{{end}}
 </nav>
 <div class="rail-note"><span class="connection" role="status">Live connection</span>
 <p>Read-only · v1.7
@@ -29,14 +29,14 @@
 </p>
 </div>
 {{if gt (len .Machines.Rows) 1}}
-<form method="get" class="scope"><label for="machine">Machine scope</label>
+<form method="get" class="scope">{{if .All}}<input type="hidden" name="all" value="1">{{end}}<label for="machine">Machine scope</label>
 <div><select id="machine" name="machine"><option value="all" {{if eq .Scope "all"}}selected{{end}}>All machines</option>{{$scope := .Scope}}{{range .Machines.Rows}}<option value="{{.MachineID}}" {{if eq $scope .MachineID}}selected{{end}}>{{machineName .}} · {{.State}}</option>{{end}}</select><button type="submit">Apply</button>
 </div>
 </form>{{end}}
 </header>
-{{range $key, $fresh := .Freshness}}{{if $fresh.Stale}}
-<p class="notice">{{$key}} is stale · last successful reading {{stamp $fresh.LastOKAt}}{{if $fresh.LastError}} · {{$fresh.LastError}}{{end}}
-</p>{{end}}{{end}}
+{{if .StaleSources}}<p class="source-status" title="{{.StaleDetails}}">Stale: {{.StaleSources}}</p>{{end}}
+{{if .PendingSources}}<p class="source-status muted">{{.PendingSources}}: not-yet-receiving</p>{{end}}
+{{if or (eq .Page "/") (eq .Page "/agents") (eq .Page "/projects")}}<p class="visibility">{{if .All}}Showing all sessions · <a href="{{link .Page .Scope false}}">Show default sessions</a>{{else}}Showing default sessions · <a href="{{link .Page .Scope true}}">Show all sessions (including ended and hosted idle up to 24h)</a>{{end}}</p>{{end}}
 {{if eq .Page "/"}}{{template "home" .}}{{else if eq .Page "/agents"}}{{template "agents" .}}{{else if eq .Page "/projects"}}{{template "projects" .}}{{else if eq .Page "/inbox"}}{{template "inbox" .}}{{else if eq .Page "/orphans"}}{{template "orphans" .}}{{else if eq .Page "/machines"}}{{template "machines" .}}{{else if eq .Page "/cleanup"}}{{template "cleanup" .}}{{else if eq .Title "Agent detail"}}{{template "agent" .}}{{else if eq .Title "Project detail"}}{{template "project" .}}{{end}}
 <footer>Driga <span aria-hidden="true">/</span> Local evidence. Shared perspective.<span>Read-only dashboard</span>
 </footer>{{end}}
@@ -54,23 +54,24 @@
 <div>
 <p class="eyebrow">ATTENTION
 </p>
-<h2>Needs you <span class="count">{{len .Needs}}</span>
+<h2>Needs you <span class="count">{{len .Needs}}{{if .NeedsMore}}+{{end}}</span>
 </h2>
 </div><a href="{{link "/inbox" .Scope}}">Inbox ↗</a>
 </div>
 {{$p := .}}{{range .Needs}}
 <article class="item stripe {{stateClass .State}}">
-<div class="item-top">{{template "chip" .State}}<small>{{.Machine}} · {{stamp .At}}</small>
+<div class="item-top">{{template "chip" .State}}<small>{{.Adapter}} · {{relative .At $p.ObservedAt}}</small>
 </div>
-<h3>{{if .ID}}<a href="{{link (agentPath .ID) $p.Scope}}">{{if .Title}}{{.Title}}{{else}}Session {{.ID}}{{end}}</a>{{else}}{{.Title}}{{end}}
+<h3>{{if .ID}}<a href="{{link (agentPath .ID) $p.Scope $p.All}}">{{if .Title}}{{.Title}}{{else}}{{.Project}}{{end}}</a>{{else}}{{.Title}}{{end}}
 </h3>
-<p class="muted">{{.Project}}
+<p class="muted">{{.Project}}{{if .Machine}} · {{.Machine}}{{end}}
 </p>
 </article>{{else}}
 <div class="empty"><strong>Nothing needs you.</strong>
 <p>Your agents can keep going. Attention items appear here.
 </p>
 </div>{{end}}
+{{if .NeedsMore}}<p class="attention-more"><a href="{{link "/inbox" .Scope}}">{{.NeedsMore}} more in Inbox</a></p>{{end}}
 </section>
 <section class="panel health">
 <div class="section-heading">
@@ -127,12 +128,12 @@
 <p class="empty">Health unavailable
 </p>{{else}}
 <div class="gauge">
-<div><span>Memory</span><strong>{{bytes .Sample.MemUsed}} <small>/ {{bytes .Sample.MemTotal}}</small></strong>
-</div>{{if .Sample.MemTotal}}<meter aria-label="Memory used" min="0" max="{{.Sample.MemTotal}}" value="{{.Sample.MemUsed}}">{{bytes .Sample.MemUsed}}</meter>{{else}}<small>Total unavailable</small>{{end}}
+<div><span>Memory</span><strong>{{if .Sample.MemTotal}}{{printf "%.0f" (percent .Sample.MemUsed .Sample.MemTotal)}}% · {{end}}{{bytes .Sample.MemUsed}} <small>/ {{bytes .Sample.MemTotal}}</small></strong>
+</div>{{if .Sample.MemTotal}}<meter class="{{gaugeLevel .Sample.MemUsed .Sample.MemTotal}}" aria-label="Memory used" min="0" max="{{.Sample.MemTotal}}" value="{{.Sample.MemUsed}}">{{bytes .Sample.MemUsed}}</meter>{{else}}<small>Total unavailable</small>{{end}}
 </div>
 <div class="gauge">
-<div><span>Swap</span><strong>{{bytes .Sample.SwapUsed}} <small>/ {{bytes .Sample.SwapTotal}}</small></strong>
-</div>{{if .Sample.SwapTotal}}<meter aria-label="Swap used" min="0" max="{{.Sample.SwapTotal}}" value="{{.Sample.SwapUsed}}">{{bytes .Sample.SwapUsed}}</meter>{{else}}<small>No swap capacity reported</small>{{end}}
+<div><span>Swap</span><strong>{{if .Sample.SwapTotal}}{{printf "%.0f" (percent .Sample.SwapUsed .Sample.SwapTotal)}}% · {{end}}{{bytes .Sample.SwapUsed}} <small>/ {{bytes .Sample.SwapTotal}}</small></strong>
+</div>{{if .Sample.SwapTotal}}<meter class="{{gaugeLevel .Sample.SwapUsed .Sample.SwapTotal}}" aria-label="Swap used" min="0" max="{{.Sample.SwapTotal}}" value="{{.Sample.SwapUsed}}">{{bytes .Sample.SwapUsed}}</meter>{{else}}<small>No swap capacity reported</small>{{end}}
 </div>
 <dl class="metrics">
 <div>
@@ -160,16 +161,16 @@
 </div>
 <div class="chart-grid">
 <div>
-<h4>Events / minute
+<h4>events/min
 </h4>
 <div class="chart" data-series="events" data-buckets="{{chartData .Buckets}}" aria-label="Events per minute chart">
-</div>
+</div>{{if not (hasEvents .Buckets)}}<p class="chart-note">Events need agent hooks: <code>driga hooks install</code></p>{{end}}
 </div>
 <div>
-<h4>Load
+<h4>load
 </h4>
 <div class="chart" data-series="load" data-buckets="{{chartData .Buckets}}" aria-label="Machine load chart">
-</div>
+</div>{{if not (hasSamples .Buckets)}}<p class="chart-note">History builds while the collector runs</p>{{end}}
 </div>
 </div>
 <details>
@@ -191,40 +192,40 @@
 </div>
 </details>
 </article>{{else}}
-<p class="empty">No history available.
-</p>{{end}}{{end}}
+<p class="chart-note">History builds while the collector runs</p>
+<p class="chart-note">Events need agent hooks: <code>driga hooks install</code></p>{{end}}{{end}}
 
 {{define "agents"}}
 <section class="panel">
 <div class="section-heading">
 <h2>Agent families <span class="count">{{len .AgentRows}}</span>
 </h2><span class="muted">State and recent evidence</span>
-</div>{{$p := .}}{{range .Agents.Rows}}{{template "family" (familyData . $p.Scope)}}{{else}}
+</div>{{$p := .}}{{range .Agents.Rows}}{{template "family" (familyData . $p.Scope $p.All)}}{{else}}
 <p class="empty">No agents in this scope.
 </p>{{end}}
 </section>{{end}}
-{{define "family"}}{{$scope := .Scope}}{{with .Row}}
+{{define "family"}}{{$scope := .Scope}}{{$all := .All}}{{with .Row}}
 <article class="agent-family">
 <div class="item stripe {{stateClass .Label}}">
 <div class="item-top">{{template "chip" .Label}}<small>{{.Adapter}} · {{.Origin}} · {{.MachineName}}{{if .Stale}} · stale{{end}}</small>
 </div>
-<h3><a href="{{link (agentPath .ID) $scope}}">{{if .Title}}{{.Title}}{{else}}Session {{.ID}}{{end}}</a>
+<h3><a href="{{link (agentPath .ID) $scope $all}}">{{if .Title}}{{.Title}}{{else}}Session {{.ID}}{{end}}</a>
 </h3>
 <p>{{.Project}} <span class="muted">/ {{.Branch}}</span>
 </p>
 <p class="muted">{{.Evidence}}
 </p><small>{{duration .Age}} ago · {{bytes .Mem}} RSS{{if .FinishedChildren}} · {{.FinishedChildren}} finished workers{{end}}</small>
 </div>{{if .Children}}
-<div class="children">{{range .Children}}{{template "family" (familyData . $scope)}}{{end}}
+<div class="children">{{range .Children}}{{template "family" (familyData . $scope $all)}}{{end}}
 </div>{{end}}
 </article>{{end}}{{end}}
 
 {{define "projectCards"}}{{$p := .}}{{range .ProjectCards}}
 <article class="project-card">
 <div class="item-top">
-<h3><a href="{{link (projectPath .Status.Repo.ID) $p.Scope}}">{{.Status.Repo.Name}}</a>
+<h3><a href="{{link (projectPath .Status.Repo.ID) $p.Scope $p.All}}">{{.Status.Repo.Name}}</a>
 </h3>
-<div class="agent-dots">{{range .Agents}}<span class="chip {{stateClass .Label}}" title="{{.Title}}">{{.Label}}</span>{{end}}
+<div class="state-counts">{{range $i, $state := .States}}{{if $i}}<span aria-hidden="true"> · </span>{{end}}<span class="state-total {{stateClass .Label}}">{{.Count}} {{.Label}}</span>{{end}}
 </div>
 </div>
 <p class="muted">{{.MachineName}}{{if .Stale}} · stale{{end}} · {{.Branch}}
@@ -324,7 +325,7 @@
 </p>{{end}}
 </section>{{end}}{{end}}
 
-{{define "project"}}{{$scope := .Scope}}{{with .Project}}
+{{define "project"}}{{$scope := .Scope}}{{$all := .All}}{{with .Project}}
 <section class="panel detail">
 <p class="eyebrow">WHERE THINGS STAND
 </p>
@@ -355,7 +356,7 @@
 <p class="muted">No checkouts stored.
 </p>{{end}}
 <h3>Agent families
-</h3>{{range .Agents.Rows}}{{template "family" (familyData . $scope)}}{{else}}
+</h3>{{range .Agents.Rows}}{{template "family" (familyData . $scope $all)}}{{else}}
 <p class="muted">No agents.
 </p>{{end}}
 <h3>Latest handoffs

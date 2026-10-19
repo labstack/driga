@@ -29,7 +29,7 @@ type Source interface {
 // ScopedSource also supports per-request browser machine selection.
 type ScopedSource interface {
 	Source
-	LoadScope(context.Context, store.Scope) (Snapshot, error)
+	LoadScope(context.Context, store.Scope, ...bool) (Snapshot, error)
 }
 
 // Snapshot holds the shared views and the evidence needed by detail panes.
@@ -72,14 +72,17 @@ func NewStoreSource(st *store.Store, dataDir string, f view.Filter) *StoreSource
 func (s *StoreSource) DataVersion(ctx context.Context) (int64, error) { return s.st.DataVersion(ctx) }
 
 // Load builds all views inside one read transaction.
-func (s *StoreSource) Load(ctx context.Context) (Snapshot, error) { return s.load(ctx, "daemon") }
-
-// LoadScope builds the same views for a browser-selected machine scope.
-func (s *StoreSource) LoadScope(ctx context.Context, scope store.Scope) (Snapshot, error) {
-	return s.load(ctx, "daemon", scope)
+func (s *StoreSource) Load(ctx context.Context) (Snapshot, error) {
+	return s.load(ctx, "daemon", store.Scope{})
 }
 
-func (s *StoreSource) load(ctx context.Context, mode string, scopes ...store.Scope) (Snapshot, error) {
+// LoadScope builds views for a browser-selected machine scope. An optional all
+// overrides visibility for this request without mutating the source filter.
+func (s *StoreSource) LoadScope(ctx context.Context, scope store.Scope, all ...bool) (Snapshot, error) {
+	return s.load(ctx, "daemon", scope, all...)
+}
+
+func (s *StoreSource) load(ctx context.Context, mode string, scope store.Scope, all ...bool) (Snapshot, error) {
 	snap := Snapshot{AgentDetails: map[int64]view.AgentView{}, ProjectDetails: map[int64]view.WhereView{}}
 	now := time.Now()
 	if s.Now != nil {
@@ -88,6 +91,9 @@ func (s *StoreSource) load(ctx context.Context, mode string, scopes ...store.Sco
 	err := s.st.Tx(ctx, func(tx *store.Tx) error {
 		snap.LocalMachineID = tx.MachineID()
 		f := s.Filter
+		if len(all) > 0 {
+			f.All = all[0]
+		}
 		var err error
 		if s.ResolveFilter != nil {
 			f, err = s.ResolveFilter(tx, f)
@@ -100,9 +106,9 @@ func (s *StoreSource) load(ctx context.Context, mode string, scopes ...store.Sco
 				return err
 			}
 		}
-		if len(scopes) > 0 && scopes[0].Machines != nil {
+		if scope.Machines != nil {
 			selected := []string{}
-			for _, id := range scopes[0].Machines {
+			for _, id := range scope.Machines {
 				if f.Scope.Machines == nil {
 					selected = append(selected, id)
 				} else {
@@ -343,15 +349,15 @@ func (s *LiveSnapshotSource) Start(ctx context.Context) {
 
 // Load waits for the first pass and returns a consistent disposable snapshot.
 func (s *LiveSnapshotSource) Load(ctx context.Context) (Snapshot, error) {
-	return s.loadSnapshot(ctx)
+	return s.loadSnapshot(ctx, store.Scope{})
 }
 
 // LoadScope serializes scoped reads with disposable snapshot collection.
-func (s *LiveSnapshotSource) LoadScope(ctx context.Context, scope store.Scope) (Snapshot, error) {
-	return s.loadSnapshot(ctx, scope)
+func (s *LiveSnapshotSource) LoadScope(ctx context.Context, scope store.Scope, all ...bool) (Snapshot, error) {
+	return s.loadSnapshot(ctx, scope, all...)
 }
 
-func (s *LiveSnapshotSource) loadSnapshot(ctx context.Context, scopes ...store.Scope) (Snapshot, error) {
+func (s *LiveSnapshotSource) loadSnapshot(ctx context.Context, scope store.Scope, all ...bool) (Snapshot, error) {
 	select {
 	case <-ctx.Done():
 		return Snapshot{}, ctx.Err()
@@ -362,7 +368,7 @@ func (s *LiveSnapshotSource) loadSnapshot(ctx context.Context, scopes ...store.S
 	if s.lastErr != nil {
 		return Snapshot{}, s.lastErr
 	}
-	snap, err := s.load(ctx, "snapshot", scopes...)
+	snap, err := s.load(ctx, "snapshot", scope, all...)
 	return snap, err
 }
 

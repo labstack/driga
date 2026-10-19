@@ -44,6 +44,7 @@ type Fresh struct {
 	AgeSeconds int       `json:"age_seconds"`
 	Stale      bool      `json:"stale"`
 	LastError  string    `json:"last_error"`
+	Status     string    `json:"status,omitempty"`
 }
 
 // Envelope is the versioned JSON contract shared by all read commands.
@@ -64,16 +65,7 @@ func newEnvelopeLocal(r Reader, mode string, now time.Time, intervals Intervals,
 		return e, err
 	}
 	for _, s := range sources {
-		interval := intervals.Procs
-		switch s.Name {
-		case "machine":
-			interval = intervals.Machine
-		case "git":
-			interval = 5 * time.Minute
-		}
-		if interval <= 0 {
-			interval = time.Minute
-		}
+		interval := SourceInterval(s.Name, intervals)
 		age := max(time.Duration(0), now.Sub(s.LastOKAt))
 		if s.LastOKAt.IsZero() {
 			age = 0
@@ -81,7 +73,12 @@ func newEnvelopeLocal(r Reader, mode string, now time.Time, intervals Intervals,
 		// A snapshot is fresh by construction, except for a source that has
 		// never succeeded: its data is missing, not current.
 		stale := s.LastOKAt.IsZero() || mode != "snapshot" && age > 3*interval
-		e.Freshness[s.Name] = Fresh{LastOKAt: s.LastOKAt, AgeSeconds: int(age / time.Second), Stale: stale, LastError: s.LastError}
+		status := ""
+		if s.Name == "otlp" && s.LastOKAt.IsZero() && s.LastError == "" {
+			stale = false
+			status = "not-yet-receiving"
+		}
+		e.Freshness[s.Name] = Fresh{LastOKAt: s.LastOKAt, AgeSeconds: int(age / time.Second), Stale: stale, LastError: s.LastError, Status: status}
 	}
 	gaps, err := r.Gaps(now.Add(-24 * time.Hour))
 	if err != nil {
@@ -312,4 +309,22 @@ type MachineRow struct {
 type MachinesView struct {
 	Rows    []MachineRow `json:"rows"`
 	Warning string       `json:"warning,omitempty"`
+}
+
+// SourceInterval matches independently scheduled collector sources. Git's
+// full scan can take five minutes even while viewers request faster refreshes.
+func SourceInterval(name string, intervals Intervals) time.Duration {
+	interval := intervals.Procs
+	switch name {
+	case "machine":
+		interval = intervals.Machine
+	case "cwds":
+		interval = intervals.Cwds
+	case "git":
+		interval = 5 * time.Minute
+	}
+	if interval <= 0 {
+		interval = time.Minute
+	}
+	return interval
 }

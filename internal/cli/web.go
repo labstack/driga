@@ -43,7 +43,7 @@ func (c WebCmd) run(ctx context.Context, g *Globals) error {
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	source, mode, closeSource, err := openViewer(ctx, g, cfg, view.Filter{All: true})
+	source, mode, closeSource, err := openViewer(ctx, g, cfg, view.Filter{})
 	if err != nil {
 		return err
 	}

@@ -212,3 +212,47 @@ func TestIntakeAnnotatesAndSurvivesPass(t *testing.T) {
 		t.Fatal(ss[0])
 	}
 }
+
+func TestIntakeListeningIsNotAReceivedEvent(t *testing.T) {
+	d, st, _, _ := setup(t)
+	d.Cfg.Intake.OTLP = true
+	d.Cfg.Intake.Listen = "127.0.0.1:0"
+	stop, err := startIntake(context.Background(), d, st, make(chan intakeRequest, 16))
+	if err != nil || stop == nil {
+		t.Fatalf("start: %v", err)
+	}
+	defer stop()
+	sources, err := st.Sources()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, source := range sources {
+		if source.Name == "otlp" && !source.LastOKAt.IsZero() {
+			t.Fatal("listening incorrectly records a received event")
+		}
+	}
+	if _, err := applyIntake(context.Background(), d, st, intake.Batch{}); err != nil {
+		t.Fatal(err)
+	}
+	sources, err = st.Sources()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, source := range sources {
+		if source.Name == "otlp" && !source.LastOKAt.IsZero() {
+			t.Fatal("an empty export is not a received event")
+		}
+	}
+	if _, err := applyIntake(context.Background(), d, st, intake.Batch{Facts: []intake.Fact{{SessionID: "unknown", Name: "user_prompt", TS: d.now()}}}); err != nil {
+		t.Fatal(err)
+	}
+	sources, err = st.Sources()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, source := range sources {
+		if source.Name == "otlp" && !source.LastOKAt.Equal(d.now()) {
+			t.Fatal("received batch must record successful intake")
+		}
+	}
+}

@@ -116,10 +116,12 @@ main > .panel + .panel { margin-top: 22px; }
 .gauge { margin: 24px 0; }
 .gauge > div { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px; font-size: .8rem; margin-bottom: 9px; }
 .gauge strong { font-weight: 500; }
-meter { width: 100%; height: 10px; display: block; accent-color: var(--accent); background: var(--rail); border: 0; border-radius: 4px; }
+meter { --gauge: var(--working); width: 100%; height: 10px; display: block; accent-color: var(--gauge); background: var(--rail); border: 0; border-radius: 4px; }
 meter::-webkit-meter-bar { background: var(--rail); border: 0; height: 8px; }
-meter::-webkit-meter-optimum-value { background: var(--accent); border-radius: 4px; }
-meter::-moz-meter-bar { background: var(--accent); }
+meter::-webkit-meter-optimum-value { background: var(--gauge); border-radius: 4px; }
+meter::-moz-meter-bar { background: var(--gauge); }
+meter.warning { --gauge: var(--waiting); }
+meter.critical { --gauge: var(--stalled); }
 .metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding-top: 16px; margin: 0; border-top: 1px solid var(--line); }
 dt { color: var(--muted); font-size: .78rem; letter-spacing: .015em; }
 dd { margin: 7px 0 0; font-size: 1.6rem; letter-spacing: -.025em; }
@@ -140,7 +142,8 @@ th { color: var(--muted); font-weight: 500; }
 .project-card { padding: 20px 0; border-top: 1px solid var(--line); }
 .project-card p { margin-top: 8px; }
 .project-card h3 { font-size: 1.1rem; }
-.agent-dots { display: flex; flex-wrap: wrap; gap: 5px; }
+.state-counts { display: flex; flex-wrap: wrap; gap: 5px; font-size: .8rem; }
+.state-total { color: var(--state); }
 .project-meta { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: 14px; color: var(--muted); font-size: .8rem; }
 .leftovers { grid-column: 1 / -1; }
 .leftover-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 24px; }
@@ -160,7 +163,7 @@ footer { display: flex; flex-wrap: wrap; gap: 9px; padding: 26px 0 4px; font-siz
 footer > span:last-child { margin-left: auto; }
 .skip { position: fixed; left: 16px; top: -100px; background: var(--surface); padding: 12px; z-index: 10; }
 .skip:focus { top: 16px; }
-@media (min-width: 1500px) { .home-grid { grid-template-columns: 1.2fr 1fr 1fr; } .activity { grid-column: auto; } .chart-grid { grid-template-columns: 1fr; } .project-panel { grid-column: 1 / 3; } .leftovers { grid-column: 3; } .leftover-stats { grid-template-columns: 1fr; } }
+@media (min-width: 1200px) { .home-grid { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr); } .activity { grid-column: auto; } .chart-grid { grid-template-columns: 1fr; } .project-panel { grid-column: 1 / 3; } .leftovers { grid-column: 3; } .leftover-stats { grid-template-columns: 1fr; } }
 @media (max-width: 1050px) { body { grid-template-columns: 170px minmax(0, 1fr); } .rail { padding: 26px 10px; } .brand { font-size: 1.3rem; } .brand small { font-size: .42rem; } .page-heading { align-items: flex-start; flex-direction: column; } .home-grid { grid-template-columns: minmax(0, 1fr); } .activity, .project-panel, .leftovers { grid-column: auto; } }
 @media (max-width: 650px) {
   body { display: block; }
@@ -182,3 +185,15 @@ footer > span:last-child { margin-left: auto; }
   footer > span:last-child { margin-left: 0; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
+
+.source-status { margin: 8px 0; font-size: .8rem; color: var(--waiting); }
+.visibility { margin-bottom: 16px; font-size: .8rem; color: var(--muted); }
+.attention .item { padding-top: 10px; padding-bottom: 10px; margin-top: 0; }
+.attention h3 { font-size: .92rem; }
+.attention h3 a { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.attention-more { padding-top: 14px; font-size: .85rem; }
+.chart-note { font-size: .8rem; color: var(--muted); margin-top: 8px; }
+.activity .section-heading { margin-bottom: 12px; }
+.activity .section-heading > span { font-size: .75rem; }
+.activity .chart-grid { gap: 14px; margin-top: 12px; }
+.activity h4 { margin-bottom: 4px; }

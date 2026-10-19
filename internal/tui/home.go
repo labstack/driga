@@ -2,9 +2,7 @@ package tui
 
 import (
 	"fmt"
-	"sort"
 	"strings"
-	"time"
 
 	"charm.land/lipgloss/v2"
 	"github.com/NimbleMarkets/ntcharts/v2/barchart"
@@ -16,47 +14,25 @@ import (
 const homeTab = 6
 
 func (m *app) needsYou() []tabRow {
-	type attention struct {
-		row tabRow
-		at  time.Time
-	}
-	items := []attention{}
-	seen := map[string]bool{}
+	inbox := []view.InboxRow{}
 	for _, r := range m.snap.Inbox.Rows {
-		if r.AckedAt != nil || !m.machineVisible(r.MachineID) {
-			continue
+		if m.machineVisible(r.MachineID) {
+			inbox = append(inbox, r)
 		}
-		if r.Kind != "waiting" && r.Kind != "finished" && r.Kind != "worker-finished" {
-			continue
-		}
-		item := r.InboxItem
-		item.MachineID = r.MachineID
-		key := fmt.Sprintf("%s:%d", r.MachineID, r.SessionID)
-		state := r.Kind
-		if r.Kind == "waiting" {
-			seen[key] = true
-			if label := m.snap.AgentDetails[r.SessionID].Label; strings.TrimPrefix(label, "~") == "stalled?" {
-				state = label
-			}
-		}
-		items = append(items, attention{tabRow{machine: r.MachineID, key: "inbox:" + r.MachineID + ":" + r.ID, agent: r.SessionID, inbox: &item, cells: []string{"", state, r.Project, r.Summary}}, r.TS})
 	}
-	m.eachAgent(func(r view.AgentRow) {
-		state := strings.TrimPrefix(r.Label, "~")
-		if state != "waiting" && state != "stalled?" {
-			return
+	agents := []view.AgentRow{}
+	m.eachAgent(func(r view.AgentRow) { r.Children = nil; agents = append(agents, r) })
+	rows := []tabRow{}
+	for _, a := range view.NeedsYou(inbox, agents, m.snap.AgentDetails) {
+		key := fmt.Sprintf("attention:%s:%d", a.MachineID, a.ID)
+		row := tabRow{machine: a.MachineID, key: key, agent: a.ID, cells: []string{"", a.State, a.Project, a.Summary}}
+		if a.Inbox != nil {
+			item := a.Inbox.InboxItem
+			item.MachineID = a.MachineID
+			row.inbox = &item
+			row.key = "inbox:" + a.MachineID + ":" + item.ID
 		}
-		key := fmt.Sprintf("%s:%d", r.MachineID, r.ID)
-		if seen[key] {
-			return
-		}
-		at := m.snap.AgentDetails[r.ID].Session.LastActivityAt
-		items = append(items, attention{tabRow{machine: r.MachineID, key: "attention:" + key, agent: r.ID, cells: []string{"", r.Label, r.Project, r.Title}}, at})
-	})
-	sort.SliceStable(items, func(i, j int) bool { return items[i].at.After(items[j].at) })
-	rows := make([]tabRow, 0, len(items))
-	for _, item := range items {
-		rows = append(rows, item.row)
+		rows = append(rows, row)
 	}
 	return rows
 }
@@ -157,12 +133,12 @@ func (m *app) homeView() string {
 				machine = append(machine, metric.name+" unavailable")
 				continue
 			}
-			machine = append(machine, fmt.Sprintf("%s %s/%s", metric.name, humanBytes(metric.used), humanBytes(metric.total)), bar(float64(metric.used), float64(metric.total), inner, lipgloss.NewStyle()))
+			machine = append(machine, fmt.Sprintf("%s %.0f%% · %s/%s", metric.name, view.GaugePercent(metric.used, metric.total), humanBytes(metric.used), humanBytes(metric.total)), gaugeBar(metric.used, metric.total, inner, m.opts.NoColor))
 		}
 		machine = append(machine, fmt.Sprintf("Load %.1f / %d cores · disk free %s", s.Load1, s.Cores, humanBytes(s.DiskFree)))
 		for _, a := range m.snap.Activity.Machines {
 			if a.MachineID == host.MachineID {
-				machine = append(machine, activitySpark(a.Buckets, inner, true))
+				machine = append(machine, "load", activitySpark(a.Buckets, inner, true))
 			}
 		}
 	}
@@ -178,19 +154,29 @@ func (m *app) homeView() string {
 		if a.Stale || m.machineStale(a.MachineID) {
 			name += " (stale)"
 		}
-		activity = append(activity, name+" · events/min", activitySpark(a.Buckets, inner, false), "load", activitySpark(a.Buckets, inner, true))
+		activity = append(activity, name, "events/min", activitySpark(a.Buckets, inner, false))
+		if !view.ActivityHasEvents(a.Buckets) {
+			activity = append(activity, strings.Split(wrapText(view.EventsEmpty, inner), "\n")...)
+		}
+		activity = append(activity, "load", activitySpark(a.Buckets, inner, true))
+		if !view.ActivityHasSamples(a.Buckets) {
+			activity = append(activity, strings.Split(wrapText(view.HistoryEmpty, inner), "\n")...)
+		}
 	}
 	if len(activity) == 1 {
-		activity = append(activity, "No history available")
+		activity = append(activity, strings.Split(wrapText(view.HistoryEmpty, inner), "\n")...)
+		activity = append(activity, strings.Split(wrapText(view.EventsEmpty, inner), "\n")...)
 	}
 	projects := []string{}
-	for _, p := range m.snap.Projects.Rows {
+	for _, p := range view.SortedProjects(m.snap.Projects.Rows) {
 		if !m.machineVisible(p.MachineID) {
 			continue
 		}
 		dots, branch, title := "", "", ""
+		agents := []view.AgentRow{}
 		m.eachAgent(func(a view.AgentRow) {
 			if a.MachineID == p.MachineID && a.Project == p.Status.Repo.Name {
+				agents = append(agents, a)
 				dots += view.StateStyle(a.Label, m.opts.NoColor).Render("●")
 				if branch == "" {
 					branch = a.Branch
@@ -200,6 +186,13 @@ func (m *app) homeView() string {
 				}
 			}
 		})
+		if len(agents) > 5 {
+			parts := []string{}
+			for _, state := range view.StateCounts(agents) {
+				parts = append(parts, view.StateStyle(state.Label, m.opts.NoColor).Render(fmt.Sprintf("%d %s", state.Count, state.Label)))
+			}
+			dots = strings.Join(parts, " · ")
+		}
 		detail := m.snap.ProjectDetails[p.Status.Repo.ID]
 		if branch == "" && len(detail.WorktreeRows) > 0 {
 			branch = detail.WorktreeRows[0].Branch
@@ -209,7 +202,11 @@ func (m *app) homeView() string {
 		} else if len(p.Status.Where) > 0 {
 			title = p.Status.Where[0].Text
 		}
-		projects = append(projects, fmt.Sprintf("%s %s · %s · dirty %d · ↑%d · %s", clean(p.Status.Repo.Name), dots, clean(branch), p.Dirty, p.Unpushed, clean(title)))
+		line := fmt.Sprintf("%s %s · %s · dirty %d · ↑%d · %s", clean(p.Status.Repo.Name), dots, clean(branch), p.Dirty, p.Unpushed, clean(title))
+		if p.Status.LiveAgents == 0 && p.Status.Activity == "idle" && !m.opts.NoColor {
+			line = lipgloss.NewStyle().Faint(true).Render(line)
+		}
+		projects = append(projects, line)
 	}
 	if len(projects) == 0 {
 		projects = append(projects, "No projects")
@@ -269,17 +266,28 @@ func bar(value, total float64, width int, style lipgloss.Style) string {
 	return b.View()
 }
 
+// gaugeBar draws the full capacity, including the unused track at zero usage.
+func gaugeBar(used, total uint64, width int, noColor bool) string {
+	width = max(1, width)
+	filled := min(width, int(view.GaugePercent(used, total)*float64(width)/100))
+	track := strings.Repeat("░", width-filled)
+	if !noColor {
+		track = lipgloss.NewStyle().Faint(true).Render(track)
+	}
+	return view.GaugeStyle(used, total, noColor).Render(strings.Repeat("█", filled)) + track
+}
+
 func activitySpark(buckets []view.ActivityBucket, width int, load bool) string {
 	if len(buckets) == 0 {
-		return "No history available"
+		return view.HistoryEmpty
 	}
-	width = max(1, min(width, len(buckets)))
+	width = max(1, width)
 	values := make([]float64, width)
 	valid := make([]bool, width)
 	ceiling := 1.0
 	for x := range width {
 		valid[x] = true
-		for i := x * len(buckets) / width; i < (x+1)*len(buckets)/width; i++ {
+		for i := x * len(buckets) / width; i < max(x*len(buckets)/width+1, (x+1)*len(buckets)/width); i++ {
 			b := buckets[i]
 			v := float64(b.Events)
 			if load {
