@@ -2,6 +2,7 @@ package view
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -126,5 +127,36 @@ func TestNeedsYouTitleFallsBackToProject(t *testing.T) {
 	rows := NeedsYou([]InboxRow{{MachineID: "local", Project: "repo", InboxItem: model.InboxItem{ID: "event", SessionID: 1, Kind: "waiting"}}}, []AgentRow{{MachineID: "local", ID: 1, Title: "Last prompt is not a title", Adapter: "claude", Project: "repo"}}, map[int64]AgentView{1: {MachineID: "local", Session: model.Session{SessionObs: model.SessionObs{Adapter: "claude"}}}})
 	if len(rows) != 1 || rows[0].Title != "repo" {
 		t.Fatalf("title must fall back to project: %+v", rows)
+	}
+}
+
+func TestEventDrivenSourcesDoNotExpire(t *testing.T) {
+	for _, name := range []string{"otlp", "sockets"} {
+		for _, seen := range []bool{false, true} {
+			at := time.Time{}
+			if seen {
+				at = testNow.Add(-24 * time.Hour)
+			}
+			st := fixture(t, func(tx *store.Tx) error { return tx.SetSourceOK(name, at) })
+			e, err := NewEnvelope(st, "daemon", testNow, collector.Cadence(0), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			f := e.Freshness[name]
+			if f.Stale || f.LastOKAt != at || seen && f.AgeSeconds != 86400 {
+				t.Fatalf("%s seen=%v: %+v", name, seen, f)
+			}
+		}
+	}
+}
+
+func TestEventDrivenRenderReportsLastEvent(t *testing.T) {
+	var out strings.Builder
+	err := Render(&out, SummaryView{}, RenderOpts{NoColor: true, Envelope: Envelope{Freshness: map[string]Fresh{"otlp": {LastOKAt: testNow, AgeSeconds: 3600, Status: "last-event"}, "sockets": {Status: "not-yet-receiving"}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "last event: otlp") || !strings.Contains(out.String(), testNow.Format(time.RFC3339)) || !strings.Contains(out.String(), "sockets: not-yet-receiving") || strings.Contains(out.String(), "stale:") {
+		t.Fatal(out.String())
 	}
 }

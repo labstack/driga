@@ -9,11 +9,11 @@ import (
 // Attention keeps the newest unacknowledged event and the session identity together.
 // Inbox is nil for a waiting/stalled session with no unacknowledged event.
 type Attention struct {
-	MachineID                                        string
-	ID                                               int64
-	State, Adapter, Title, Project, Machine, Summary string
-	At                                               time.Time
-	Inbox                                            *InboxRow
+	MachineID                                                string
+	ID                                                       int64
+	State, Adapter, Title, Project, Machine, Summary, Branch string
+	At                                                       time.Time
+	Inbox                                                    *InboxRow
 }
 
 type sessionKey struct {
@@ -43,14 +43,18 @@ func NeedsYou(inbox []InboxRow, agents []AgentRow, details map[int64]AgentView) 
 			continue
 		}
 		item := i
-		items[key] = Attention{MachineID: i.MachineID, ID: i.SessionID, State: i.Kind, Project: i.Project, Machine: i.MachineName, Summary: i.Summary, At: i.TS, Inbox: &item}
+		items[key] = Attention{MachineID: i.MachineID, ID: i.SessionID, State: i.Kind, Project: i.Project, Machine: i.MachineName, Summary: i.Summary, At: i.TS, Inbox: &item, Adapter: i.Adapter, Title: i.Title, Branch: i.Branch}
 	}
 	for key, a := range rows {
 		state := strings.TrimPrefix(a.Label, "~")
 		if _, ok := items[key]; ok || state != "waiting" && state != "stalled?" {
 			continue
 		}
-		items[key] = Attention{MachineID: a.MachineID, ID: a.ID, State: a.Label, At: details[a.ID].Session.LastActivityAt}
+		at := a.LastActivityAt
+		if at.IsZero() {
+			at = details[a.ID].Session.LastActivityAt
+		}
+		items[key] = Attention{MachineID: a.MachineID, ID: a.ID, State: a.Label, At: at}
 	}
 	result := make([]Attention, 0, len(items))
 	for key, item := range items {
@@ -62,12 +66,22 @@ func NeedsYou(inbox []InboxRow, agents []AgentRow, details map[int64]AgentView) 
 			d = AgentView{}
 			hasDetail = false
 		}
-		item.Adapter = d.Session.Adapter
+		if a.Branch != "" {
+			item.Branch = a.Branch
+		}
+		if d.Session.Branch != "" {
+			item.Branch = d.Session.Branch
+		}
+		if d.Session.Adapter != "" {
+			item.Adapter = d.Session.Adapter
+		}
 		if item.Adapter == "" {
 			item.Adapter = a.Adapter
 		}
-		item.Title = d.Session.Title
-		if item.Title == "" && !hasDetail {
+		if hasDetail {
+			item.Title = d.Session.Title
+		}
+		if item.Title == "" && !hasDetail && !a.TitleFromPrompt {
 			item.Title = a.Title
 		}
 		if item.Project == "" {

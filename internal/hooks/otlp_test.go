@@ -60,3 +60,44 @@ func TestHooksOTLPRoundTrip(t *testing.T) {
 		})
 	}
 }
+
+func TestOTLPTracesBetaOwnership(t *testing.T) {
+	for _, existing := range []bool{false, true} {
+		p := filepath.Join(t.TempDir(), "settings.json")
+		before := `{}`
+		if existing {
+			before = `{"env":{"CLAUDE_CODE_ENHANCED_TELEMETRY_BETA":"1"}}`
+		}
+		os.WriteFile(p, []byte(before), 0600)
+		d, err := ClaudeInstallOTLP(p, true, false, time.Now())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(d.After, `"CLAUDE_CODE_ENHANCED_TELEMETRY_BETA": "1"`) {
+			t.Fatalf("beta missing: %s", d.After)
+		}
+		d, err = ClaudeUninstallOTLP(p, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(d.After, "CLAUDE_CODE_ENHANCED_TELEMETRY_BETA") != existing {
+			t.Fatalf("ownership: %s", d.After)
+		}
+	}
+}
+
+func TestOTLPTracesRefusesDisabledBeta(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "settings.json")
+	before := `{"env":{"CLAUDE_CODE_ENHANCED_TELEMETRY_BETA":"0"}}`
+	if err := os.WriteFile(p, []byte(before), 0600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := ClaudeInstallOTLP(p, true, false, time.Now())
+	if err != ErrTelemetryInUse {
+		t.Fatalf("disabled beta overwritten or ignored: %v", err)
+	}
+	b, _ := os.ReadFile(p)
+	if string(b) != before {
+		t.Fatal(string(b))
+	}
+}

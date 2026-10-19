@@ -346,6 +346,9 @@ func TestScopesAndToolErrors(t *testing.T) {
 
 func TestMachinesUsesStaleCache(t *testing.T) {
 	s, _ := fixture(t)
+	if err := os.Remove(filepath.Join(os.Getenv("DRIGA_DATA_DIR"), "driga.lock")); err != nil {
+		t.Fatal(err)
+	}
 	if err := s.SetMeta("last_pass_at", time.Now().Add(-time.Hour).Format(time.RFC3339Nano)); err != nil {
 		t.Fatal(err)
 	}

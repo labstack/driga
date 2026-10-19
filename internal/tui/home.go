@@ -283,7 +283,7 @@ func (m *app) homeView() string {
 		agents := []view.AgentRow{}
 		branch, title := "", ""
 		m.eachAgent(func(a view.AgentRow) {
-			if a.MachineID == p.MachineID && a.Project == p.Status.Repo.Name {
+			if a.MachineID == p.MachineID && a.RepoID == p.Status.Repo.ID {
 				agents = append(agents, a)
 				if branch == "" {
 					branch = a.Branch
@@ -401,8 +401,21 @@ func (m *app) homeView() string {
 		rows = append(rows, needsPanel, statesPanel, machinePanel)
 	}
 	rows = append(rows, frame("Activity · 60 min", "events/min · load · ┄ cores", strings.Join(activity, "\n"), m.width))
-	pp := frame("Projects", "2 Projects for all", strings.Join(projects, "\n"), projectW)
 	lp := frame("Leftovers", "6 Cleanup", strings.Join(leftovers, "\n"), leftW)
+	// Budget actual rendered lines, including wrapped project rows and borders.
+	available := m.bodyHeight() - lipgloss.Height(strings.Join(rows, "\n")) - 1
+	if cols != 3 {
+		available -= lipgloss.Height(lp) + 1
+	}
+	projectLines := strings.Split(strings.Join(projects, "\n"), "\n")
+	limit := max(1, available-2)
+	if len(projectLines) > limit {
+		projectLines = projectLines[:limit]
+		if limit > 1 {
+			projectLines[limit-1] = dim.Render("More projects · 2 Projects for all")
+		}
+	}
+	pp := frame("Projects", "2 Projects for all", strings.Join(projectLines, "\n"), projectW)
 	if cols == 3 {
 		rows = append(rows, lipgloss.JoinHorizontal(lipgloss.Top, pp, " ", lp))
 	} else {

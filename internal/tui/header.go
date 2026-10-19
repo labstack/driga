@@ -161,6 +161,12 @@ func (m *app) footer() string {
 			text += "\n" + truncate(clean(name)+": not-yet-receiving", m.width)
 			continue
 		}
+		if f.Status == "last-event" {
+			text += "\n" + truncate(fmt.Sprintf("%s: last event %s ago", clean(name), duration(m.opts.Now().Sub(f.LastOKAt))), m.width)
+			if !f.Stale {
+				continue
+			}
+		}
 		interval := view.SourceInterval(sourceName, collector.Cadence(0))
 		for _, machine := range m.snap.Machines.Rows {
 			if name == machine.MachineID {

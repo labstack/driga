@@ -8,6 +8,7 @@ import (
 	"crypto/subtle"
 	"embed"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"html/template"
 	"io/fs"
@@ -27,7 +28,7 @@ import (
 var assets embed.FS
 
 const csp = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'"
-const cookieName = "driga_token"
+const cookieName = "driga_token" // prefix; each server appends its port
 
 // Source shares the TUI's consistent view transaction and live snapshot source.
 type Source interface {
@@ -42,15 +43,25 @@ type Options struct {
 }
 
 type Server struct {
-	source    Source
-	opts      Options
-	token     string
-	templates *template.Template
-	static    http.Handler
-	themeCSS  string
-	mu        sync.Mutex
-	clients   map[chan struct{}]bool
-	ready     chan struct{}
+	source          Source
+	opts            Options
+	token           string
+	templates       *template.Template
+	static          http.Handler
+	themeCSS        string
+	mu              sync.Mutex
+	clients         map[chan struct{}]bool
+	ready           chan struct{}
+	cacheMu         sync.Mutex
+	cache           map[snapshotKey]cachedSnapshot
+	cacheVersion    int64
+	cleanupAt       time.Time
+	cleanupRows     []cleanup.Candidate
+	cleanupErr      error
+	cookieName      string
+	sseWriteTimeout time.Duration
+	watchInterval   time.Duration
+	refreshInterval time.Duration
 }
 
 // Listen validates before binding; hostnames other than localhost never resolve.
@@ -88,6 +99,7 @@ func New(source Source, opts Options) (*Server, error) {
 		source: source, opts: opts, token: base64.RawURLEncoding.EncodeToString(token),
 		themeCSS: view.ThemeCSS(), templates: t, static: http.StripPrefix("/static/", http.FileServer(http.FS(static))),
 		clients: map[chan struct{}]bool{}, ready: make(chan struct{}),
+		cache: map[snapshotKey]cachedSnapshot{}, cookieName: instanceCookie(opts.Host), sseWriteTimeout: 10 * time.Second, watchInterval: time.Second, refreshInterval: 15 * time.Second,
 	}, nil
 }
 
@@ -98,7 +110,8 @@ func (s *Server) Watch(ctx context.Context) {
 	version, err := s.source.DataVersion(ctx)
 	close(s.ready)
 	initialized := err == nil
-	ticker := time.NewTicker(time.Second)
+	lastRefresh := time.Now()
+	ticker := time.NewTicker(s.watchInterval)
 	defer ticker.Stop()
 	for {
 		select {
@@ -106,13 +119,20 @@ func (s *Server) Watch(ctx context.Context) {
 			return
 		case <-ticker.C:
 			next, err := s.source.DataVersion(ctx)
+			s.mu.Lock()
+			active := len(s.clients) > 0
+			s.mu.Unlock()
+			if activity, ok := s.source.(interface{ SetActive(bool) }); ok {
+				activity.SetActive(active)
+			}
 			if err != nil {
 				continue
 			}
-			if initialized && next == version {
+			if initialized && next == version && time.Since(lastRefresh) < s.refreshInterval {
 				continue
 			}
 			version, initialized = next, true
+			lastRefresh = time.Now()
 			s.mu.Lock()
 			for ch := range s.clients {
 				select {
@@ -126,6 +146,7 @@ func (s *Server) Watch(ctx context.Context) {
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	w = &headerWriter{ResponseWriter: w}
 	w.Header().Set("Content-Security-Policy", csp)
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Referrer-Policy", "no-referrer")
@@ -145,7 +166,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "unauthorized", 401)
 			return
 		}
-		http.SetCookie(w, &http.Cookie{Name: cookieName, Value: s.token, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode})
+		http.SetCookie(w, &http.Cookie{Name: s.cookieName, Value: s.token, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode})
 		clean := *r.URL
 		q := clean.Query()
 		q.Del("token")
@@ -160,7 +181,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, clean.String(), http.StatusSeeOther)
 		return
 	}
-	cookie, err := r.Cookie(cookieName)
+	cookie, err := r.Cookie(s.cookieName)
 	if err != nil || !s.validToken(cookie.Value) {
 		http.Error(w, "unauthorized", 401)
 		return
@@ -192,11 +213,6 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodHead {
 		return
 	}
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		http.Error(w, "streaming unavailable", 500)
-		return
-	}
 	select {
 	case <-s.ready:
 	case <-r.Context().Done():
@@ -207,19 +223,27 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 	s.clients[ch] = true
 	s.mu.Unlock()
 	defer func() { s.mu.Lock(); delete(s.clients, ch); s.mu.Unlock() }()
-	if _, err := fmt.Fprint(w, "event: ready\ndata: refresh\n\n"); err != nil {
+	writeEvent := func(event string) error {
+		rc := http.NewResponseController(w)
+		if err := rc.SetWriteDeadline(time.Now().Add(s.sseWriteTimeout)); err != nil && !errors.Is(err, http.ErrNotSupported) {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, "event: %s\ndata: refresh\n\n", event); err != nil {
+			return err
+		}
+		return rc.Flush()
+	}
+	if err := writeEvent("ready"); err != nil {
 		return
 	}
-	flusher.Flush()
 	for {
 		select {
 		case <-r.Context().Done():
 			return
 		case <-ch:
-			if _, err := fmt.Fprint(w, "event: change\ndata: refresh\n\n"); err != nil {
+			if err := writeEvent("change"); err != nil {
 				return
 			}
-			flusher.Flush()
 		}
 	}
 }
@@ -244,4 +268,33 @@ func (s *Server) page(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodHead {
 		_, _ = w.Write(buf.Bytes())
 	}
+}
+
+func instanceCookie(host string) string {
+	_, port, _ := net.SplitHostPort(host)
+	return cookieName + "_" + port
+}
+
+type headerWriter struct {
+	http.ResponseWriter
+	wrote bool
+}
+
+func (w *headerWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+func (w *headerWriter) WriteHeader(code int) {
+	if w.wrote {
+		return
+	}
+	w.wrote = true
+	w.Header().Set("Content-Security-Policy", csp)
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Referrer-Policy", "no-referrer")
+	w.Header().Set("Cache-Control", "no-store")
+	w.ResponseWriter.WriteHeader(code)
+}
+func (w *headerWriter) Write(b []byte) (int, error) {
+	if !w.wrote {
+		w.WriteHeader(http.StatusOK)
+	}
+	return w.ResponseWriter.Write(b)
 }

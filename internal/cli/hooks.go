@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/labstack/driga/internal/config"
 	"github.com/labstack/driga/internal/hooks"
 )
 
@@ -152,15 +153,23 @@ func (c HooksOptions) change(g *Globals, install bool) error {
 			}
 		}
 	}
+	endpoint := ""
+	if c.OTLP {
+		cfg, err := config.Load(config.Path())
+		if err != nil {
+			return err
+		}
+		endpoint = "http://" + cfg.Intake.Listen
+	}
 	now := time.Now()
 	var operations []func(bool) (hooks.Diff, error)
 	if agent == "claude" || agent == "all" {
 		operations = append(operations, func(dryRun bool) (hooks.Diff, error) {
 			if c.OTLP {
 				if install {
-					return hooks.ClaudeInstallOTLP(claude, c.Traces, dryRun, now)
+					return hooks.ClaudeInstallOTLP(claude, c.Traces, dryRun, now, endpoint)
 				}
-				return hooks.ClaudeUninstallOTLP(claude, dryRun)
+				return hooks.ClaudeUninstallOTLP(claude, dryRun, endpoint)
 			}
 			if install {
 				return hooks.ClaudeInstall(claude, driga, dryRun, now)
@@ -172,9 +181,9 @@ func (c HooksOptions) change(g *Globals, install bool) error {
 		operations = append(operations, func(dryRun bool) (hooks.Diff, error) {
 			if c.OTLP {
 				if install {
-					return hooks.CodexInstallOTLP(codex, c.Traces, dryRun, now)
+					return hooks.CodexInstallOTLP(codex, c.Traces, dryRun, now, endpoint)
 				}
-				return hooks.CodexUninstallOTLP(codex, dryRun)
+				return hooks.CodexUninstallOTLP(codex, dryRun, endpoint)
 			}
 			if install {
 				return hooks.CodexInstall(codex, driga, dryRun, now)
@@ -182,11 +191,7 @@ func (c HooksOptions) change(g *Globals, install bool) error {
 			return hooks.CodexUninstall(codex, dryRun)
 		})
 	}
-	type change struct {
-		diff  hooks.Diff
-		apply func(bool) (hooks.Diff, error)
-	}
-	var changes []change
+	var changes []hooks.Diff
 	out := hooksOutput(g)
 	for _, operation := range operations {
 		d, err := operation(true)
@@ -200,7 +205,7 @@ func (c HooksOptions) change(g *Globals, install bool) error {
 			return err
 		}
 		if d.Changed {
-			changes = append(changes, change{diff: d, apply: operation})
+			changes = append(changes, d)
 			if _, err := io.WriteString(out, d.Unified()); err != nil {
 				return err
 			}
@@ -223,18 +228,14 @@ func (c HooksOptions) change(g *Globals, install bool) error {
 	if answer != "y" && answer != "yes" {
 		return nil
 	}
-	// Recheck every preview before applying any changes after the prompt.
+	// Check all files before writing any preview, then guard each atomic write again.
 	for _, change := range changes {
-		d, err := change.apply(true)
-		if err != nil {
+		if err := change.Check(); err != nil {
 			return err
-		}
-		if d.Before != change.diff.Before || d.After != change.diff.After {
-			return fmt.Errorf("%s changed since the preview; rerun the hooks command", d.Path)
 		}
 	}
 	for _, change := range changes {
-		if _, err := change.apply(false); err != nil {
+		if err := change.Apply(now); err != nil {
 			return err
 		}
 	}
@@ -250,15 +251,20 @@ func (c HooksOptions) otlpStatus(g *Globals) error {
 	if err != nil {
 		return err
 	}
+	cfg, err := config.Load(config.Path())
+	if err != nil {
+		return err
+	}
+	endpoint := "http://" + cfg.Intake.Listen
 	for _, a := range []string{"claude", "codex"} {
 		if agent != "all" && agent != a {
 			continue
 		}
 		var d hooks.Diff
 		if a == "claude" {
-			d, err = hooks.ClaudeUninstallOTLP(claude, true)
+			d, err = hooks.ClaudeUninstallOTLP(claude, true, endpoint)
 		} else {
-			d, err = hooks.CodexUninstallOTLP(codex, true)
+			d, err = hooks.CodexUninstallOTLP(codex, true, endpoint)
 		}
 		if err != nil {
 			return err

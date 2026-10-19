@@ -110,6 +110,11 @@ func agentsLocal(r Reader, f AgentFilter, now time.Time) (AgentsView, error) {
 			title = s.LastPrompt
 		}
 		row := AgentRow{MachineID: r.MachineID(), ID: s.ID, Label: derive.Display(s.Label, s.Heuristic), Adapter: s.Adapter, Origin: s.Origin, Project: projectName(s, repos), Branch: s.Branch, Title: title, Age: sessionAge(s, now), Evidence: s.Evidence, ObservedAt: now, Children: []AgentRow{}, FinishedChildren: counts[s.ID]}
+		if s.RepoID != nil {
+			row.RepoID = *s.RepoID
+		}
+		row.LastActivityAt = s.LastActivityAt
+		row.TitleFromPrompt = s.Title == ""
 		for _, p := range procTree(s, idx) {
 			row.Mem += p.RSS
 		}
@@ -212,6 +217,12 @@ func projectRow(r Reader, repo model.Repo, ss []model.Session, now time.Time) (P
 		row.Status.Where = []WherePart{{MachineID: r.MachineID(), Source: "claude", Text: s.Text, At: s.CreatedAt, Stale: s.StateHash != derive.SummaryStateHash(repo, wts, ss, hs, now, s.UsedSnippets)}}
 	}
 	row.Worktrees = len(wts)
+	if len(wts) > 0 {
+		row.Branch = wts[0].Branch
+	}
+	if len(hs) > 0 {
+		row.LatestHandoff = hs[0].Text
+	}
 	for _, w := range wts {
 		row.Dirty += w.Dirty + w.Untracked
 		row.Unpushed += w.Ahead
@@ -272,7 +283,7 @@ func projectsLocal(r Reader, f Filter, now time.Time) (ProjectsView, error) {
 }
 
 // Where reads a canonical repo's status, worktrees, agents and latest handoffs.
-func whereLocal(r Reader, project string, now time.Time) (WhereView, error) {
+func whereLocal(r Reader, project string, now time.Time, all bool) (WhereView, error) {
 	v := WhereView{WorktreeRows: []WorktreeRow{}, Handoffs: []HandoffRow{}}
 	repos, err := r.Repos()
 	if err != nil {
@@ -286,11 +297,11 @@ func whereLocal(r Reader, project string, now time.Time) (WhereView, error) {
 		if err != nil {
 			return v, err
 		}
-		v.ProjectRow, v.WorktreeRows, v.Handoffs, err = projectRow(r, repo, visibleSessions(ss, false, now), now)
+		v.ProjectRow, v.WorktreeRows, v.Handoffs, err = projectRow(r, repo, visibleSessions(ss, all, now), now)
 		if err != nil {
 			return v, err
 		}
-		v.Agents, err = agentsLocal(r, AgentFilter{Project: project}, now)
+		v.Agents, err = agentsLocal(r, AgentFilter{Project: project, All: all}, now)
 		return v, err
 	}
 	return v, fmt.Errorf("unknown project %q", project)
@@ -337,7 +348,7 @@ func inboxLocal(r Reader, f Filter, now time.Time) (InboxView, error) {
 		if f.Project != "" && !sessionProject(s, repos, f.Project) {
 			continue
 		}
-		v.Rows = append(v.Rows, InboxRow{MachineID: r.MachineID(), InboxItem: item, Age: max(0, now.Sub(item.TS)), Project: projectName(s, repos)})
+		v.Rows = append(v.Rows, InboxRow{MachineID: r.MachineID(), InboxItem: item, Age: max(0, now.Sub(item.TS)), Project: projectName(s, repos), Adapter: s.Adapter, Title: s.Title, Branch: s.Branch})
 	}
 	return v, nil
 }

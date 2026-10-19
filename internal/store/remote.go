@@ -22,7 +22,7 @@ func (tx *Tx) ClearRemoteRows(machine string) error {
 	if machine == "" || machine == tx.localID {
 		return fmt.Errorf("refuse to purge local or empty machine_id")
 	}
-	for _, table := range []string{"session_files", "handoffs", "summaries", "inbox_items", "procs", "events", "sessions", "worktrees", "repos", "orphans", "machine_samples", "offsets", "sources", "gaps"} {
+	for _, table := range []string{"session_files", "handoffs", "summaries", "inbox_items", "procs", "events", "event_minutes", "sessions", "worktrees", "repos", "orphans", "machine_samples", "offsets", "sources", "gaps"} {
 		if err := tx.exec("DELETE FROM "+table+" WHERE machine_id=?", machine); err != nil {
 			return err
 		}
@@ -81,8 +81,12 @@ func (tx *Tx) ApplyInbox(i model.InboxItem) error {
 
 // ApplyEvent idempotently stores a natural-keyed peer event.
 func (tx *Tx) ApplyEvent(e model.Event) error {
-	if err := tx.exec("DELETE FROM events WHERE machine_id=? AND adapter=? AND external_id=? AND ts=? AND kind=?", tx.machineID, e.Adapter, e.ExternalID, unix(e.TS), e.Kind); err != nil {
+	var exists bool
+	if err := tx.conn.QueryRowContext(tx.ctx, `SELECT EXISTS(SELECT 1 FROM events WHERE machine_id=? AND adapter=? AND external_id=? AND ts=? AND kind=?)`, tx.machineID, e.Adapter, e.ExternalID, unix(e.TS), e.Kind).Scan(&exists); err != nil {
 		return err
+	}
+	if exists {
+		return tx.exec(`UPDATE events SET summary=? WHERE machine_id=? AND adapter=? AND external_id=? AND ts=? AND kind=?`, e.Summary, tx.machineID, e.Adapter, e.ExternalID, unix(e.TS), e.Kind)
 	}
 	return tx.InsertEvent(e)
 }

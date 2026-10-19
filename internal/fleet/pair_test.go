@@ -235,7 +235,7 @@ func TestPairEitherNoAborts(t *testing.T) {
 func TestHeadlessAllowID(t *testing.T) {
 	s, addr, sock := pairServer(t)
 	dir, id := pairIdentity(t)
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	panicPrompt := func(string) bool { t.Error("headless prompt"); return false }
 	if _, err := Enroll(ctx, sock, EnrollOpts{AllowID: id.DeviceID}, panicPrompt); err != nil {

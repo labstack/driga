@@ -116,7 +116,7 @@ func TestNeedsYouDedupeCapAndIdentity(t *testing.T) {
 	if strings.Count(body, `class="strip finished"`)+strings.Count(body, `class="strip waiting"`) != 8 {
 		t.Error("attention cap missing")
 	}
-	for _, text := range []string{"2 more in Inbox", "claude", "codex", "2m ago", "Fixture project", "&lt;script&gt;alert(1)&lt;/script&gt;"} {
+	for _, text := range []string{"2 more needing you", "claude", "codex", "2m ago", "Fixture project", "&lt;script&gt;alert(1)&lt;/script&gt;"} {
 		if !strings.Contains(body, text) {
 			t.Errorf("missing %q", text)
 		}
@@ -162,7 +162,7 @@ func TestFreshnessCompactAndActivityEmpty(t *testing.T) {
 		t.Fatal(err)
 	}
 	body := request(s, "GET", "/", s.token).Body.String()
-	if !strings.Contains(body, "Stale: cwds, otlp") || !strings.Contains(body, `title="cwds`) {
+	if !strings.Contains(body, "Stale: cwds") || !strings.Contains(body, `title="cwds`) {
 		t.Error("missing compact stale line with hover details")
 	}
 	p := pageData{Page: "/"}

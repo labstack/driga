@@ -87,7 +87,7 @@ func fixture(t *testing.T) (*Server, *store.Store, int64, int64) {
 func request(s *Server, method, target, token string) *httptest.ResponseRecorder {
 	r := httptest.NewRequest(method, "http://127.0.0.1:4321"+target, nil)
 	if token != "" {
-		r.AddCookie(&http.Cookie{Name: "driga_token", Value: token})
+		r.AddCookie(&http.Cookie{Name: s.cookieName, Value: token})
 	}
 	w := httptest.NewRecorder()
 	s.ServeHTTP(w, r)
@@ -117,7 +117,7 @@ func TestAuthentication(t *testing.T) {
 func TestHostAndMethods(t *testing.T) {
 	s, _, _, _ := fixture(t)
 	r := httptest.NewRequest("GET", "http://evil.test/", nil)
-	r.AddCookie(&http.Cookie{Name: "driga_token", Value: s.token})
+	r.AddCookie(&http.Cookie{Name: s.cookieName, Value: s.token})
 	w := httptest.NewRecorder()
 	s.ServeHTTP(w, r)
 	if w.Code != http.StatusForbidden {
@@ -177,7 +177,7 @@ func TestPagesAndEscaping(t *testing.T) {
 	}
 	r := httptest.NewRequest("GET", "http://127.0.0.1:4321/agents", nil)
 	r.Header.Set("HX-Request", "true")
-	r.AddCookie(&http.Cookie{Name: "driga_token", Value: s.token})
+	r.AddCookie(&http.Cookie{Name: s.cookieName, Value: s.token})
 	w := httptest.NewRecorder()
 	s.ServeHTTP(w, r)
 	if w.Code != 200 || strings.Contains(w.Body.String(), "<!DOCTYPE") || !strings.Contains(w.Body.String(), "&lt;script&gt;") {
@@ -192,7 +192,7 @@ func TestSSEDataChange(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	r, _ := http.NewRequestWithContext(ctx, "GET", ts.URL+"/events", nil)
-	r.AddCookie(&http.Cookie{Name: "driga_token", Value: s.token})
+	r.AddCookie(&http.Cookie{Name: s.cookieName, Value: s.token})
 	resp, err := http.DefaultClient.Do(r)
 	if err != nil {
 		t.Fatal(err)
@@ -296,7 +296,7 @@ func TestSSERecoversAfterReadError(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { r.Host = s.opts.Host; s.ServeHTTP(w, r) }))
 	defer ts.Close()
 	r, _ := http.NewRequestWithContext(ctx, "GET", ts.URL+"/events", nil)
-	r.AddCookie(&http.Cookie{Name: cookieName, Value: s.token})
+	r.AddCookie(&http.Cookie{Name: s.cookieName, Value: s.token})
 	resp, err := http.DefaultClient.Do(r)
 	if err != nil {
 		t.Fatal(err)

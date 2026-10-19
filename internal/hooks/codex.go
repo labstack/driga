@@ -13,16 +13,16 @@ import (
 // ErrNotifyInUse means another program already owns Codex's notify setting.
 var ErrNotifyInUse = errors.New("Codex notify is already in use")
 
-func codexOTLP() map[string]any {
+func codexOTLP(endpoints ...string) map[string]any {
 	return map[string]any{
 		"log_user_prompt": false,
-		"exporter":        map[string]any{"otlp-http": map[string]any{"endpoint": "http://127.0.0.1:7418/v1/logs", "protocol": "json"}},
+		"exporter":        map[string]any{"otlp-http": map[string]any{"endpoint": otlpEndpoint(endpoints) + "/v1/logs", "protocol": "json"}},
 	}
 }
 
 // CodexInstallOTLP configures the documented logs exporter; Codex facts stay unmapped.
 // The traces option applies only to Claude's documented spans.
-func CodexInstallOTLP(path string, _ bool, dryRun bool, now time.Time) (Diff, error) {
+func CodexInstallOTLP(path string, _ bool, dryRun bool, now time.Time, endpoints ...string) (Diff, error) {
 	d, settings, err := readCodex(path)
 	if err != nil {
 		return d, err
@@ -30,17 +30,17 @@ func CodexInstallOTLP(path string, _ bool, dryRun bool, now time.Time) (Diff, er
 	if _, exists := settings["otel"]; exists {
 		return d, ErrTelemetryInUse
 	}
-	settings["otel"] = codexOTLP()
+	settings["otel"] = codexOTLP(endpoints...)
 	return finishCodex(d, settings, dryRun, now)
 }
 
 // CodexUninstallOTLP removes only the exact Driga metadata-only loopback exporter.
-func CodexUninstallOTLP(path string, dryRun bool) (Diff, error) {
+func CodexUninstallOTLP(path string, dryRun bool, endpoints ...string) (Diff, error) {
 	d, settings, err := readCodex(path)
 	if err != nil {
 		return d, err
 	}
-	if !reflect.DeepEqual(settings["otel"], codexOTLP()) {
+	if !reflect.DeepEqual(settings["otel"], codexOTLP(endpoints...)) {
 		return d, nil
 	}
 	delete(settings, "otel")
@@ -106,5 +106,6 @@ func finishCodex(d Diff, settings map[string]any, dryRun bool, now time.Time) (D
 		return d, err
 	}
 	d.After, d.Changed = string(b), true
+	d.FullRewrite = true
 	return d, writeDiff(d, dryRun, now)
 }

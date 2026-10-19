@@ -514,6 +514,10 @@ func (tx *Tx) InsertEvent(e model.Event) error {
 	if err := tx.exec("INSERT INTO events (machine_id,adapter,external_id,ts,kind,summary) VALUES (?,?,?,?,?,?)", tx.machineID, e.Adapter, e.ExternalID, unix(e.TS), e.Kind, e.Summary); err != nil {
 		return err
 	}
+	if err := tx.exec(`INSERT INTO event_minutes(machine_id,minute,count) VALUES(?,?,1)
+ ON CONFLICT(machine_id,minute) DO UPDATE SET count=count+1`, tx.machineID, unix(e.TS.Truncate(time.Minute))); err != nil {
+		return err
+	}
 	return tx.exec(`DELETE FROM events WHERE machine_id=? AND adapter=? AND external_id=? AND id NOT IN
 	(SELECT id FROM events WHERE machine_id=? AND adapter=? AND external_id=? ORDER BY ts DESC,id DESC LIMIT 200)`, tx.machineID, e.Adapter, e.ExternalID, tx.machineID, e.Adapter, e.ExternalID)
 }
@@ -615,6 +619,7 @@ func (tx *Tx) Prune(now time.Time) error {
 		args  []any
 	}{
 		{"DELETE FROM events WHERE machine_id=? AND ts<?", []any{tx.machineID, month}},
+		{"DELETE FROM event_minutes WHERE machine_id=? AND minute<?", []any{tx.machineID, unix(now.Add(-30 * 24 * time.Hour).Truncate(time.Minute))}},
 		{"DELETE FROM inbox_items WHERE machine_id=? AND ts<?", []any{tx.machineID, month}},
 		{"DELETE FROM handoffs WHERE machine_id=? AND ts<?", []any{tx.machineID, month}},
 		{"DELETE FROM sessions WHERE " + expiredSession, sessionArgs},
@@ -789,4 +794,27 @@ func (q *querier) Offsets() (map[string]model.Offset, error) {
 		result[path] = o
 	}
 	return result, rows.Err()
+}
+
+// PruneSnapshot bounds disposable collection to the displayed activity window,
+// while also applying normal session, inbox, handoff and file retention.
+func (tx *Tx) PruneSnapshot(now time.Time) error {
+	if err := tx.Prune(now); err != nil {
+		return err
+	}
+	cutoff := unix(now.Truncate(time.Minute).Add(-59 * time.Minute))
+	for _, query := range []string{
+		"DELETE FROM machine_samples WHERE machine_id=? AND ts<?",
+		"DELETE FROM events WHERE machine_id=? AND ts<?",
+		"DELETE FROM event_minutes WHERE machine_id=? AND minute<?",
+	} {
+		if err := tx.exec(query, tx.machineID, cutoff); err != nil {
+			return err
+		}
+	}
+	if err := tx.exec("DELETE FROM session_files WHERE machine_id=? AND last_edit_at<?", tx.machineID, unix(now.Add(-30*time.Minute))); err != nil {
+		return err
+	}
+	// A disposable viewer does not publish a resumable fleet feed.
+	return tx.exec("DELETE FROM feed")
 }

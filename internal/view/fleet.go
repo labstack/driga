@@ -187,12 +187,18 @@ func Projects(r Reader, f Filter, now time.Time, scopes ...store.Scope) (Project
 
 // Where requires an unambiguous machine for a canonical repository path.
 func Where(r Reader, path string, now time.Time, scopes ...store.Scope) (WhereView, error) {
-	v := WhereView{}
-	found := false
 	scope := store.Scope{}
 	if len(scopes) > 0 {
 		scope = scopes[0]
 	}
+	return WhereFiltered(r, path, now, Filter{Scope: scope})
+}
+
+// WhereFiltered applies the same session visibility as project and agent lists.
+func WhereFiltered(r Reader, path string, now time.Time, f Filter) (WhereView, error) {
+	v := WhereView{}
+	found := false
+	scope := f.Scope
 	e := machineReaders(r, scope, func(mr Reader, m model.Machine) error {
 		repos, e := mr.Repos()
 		if e != nil {
@@ -203,7 +209,7 @@ func Where(r Reader, path string, now time.Time, scopes ...store.Scope) (WhereVi
 				if found {
 					return fmt.Errorf("project %q exists on multiple machines; use --machine", path)
 				}
-				v, e = whereLocal(mr, path, now)
+				v, e = whereLocal(mr, path, now, f.All)
 				v.MachineFresh = freshness(m, r.MachineID(), now)
 				found = true
 				return e

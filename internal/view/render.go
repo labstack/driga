@@ -199,7 +199,7 @@ func Render(w io.Writer, v any, opts RenderOpts) error {
 	}
 	names := []string{}
 	for name, f := range opts.Envelope.Freshness {
-		if f.Stale {
+		if f.Stale || f.Status == "last-event" || f.Status == "not-yet-receiving" {
 			names = append(names, name)
 		}
 	}
@@ -207,6 +207,13 @@ func Render(w io.Writer, v any, opts RenderOpts) error {
 	for _, name := range names {
 		f := opts.Envelope.Freshness[name]
 		line := fmt.Sprintf("stale: %s (%s)", cell(name), age(time.Duration(f.AgeSeconds)*time.Second))
+		if !f.Stale {
+			if f.Status == "last-event" {
+				line = fmt.Sprintf("last event: %s %s (%s ago)", cell(name), f.LastOKAt.Format(time.RFC3339), age(time.Duration(f.AgeSeconds)*time.Second))
+			} else {
+				line = fmt.Sprintf("%s: not-yet-receiving", cell(name))
+			}
+		}
 		if color {
 			line = lipgloss.NewStyle().Faint(true).Render(line)
 		}

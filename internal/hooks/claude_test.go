@@ -70,7 +70,7 @@ func TestClaudeInstallMergesPreservingExisting(t *testing.T) {
 		t.Fatal("backup differs")
 	}
 	info, _ := os.Stat(path)
-	if info.Mode().Perm() != 0640 || !strings.HasSuffix(d.After, "\n") || !strings.Contains(d.After, "\n  \"hooks\"") {
+	if info.Mode().Perm() != 0640 {
 		t.Fatalf("mode/format: %v, %q", info.Mode(), d.After)
 	}
 }
@@ -206,5 +206,54 @@ func TestDiffUnified(t *testing.T) {
 	}
 	if got := (hooks.Diff{Before: "same\n", After: "same\n"}).Unified(); got != "" {
 		t.Fatalf("unchanged diff = %q", got)
+	}
+}
+
+func TestClaudePreservesUnrelatedBytes(t *testing.T) {
+	for _, before := range []string{`{"z":  2, "a" : { "x" : 1 }}`, "{\n\t\"z\": 2,\n\t\"a\": 1\n}\n", "{  }", "{}\n"} {
+		for _, otlp := range []bool{false, true} {
+			path := filepath.Join(t.TempDir(), "settings.json")
+			writeFixture(t, path, before)
+			var d hooks.Diff
+			var err error
+			if otlp {
+				d, err = hooks.ClaudeInstallOTLP(path, true, false, testNow)
+			} else {
+				d, err = hooks.ClaudeInstall(path, "/opt/driga", false, testNow)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(d.After, strings.TrimPrefix(before, "{")) {
+				t.Fatalf("unrelated bytes changed: %q -> %q", before, d.After)
+			}
+			if otlp {
+				_, err = hooks.ClaudeUninstallOTLP(path, false)
+			} else {
+				_, err = hooks.ClaudeUninstall(path, false)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := readFixture(t, path); got != before {
+				t.Fatalf("roundtrip: %q != %q", got, before)
+			}
+		}
+	}
+}
+
+func TestClaudeDuplicateManagedKeyFallsBack(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	writeFixture(t, path, `{"hooks":{},"hooks":{},"unknown": 2}`)
+	d, err := hooks.ClaudeInstall(path, "/opt/driga", true, testNow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !d.FullRewrite || !strings.Contains(d.Unified(), "Full settings rewrite") {
+		t.Fatal("ambiguous targeted edit should disclose full rewrite")
+	}
+	h := decodeSettings(t, d.After)["hooks"].(map[string]any)
+	if len(h) != 4 {
+		t.Fatalf("hooks not installed: %s", d.After)
 	}
 }

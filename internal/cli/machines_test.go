@@ -9,6 +9,7 @@ import (
 	"github.com/labstack/driga/internal/gitscan"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/store"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -113,6 +114,9 @@ func TestFleetPeersShowsStateAndLastSeen(t *testing.T) {
 func TestMachinesCommandUsesCachedRows(t *testing.T) {
 	readEnv(t)
 	s := machineDB(t, "/code/api")
+	if err := os.Remove(filepath.Join(config.DataDir(), "driga.lock")); err != nil {
+		t.Fatal(err)
+	}
 	if e := s.SetMeta("last_pass_at", time.Now().Add(-time.Hour).Format(time.RFC3339Nano)); e != nil {
 		t.Fatal(e)
 	}
@@ -154,5 +158,20 @@ func TestRemoteAckScopeDoesNotSpoolUnknownID(t *testing.T) {
 	}
 	if files, _ := filepath.Glob(filepath.Join(config.SpoolDir(), "*")); len(files) != 0 {
 		t.Fatal("remote ack spooled locally", files)
+	}
+}
+
+func TestMachinesProbeDoesNotWriteLock(t *testing.T) {
+	readEnv(t)
+	machineDB(t, "/code/app")
+	path := filepath.Join(config.DataDir(), "driga.lock")
+	before := []byte("stopped collector metadata\n")
+	if err := os.WriteFile(path, before, 0600); err != nil {
+		t.Fatal(err)
+	}
+	readRun(t, "machines")
+	got, err := os.ReadFile(path)
+	if err != nil || !bytes.Equal(got, before) {
+		t.Fatalf("probe mutated lock: %q %v", got, err)
 	}
 }

@@ -74,9 +74,12 @@ func newEnvelopeLocal(r Reader, mode string, now time.Time, intervals Intervals,
 		// never succeeded: its data is missing, not current.
 		stale := s.LastOKAt.IsZero() || mode != "snapshot" && age > 3*interval
 		status := ""
-		if s.Name == "otlp" && s.LastOKAt.IsZero() && s.LastError == "" {
-			stale = false
-			status = "not-yet-receiving"
+		if s.Name == "otlp" || s.Name == "sockets" {
+			stale = s.LastError != ""
+			status = "last-event"
+			if s.LastOKAt.IsZero() && !stale {
+				status = "not-yet-receiving"
+			}
 		}
 		e.Freshness[s.Name] = Fresh{LastOKAt: s.LastOKAt, AgeSeconds: int(age / time.Second), Stale: stale, LastError: s.LastError, Status: status}
 	}
@@ -106,6 +109,9 @@ type AgentRow struct {
 	MachineFresh
 	MachineID        string        `json:"machine_id"`
 	ID               int64         `json:"id"`
+	RepoID           int64         `json:"repo_id"`
+	LastActivityAt   time.Time     `json:"last_activity_at"`
+	TitleFromPrompt  bool          `json:"title_from_prompt,omitempty"`
 	Label            string        `json:"label"`
 	Adapter          string        `json:"adapter"`
 	Origin           string        `json:"origin"`
@@ -189,11 +195,13 @@ type WherePart struct {
 // ProjectRow is a derived repository status with checkout totals.
 type ProjectRow struct {
 	MachineFresh
-	MachineID string        `json:"machine_id"`
-	Status    ProjectStatus `json:"status"`
-	Dirty     int           `json:"dirty"`
-	Unpushed  int           `json:"unpushed"`
-	Worktrees int           `json:"worktrees"`
+	MachineID     string        `json:"machine_id"`
+	Status        ProjectStatus `json:"status"`
+	Dirty         int           `json:"dirty"`
+	Unpushed      int           `json:"unpushed"`
+	Worktrees     int           `json:"worktrees"`
+	Branch        string        `json:"branch"`
+	LatestHandoff string        `json:"latest_handoff,omitempty"`
 }
 
 // ProjectsView lists repositories and their sourced status.
@@ -216,6 +224,9 @@ type InboxRow struct {
 	model.InboxItem
 	Age     time.Duration `json:"age"`
 	Project string        `json:"project"`
+	Adapter string        `json:"adapter"`
+	Title   string        `json:"title"`
+	Branch  string        `json:"branch"`
 }
 
 // InboxView lists attention and completion events without acknowledging them.

@@ -33,6 +33,7 @@
 </form>{{end}}
 </header>
 {{if .StaleSources}}<p class="source-status" title="{{.StaleDetails}}">Stale: {{.StaleSources}}</p>{{end}}
+{{if .LastEvents}}<p class="source-status muted">{{.LastEvents}}</p>{{end}}
 {{if .PendingSources}}<p class="source-status muted">{{.PendingSources}}: not-yet-receiving</p>{{end}}
 {{if or (eq .Page "/") (eq .Page "/agents") (eq .Page "/projects")}}<p class="visibility">{{if .All}}Showing all sessions · <a href="{{link .Page .Scope false}}">Show default sessions</a>{{else}}Showing default sessions · <a href="{{link .Page .Scope true}}">Show all sessions (including ended and hosted idle up to 24h)</a>{{end}}</p>{{end}}
 {{if eq .Page "/"}}{{template "home" .}}{{else if eq .Page "/agents"}}{{template "agents" .}}{{else if eq .Page "/projects"}}{{template "projects" .}}{{else if eq .Page "/inbox"}}{{template "inbox" .}}{{else if eq .Page "/orphans"}}{{template "orphans" .}}{{else if eq .Page "/machines"}}{{template "machines" .}}{{else if eq .Page "/cleanup"}}{{template "cleanup" .}}{{else if eq .Title "Agent detail"}}{{template "agent" .}}{{else if eq .Title "Project detail"}}{{template "project" .}}{{end}}
@@ -47,11 +48,11 @@
 <div class="legend">{{range .States}}<div class="leg"><span class="dot {{stateClass .Label}}"></span><span class="n">{{.Count}}</span><span class="l">{{.Label}}</span></div>{{end}}</div>
 </section>
 <div class="grid2">
-<section class="card attention"><div class="head"><h2>Needs you <span class="count">{{add (len .Needs) .NeedsMore}}</span></h2><a href="{{link "/inbox" .Scope .All}}">Open inbox →</a></div>
+<section class="card attention"><div class="head"><h2>Needs you <span class="count">{{add (len .Needs) .NeedsMore}}</span></h2><a href="{{link "/inbox" .Scope .All}}&amp;attention=1">All attention →</a></div>
 <div class="strips">{{$p := .}}{{range .Needs}}
-<a class="strip {{stateClass .State}}" href="{{link (agentPath .ID) $p.Scope $p.All}}"><span class="edge"></span><span class="agent" title="{{.Adapter}}">{{initial .Adapter}}</span><span class="st"><b>{{.Title}}</b><span>{{.Project}}{{with index $p.AgentDetails .ID}}{{if .Session.Branch}} · {{.Session.Branch}}{{end}}{{end}}{{if .Machine}} · {{.Machine}}{{end}}</span></span><span class="when">{{template "chip" .State}}<span class="timer">{{relative .At $p.ObservedAt}}</span></span></a>
+<a class="strip {{stateClass .State}}" href="{{link (agentPath .ID) $p.Scope $p.All}}"><span class="edge"></span><span class="agent" title="{{.Adapter}}">{{initial .Adapter}}</span><span class="st"><b>{{.Title}}</b><span>{{.Project}}{{if .Branch}} · {{.Branch}}{{end}}{{if .Machine}} · {{.Machine}}{{end}}</span></span><span class="when">{{template "chip" .State}}<span class="timer">{{relative .At $p.ObservedAt}}</span></span></a>
 {{else}}<div class="empty">Nothing needs you.</div>{{end}}</div>
-{{if .NeedsMore}}<div class="more"><a href="{{link "/inbox" .Scope .All}}">{{.NeedsMore}} more in Inbox</a><span class="muted"> · one row per session here</span></div>{{end}}</section>
+{{if .NeedsMore}}<div class="more"><a href="{{link "/inbox" .Scope .All}}&amp;attention=1">{{.NeedsMore}} more needing you</a><span class="muted"> · one row per session here</span></div>{{end}}</section>
 <section class="card health"><div class="head"><h2>Machine</h2><a href="{{link "/machines" .Scope .All}}">Details →</a></div>{{template "gauges" .}}</section>
 </div>
 <section class="card activity"><div class="head"><h2>Activity · last 60 minutes</h2><div class="keys"><span class="key"><span class="dot idle"></span>events / min</span><span class="key">─ load</span><span class="key cores-key">┄ cores</span></div></div>{{template "activity" .}}</section>
@@ -120,7 +121,7 @@
 </div>{{end}}
 </article>{{end}}{{end}}
 
-{{define "projectCards"}}<div class="tablebox"><table><thead><tr><th>Project</th><th>Agents</th><th>Branch</th><th class="r">Dirty</th><th class="r">Unpushed</th><th>Latest</th></tr></thead><tbody>{{$p := .}}{{range .ProjectCards}}<tr {{if eq .Status.LiveAgents 0}}class="quiet"{{end}}><td class="pname"><a href="{{link (projectPath .Status.Repo.ID) $p.Scope $p.All}}">{{.Status.Repo.Name}}</a>{{if .Stale}} <small>stale</small>{{end}}</td><td><div class="project-states"><div class="mini">{{range .States}}<progress class="segment {{stateClass .Label}}" max="{{add $.Summary.Agents 1}}" value="{{.Count}}" aria-label="{{.Count}} {{.Label}}"></progress>{{end}}</div><span class="cnt">{{if .States}}{{stateSummary .States}}{{else}}quiet{{end}}</span></div></td><td class="mono">{{.Branch}}</td><td class="r mono">{{.Dirty}}</td><td class="r mono">{{.Unpushed}}</td><td class="latest">{{.Title}}{{range .Status.AtRisk}}<p class="notice">{{.}}</p>{{end}}</td></tr>{{else}}<tr><td colspan="6" class="empty">No projects in this scope.</td></tr>{{end}}</tbody></table></div>{{end}}
+{{define "projectCards"}}<div class="tablebox"><table><thead><tr><th>Project</th><th>Agents</th><th>Branch</th><th class="r">Dirty</th><th class="r">Unpushed</th><th>Latest</th></tr></thead><tbody>{{$p := .}}{{range .ProjectCards}}<tr {{if eq .Status.LiveAgents 0}}class="quiet"{{end}}><td class="pname"><a href="{{link (projectPath .Status.Repo.ID) $p.Scope $p.All}}">{{.Status.Repo.Name}}</a>{{if .Stale}} <small>stale</small>{{end}}</td><td><div class="project-states"><div class="mini">{{range .States}}<progress class="segment {{stateClass .Label}}" max="{{add $.Summary.Agents 1}}" value="{{.Count}}" aria-label="{{.Count}} {{.Label}}"></progress>{{end}}</div><span class="cnt">{{if .States}}{{stateSummary .States}}{{else}}quiet{{end}}</span></div></td><td class="mono branch" title="{{.Branch}}">{{.Branch}}</td><td class="r mono">{{.Dirty}}</td><td class="r mono">{{.Unpushed}}</td><td class="latest">{{.Title}}{{range .Status.AtRisk}}<p class="notice">{{.}}</p>{{end}}</td></tr>{{else}}<tr><td colspan="6" class="empty">No projects in this scope.</td></tr>{{end}}</tbody></table></div>{{end}}
 {{define "projects"}}
 <section class="panel">
 <div class="section-heading">
@@ -252,6 +253,9 @@
 </section>{{end}}{{end}}
 
 {{define "inbox"}}
+{{if .AttentionOnly}}
+<section class="panel"><h2>Needs you · {{len .Needs}}</h2>{{$p := .}}{{range .Needs}}<article class="item stripe {{stateClass .State}}">{{template "chip" .State}}<h3><a href="{{link (agentPath .ID) $p.Scope $p.All}}">{{.Title}}</a></h3><p>{{.Project}} · {{.Summary}}</p><small>{{relative .At $p.ObservedAt}}</small></article>{{else}}<p class="empty">Nothing needs you.</p>{{end}}</section>
+{{else}}
 <section class="panel">
 <div class="section-heading">
 <h2>Attention & completions
@@ -268,6 +272,8 @@
 <p class="empty">Your inbox is clear.
 </p>{{end}}
 </section>{{end}}
+
+{{end}}
 
 {{define "orphans"}}
 <section class="panel">

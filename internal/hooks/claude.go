@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 	"time"
@@ -18,6 +19,9 @@ import (
 type Diff struct {
 	Path, Before, After string
 	Changed             bool
+	FullRewrite         bool
+	existed             bool
+	target              string
 }
 
 // Unified renders a simple line diff, omitting common leading and trailing lines.
@@ -39,6 +43,9 @@ func (d Diff) Unified() string {
 		before, after = before[:len(before)-1], after[:len(after)-1]
 	}
 	var b strings.Builder
+	if d.FullRewrite {
+		b.WriteString("# Full settings rewrite: targeted edit unavailable\n")
+	}
 	fmt.Fprintf(&b, "--- %s\n+++ %s\n", d.Path, d.Path)
 	for _, line := range before {
 		fmt.Fprintf(&b, "-%s\n", line)
@@ -51,10 +58,12 @@ func (d Diff) Unified() string {
 
 var claudeEvents = []string{"Stop", "Notification", "SessionStart", "SessionEnd"}
 
+var renameSettings = os.Rename
+
 // ErrTelemetryInUse prevents replacing any existing agent telemetry destination.
 var ErrTelemetryInUse = errors.New("telemetry is already configured; Driga cannot replace or relay it")
 
-func claudeOTLPEnv(traces bool) map[string]string {
+func claudeOTLPEnv(traces bool, endpoints ...string) map[string]string {
 	traceExporter := "none"
 	if traces {
 		traceExporter = "otlp"
@@ -64,12 +73,12 @@ func claudeOTLPEnv(traces bool) map[string]string {
 		"OTEL_LOGS_EXPORTER":           "otlp", "OTEL_METRICS_EXPORTER": "none",
 		"OTEL_TRACES_EXPORTER":        traceExporter,
 		"OTEL_EXPORTER_OTLP_PROTOCOL": "http/json",
-		"OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:7418",
+		"OTEL_EXPORTER_OTLP_ENDPOINT": otlpEndpoint(endpoints),
 	}
 }
 
 // ClaudeInstallOTLP installs metadata-only telemetry without replacing telemetry settings.
-func ClaudeInstallOTLP(path string, traces, dryRun bool, now time.Time) (Diff, error) {
+func ClaudeInstallOTLP(path string, traces, dryRun bool, now time.Time, endpoints ...string) (Diff, error) {
 	d, settings, err := readClaude(path)
 	if err != nil {
 		return d, err
@@ -87,7 +96,19 @@ func ClaudeInstallOTLP(path string, traces, dryRun bool, now time.Time) (Diff, e
 			return d, ErrTelemetryInUse
 		}
 	}
-	for k, v := range claudeOTLPEnv(traces) {
+	if traces {
+		if v, exists := env["CLAUDE_CODE_ENHANCED_TELEMETRY_BETA"]; exists && v != "1" {
+			return d, ErrTelemetryInUse
+		}
+		if _, exists := env["DRIGA_OTLP_TRACES_ADDED"]; exists {
+			return d, ErrTelemetryInUse
+		}
+		if _, exists := env["CLAUDE_CODE_ENHANCED_TELEMETRY_BETA"]; !exists {
+			env["CLAUDE_CODE_ENHANCED_TELEMETRY_BETA"] = "1"
+			env["DRIGA_OTLP_TRACES_ADDED"] = "1"
+		}
+	}
+	for k, v := range claudeOTLPEnv(traces, endpoints...) {
 		env[k] = v
 	}
 	settings["env"] = env
@@ -96,7 +117,7 @@ func ClaudeInstallOTLP(path string, traces, dryRun bool, now time.Time) (Diff, e
 }
 
 // ClaudeUninstallOTLP removes only an intact Driga loopback telemetry configuration.
-func ClaudeUninstallOTLP(path string, dryRun bool) (Diff, error) {
+func ClaudeUninstallOTLP(path string, dryRun bool, endpoints ...string) (Diff, error) {
 	d, settings, err := readClaude(path)
 	if err != nil {
 		return d, err
@@ -106,7 +127,7 @@ func ClaudeUninstallOTLP(path string, dryRun bool) (Diff, error) {
 		return d, nil
 	}
 	for _, traces := range []bool{false, true} {
-		want := claudeOTLPEnv(traces)
+		want := claudeOTLPEnv(traces, endpoints...)
 		match := true
 		for k, v := range want {
 			if env[k] != v {
@@ -116,6 +137,12 @@ func ClaudeUninstallOTLP(path string, dryRun bool) (Diff, error) {
 		}
 		if !match {
 			continue
+		}
+		if env["DRIGA_OTLP_TRACES_ADDED"] == "1" {
+			if env["CLAUDE_CODE_ENHANCED_TELEMETRY_BETA"] == "1" {
+				delete(env, "CLAUDE_CODE_ENHANCED_TELEMETRY_BETA")
+			}
+			delete(env, "DRIGA_OTLP_TRACES_ADDED")
 		}
 		for k := range want {
 			delete(env, k)
@@ -296,6 +323,38 @@ func finishClaude(d Diff, settings map[string]any, dryRun bool, now time.Time) (
 		return d, err
 	}
 	d.After = string(b) + "\n"
+	if d.Before != "" {
+		var original map[string]any
+		dec := json.NewDecoder(strings.NewReader(d.Before))
+		dec.UseNumber()
+		if dec.Decode(&original) == nil && uniqueJSONMembers(d.Before) {
+			edited := d.Before
+			ok := true
+			for _, key := range []string{"hooks", "env"} {
+				if reflect.DeepEqual(original[key], settings[key]) {
+					continue
+				}
+				var value []byte
+				if v, exists := settings[key]; exists {
+					value, err = json.MarshalIndent(v, "  ", "  ")
+					if err != nil {
+						return d, err
+					}
+				}
+				edited, ok = editJSONMember(edited, key, value)
+				if !ok {
+					break
+				}
+			}
+			if ok {
+				d.After = edited
+			} else {
+				d.FullRewrite = true
+			}
+		} else {
+			d.FullRewrite = true
+		}
+	}
 	return d, writeDiff(d, dryRun, now)
 }
 
@@ -377,14 +436,23 @@ func readDiff(path string) (Diff, error) {
 		return d, err
 	}
 	d.Before, d.After = string(b), string(b)
-	return d, nil
+	d.existed = true
+	d.target, err = filepath.EvalSymlinks(path)
+	return d, err
 }
 
 func writeDiff(d Diff, dryRun bool, now time.Time) error {
 	if dryRun || !d.Changed {
 		return nil
 	}
-	info, err := os.Stat(d.Path)
+	if err := d.Check(); err != nil {
+		return err
+	}
+	path := d.Path
+	if d.target != "" {
+		path = d.target
+	}
+	info, err := os.Stat(path)
 	exists := err == nil
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
@@ -409,8 +477,129 @@ func writeDiff(d Diff, dryRun bool, now time.Time) error {
 			}
 			break
 		}
-	} else if err := os.MkdirAll(filepath.Dir(d.Path), 0700); err != nil {
+	} else if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return err
 	}
-	return os.WriteFile(d.Path, []byte(d.After), mode)
+	f, err := os.CreateTemp(filepath.Dir(path), ".driga-settings-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(f.Name())
+	_, writeErr := io.WriteString(f, d.After)
+	chmodErr := f.Chmod(mode)
+	syncErr := f.Sync()
+	if err := errors.Join(writeErr, chmodErr, syncErr, f.Close()); err != nil {
+		return err
+	}
+	if err := d.Check(); err != nil {
+		return err
+	}
+	return renameSettings(f.Name(), path)
+}
+
+// Check refuses byte changes, creation/deletion, and symlink retargets since preview.
+func (d Diff) Check() error {
+	current, err := readDiff(d.Path)
+	if err != nil {
+		return err
+	}
+	if current.existed != d.existed || current.Before != d.Before || current.target != d.target {
+		return fmt.Errorf("%s: settings changed since preview; rerun", d.Path)
+	}
+	return nil
+}
+
+// Apply writes exactly the previewed change, refusing intervening edits.
+func (d Diff) Apply(now time.Time) error { return writeDiff(d, false, now) }
+
+func otlpEndpoint(endpoints []string) string {
+	if len(endpoints) > 0 {
+		return strings.TrimRight(endpoints[0], "/")
+	}
+	return "http://127.0.0.1:7418"
+}
+
+// editJSONMember uses decoder offsets to leave unrelated values and whitespace intact.
+func editJSONMember(src, key string, value []byte) (string, bool) {
+	dec := json.NewDecoder(strings.NewReader(src))
+	tok, err := dec.Token()
+	if err != nil || tok != json.Delim('{') {
+		return src, false
+	}
+	open := int(dec.InputOffset())
+	prevEnd := open
+	for dec.More() {
+		start := int(dec.InputOffset())
+		tok, err = dec.Token()
+		if err != nil {
+			return src, false
+		}
+		name, ok := tok.(string)
+		if !ok {
+			return src, false
+		}
+		// Offset after the key; skip its colon and surrounding whitespace.
+		vstart := int(dec.InputOffset())
+		for vstart < len(src) && (src[vstart] == ':' || strings.ContainsRune(" \t\r\n", rune(src[vstart]))) {
+			vstart++
+		}
+		var raw json.RawMessage
+		if dec.Decode(&raw) != nil {
+			return src, false
+		}
+		end := int(dec.InputOffset())
+		if name == key {
+			if value != nil {
+				return src[:vstart] + string(value) + src[end:], true
+			}
+			if prevEnd == open {
+				// Remove a first member and its following comma, keeping the next member's whitespace.
+				next := end
+				for next < len(src) && strings.ContainsRune(" \t\r\n", rune(src[next])) {
+					next++
+				}
+				if next < len(src) && src[next] == ',' {
+					end = next + 1
+				}
+				return src[:open] + src[end:], true
+			}
+			return src[:start] + src[end:], true // start includes the preceding comma
+		}
+		prevEnd = end
+	}
+	if value == nil {
+		return src, true
+	}
+	comma := ""
+	if prevEnd != open {
+		comma = ","
+	}
+	return src[:open] + "\n  " + strconvQuote(key) + ": " + string(value) + comma + src[open:], true
+}
+func strconvQuote(s string) string { b, _ := json.Marshal(s); return string(b) }
+
+// Duplicate keys make a byte edit ambiguous; a full rewrite resolves them.
+func uniqueJSONMembers(src string) bool {
+	dec := json.NewDecoder(strings.NewReader(src))
+	tok, err := dec.Token()
+	if err != nil || tok != json.Delim('{') {
+		return false
+	}
+	seen := map[string]bool{}
+	for dec.More() {
+		tok, err = dec.Token()
+		if err != nil {
+			return false
+		}
+		key, ok := tok.(string)
+		if !ok || seen[key] {
+			return false
+		}
+		seen[key] = true
+		var raw json.RawMessage
+		if dec.Decode(&raw) != nil {
+			return false
+		}
+	}
+	return true
 }

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -256,9 +257,9 @@ func TestFooterCwdsAndPendingOTLP(t *testing.T) {
 func TestHomeProjectsOrderAndAggregation(t *testing.T) {
 	s := fixture()
 	s.snap.Projects.Rows = []view.ProjectRow{
-		{Status: view.ProjectStatus{Repo: model.Repo{Name: "Quiet project"}, Activity: "idle"}},
-		{Status: view.ProjectStatus{Repo: model.Repo{Name: "Recent project"}, Where: []view.WherePart{{At: s.snap.ObservedAt}}}},
-		{Status: view.ProjectStatus{Repo: model.Repo{Name: "Live project"}, LiveAgents: 6}},
+		{Status: view.ProjectStatus{Repo: model.Repo{ID: 1, Name: "Quiet project"}, Activity: "idle"}},
+		{Status: view.ProjectStatus{Repo: model.Repo{ID: 2, Name: "Recent project"}, Where: []view.WherePart{{At: s.snap.ObservedAt}}}},
+		{Status: view.ProjectStatus{Repo: model.Repo{ID: 3, Name: "Live project"}, LiveAgents: 6}},
 	}
 	s.snap.Agents.Rows = nil
 	for i := 0; i < 6; i++ {
@@ -266,9 +267,11 @@ func TestHomeProjectsOrderAndAggregation(t *testing.T) {
 		if i < 2 {
 			state = "working"
 		}
-		s.snap.Agents.Rows = append(s.snap.Agents.Rows, view.AgentRow{ID: int64(i + 1), Label: state, Project: "Live project"})
+		s.snap.Agents.Rows = append(s.snap.Agents.Rows, view.AgentRow{ID: int64(i + 1), Label: state, Project: "Live project", RepoID: 3})
 	}
 	m := setup(t, s, Options{}).(*app)
+	m.width, m.height = 160, 44
+	m.rebuild()
 	text := m.homeView()
 	if strings.Index(text, "Live project") > strings.Index(text, "Recent project") || strings.Index(text, "Recent project") > strings.Index(text, "Quiet project") {
 		t.Error("wrong project order")
@@ -279,5 +282,50 @@ func TestHomeProjectsOrderAndAggregation(t *testing.T) {
 	m.opts.NoColor = false
 	if !strings.Contains(m.homeView(), "\x1b[2mQuiet project") {
 		t.Error("quiet project is not dimmed")
+	}
+}
+
+func TestHomeProjectsFitAvailableHeight(t *testing.T) {
+	for _, size := range [][2]int{{160, 44}, {120, 40}} {
+		src := fixture()
+		for i := 0; i < 50; i++ {
+			src.snap.Projects.Rows = append(src.snap.Projects.Rows, view.ProjectRow{Status: view.ProjectStatus{Repo: model.Repo{ID: int64(i + 1), Name: fmt.Sprint("project", i)}}})
+		}
+		m := setup(t, src, Options{}).(*app)
+		m.width, m.height = size[0], size[1]
+		m.rebuild()
+		body := m.homeView()
+		if lipgloss.Height(body) > m.bodyHeight() {
+			t.Fatalf("%dx%d: body height %d > %d", m.width, m.height, lipgloss.Height(body), m.bodyHeight())
+		}
+		out := m.View().Content
+		if !strings.Contains(out, "╰") {
+			t.Fatalf("bottom border missing: %s", out)
+		}
+	}
+}
+
+func TestHomeSameNamedReposStaySeparate(t *testing.T) {
+	src := fixture()
+	src.snap.Inbox.Rows = nil
+	src.snap.Projects.Rows = []view.ProjectRow{{Status: view.ProjectStatus{Repo: model.Repo{ID: 1, Name: "app", Path: "/a/app"}}}, {Status: view.ProjectStatus{Repo: model.Repo{ID: 2, Name: "app", Path: "/b/app"}}}}
+	src.snap.Agents.Rows = []view.AgentRow{{ID: 1, RepoID: 1, Project: "app", Branch: "first-branch", Label: "working"}, {ID: 2, RepoID: 2, Project: "app", Branch: "second-branch", Label: "waiting"}}
+	m := setup(t, src, Options{}).(*app)
+	m.width = 160
+	m.height = 44
+	m.rebuild()
+	body := m.homeView()
+	if !strings.Contains(body, "second-branch") {
+		t.Fatalf("mixed repos: %s", body)
+	}
+}
+
+func TestEventDrivenFooterReportsLastEvent(t *testing.T) {
+	s := fixture()
+	at := s.snap.ObservedAt.Add(-24 * time.Hour)
+	s.snap.Freshness = map[string]view.Fresh{"otlp": {LastOKAt: at, Status: "last-event"}, "sockets": {LastOKAt: at, Status: "last-event"}}
+	m := setup(t, s, Options{}).(*app)
+	if strings.Contains(m.footer(), "stale") || !strings.Contains(m.footer(), "last event") {
+		t.Fatal(m.footer())
 	}
 }

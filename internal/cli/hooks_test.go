@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -99,5 +100,61 @@ func TestHooksInstallUsesUnresolvedExecutable(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestHooksConfiguredEndpoint(t *testing.T) {
+	g, out := initFixture(t, "y\n")
+	if err := os.MkdirAll(filepath.Dir(os.Getenv("DRIGA_CONFIG")), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(os.Getenv("DRIGA_CONFIG"), []byte("[intake]\nlisten = \"127.0.0.1:8743\"\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	err := (HooksInstallCmd{HooksOptions: HooksOptions{Agent: "all", OTLP: true, DryRun: true}}).Run(g)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out.String(), ":7418") || strings.Count(out.String(), ":8743") != 2 {
+		t.Fatal(out.String())
+	}
+}
+
+type editingPrompt struct {
+	path string
+	done bool
+}
+
+func (r *editingPrompt) Read(b []byte) (int, error) {
+	if r.done {
+		return 0, io.EOF
+	}
+	r.done = true
+	if err := os.WriteFile(r.path, []byte(`{"theme":"concurrent edit"}`), 0600); err != nil {
+		return 0, err
+	}
+	return copy(b, "y\n"), nil
+}
+func TestHooksCLIRejectsEditAfterPreview(t *testing.T) {
+	g, _ := initFixture(t, "")
+	path := filepath.Join(os.Getenv("HOME"), ".claude", "settings.json")
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(`{"theme":"original"}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	g.Stdin = &editingPrompt{path: path}
+	err := (HooksInstallCmd{HooksOptions: HooksOptions{Agent: "claude"}}).Run(g)
+	if err == nil || !strings.Contains(err.Error(), "settings changed since preview; rerun") {
+		t.Fatalf("guard error: %v", err)
+	}
+	b, _ := os.ReadFile(path)
+	if string(b) != `{"theme":"concurrent edit"}` {
+		t.Fatalf("edit overwritten: %s", b)
+	}
+	backups, _ := filepath.Glob(path + ".driga-bak-*")
+	if len(backups) != 0 {
+		t.Fatal(backups)
 	}
 }

@@ -73,16 +73,16 @@ func (s *StoreSource) DataVersion(ctx context.Context) (int64, error) { return s
 
 // Load builds all views inside one read transaction.
 func (s *StoreSource) Load(ctx context.Context) (Snapshot, error) {
-	return s.load(ctx, "daemon", store.Scope{})
+	return s.load(ctx, "daemon", store.Scope{}, true)
 }
 
 // LoadScope builds views for a browser-selected machine scope. An optional all
 // overrides visibility for this request without mutating the source filter.
 func (s *StoreSource) LoadScope(ctx context.Context, scope store.Scope, all ...bool) (Snapshot, error) {
-	return s.load(ctx, "daemon", scope, all...)
+	return s.load(ctx, "daemon", scope, false, all...)
 }
 
-func (s *StoreSource) load(ctx context.Context, mode string, scope store.Scope, all ...bool) (Snapshot, error) {
+func (s *StoreSource) load(ctx context.Context, mode string, scope store.Scope, details bool, all ...bool) (Snapshot, error) {
 	snap := Snapshot{AgentDetails: map[int64]view.AgentView{}, ProjectDetails: map[int64]view.WhereView{}}
 	now := time.Now()
 	if s.Now != nil {
@@ -161,33 +161,36 @@ func (s *StoreSource) load(ctx context.Context, mode string, scope store.Scope, 
 		} else if !errors.Is(err, store.ErrNotFound) {
 			return err
 		}
-		ids := map[int64]bool{}
-		var collect func([]view.AgentRow)
-		collect = func(rows []view.AgentRow) {
-			for _, r := range rows {
-				ids[r.ID] = true
-				collect(r.Children)
+		if details {
+			ids := map[int64]bool{}
+			var collect func([]view.AgentRow)
+			collect = func(rows []view.AgentRow) {
+				for _, r := range rows {
+					ids[r.ID] = true
+					collect(r.Children)
+				}
 			}
-		}
-		collect(snap.Agents.Rows)
-		for _, i := range snap.Inbox.Rows {
-			if i.SessionID != 0 {
-				ids[i.SessionID] = true
+			collect(snap.Agents.Rows)
+			for _, i := range snap.Inbox.Rows {
+				if i.SessionID != 0 {
+					ids[i.SessionID] = true
+				}
 			}
-		}
-		for id := range ids {
-			d, err := view.Agent(tx, id, now, f.Scope)
-			if err != nil {
-				return err
+			for id := range ids {
+				d, err := view.Agent(tx, id, now, f.Scope)
+				if err != nil {
+					return err
+				}
+				snap.AgentDetails[id] = d
 			}
-			snap.AgentDetails[id] = d
-		}
-		for _, r := range snap.Projects.Rows {
-			d, err := view.Where(tx, r.Status.Repo.Path, now, store.Scope{Machines: []string{r.MachineID}})
-			if err != nil {
-				return err
+			for _, r := range snap.Projects.Rows {
+				d, err := view.WhereFiltered(tx, r.Status.Repo.Path, now, view.Filter{All: f.All, Scope: store.Scope{Machines: []string{r.MachineID}}})
+				if err != nil {
+					return err
+				}
+				snap.ProjectDetails[r.Status.Repo.ID] = d
 			}
-			snap.ProjectDetails[r.Status.Repo.ID] = d
+
 		}
 		if !f.Since.IsZero() {
 			snap.CoverageGaps, err = view.CoverageGaps(tx, f.Since, f.Scope)
@@ -201,13 +204,14 @@ func (s *StoreSource) load(ctx context.Context, mode string, scope store.Scope, 
 // Its mutex serializes passes, reads, and pass-counter changes.
 type LiveSnapshotSource struct {
 	*StoreSource
-	deps    collector.Deps
-	mu      sync.Mutex
-	version int64
-	lastErr error
-	ready   chan struct{}
-	done    chan struct{}
-	cancel  context.CancelFunc
+	deps      collector.Deps
+	mu        sync.Mutex
+	version   int64
+	lastErr   error
+	ready     chan struct{}
+	done      chan struct{}
+	cancel    context.CancelFunc
+	idleSince time.Time
 }
 
 // NewLiveSnapshotSource creates a private memory database, never the daemon DB.
@@ -316,6 +320,9 @@ func (s *LiveSnapshotSource) Start(ctx context.Context) {
 			s.mu.Lock()
 			_, s.lastErr = collector.Pass(ctx, s.deps, s.st, p)
 			if s.lastErr == nil {
+				s.lastErr = s.st.Tx(ctx, func(tx *store.Tx) error { return tx.PruneSnapshot(now) })
+			}
+			if s.lastErr == nil {
 				s.version++
 				if p.Procs {
 					procs = now
@@ -333,7 +340,9 @@ func (s *LiveSnapshotSource) Start(ctx context.Context) {
 					cwds = now
 				}
 			}
+			delay := s.collectionInterval(now)
 			s.mu.Unlock()
+			ticker.Reset(delay)
 			if first {
 				close(s.ready)
 				first = false
@@ -349,15 +358,15 @@ func (s *LiveSnapshotSource) Start(ctx context.Context) {
 
 // Load waits for the first pass and returns a consistent disposable snapshot.
 func (s *LiveSnapshotSource) Load(ctx context.Context) (Snapshot, error) {
-	return s.loadSnapshot(ctx, store.Scope{})
+	return s.loadSnapshot(ctx, store.Scope{}, true)
 }
 
 // LoadScope serializes scoped reads with disposable snapshot collection.
 func (s *LiveSnapshotSource) LoadScope(ctx context.Context, scope store.Scope, all ...bool) (Snapshot, error) {
-	return s.loadSnapshot(ctx, scope, all...)
+	return s.loadSnapshot(ctx, scope, false, all...)
 }
 
-func (s *LiveSnapshotSource) loadSnapshot(ctx context.Context, scope store.Scope, all ...bool) (Snapshot, error) {
+func (s *LiveSnapshotSource) loadSnapshot(ctx context.Context, scope store.Scope, details bool, all ...bool) (Snapshot, error) {
 	select {
 	case <-ctx.Done():
 		return Snapshot{}, ctx.Err()
@@ -368,7 +377,7 @@ func (s *LiveSnapshotSource) loadSnapshot(ctx context.Context, scope store.Scope
 	if s.lastErr != nil {
 		return Snapshot{}, s.lastErr
 	}
-	snap, err := s.load(ctx, "snapshot", scope, all...)
+	snap, err := s.load(ctx, "snapshot", scope, details, all...)
 	return snap, err
 }
 
@@ -391,4 +400,64 @@ func (s *LiveSnapshotSource) Close() error {
 		<-s.done
 	}
 	return s.st.Close()
+}
+
+// DetailSource loads only the detail requested by a browser.
+type DetailSource interface {
+	LoadAgent(context.Context, store.Scope, int64) (view.AgentView, error)
+	LoadProject(context.Context, store.Scope, int64, bool) (view.WhereView, error)
+}
+
+func (s *StoreSource) LoadAgent(ctx context.Context, scope store.Scope, id int64) (view.AgentView, error) {
+	var result view.AgentView
+	err := s.st.Tx(ctx, func(tx *store.Tx) error { var err error; result, err = view.Agent(tx, id, s.Now(), scope); return err })
+	return result, err
+}
+func (s *StoreSource) LoadProject(ctx context.Context, scope store.Scope, id int64, all bool) (view.WhereView, error) {
+	var result view.WhereView
+	err := s.st.Tx(ctx, func(tx *store.Tx) error {
+		rows, err := view.Projects(tx, view.Filter{Scope: scope, All: all}, s.Now())
+		if err != nil {
+			return err
+		}
+		for _, r := range rows.Rows {
+			if r.Status.Repo.ID == id {
+				result, err = view.WhereFiltered(tx, r.Status.Repo.Path, s.Now(), view.Filter{Scope: store.Scope{Machines: []string{r.MachineID}}, All: all})
+				return err
+			}
+		}
+		return store.ErrNotFound
+	})
+	return result, err
+}
+func (s *LiveSnapshotSource) LoadAgent(ctx context.Context, scope store.Scope, id int64) (view.AgentView, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.StoreSource.LoadAgent(ctx, scope, id)
+}
+func (s *LiveSnapshotSource) LoadProject(ctx context.Context, scope store.Scope, id int64, all bool) (view.WhereView, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.StoreSource.LoadProject(ctx, scope, id, all)
+}
+
+// SetActive lets the browser back off after its last SSE client leaves. TUIs
+// never set it, and keep their interactive collection cadence.
+func (s *LiveSnapshotSource) SetActive(active bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.setActiveAt(active, time.Now())
+}
+func (s *LiveSnapshotSource) setActiveAt(active bool, now time.Time) {
+	if active {
+		s.idleSince = time.Time{}
+	} else if s.idleSince.IsZero() {
+		s.idleSince = now
+	}
+}
+func (s *LiveSnapshotSource) collectionInterval(now time.Time) time.Duration {
+	if !s.idleSince.IsZero() && now.Sub(s.idleSince) > time.Minute {
+		return time.Minute
+	}
+	return 5 * time.Second
 }

@@ -121,10 +121,6 @@ func openViewer(ctx context.Context, g *Globals, cfg config.Config, f view.Filte
 	if err != nil {
 		return nil, "", nil, err
 	}
-	st, mode, err := decideMode(ctx, g)
-	if err != nil {
-		return nil, "", nil, err
-	}
 	f.Project, f.Since = g.Project, since
 	resolve := func(r view.Reader, f view.Filter) (view.Filter, error) {
 		resolved, err := resolveViewFilter(g, r, f, g.Project)
@@ -133,20 +129,37 @@ func openViewer(ctx context.Context, g *Globals, cfg config.Config, f view.Filte
 		}
 		return resolved, err
 	}
-	if st != nil {
-		s := viewer.NewStoreSource(st, config.DataDir(), f)
-		s.ResolveFilter = resolve
-		return s, mode, func() { _ = st.Close() }, nil
+
+	running := func() bool { return !g.Snapshot && collector.Running(config.DataDir()) }
+	factory := func(ctx context.Context, daemon bool) (viewer.ScopedSource, func(), error) {
+		if daemon {
+			st, err := store.Open(filepath.Join(config.DataDir(), "driga.db"), store.ReadOnly)
+			if err != nil {
+				return nil, nil, err
+			}
+			source := viewer.NewStoreSource(st, config.DataDir(), f)
+			source.ResolveFilter = resolve
+			return source, func() { _ = st.Close() }, nil
+		}
+		deps, err := NewDeps(cfg)
+		if err != nil {
+			return nil, nil, err
+		}
+		source, err := viewer.NewLiveSnapshotSource(deps, config.DataDir(), f)
+		if err != nil {
+			return nil, nil, err
+		}
+		source.ResolveFilter = resolve
+		source.Start(ctx)
+		return source, func() { _ = source.Close() }, nil
 	}
-	d, err := NewDeps(cfg)
+	source, err := viewer.NewSwitchingSource(ctx, running, factory)
 	if err != nil {
 		return nil, "", nil, err
 	}
-	s, err := viewer.NewLiveSnapshotSource(d, config.DataDir(), f)
-	if err != nil {
-		return nil, "", nil, err
+	mode := "snapshot"
+	if running() {
+		mode = "daemon"
 	}
-	s.ResolveFilter = resolve
-	s.Start(ctx)
-	return s, mode, func() { _ = s.Close() }, nil
+	return source, mode, func() { _ = source.Close() }, nil
 }

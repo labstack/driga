@@ -106,3 +106,5 @@ meter{appearance:none;width:100%;height:8px;border:0;background:var(--sunk);bord
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 
 nav a{gap:10px}.dot.waiting{background:var(--waiting-bar)}
+
+.tablebox td.branch { max-width: 18rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

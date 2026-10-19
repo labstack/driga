@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"html/template"
@@ -27,6 +28,8 @@ type projectCard struct {
 	States        []view.StateCount
 }
 type pageData struct {
+	LastEvents    string
+	AttentionOnly bool
 	viewer.Snapshot
 	Title, Page, Scope, RefreshURL, CleanupError string
 	Nav                                          []navItem
@@ -52,7 +55,8 @@ func (s *Server) loadPage(r *http.Request) (pageData, int, error) {
 			return p, 404, fmt.Errorf("page not found")
 		}
 	}
-	snap, err := s.source.LoadScope(r.Context(), store.Scope{}, p.All)
+	p.AttentionOnly = r.URL.Query().Get("attention") == "1"
+	snap, err := s.cachedLoad(r.Context(), store.Scope{}, p.All)
 	if err != nil {
 		return p, 500, err
 	}
@@ -76,13 +80,16 @@ func (s *Server) loadPage(r *http.Request) (pageData, int, error) {
 			return p, 400, fmt.Errorf("unknown or ambiguous machine scope")
 		}
 		p.Scope = matches[0]
-		snap, err = s.source.LoadScope(r.Context(), store.Scope{Machines: []string{p.Scope}}, p.All)
+		snap, err = s.cachedLoad(r.Context(), store.Scope{Machines: []string{p.Scope}}, p.All)
 		if err != nil {
 			return p, 500, err
 		}
 	}
 	p.Snapshot = snap
 	p.RefreshURL = pageLink(p.Page, p.Scope, p.All)
+	if p.AttentionOnly {
+		p.RefreshURL += "&attention=1"
+	}
 	p.Title = "Home"
 	for _, n := range navigation {
 		if p.Page == n.Path {
@@ -92,6 +99,26 @@ func (s *Server) loadPage(r *http.Request) (pageData, int, error) {
 	if strings.HasPrefix(p.Page, "/agents/") {
 		id, err := strconv.ParseInt(strings.TrimPrefix(p.Page, "/agents/"), 10, 64)
 		d, ok := snap.AgentDetails[id]
+		if err == nil {
+			if source, supported := s.source.(viewer.DetailSource); supported {
+				// Keep details within the overview's project and machine selection.
+				visible := false
+				for _, a := range flatten(snap.Agents.Rows) {
+					visible = visible || a.ID == id
+				}
+				for _, i := range snap.Inbox.Rows {
+					visible = visible || i.SessionID == id
+				}
+				if visible {
+					scope := store.Scope{}
+					if p.Scope != "all" {
+						scope.Machines = []string{p.Scope}
+					}
+					d, err = source.LoadAgent(r.Context(), scope, id)
+					ok = err == nil
+				}
+			}
+		}
 		if err != nil || !ok {
 			return p, 404, fmt.Errorf("agent not found")
 		}
@@ -100,13 +127,24 @@ func (s *Server) loadPage(r *http.Request) (pageData, int, error) {
 	if strings.HasPrefix(p.Page, "/projects/") {
 		id, err := strconv.ParseInt(strings.TrimPrefix(p.Page, "/projects/"), 10, 64)
 		d, ok := snap.ProjectDetails[id]
+		if err == nil {
+			if source, supported := s.source.(viewer.DetailSource); supported {
+				for _, row := range snap.Projects.Rows {
+					if row.Status.Repo.ID == id {
+						d, err = source.LoadProject(r.Context(), store.Scope{Machines: []string{row.MachineID}}, id, p.All)
+						ok = err == nil
+						break
+					}
+				}
+			}
+		}
 		if err != nil || !ok {
 			return p, 404, fmt.Errorf("project not found")
 		}
 		p.Project, p.Title = d, "Project detail"
 	}
 	if (p.Scope == "all" || p.Scope == snap.LocalMachineID) && s.opts.CleanupList != nil {
-		p.Cleanup, err = s.opts.CleanupList(r.Context())
+		p.Cleanup, err = s.cachedCleanup(r.Context())
 		if err != nil {
 			p.CleanupError = err.Error()
 		}
@@ -143,8 +181,12 @@ func (p *pageData) prepare() {
 		}
 	}
 	p.Needs = view.NeedsYou(p.Inbox.Rows, p.Agents.Rows, p.AgentDetails)
-	p.NeedsMore = max(0, len(p.Needs)-8)
-	p.Needs = p.Needs[:min(8, len(p.Needs))]
+	if !p.AttentionOnly {
+		p.NeedsMore = max(0, len(p.Needs)-8)
+		p.Needs = p.Needs[:min(8, len(p.Needs))]
+	} else {
+		p.Title = "Needs you"
+	}
 	names := []string{}
 	pending := []string{}
 	for name, f := range p.Freshness {
@@ -157,6 +199,14 @@ func (p *pageData) prepare() {
 	sort.Strings(names)
 	sort.Strings(pending)
 	p.StaleSources = strings.Join(names, ", ")
+	events := []string{}
+	for name, f := range p.Freshness {
+		if f.Status == "last-event" {
+			events = append(events, fmt.Sprintf("%s: last event %s", name, f.LastOKAt.Format(time.RFC3339)))
+		}
+	}
+	sort.Strings(events)
+	p.LastEvents = strings.Join(events, " · ")
 	details := []string{}
 	for _, name := range names {
 		f := p.Freshness[name]
@@ -168,7 +218,7 @@ func (p *pageData) prepare() {
 		card := projectCard{ProjectRow: project}
 		agents := []view.AgentRow{}
 		for _, a := range p.AgentRows {
-			if a.MachineID == project.MachineID && a.Project == project.Status.Repo.Name {
+			if a.MachineID == project.MachineID && a.RepoID == project.Status.Repo.ID {
 				agents = append(agents, a)
 				if card.Branch == "" {
 					card.Branch = a.Branch
@@ -179,6 +229,12 @@ func (p *pageData) prepare() {
 			}
 		}
 		card.States = view.StateCounts(agents)
+		if card.Branch == "" {
+			card.Branch = project.Branch
+		}
+		if project.LatestHandoff != "" {
+			card.Title = project.LatestHandoff
+		}
 		d := p.ProjectDetails[project.Status.Repo.ID]
 		if card.Branch == "" && len(d.WorktreeRows) > 0 {
 			card.Branch = d.WorktreeRows[0].Branch
@@ -344,4 +400,52 @@ func pageLink(path, scope string, all ...bool) string {
 		q.Set("all", "1")
 	}
 	return path + "?" + q.Encode()
+}
+
+type snapshotKey struct {
+	scope string
+	all   bool
+}
+type cachedSnapshot struct {
+	snap viewer.Snapshot
+	at   time.Time
+}
+
+// Cache only overview data. Fifteen-second expiry also refreshes ages without commits.
+func (s *Server) cachedLoad(ctx context.Context, scope store.Scope, all bool) (viewer.Snapshot, error) {
+	s.cacheMu.Lock()
+	defer s.cacheMu.Unlock()
+	version, err := s.source.DataVersion(ctx)
+	if err != nil {
+		return viewer.Snapshot{}, err
+	}
+	if version != s.cacheVersion {
+		s.cache = map[snapshotKey]cachedSnapshot{}
+		s.cacheVersion = version
+	}
+	key := snapshotKey{scope: strings.Join(scope.Machines, "\x00"), all: all}
+	if scope.Machines != nil {
+		key.scope = "selected:" + key.scope
+	}
+	now := time.Now()
+	if c, ok := s.cache[key]; ok && now.Sub(c.at) < 15*time.Second {
+		return c.snap, nil
+	}
+	snap, err := s.source.LoadScope(ctx, scope, all)
+	if err == nil {
+		if len(s.cache) >= 32 {
+			s.cache = map[snapshotKey]cachedSnapshot{}
+		}
+		s.cache[key] = cachedSnapshot{snap, now}
+	}
+	return snap, err
+}
+func (s *Server) cachedCleanup(ctx context.Context) ([]cleanup.Candidate, error) {
+	s.cacheMu.Lock()
+	defer s.cacheMu.Unlock()
+	if s.cleanupAt.IsZero() || time.Since(s.cleanupAt) >= time.Minute {
+		s.cleanupRows, s.cleanupErr = s.opts.CleanupList(ctx)
+		s.cleanupAt = time.Now()
+	}
+	return s.cleanupRows, s.cleanupErr
 }

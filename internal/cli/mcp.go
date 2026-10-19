@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/labstack/driga/internal/collector"
 	"github.com/labstack/driga/internal/config"
 	drigamcp "github.com/labstack/driga/internal/mcp"
 	"github.com/labstack/driga/internal/view"
@@ -63,7 +64,7 @@ func NewMCPServer(g *Globals) *sdk.Server {
 			data, err := build(r, f, now)
 			if q.CachedMachines && !copy.Snapshot {
 				if v, ok := data.(view.MachinesView); ok {
-					if held, e := probeCollectorLock(config.DataDir()); e == nil && !held {
+					if !collector.Running(config.DataDir()) {
 						v.Warning = "viewer collector not running"
 					}
 					data = v

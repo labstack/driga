@@ -23,9 +23,7 @@ func (MachinesCmd) Run(g *Globals) error {
 	return runRead(&copy, view.Filter{}, "", func(r view.Reader, f view.Filter, now time.Time) (any, error) {
 		v, e := view.Machines(r, now, f.Scope)
 		if !g.Snapshot {
-			lock, err := collector.Lock(config.DataDir())
-			if err == nil {
-				_ = lock.Close()
+			if !collector.Running(config.DataDir()) {
 				v.Warning = "viewer collector not running"
 			}
 		}
