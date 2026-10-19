@@ -94,6 +94,21 @@ func (s *SwitchingSource) LoadScope(ctx context.Context, scope store.Scope, all 
 	}
 	return s.source.LoadScope(ctx, scope, all...)
 }
+
+// LoadFlow forwards to the current source; the web reads every page through
+// this wrapper, so a missing method would leave the flow page always empty.
+func (s *SwitchingSource) LoadFlow(ctx context.Context, scope store.Scope, id int64) (view.FlowView, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.recheck(); err != nil {
+		return view.FlowView{}, err
+	}
+	f, ok := s.source.(FlowSource)
+	if !ok {
+		return view.FlowView{}, fmt.Errorf("flow is not available from this source")
+	}
+	return f.LoadFlow(ctx, scope, id)
+}
 func (s *SwitchingSource) DataVersion(ctx context.Context) (int64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -144,3 +144,30 @@ func TestSourceRechecksRunningAndClosesOld(t *testing.T) {
 		t.Fatal("time-dependent display does not refresh")
 	}
 }
+
+type flowFixtureSource struct{ switchFixtureSource }
+
+func (s *flowFixtureSource) LoadFlow(_ context.Context, _ store.Scope, id int64) (view.FlowView, error) {
+	return view.FlowView{Lead: &view.FlowNode{ID: id}}, nil
+}
+
+// The web server always reads through a SwitchingSource, so the flow page
+// is empty unless the wrapper forwards LoadFlow to its current source.
+func TestSwitchingSourceForwardsFlow(t *testing.T) {
+	s, err := NewSwitchingSource(context.Background(), func() bool { return true }, func(context.Context, bool) (ScopedSource, func(), error) {
+		return &flowFixtureSource{switchFixtureSource{mode: "daemon", version: 1}}, func() {}, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	var src any = s
+	fs, ok := src.(FlowSource)
+	if !ok {
+		t.Fatal("SwitchingSource does not implement FlowSource")
+	}
+	f, err := fs.LoadFlow(context.Background(), store.Scope{}, 5)
+	if err != nil || f.Lead == nil || f.Lead.ID != 5 {
+		t.Fatal(f, err)
+	}
+}
