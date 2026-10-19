@@ -36,9 +36,11 @@ export CGO_ENABLED=0
 cd -- "$repo"
 go build -o "$scratch/driga" ./cmd/driga
 
-# Capture effective collection settings read-only. This v1.5 command emits
-# collection settings; fleet/intake are set explicitly in each isolated config.
-"$scratch/driga" config show >"$scratch/collection.toml"
+# Capture effective collection settings read-only. Fleet and intake are set
+# explicitly in each isolated config, so drop the user's sections for them.
+"$scratch/driga" config show | awk '
+	/^\[/ { skip = ($0 == "[fleet]" || $0 == "[intake]") }
+	!skip' >"$scratch/collection.toml"
 for node in collector viewer1 viewer2; do
 	mkdir -p "$scratch/$node/data" "$scratch/$node/spool" "$scratch/$node/home"
 done

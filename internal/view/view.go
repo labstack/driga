@@ -73,7 +73,13 @@ func newEnvelopeLocal(r Reader, mode string, now time.Time, intervals Intervals,
 			interval = time.Minute
 		}
 		age := max(time.Duration(0), now.Sub(s.LastOKAt))
-		e.Freshness[s.Name] = Fresh{LastOKAt: s.LastOKAt, AgeSeconds: int(age / time.Second), Stale: mode != "snapshot" && (s.LastOKAt.IsZero() || age > 3*interval), LastError: s.LastError}
+		if s.LastOKAt.IsZero() {
+			age = 0
+		}
+		// A snapshot is fresh by construction, except for a source that has
+		// never succeeded: its data is missing, not current.
+		stale := s.LastOKAt.IsZero() || mode != "snapshot" && age > 3*interval
+		e.Freshness[s.Name] = Fresh{LastOKAt: s.LastOKAt, AgeSeconds: int(age / time.Second), Stale: stale, LastError: s.LastError}
 	}
 	gaps, err := r.Gaps(now.Add(-24 * time.Hour))
 	if err != nil {

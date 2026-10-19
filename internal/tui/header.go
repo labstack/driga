@@ -74,7 +74,12 @@ func (m *app) header() string {
 	if host == "" {
 		host = m.snap.Summary.MachineID
 	}
-	return pack([]string{"driga · " + host + m.fleetHeader(), mode, fmt.Sprintf("swap %s/%s %s%s", humanBytes(sample.SwapUsed), humanBytes(sample.SwapTotal), strings.Repeat("▇", filled), strings.Repeat("░", 8-filled)), fmt.Sprintf("load %.1f/%d", sample.Load1, sample.Cores), fmt.Sprintf("%d agents (%d working, %d waiting, %d stalled?)", s.Agents, s.Working, s.Waiting, s.Stalled), fmt.Sprintf("%d orphans ~%s", s.Orphans, humanBytes(s.Reclaim))}, m.width, " · ")
+	health := []string{fmt.Sprintf("swap %s/%s %s%s", humanBytes(sample.SwapUsed), humanBytes(sample.SwapTotal), strings.Repeat("▇", filled), strings.Repeat("░", 8-filled)), fmt.Sprintf("load %.1f/%d", sample.Load1, sample.Cores)}
+	if sample.TS.IsZero() {
+		health = []string{"health unavailable"}
+	}
+	parts := append([]string{"driga · " + host + m.fleetHeader(), mode}, health...)
+	return pack(append(parts, fmt.Sprintf("%d agents (%d working, %d waiting, %d stalled?)", s.Agents, s.Working, s.Waiting, s.Stalled), fmt.Sprintf("%d orphans ~%s", s.Orphans, humanBytes(s.Reclaim))), m.width, " · ")
 }
 func (m *app) footer() string {
 	hints := []string{"m machine", "enter detail", "/ filter", "s sort", "g group by project", "o open terminal"}

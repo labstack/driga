@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -35,6 +36,11 @@ func readDB(t *testing.T, seed func(*store.Tx) error) *store.Store {
 	}
 	t.Cleanup(func() { s.Close() })
 	if err := s.SetMeta("last_pass_at", time.Now().Format(time.RFC3339Nano)); err != nil {
+		t.Fatal(err)
+	}
+	// Reads trust the database only while its collector is alive; this test
+	// process stands in for it.
+	if err := os.WriteFile(filepath.Join(config.DataDir(), "driga.lock"), []byte(strconv.Itoa(os.Getpid())+"\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	if seed != nil {
@@ -301,5 +307,19 @@ func TestReadProjectErrors(t *testing.T) {
 		if code := run([]string{"agents", "--json", "--project", tc.project}, "test", strings.NewReader(""), &out, &errout); code == 0 || !strings.Contains(errout.String(), tc.want) {
 			t.Fatalf("%s: code=%d %s", tc.project, code, errout.String())
 		}
+	}
+}
+
+// A recent database without a live collector is not presented as daemon
+// data: the read collects a fresh snapshot instead.
+func TestReadWithoutLiveCollectorIsSnapshot(t *testing.T) {
+	readEnv(t)
+	readDB(t, nil)
+	if err := os.Remove(filepath.Join(config.DataDir(), "driga.lock")); err != nil {
+		t.Fatal(err)
+	}
+	out, _ := readRun(t, "agents", "--json")
+	if !strings.Contains(out, `"mode": "snapshot"`) && !strings.Contains(out, `"mode":"snapshot"`) {
+		t.Fatalf("mode: %s", out[:min(len(out), 200)])
 	}
 }

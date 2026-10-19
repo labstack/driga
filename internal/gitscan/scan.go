@@ -423,7 +423,9 @@ func (s *Scanner) scanWorktree(ctx context.Context, entry WorktreeEntry, full bo
 	if full {
 		passes++
 	}
-	if full && passes%5 == 0 {
+	// Counting untracked files walks the tree, so it runs on the first full
+	// scan (before it the count is unknown) and then every fifth.
+	if full && (passes == 1 || passes%5 == 0) {
 		untracked, err := s.git(ctx, entry.Path, "status", "--porcelain=v2", "--branch", "--untracked-files=normal")
 		if err != nil {
 			return model.Worktree{}, err

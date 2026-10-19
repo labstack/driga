@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/labstack/driga/internal/config"
@@ -18,8 +19,16 @@ import (
 // Git worktree .git files count as repositories; symlinks are not traversed.
 func SuggestRoots(home string) []string {
 	var roots []string
+	var seen []os.FileInfo
 	for _, name := range []string{"code", "src", "dev", "Projects", "projects", "work", "git"} {
 		root := filepath.Join(home, name)
+		// A case-insensitive disk resolves Projects and projects to one directory.
+		if info, err := os.Stat(root); err == nil {
+			if slices.ContainsFunc(seen, func(s os.FileInfo) bool { return os.SameFile(s, info) }) {
+				continue
+			}
+			seen = append(seen, info)
+		}
 		found := false
 		_ = filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
 			if err != nil {

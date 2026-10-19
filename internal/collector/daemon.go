@@ -41,6 +41,23 @@ func cadence(age time.Duration) Intervals {
 // Cadence returns polling intervals for the age of a viewer's heartbeat.
 func Cadence(age time.Duration) Intervals { return cadence(age) }
 
+// Running reports whether the PID recorded by the lock holder is alive. It
+// only reads the lock file: probing with flock could make a collector that is
+// starting at the same moment fail. A reused PID can at worst make a reader
+// trust a recent database for its freshness window.
+func Running(dataDir string) bool {
+	b, err := os.ReadFile(filepath.Join(dataDir, "driga.lock"))
+	if err != nil {
+		return false
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(b)))
+	if err != nil || pid <= 0 {
+		return false
+	}
+	err = syscall.Kill(pid, 0)
+	return err == nil || errors.Is(err, syscall.EPERM)
+}
+
 // Lock takes the nonblocking collector writer lock and writes the owner's PID.
 // Closing the returned file releases it; the lock file must not be removed.
 func Lock(dataDir string) (*os.File, error) {

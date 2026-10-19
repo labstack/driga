@@ -689,3 +689,17 @@ func TestProjectSlugMatchesClaude(t *testing.T) {
 		t.Fatal(got)
 	}
 }
+
+func TestWhyOmitsMainWorktree(t *testing.T) {
+	e, _, repo, _ := fixture(t)
+	e.Why = true
+	cs, err := List(context.Background(), e)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range cs {
+		if c.Path == repo {
+			t.Fatalf("main worktree listed: %+v", c)
+		}
+	}
+}

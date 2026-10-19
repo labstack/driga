@@ -216,18 +216,16 @@ func TestLinkedWorktreeGitFile(t *testing.T) {
 	}
 }
 
-func TestScanUntrackedEveryFifthFull(t *testing.T) {
+// Untracked files are counted on the first full scan (a snapshot has only
+// one) and then every fifth; counts in between are carried forward.
+func TestScanUntrackedFirstAndEveryFifthFull(t *testing.T) {
 	gitEnv(t)
 	p := initRepo(t, filepath.Join(t.TempDir(), "repo"))
 	writeTest(t, filepath.Join(p, "untracked"), "new")
 	s := NewScanner(1)
 	for i := 1; i <= 5; i++ {
 		w := scanOne(t, s, p, true)
-		want := 0
-		if i == 5 {
-			want = 1
-		}
-		if w.Untracked != want || w.Dirty != 0 {
+		if w.Untracked != 1 || w.Dirty != 0 {
 			t.Fatalf("pass %d: %#v", i, w)
 		}
 		scanOne(t, s, p, false)

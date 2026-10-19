@@ -62,7 +62,9 @@ func decideMode(ctx context.Context, g *Globals) (*store.Store, string, error) {
 			}
 			raw, metaErr := st.Meta("last_pass_at")
 			last, parseErr := time.Parse(time.RFC3339Nano, raw)
-			if metaErr == nil && parseErr == nil && time.Since(last) <= 10*time.Minute {
+			// A recent pass alone is not enough: after `collect --once` or a
+			// stopped service the data only ages, so it must not read as daemon.
+			if metaErr == nil && parseErr == nil && time.Since(last) <= 10*time.Minute && collector.Running(config.DataDir()) {
 				return st, "daemon", nil
 			}
 			_ = st.Close()

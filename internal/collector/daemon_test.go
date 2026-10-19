@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -119,5 +121,33 @@ func TestDaemonSchedule(t *testing.T) {
 	}
 	if wait := s.wait(now.Add(31*time.Second), Cadence(time.Hour)); wait > time.Second {
 		t.Fatalf("heartbeat wake too late: %v", wait)
+	}
+}
+
+// Running reads the PID the lock holder wrote; it never takes the lock, so it
+// cannot make a collector that is starting at the same moment fail.
+func TestRunningReadsLockOwner(t *testing.T) {
+	dir := t.TempDir()
+	if Running(dir) {
+		t.Fatal("no lock file reported running")
+	}
+	f, err := Lock(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !Running(dir) {
+		t.Fatal("held lock not reported running")
+	}
+	f.Close()
+	// A stale PID from an exited process is not running.
+	cmd := exec.Command("true")
+	if err := cmd.Run(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "driga.lock"), []byte(strconv.Itoa(cmd.Process.Pid)+"\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if Running(dir) {
+		t.Fatal("exited owner reported running")
 	}
 }

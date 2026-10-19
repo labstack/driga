@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -62,6 +63,11 @@ func fixture(t *testing.T) (*store.Store, int64) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = s.Close() })
+	// Reads trust the database only while its collector lives; this test
+	// process stands in for it.
+	if err := os.WriteFile(filepath.Join(home, "data", "driga.lock"), []byte(strconv.Itoa(os.Getpid())+"\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	// Future observations keep derived ages at zero, so only observed_at
 	// changes between the real CLI and MCP reads.
 	future := time.Date(2030, 1, 1, 0, 0, 0, 0, time.UTC)

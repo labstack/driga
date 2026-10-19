@@ -37,6 +37,9 @@ type ConfigShowCmd struct{}
 
 // Run loads overrides and prints defaults for unspecified settings.
 func (ConfigShowCmd) Run(g *Globals) error {
+	if g.JSON {
+		return errors.New("config show prints TOML; --json is not supported")
+	}
 	cfg, err := config.Load(config.Path())
 	if err != nil {
 		return err
@@ -201,6 +204,23 @@ func configText(c config.Config, commented bool, chosen map[string]bool) string 
 	line("low_disk_percent", c.Cleanup.LowDiskPercent, defaults.Cleanup.LowDiskPercent)
 	line("low_disk_bytes", fmt.Sprint(c.Cleanup.LowDiskBytes), fmt.Sprint(defaults.Cleanup.LowDiskBytes))
 	line("regenerable", c.Cleanup.Regenerable, defaults.Cleanup.Regenerable)
+	b.WriteByte('\n')
+	if commented && c.Fleet == defaults.Fleet {
+		b.WriteString("# ")
+	}
+	b.WriteString("[fleet]\n")
+	line("serve", c.Fleet.Serve, defaults.Fleet.Serve)
+	line("listen", c.Fleet.Listen, defaults.Fleet.Listen)
+	line("share_text", c.Fleet.ShareText, defaults.Fleet.ShareText)
+	line("enroll_window", durationText(c.Fleet.EnrollWindow), durationText(defaults.Fleet.EnrollWindow))
+	line("allow_any_address", c.Fleet.AllowAnyAddress, defaults.Fleet.AllowAnyAddress)
+	b.WriteByte('\n')
+	if commented && c.Intake == defaults.Intake {
+		b.WriteString("# ")
+	}
+	b.WriteString("[intake]\n")
+	line("otlp", c.Intake.OTLP, defaults.Intake.OTLP)
+	line("listen", c.Intake.Listen, defaults.Intake.Listen)
 	return b.String()
 }
 

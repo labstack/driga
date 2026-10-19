@@ -112,7 +112,7 @@ func agentsLocal(r Reader, f AgentFilter, now time.Time) (AgentsView, error) {
 		if title == "" {
 			title = s.LastPrompt
 		}
-		row := AgentRow{MachineID: r.MachineID(), ID: s.ID, Label: derive.Display(s.Label, s.Heuristic), Adapter: s.Adapter, Origin: s.Origin, Project: projectName(s, repos), Branch: s.Branch, Title: title, Age: max(0, now.Sub(s.StartedAt)), Evidence: s.Evidence, ObservedAt: now, Children: []AgentRow{}, FinishedChildren: counts[s.ID]}
+		row := AgentRow{MachineID: r.MachineID(), ID: s.ID, Label: derive.Display(s.Label, s.Heuristic), Adapter: s.Adapter, Origin: s.Origin, Project: projectName(s, repos), Branch: s.Branch, Title: title, Age: sessionAge(s, now), Evidence: s.Evidence, ObservedAt: now, Children: []AgentRow{}, FinishedChildren: counts[s.ID]}
 		for _, p := range procTree(s, idx) {
 			row.Mem += p.RSS
 		}
@@ -547,4 +547,13 @@ func within(path, root string) bool {
 	}
 	rel, err := filepath.Rel(root, path)
 	return err == nil && !filepath.IsAbs(rel) && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+// sessionAge is zero when the start is unknown (a transcript seen without
+// registry metadata); renderers show that as "—" instead of a huge age.
+func sessionAge(s model.Session, now time.Time) time.Duration {
+	if s.StartedAt.IsZero() {
+		return 0
+	}
+	return max(0, now.Sub(s.StartedAt))
 }

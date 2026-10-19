@@ -183,7 +183,8 @@ func List(ctx context.Context, e Env) ([]Candidate, error) {
 		c, err := inspectWorktree(ctx, e, s, w, nil)
 		if err == nil {
 			cs = append(cs, c)
-		} else if e.Why {
+		} else if e.Why && err.Error() != errMainWorktree {
+			// Main worktrees are never candidates; listing each one is noise.
 			cs = append(cs, Candidate{ID: wtID(w.Path), Kind: Worktree, Path: w.Path, Repo: c.Repo, Branch: c.Branch, Status: "refused", Evidence: []string{err.Error()}, Ignored: []IgnoredPath{}})
 		}
 	}

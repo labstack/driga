@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"charm.land/bubbles/v2/table"
 	"charm.land/lipgloss/v2"
@@ -148,7 +149,7 @@ func (m *app) rebuild() {
 				if r.FinishedChildren > 0 {
 					title += fmt.Sprintf(" (%d workers finished)", r.FinishedChildren)
 				}
-				add(tabRow{machine: r.MachineID, key: key, agent: r.ID, cells: []string{"", r.Label, strings.Repeat(" ", depth) + mark + r.Adapter, r.Project, r.Branch, title, duration(r.Age), humanBytes(r.Mem)}})
+				add(tabRow{machine: r.MachineID, key: key, agent: r.ID, cells: []string{"", r.Label, strings.Repeat(" ", depth) + mark + r.Adapter, r.Project, r.Branch, title, agentAge(r.Age), humanBytes(r.Mem)}})
 				// Filtering searches through collapsed families as well.
 				if m.expanded[key] || query != "" {
 					agents(r.Children, depth+1)
@@ -314,4 +315,12 @@ func (m *app) selectedCwd() string {
 		return r.cwd
 	}
 	return m.snap.AgentDetails[r.agent].Session.Cwd
+}
+
+// agentAge renders an unknown (zero) session age as "—".
+func agentAge(d time.Duration) string {
+	if d == 0 {
+		return "—"
+	}
+	return duration(d)
 }

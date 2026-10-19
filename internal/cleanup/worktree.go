@@ -11,6 +11,8 @@ import (
 	"time"
 )
 
+const errMainWorktree = "main worktree is never removable"
+
 func inspectWorktree(ctx context.Context, e Env, s snapshot, w model.Worktree, expected *Candidate) (Candidate, error) {
 	c := Candidate{ID: wtID(w.Path), Kind: Worktree, Path: w.Path, Status: "ready", Ignored: []IgnoredPath{}}
 	fail := func(reason string) (Candidate, error) { return c, fmt.Errorf("%s", reason) }
@@ -39,7 +41,7 @@ func inspectWorktree(ctx context.Context, e Env, s snapshot, w model.Worktree, e
 		path := strings.TrimPrefix(fields[0], "worktree ")
 		if resolved(path) == resolved(w.Path) {
 			if first {
-				return fail("main worktree is never removable")
+				return fail(errMainWorktree)
 			}
 			matched = true
 			for _, f := range fields {

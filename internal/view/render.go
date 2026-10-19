@@ -13,6 +13,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/term"
+	"github.com/labstack/driga/internal/model"
 )
 
 // RenderOpts controls JSON, colors, and the common metadata around tables.
@@ -75,7 +76,7 @@ func Render(w io.Writer, v any, opts RenderOpts) error {
 			fmt.Fprintln(tw, cell(x.Warning))
 		}
 	case SummaryView:
-		fmt.Fprintf(tw, "%d agents (%d working, %d waiting, %d stalled?) · inbox %d · swap %s/%s · load %.0f/%d · orphans %d ~%s · %s\n", x.Agents, x.Working, x.Waiting, x.Stalled, x.Inbox, humanBytes(x.Sample.SwapUsed), humanBytes(x.Sample.SwapTotal), x.Sample.Load1, x.Sample.Cores, x.Orphans, humanBytes(x.Reclaim), opts.Envelope.Mode)
+		fmt.Fprintf(tw, "%d agents (%d working, %d waiting, %d stalled?) · inbox %d · %s · orphans %d ~%s · %s\n", x.Agents, x.Working, x.Waiting, x.Stalled, x.Inbox, HealthText(x.Sample, "%.0f"), x.Orphans, humanBytes(x.Reclaim), opts.Envelope.Mode)
 	case AgentsView:
 		renderAgents(tw, x, label)
 	case AgentView:
@@ -240,7 +241,7 @@ func renderAgents(w io.Writer, v AgentsView, label func(string) string) {
 				title += fmt.Sprintf(" (%d workers finished)", r.FinishedChildren)
 			}
 			fmt.Fprint(w, machinePrefix(multi, r.MachineID, r.MachineFresh))
-			fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", r.ID, name, label(r.Label), cell(r.Origin), cell(r.Project), cell(r.Branch), age(r.Age), humanBytes(r.Mem), title, cell(r.Evidence))
+			fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", r.ID, name, label(r.Label), cell(r.Origin), cell(r.Project), cell(r.Branch), sessionAgeText(r.Age), humanBytes(r.Mem), title, cell(r.Evidence))
 			rows(r.Children, depth+1)
 		}
 	}
@@ -298,6 +299,14 @@ func humanBytes(n uint64) string {
 }
 func age(d time.Duration) string { return max(0, d).Round(time.Second).String() }
 
+// sessionAgeText renders an unknown (zero) session age as "—".
+func sessionAgeText(d time.Duration) string {
+	if d == 0 {
+		return "—"
+	}
+	return age(d)
+}
+
 // cell keeps stored control sequences and multiline text out of table layout.
 func cell(s string) string {
 	return strings.Map(func(r rune) rune {
@@ -336,4 +345,13 @@ func machinePrefix(show bool, id string, f MachineFresh) string {
 		return cell(originLabel(id, f)) + "\t"
 	}
 	return ""
+}
+
+// HealthText formats swap and load, or says health is unavailable when no
+// machine sample exists, rather than showing zeros as if measured.
+func HealthText(sample model.MachineSample, loadFormat string) string {
+	if sample.TS.IsZero() {
+		return "health unavailable"
+	}
+	return fmt.Sprintf("swap %s/%s · load "+loadFormat+"/%d", humanBytes(sample.SwapUsed), humanBytes(sample.SwapTotal), sample.Load1, sample.Cores)
 }

@@ -211,3 +211,51 @@ func TestServiceLogsLast50(t *testing.T) {
 		t.Fatalf("wrong log tail: %s", out)
 	}
 }
+
+// init and config show rewrite the whole file from configText; fleet and
+// intake settings (including the share_text privacy choice) must survive.
+func TestConfigTextKeepsFleetAndIntake(t *testing.T) {
+	readEnv(t)
+	text := "[fleet]\nserve = true\nlisten = '127.0.0.1:9999'\nshare_text = 'none'\nenroll_window = '2m'\nallow_any_address = true\n[intake]\notlp = true\nlisten = '127.0.0.1:7777'\n"
+	if err := os.WriteFile(config.Path(), []byte(text), 0600); err != nil {
+		t.Fatal(err)
+	}
+	want, err := config.Load(config.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, commented := range []bool{true, false} {
+		if err := os.WriteFile(config.Path(), []byte(configText(want, commented, nil)), 0600); err != nil {
+			t.Fatal(err)
+		}
+		got, err := config.Load(config.Path())
+		if err != nil {
+			t.Fatalf("commented=%v: %v", commented, err)
+		}
+		if got.Fleet != want.Fleet || got.Intake != want.Intake {
+			t.Fatalf("commented=%v: fleet %+v intake %+v, want %+v %+v", commented, got.Fleet, got.Intake, want.Fleet, want.Intake)
+		}
+	}
+}
+
+func TestConfigShowRejectsJSON(t *testing.T) {
+	readEnv(t)
+	var out, errout bytes.Buffer
+	if code := run([]string{"config", "show", "--json"}, "test", nil, &out, &errout); code == 0 || !strings.Contains(errout.String(), "--json") {
+		t.Fatal(code, out.String(), errout.String())
+	}
+}
+
+// On a case-insensitive disk ~/Projects and ~/projects are one directory.
+func TestSuggestRootsCaseInsensitiveOnce(t *testing.T) {
+	home := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(home, "Projects", "r", ".git"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(home, "projects")); err != nil {
+		t.Skip("case-sensitive filesystem")
+	}
+	if got := SuggestRoots(home); !reflect.DeepEqual(got, []string{"~/Projects"}) {
+		t.Fatal(got)
+	}
+}

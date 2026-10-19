@@ -62,7 +62,7 @@ events as already seen, so historical completions do not fill the inbox.
 ```sh
 driga agents --all                 # include sessions ended within 24 hours
 driga agents --json --project .
-driga agent <session-id>
+driga agent <id>                   # numeric ID from the agents table or --json
 driga where <project>
 driga inbox                       # unacknowledged events; "inbox list" also works
 driga inbox --all
@@ -90,7 +90,7 @@ Hosted Codex threads use heuristic labels prefixed with `~`; a shared host proce
 does not establish individual thread liveness. Unknown agent versions are parsed
 tolerantly and reported by `driga doctor`.
 
-In the TUI, use `1`–`5` for tabs, Enter for detail, Esc to return, `?` for help,
+In the TUI, use `1`–`6` for tabs (Agents, Projects, Inbox, Orphans, Machine, Cleanup), Enter for detail, Esc to return, `?` for help,
 `m` to cycle machine scope, and `q` to quit. Opening details or issuing JSON
 queries never acknowledges inbox items. Use `x`/Space in Inbox or `driga inbox ack`. Without a running collector,
 acknowledgments are queued for the next collection. Orphan kills recheck process
@@ -373,7 +373,7 @@ installed `claude` lacks a required flag.
 
 ## MCP registration
 
-`driga mcp` exposes eleven read-only tools over stdio with the same schema-1 view
+`driga mcp` exposes twelve read-only tools over stdio with the same schema-1 view
 envelopes as `--json`. Reading never acknowledges inbox items. Run a collector for
 history and merged fleet data; without one, tools use labelled snapshot mode.
 Keep the installed `driga` binary on the MCP client's PATH.

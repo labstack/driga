@@ -117,11 +117,13 @@ func (s *StoreSource) load(ctx context.Context, mode string) (Snapshot, error) {
 		if snap.Procs, err = tx.Procs(); err != nil {
 			return err
 		}
-		machine, err := tx.Machine()
-		if err != nil && !errors.Is(err, store.ErrNotFound) {
+		// A collector whose machine source never succeeded has no machine row;
+		// the views above still hold its sessions.
+		if machine, err := tx.Machine(); err == nil {
+			snap.Hostname = machine.Hostname
+		} else if !errors.Is(err, store.ErrNotFound) {
 			return err
 		}
-		snap.Hostname = machine.Hostname
 		ids := map[int64]bool{}
 		var collect func([]view.AgentRow)
 		collect = func(rows []view.AgentRow) {
