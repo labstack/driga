@@ -81,7 +81,10 @@ func (m *app) openDetail(r tabRow) {
 		lines[i] = truncate(clean(line), m.width)
 	}
 	m.detailText = strings.Join(lines, "\n")
-	m.viewport.SetContent(wrapText(m.detailText, m.width))
+	if d, ok := m.snap.AgentDetails[r.agent]; ok {
+		m.detailText = m.styleAgentState(m.detailText, d.Label)
+	}
+	m.viewport.SetContent(m.detailText)
 	m.viewport.GotoTop()
 }
 

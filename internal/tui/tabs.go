@@ -32,6 +32,8 @@ func (m *app) tabVisible(tab int) bool {
 		return true
 	}
 	switch tab {
+	case homeTab:
+		return true
 	case 0:
 		return len(m.snap.Agents.Rows) > 0
 	case 1:
@@ -67,7 +69,10 @@ func (m *app) tabBar() string {
 	}
 	names := []string{fmt.Sprintf("Agents(%d)", s.Agents), fmt.Sprintf("Projects(%d)", projects), fmt.Sprintf("Inbox(%d)", inbox), fmt.Sprintf("Orphans(%d)", orphans), "Machine", "Cleanup"}
 	// Keep stable key numbers even when project scope hides a tab.
-	var tabs []string
+	tabs := []string{"0 Home"}
+	if m.tab == homeTab {
+		tabs[0] = "[0 Home]"
+	}
 	for i, name := range names {
 		if !m.tabVisible(i) {
 			continue
@@ -108,6 +113,12 @@ func (m *app) rebuild() {
 		rows = append(rows, r)
 	}
 	switch m.tab {
+	case homeTab:
+		titles = []string{"", "STATE", "PROJECT", "SUMMARY"}
+		weights = []int{2, 10, 14, 40}
+		for _, row := range m.needsYou() {
+			add(row)
+		}
 	case 5:
 		titles = []string{"", "KIND", "STATUS", "PATH"}
 		weights = []int{2, 10, 18, 50}
@@ -233,7 +244,7 @@ func (m *app) rebuild() {
 			ids[r.machine] = true
 		}
 	}
-	if len(ids) > 1 {
+	if len(ids) > 1 && m.tab != homeTab {
 		titles = append([]string{titles[0], "MACHINE"}, titles[1:]...)
 		weights = append([]int{weights[0], 14}, weights[1:]...)
 		for i := range rows {
@@ -248,7 +259,11 @@ func (m *app) rebuild() {
 		sum += w
 	}
 	widths := make([]int, len(titles))
-	available := max(1, m.width-len(titles))
+	tableWidth := m.width
+	if m.splitDetail() {
+		tableWidth = m.width / 2
+	}
+	available := max(1, tableWidth-len(titles))
 	for i := range widths {
 		widths[i] = max(1, weights[i]*available/sum)
 	}
@@ -264,6 +279,9 @@ func (m *app) rebuild() {
 		cells[i] = make(table.Row, len(titles))
 		for j, c := range r.cells {
 			cells[i][j] = truncate(clean(c), widths[j])
+			if titles[j] == "STATE" || titles[j] == "KIND" {
+				cells[i][j] = view.StateStyle(c, m.opts.NoColor).Render(cells[i][j])
+			}
 			if r.stale && !m.opts.NoColor {
 				cells[i][j] = lipgloss.NewStyle().Faint(true).Render(cells[i][j])
 			}
@@ -285,14 +303,14 @@ func (m *app) rebuild() {
 	m.table.SetStyles(styles)
 	m.table.SetColumns(columns)
 	m.table.SetRows(cells)
-	m.table.SetWidth(m.width)
+	m.table.SetWidth(tableWidth)
 	m.table.SetHeight(m.bodyHeight())
 	m.table.SetCursor(m.cursors[m.tab])
 	m.filter.SetWidth(max(1, m.width-2))
 	m.viewport.SetWidth(m.width)
 	m.viewport.SetHeight(m.bodyHeight())
 	if m.detail {
-		m.viewport.SetContent(wrapText(m.detailText, m.width))
+		m.viewport.SetContent(m.detailText)
 	}
 }
 

@@ -22,6 +22,13 @@ import (
 // SummaryCmd prints the default one-screen summary.
 type SummaryCmd struct{}
 
+// ActivityCmd shows machine-wide activity over the last hour.
+type ActivityCmd struct{}
+
+func (ActivityCmd) Run(g *Globals) error {
+	return runRead(g, view.Filter{}, "", func(r view.Reader, f view.Filter, now time.Time) (any, error) { return view.Activity(r, f, now) })
+}
+
 // AgentsCmd lists live sessions and their worker families.
 type AgentsCmd struct {
 	All bool `help:"Include sessions ended within the last 24 hours."`

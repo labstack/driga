@@ -26,6 +26,8 @@ type Reader interface {
 	Inbox(time.Time, bool) ([]model.InboxItem, error)
 	Orphans() ([]model.Orphan, error)
 	LatestSample() (model.MachineSample, error)
+	Samples(time.Time) ([]model.MachineSample, error)
+	EventCounts(time.Time, time.Time) ([]store.EventCount, error)
 	Sources() ([]model.SourceStatus, error)
 	Gaps(time.Time) ([]model.Gap, error)
 }

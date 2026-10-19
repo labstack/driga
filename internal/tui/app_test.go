@@ -193,6 +193,7 @@ func TestKillRefusesUnverified(t *testing.T) {
 func TestReloadOnlyOnDataVersionChange(t *testing.T) {
 	s := fixture()
 	m := setup(t, s, Options{})
+	m = key(m, '1')
 	poll := func() { t.Helper(); var cmd tea.Cmd; m, cmd = m.Update(tickMsg{}); m = execute(t, m, cmd) }
 	poll()
 	if s.loads != 1 {
@@ -355,6 +356,7 @@ func TestFamiliesFilterSortAndCursors(t *testing.T) {
 	s.snap.Agents.Rows[0].Children = []view.AgentRow{{ID: 2, Adapter: "codex", Label: "working", Title: "worker title"}}
 	s.snap.Agents.Rows = append(s.snap.Agents.Rows, view.AgentRow{ID: 3, Adapter: "codex", Label: "waiting", Title: "other title", Mem: 100})
 	m := setup(t, s, Options{})
+	m = key(m, '1')
 	if strings.Contains(m.View().Content, "worker title") {
 		t.Fatal("family starts expanded")
 	}
@@ -444,12 +446,16 @@ func TestStoreSource(t *testing.T) {
 	}
 	defer reader.Close()
 	src := NewStoreSource(reader, dir, view.Filter{Project: filepath.Join(dir, "repo")})
+	src.Now = func() time.Time { return now }
 	snap, err := src.Load(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if snap.Mode != "daemon" || snap.Hostname != "fixture-host" || len(snap.Agents.Rows) != 1 || len(snap.ProjectDetails) != 1 || snap.AgentDetails[sessionID].Resume == "" || len(snap.Inbox.Rows) != 1 {
 		t.Fatalf("incomplete snapshot: %+v", snap)
+	}
+	if len(snap.Activity.Machines) != 1 || len(snap.Activity.Machines[0].Buckets) != 60 || snap.Activity.Machines[0].Buckets[59].Sample == nil || snap.Activity.Machines[0].Buckets[59].Sample.Cores != 4 {
+		t.Fatalf("activity missing from snapshot: %+v", snap.Activity)
 	}
 	v, err := src.DataVersion(ctx)
 	if err != nil {

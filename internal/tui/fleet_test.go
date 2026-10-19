@@ -20,6 +20,7 @@ func fleetSource() *fakeSource {
 }
 func TestTUIHeaderAndMachineColumn(t *testing.T) {
 	m := setup(t, fleetSource(), Options{})
+	m = key(m, '1')
 	text := m.View().Content
 	for _, want := range []string{"+1", "vm-1 stale 12m", "MACHINE"} {
 		if !strings.Contains(text, want) {
@@ -43,6 +44,7 @@ func TestTUIHeaderAndMachineColumn(t *testing.T) {
 func TestStaleRowsDimmed(t *testing.T) {
 	t.Setenv("NO_COLOR", "")
 	m := setup(t, fleetSource(), Options{}).(*app)
+	key(m, '1')
 	m.opts.NoColor = false
 	m.rebuild()
 	text := m.View().Content

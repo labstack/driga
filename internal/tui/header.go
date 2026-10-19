@@ -82,12 +82,18 @@ func (m *app) header() string {
 	return pack(append(parts, fmt.Sprintf("%d agents (%d working, %d waiting, %d stalled?)", s.Agents, s.Working, s.Waiting, s.Stalled), fmt.Sprintf("%d orphans ~%s", s.Orphans, humanBytes(s.Reclaim))), m.width, " · ")
 }
 func (m *app) footer() string {
-	hints := []string{"m machine", "enter detail", "/ filter", "s sort", "g group by project", "o open terminal"}
+	hints := []string{"0 Home", "m machine", "enter detail", "/ filter", "s sort", "g group by project", "o open terminal"}
 	if m.tmuxTarget() != "" {
 		hints = append(hints, "a attach tmux")
 	}
+	if m.tab == 2 || m.tab == homeTab {
+		hints = append(hints, "x/space ack")
+	}
 	if m.tab == 2 {
-		hints = append(hints, "x/space ack", "X ack all")
+		hints = append(hints, "X ack all")
+	}
+	if m.tab == homeTab {
+		hints = append(hints, "pgup/pgdown scroll")
 	}
 	if m.tab == 1 {
 		hints = append([]string{"S summarize"}, hints...)
@@ -177,6 +183,13 @@ func (m *app) View() tea.View {
 	if len(m.rows) == 0 {
 		body = "No items"
 	}
+	if m.tab == homeTab {
+		lines := strings.Split(m.homeView(), "\n")
+		offset := min(m.homeOffset, max(0, len(lines)-m.bodyHeight()))
+		body = strings.Join(lines[offset:], "\n")
+	} else if m.splitDetail() {
+		body = m.agentsSplitView()
+	}
 	if !m.loaded {
 		body = "Loading…"
 		if _, ok := m.src.(*LiveSnapshotSource); ok {
@@ -187,7 +200,7 @@ func (m *app) View() tea.View {
 		body = m.viewport.View()
 	}
 	if m.help {
-		body = wrapText("1–6 tabs · ↑/↓ or j/k move · enter detail · esc back\nm cycle machine scope · / filter · enter apply · esc clear · s sort: state, age, mem, project · S summarize selected project\ng group by project · →/← expand/collapse families and worktrees\nx/space acknowledge Inbox · X acknowledge all (confirm)\nk kill orphan (confirm) · K force (two confirmations)\no open terminal · ? close help · q / ctrl+c quit", m.width)
+		body = wrapText("0 Home · 1–6 tabs · ↑/↓ or j/k move · enter detail · esc back\nm cycle machine scope · / filter · enter apply · esc clear · s sort: state, age, mem, project · S summarize selected project\ng group by project · →/← expand/collapse families and worktrees\nx/space acknowledge Needs you / Inbox · X acknowledge all Inbox (confirm)\npgup/pgdown scroll Home · k kill orphan (confirm) · K force (two confirmations)\no open terminal · ? close help · q / ctrl+c quit", m.width)
 		if m.tmuxTarget() != "" {
 			body += "\na attach tmux"
 		}

@@ -74,10 +74,13 @@ type conflictsInput struct {
 
 const readDescription = ` Reading never acknowledges inbox items. mode: "snapshot" means no history.`
 
-// NewServer registers exactly the eleven v1.5 read tools, without resources or prompts.
+// NewServer registers read tools, without resources or prompts.
 func NewServer(o Options) *sdk.Server {
 	s := sdk.NewServer(&sdk.Implementation{Name: "driga", Version: o.Version}, &sdk.ServerOptions{Logger: o.Logger})
 	s.AddReceivingMiddleware(preserveEnvelope)
+	register(s, "driga_activity", "Read the last sixty minutes of machine samples and event counts.", func(ctx context.Context, in machineInput) (view.Envelope, error) {
+		return o.Read(ctx, Query{Machine: in.Machine}, func(r view.Reader, f view.Filter, now time.Time) (any, error) { return view.Activity(r, f, now) })
+	})
 	register(s, "driga_summary", "Read agent counts, inbox counts, and machine health.", func(ctx context.Context, in machineInput) (view.Envelope, error) {
 		return o.Read(ctx, Query{Machine: in.Machine}, func(r view.Reader, f view.Filter, now time.Time) (any, error) { return view.Summary(r, f, now) })
 	})

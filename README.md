@@ -95,7 +95,12 @@ Hosted Codex threads use heuristic labels prefixed with `~`; a shared host proce
 does not establish individual thread liveness. Unknown agent versions are parsed
 tolerantly and reported by `driga doctor`.
 
-In the TUI, use `1`–`6` for tabs (Agents, Projects, Inbox, Orphans, Machine, Cleanup), Enter for detail, Esc to return, `?` for help,
+`driga top` opens on Home (`0`): what needs you, agent states, machine health, the last
+hour's activity, projects and leftovers. On terminals 140 columns or wider the Agents tab
+shows the selected agent beside the list. `driga activity` prints the same 60-minute
+history (machine samples and events per minute; minutes without a sample are gaps).
+
+In the TUI, use `0`–`6` for tabs (Home, Agents, Projects, Inbox, Orphans, Machine, Cleanup), Enter for detail, Esc to return, `?` for help,
 `m` to cycle machine scope, and `q` to quit. Opening details or issuing JSON
 queries never acknowledges inbox items. Use `x`/Space in Inbox or `driga inbox ack`. Without a running collector,
 acknowledgments are queued for the next collection. Orphan kills recheck process
@@ -378,7 +383,7 @@ installed `claude` lacks a required flag.
 
 ## MCP registration
 
-`driga mcp` exposes twelve read-only tools over stdio with the same schema-1 view
+`driga mcp` exposes thirteen read-only tools over stdio with the same schema-1 view
 envelopes as `--json`. Reading never acknowledges inbox items. Run a collector for
 history and merged fleet data; without one, tools use labelled snapshot mode.
 Keep the installed `driga` binary on the MCP client's PATH.

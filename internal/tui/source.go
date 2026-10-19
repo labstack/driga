@@ -39,6 +39,7 @@ type Snapshot struct {
 	Inbox          view.InboxView
 	Orphans        view.OrphansView
 	Machine        view.MachineView
+	Activity       view.ActivityView
 	Conflicts      view.ConflictsView
 	AgentDetails   map[int64]view.AgentView
 	ProjectDetails map[int64]view.WhereView
@@ -109,6 +110,9 @@ func (s *StoreSource) load(ctx context.Context, mode string) (Snapshot, error) {
 			return err
 		}
 		if snap.Machine, err = view.Machine(tx, f, now); err != nil {
+			return err
+		}
+		if snap.Activity, err = view.Activity(tx, f, now); err != nil {
 			return err
 		}
 		if snap.Conflicts, err = view.Conflicts(tx, f, now); err != nil {

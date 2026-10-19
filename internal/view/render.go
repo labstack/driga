@@ -42,7 +42,8 @@ func Render(w io.Writer, v any, opts RenderOpts) error {
 	}
 	// Buffer table output so footer and formatting errors reach the caller.
 	var buf strings.Builder
-	color := !opts.NoColor && os.Getenv("NO_COLOR") == "" && IsTerminal(w)
+	_, noColor := os.LookupEnv("NO_COLOR")
+	color := !opts.NoColor && !noColor && IsTerminal(w)
 	if opts.Envelope.Mode == "snapshot" {
 		fmt.Fprintln(&buf, "snapshot · no history")
 	}
@@ -51,18 +52,22 @@ func Render(w io.Writer, v any, opts RenderOpts) error {
 		if !color {
 			return cell(s)
 		}
-		c := lipgloss.Color("7")
-		switch strings.TrimPrefix(s, "~") {
-		case "working":
-			c = lipgloss.Color("2")
-		case "waiting", "stalled?":
-			c = lipgloss.Color("3")
-		case "dead":
-			c = lipgloss.Color("1")
-		}
-		return lipgloss.NewStyle().Foreground(c).Render(cell(s))
+		return StateStyle(s, false).Render(cell(s))
 	}
 	switch x := v.(type) {
+	case ActivityView:
+		fmt.Fprintln(tw, "MACHINE\tWINDOW\tSAMPLES\tEVENTS\tLATEST LOAD")
+		for _, m := range x.Machines {
+			samples, events, load := 0, 0, "—"
+			for _, b := range m.Buckets {
+				events += b.Events
+				if b.Sample != nil {
+					samples++
+					load = fmt.Sprintf("%.1f", b.Sample.Load1)
+				}
+			}
+			fmt.Fprintf(tw, "%s\t60m\t%d/60\t%d\t%s\n", cell(originLabel(m.MachineID, m.MachineFresh)), samples, events, load)
+		}
 	case MachinesView:
 		fmt.Fprintln(tw, "NAME\tID\tHOST\tOS\tSTATE\tLAST SEEN\tAGENTS\tINBOX\tSKEW\tLAST ERROR")
 		for _, m := range x.Rows {

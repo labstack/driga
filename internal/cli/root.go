@@ -35,6 +35,7 @@ type Root struct {
 	Globals
 
 	Summary   SummaryCmd   `cmd:"" default:"1" help:"Show a one-screen summary."`
+	Activity  ActivityCmd  `cmd:"" help:"Show the last hour of machine activity."`
 	Agents    AgentsCmd    `cmd:"" help:"List agents grouped by family."`
 	Agent     AgentCmd     `cmd:"" help:"Show session detail."`
 	Projects  ProjectsCmd  `cmd:"" help:"List project status."`

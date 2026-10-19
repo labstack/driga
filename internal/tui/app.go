@@ -44,31 +44,33 @@ type Options struct {
 }
 
 type app struct {
-	machineScope  string
-	src           Source
-	opts          Options
-	snap          Snapshot
-	loaded        bool
-	pollPending   bool
-	version       int64
-	tab           int
-	cursors       [6]int
-	expanded      map[string]bool
-	filter        textinput.Model
-	filtering     bool
-	sort          int
-	group         bool
-	table         table.Model
-	rows          []tabRow
-	detail        bool
-	detailText    string
-	detailRow     *tabRow
-	viewport      viewport.Model
-	confirm       *confirmation
-	help          bool
-	status        string
-	busy          bool
-	width, height int
+	machineScope     string
+	src              Source
+	opts             Options
+	snap             Snapshot
+	loaded           bool
+	pollPending      bool
+	version          int64
+	tab              int
+	cursors          [7]int
+	homeOffset       int
+	cleanupRequested bool
+	expanded         map[string]bool
+	filter           textinput.Model
+	filtering        bool
+	sort             int
+	group            bool
+	table            table.Model
+	rows             []tabRow
+	detail           bool
+	detailText       string
+	detailRow        *tabRow
+	viewport         viewport.Model
+	confirm          *confirmation
+	help             bool
+	status           string
+	busy             bool
+	width, height    int
 }
 type confirmation struct {
 	cleanup cleanup.Candidate
@@ -132,7 +134,7 @@ func New(src Source, opts Options) tea.Model {
 	input.Prompt = "/ "
 	input.Placeholder = "filter"
 	input.SetStyles(textinput.Styles{})
-	m := &app{machineScope: opts.Machine, src: src, opts: opts, width: 80, height: 24, expanded: map[string]bool{}, filter: input, table: table.New(table.WithFocused(true)), viewport: viewport.New()}
+	m := &app{tab: homeTab, machineScope: opts.Machine, src: src, opts: opts, width: 80, height: 24, expanded: map[string]bool{}, filter: input, table: table.New(table.WithFocused(true)), viewport: viewport.New()}
 	m.rebuild()
 	return m
 }
@@ -197,6 +199,10 @@ func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = max(1, msg.Width)
 		m.height = max(1, msg.Height)
+		if m.tab == 0 && m.width >= 140 {
+			m.detail = false
+			m.detailRow = nil
+		}
 		m.rebuild()
 		if m.detail && m.detailRow != nil {
 			offset := m.viewport.YOffset()
@@ -231,6 +237,10 @@ func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.loaded {
 			m.showAckPending()
 			m.rebuild()
+		}
+		if m.loaded && m.tab == homeTab && !m.cleanupRequested && m.snap.Cleanup == nil && m.opts.CleanupList != nil && !m.busy {
+			m.cleanupRequested = true
+			return m, m.loadCleanup()
 		}
 		return m, nil
 	case cleanupMsg:
@@ -321,10 +331,14 @@ func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.help {
 			return m, nil
 		}
-		if k >= "1" && k <= "6" {
+		if k >= "0" && k <= "6" {
 			tab := int(k[0] - '1')
+			if k == "0" {
+				tab = homeTab
+			}
 			if m.tabVisible(tab) {
 				m.tab = tab
+				m.homeOffset = 0
 				m.detail = false
 				m.showAckPending()
 				m.rebuild()
@@ -335,6 +349,24 @@ func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		switch k {
+		case "pgdown", "pgup":
+			if m.tab == homeTab && !m.detail {
+				delta := m.bodyHeight()
+				if k == "pgup" {
+					delta = -delta
+				}
+				m.homeOffset = max(0, m.homeOffset+delta)
+				return m, nil
+			}
+			var cmd tea.Cmd
+			if m.detail {
+				m.viewport, cmd = m.viewport.Update(msg)
+			} else {
+				m.table, cmd = m.table.Update(msg)
+				m.cursors[m.tab] = max(0, m.table.Cursor())
+				m.rebuild()
+			}
+			return m, cmd
 		case "r":
 			if m.tab == 5 && m.opts.CleanupList != nil && !m.busy {
 				m.detail = false
@@ -390,6 +422,9 @@ func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.rebuild()
 			}
 		case "enter":
+			if m.splitDetail() {
+				return m, nil
+			}
 			if r, ok := m.selected(); ok {
 				m.openDetail(r)
 				if r.cleanup != nil && !m.busy {
@@ -414,9 +449,12 @@ func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return m, nil
 			}
-			if m.tab == 2 && !m.busy {
+			if (m.tab == 2 || m.tab == homeTab) && !m.busy {
 				if r, ok := m.selected(); ok && r.inbox != nil {
 					return m, m.ack([]model.InboxItem{*r.inbox})
+				}
+				if m.tab == homeTab {
+					m.status = "no inbox event to acknowledge"
 				}
 			}
 		case "X":
@@ -471,6 +509,9 @@ func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			var cmd tea.Cmd
 			m.table, cmd = m.table.Update(msg)
 			m.cursors[m.tab] = max(0, m.table.Cursor())
+			if m.tab == homeTab {
+				m.homeOffset = 0
+			}
 			m.rebuild()
 			return m, cmd
 		}
