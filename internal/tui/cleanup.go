@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"github.com/labstack/driga/internal/view"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -15,7 +16,7 @@ func (m *app) loadCleanup() tea.Cmd {
 }
 func cleanupDetail(c cleanup.Candidate) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s · %s\n%s\n%s\n", c.ID, c.Status, c.Path, strings.Join(c.Evidence, "\n"))
+	fmt.Fprintf(&b, "%s · %s\n%s\n%s\n", c.ID, view.FriendlyEnum(c.Status), c.Path, strings.Join(c.Evidence, "\n"))
 	prefix := ""
 	if c.SizeCapped {
 		prefix = "≥"

@@ -110,7 +110,7 @@ func Machines(r Reader, now time.Time, scopes ...store.Scope) (MachinesView, err
 		}
 		count := 0
 		for _, i := range items {
-			if i.Kind != "worker-finished" {
+			if i.Kind != "worker_finished" {
 				count++
 			}
 		}
@@ -333,7 +333,7 @@ func CoverageGaps(r Reader, since time.Time, scope store.Scope) ([]model.Gap, er
 
 // NewEnvelope includes freshness and coverage for the same machines as its data.
 func NewEnvelope(r Reader, mode string, now time.Time, intervals Intervals, data any, scopes ...store.Scope) (Envelope, error) {
-	v := Envelope{Schema: 1, ObservedAt: now, Mode: mode, Freshness: map[string]Fresh{}, CoverageGaps: []model.Gap{}, Data: data}
+	v := Envelope{Schema: 2, ObservedAt: now, Mode: mode, Freshness: map[string]Fresh{}, CoverageGaps: []model.Gap{}, Data: data}
 	scope := store.Scope{}
 	if len(scopes) > 0 {
 		scope = scopes[0]
@@ -352,7 +352,7 @@ func NewEnvelope(r Reader, mode string, now time.Time, intervals Intervals, data
 		}
 		if m.MachineID != r.MachineID() {
 			f := freshness(m, r.MachineID(), now)
-			v.Freshness[m.MachineID] = Fresh{LastOKAt: f.LastSeen, AgeSeconds: int(f.LastSeenAge / time.Second), Stale: f.Stale, LastError: m.LastError}
+			v.Freshness[m.MachineID] = Fresh{LastOKAt: f.LastSeen, AgeMS: f.LastSeenAge.Milliseconds(), Stale: f.Stale, LastError: m.LastError}
 		}
 		v.CoverageGaps = append(v.CoverageGaps, e.CoverageGaps...)
 		return nil

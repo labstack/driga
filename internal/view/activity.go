@@ -9,7 +9,7 @@ import (
 
 // ActivityBucket holds the latest sample in a minute; nil is a collection gap.
 type ActivityBucket struct {
-	TS     time.Time            `json:"ts"`
+	TS     time.Time            `json:"sampled_at"`
 	Sample *model.MachineSample `json:"sample"`
 	Events int                  `json:"events"`
 }

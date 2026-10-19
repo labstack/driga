@@ -20,7 +20,7 @@ type Kind string
 // FeedRow is one committed change, ordered by its persistent sequence.
 type FeedRow struct {
 	Seq     int64           `json:"seq"`
-	TS      time.Time       `json:"ts"`
+	TS      time.Time       `json:"occurred_at"`
 	Kind    string          `json:"kind"`
 	Key     string          `json:"key"`
 	Payload json.RawMessage `json:"payload"`
@@ -96,7 +96,7 @@ type FilesRow struct {
 type HandoffRow struct {
 	MachineID string     `json:"machine_id"`
 	Session   SessionKey `json:"session"`
-	TS        time.Time  `json:"ts"`
+	TS        time.Time  `json:"occurred_at"`
 	Text      string     `json:"text"`
 }
 

@@ -139,7 +139,7 @@ func Open(path string, mode Mode) (_ *Store, retErr error) {
 		if err != nil {
 			return nil, err
 		}
-		provider, err := goose.NewProvider(goose.DialectSQLite3, db, subFS, goose.WithDisableGlobalRegistry(true))
+		provider, err := goose.NewProvider(goose.DialectSQLite3, db, subFS, goose.WithDisableGlobalRegistry(true), goose.WithGoMigrations(canonMigration()))
 		if err != nil {
 			return nil, err
 		}

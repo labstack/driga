@@ -252,7 +252,7 @@ func TestWorktreeIgnoredClassification(t *testing.T) {
 	put(t, filepath.Join(wt, "node_modules", "pkg"), "build")
 	put(t, filepath.Join(wt, ".env"), "SECRET")
 	c := listed(t, e, wt)
-	if c.Status != "needs-review" || len(c.Ignored) != 2 {
+	if c.Status != "needs_review" || len(c.Ignored) != 2 {
 		t.Fatal(c)
 	}
 	for _, i := range c.Ignored {
@@ -521,7 +521,7 @@ func TestHistoryReportOnly(t *testing.T) {
 	path := filepath.Join(e.Home, ".claude/projects")
 	put(t, filepath.Join(path, "history"), "keep")
 	c := listed(t, e, path)
-	if c.Status != "report-only" {
+	if c.Status != "report_only" {
 		t.Fatal(c)
 	}
 	if _, err := Apply(context.Background(), e, c, ApplyOpts{}); err == nil {
@@ -662,6 +662,24 @@ func TestApplyWorktreeBranchKeptWhenGitRefuses(t *testing.T) {
 	}
 	if strings.Contains(git(t, repo, "worktree", "list", "--porcelain"), wt) {
 		t.Fatal("worktree prune did not run")
+	}
+}
+
+func TestCompletedRemovalSurvivesPruneFailure(t *testing.T) {
+	e, _, _, wt := fixture(t)
+	c := listed(t, e, wt)
+	e.Git = func(ctx context.Context, dir string, args ...string) ([]byte, error) {
+		if len(args) > 1 && args[0] == "worktree" && args[1] == "prune" {
+			return nil, fmt.Errorf("prune unavailable")
+		}
+		return runGit(ctx, dir, args...)
+	}
+	r, err := Apply(context.Background(), e, c, ApplyOpts{})
+	if err != nil || len(r.Warnings) == 0 || !strings.Contains(strings.Join(r.Warnings, " "), "prune") {
+		t.Fatalf("completed removal lost: %+v %v", r, err)
+	}
+	if _, err = os.Stat(wt); !os.IsNotExist(err) {
+		t.Fatal("worktree still exists", err)
 	}
 }
 

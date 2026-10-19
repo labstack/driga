@@ -93,7 +93,7 @@ func TestRolloutMeta(t *testing.T) {
 	if !obs.StartedAt.Equal(time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)) || !obs.LastActivityAt.Equal(time.Date(2026, 10, 18, 12, 0, 5, 0, time.UTC)) {
 		t.Fatalf("timestamps: %+v", obs)
 	}
-	if warningCount(w, "untested-version") != 0 {
+	if warningCount(w, "untested_version") != 0 {
 		t.Fatal(w)
 	}
 }
@@ -207,7 +207,7 @@ func TestCatalogTitle(t *testing.T) {
 	env, _ := setup(t, fixture(t))
 	catalog(t, env, `CREATE TABLE local_thread_catalog(id TEXT, display_title TEXT, cwd TEXT); INSERT INTO local_thread_catalog VALUES ('`+sid+`', 'Synthetic title', '/workspace/sample')`)
 	obs, w := collect(t, codex.New(), env)
-	if obs.Title != "Synthetic title" || warningCount(w, "catalog-unavailable") != 0 {
+	if obs.Title != "Synthetic title" || warningCount(w, "catalog_unavailable") != 0 {
 		t.Fatalf("title=%q warnings=%v", obs.Title, w)
 	}
 }
@@ -220,7 +220,7 @@ func TestCatalogMissingIsWarning(t *testing.T) {
 				catalog(t, env, ddl)
 			}
 			_, w := collect(t, codex.New(), env)
-			if warningCount(w, "catalog-unavailable") != 1 {
+			if warningCount(w, "catalog_unavailable") != 1 {
 				t.Fatalf("warnings = %v", w)
 			}
 			if ddl == "" {
@@ -237,7 +237,7 @@ func TestParseToleratesUnknownTypes(t *testing.T) {
 		`{"type":"event_msg","payload":{"type":"future-event","message":{"new":"shape"}}}`+"\n"+
 		`{"type":"response_item","payload":{"type":"future-item","input":{"new":"shape"}}}`+"\n")
 	obs, w := collect(t, codex.New(), env)
-	if obs.ExternalID != sid || warningCount(w, "invalid-json") != 1 || len(w) != 2 {
+	if obs.ExternalID != sid || warningCount(w, "invalid_json") != 1 || len(w) != 2 {
 		t.Fatalf("obs=%+v warnings=%v", obs, w)
 	}
 }
@@ -294,7 +294,7 @@ func TestTemporaryCwdAndVersion(t *testing.T) {
 			data := strings.ReplaceAll(strings.ReplaceAll(fixture(t), "/workspace/sample", cwd), "0.16.2", "9.0.0")
 			env, _ := setup(t, data)
 			obs, w := collect(t, codex.New(), env)
-			if obs.Origin != "interactive/temporary" || warningCount(w, "untested-version") != 1 {
+			if obs.Origin != "interactive/temporary" || warningCount(w, "untested_version") != 1 {
 				t.Fatalf("obs=%+v warnings=%v", obs, w)
 			}
 		})
@@ -310,17 +310,17 @@ func TestOversizeOffsetsAndBudget(t *testing.T) {
 	a := codex.New()
 	first, w := collect(t, a, env)
 	o, _, _ := env.Offsets.GetOffset(path)
-	if o.Pos != o.Size || warningCount(w, "skipped-backlog") != 1 || warningCount(w, "invalid-json") != 0 || len(first.Completions) != 1 || first.Completions[0].ID != fmt.Sprintf("codex:%s:%d", sid, idx+len(big)) {
+	if o.Pos != o.Size || warningCount(w, "skipped_backlog") != 1 || warningCount(w, "invalid_json") != 0 || len(first.Completions) != 1 || first.Completions[0].ID != fmt.Sprintf("codex:%s:%d", sid, idx+len(big)) {
 		t.Fatalf("budget offset=%d completions=%v", o.Pos, first.Completions)
 	}
 	obs, w := collect(t, a, env)
-	if warningCount(w, "skipped-backlog") != 0 || len(obs.Completions) != 0 {
+	if warningCount(w, "skipped_backlog") != 0 || len(obs.Completions) != 0 {
 		t.Fatalf("obs=%+v warnings=%v", obs, w)
 	}
 	// Also verify a complete skipped record followed by an event in one read.
 	env, _ = setup(t, data[:idx]+strings.Repeat("x", tail.MaxLine+1)+"\n"+data[idx:])
 	obs, w = collect(t, a, env)
-	if warningCount(w, "oversize-line") != 1 || len(obs.Completions) != 1 || obs.Completions[0].ID != fmt.Sprintf("codex:%s:%d", sid, idx+tail.MaxLine+2) {
+	if warningCount(w, "oversize_line") != 1 || len(obs.Completions) != 1 || obs.Completions[0].ID != fmt.Sprintf("codex:%s:%d", sid, idx+tail.MaxLine+2) {
 		t.Fatalf("obs=%+v warnings=%v", obs, w)
 	}
 }

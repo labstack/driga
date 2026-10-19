@@ -29,7 +29,7 @@ func raw(t *testing.T, v any) json.RawMessage {
 	return b
 }
 func remoteSnapshot(t *testing.T, at time.Time, epoch string) *Snapshot {
-	return &Snapshot{Schema: 1, ObservedAt: at, Data: SnapshotData{Machine: raw(t, model.Machine{MachineID: "remote", Hostname: "vm"}), Cursor: Cursor{epoch, 0}, Sessions: []json.RawMessage{raw(t, feed.SessionRow{Session: model.Session{SessionObs: model.SessionObs{Adapter: "claude", ExternalID: "one", LastActivityAt: at.Add(-time.Second)}, Label: "working"}})}}}
+	return &Snapshot{Schema: 2, ObservedAt: at, Data: SnapshotData{Machine: raw(t, model.Machine{MachineID: "remote", Hostname: "vm"}), Cursor: Cursor{epoch, 0}, Sessions: []json.RawMessage{raw(t, feed.SessionRow{Session: model.Session{SessionObs: model.SessionObs{Adapter: "claude", ExternalID: "one", LastActivityAt: at.Add(-time.Second)}, Label: "working"}})}}}
 }
 func apply(t *testing.T, st *store.Store, b Batch, now time.Time) {
 	t.Helper()
@@ -75,9 +75,9 @@ func TestIncompatibleSchemaAppliesNothing(t *testing.T) {
 	st := remoteStore(t)
 	now := time.Now()
 	snap := remoteSnapshot(t, now, "epoch")
-	snap.Schema = 2
+	snap.Schema = 1
 	if e := st.Tx(context.Background(), func(tx *store.Tx) error { return ApplyBatch(tx, Batch{MachineID: "remote", Snapshot: snap}, now) }); e == nil {
-		t.Fatal("accepted schema 2")
+		t.Fatal("accepted schema 1")
 	}
 	ss, _ := st.SessionsScoped(store.SessionFilter{IncludeEnded: true}, store.Scope{})
 	if len(ss) != 0 {

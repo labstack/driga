@@ -111,7 +111,7 @@ func (s *Server) streamSnapshotTx(ctx context.Context, tx *sql.Tx, out io.Writer
 	// Buffer small punctuation writes, never a complete table or response.
 	w := bufio.NewWriterSize(out, 32<<10)
 	enc := json.NewEncoder(w)
-	if _, err := fmt.Fprintf(w, `{"schema":1,"observed_at":%q,"mode":"daemon","data":{"machine":`, now.Format(time.RFC3339Nano)); err != nil {
+	if _, err := fmt.Fprintf(w, `{"schema":2,"observed_at":%q,"mode":"daemon","data":{"machine":`, now.Format(time.RFC3339Nano)); err != nil {
 		return err
 	}
 	if err := enc.Encode(machine); err != nil {
@@ -314,7 +314,7 @@ func (s *Server) streamSnapshotTx(ctx context.Context, tx *sql.Tx, out io.Writer
 				interval = 5 * time.Minute
 			}
 			age := max(time.Duration(0), now.Sub(v.LastOKAt))
-			freshness[v.Name] = SnapshotFresh{LastOKAt: clean.LastOKAt, AgeSeconds: int(age / time.Second), Stale: clean.LastOKAt.IsZero() || age > 3*interval, LastError: clean.LastError}
+			freshness[v.Name] = SnapshotFresh{LastOKAt: clean.LastOKAt, AgeMS: age.Milliseconds(), Stale: clean.LastOKAt.IsZero() || age > 3*interval, LastError: clean.LastError}
 			return emit(p)
 		})
 	}); err != nil {

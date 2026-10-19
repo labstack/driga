@@ -15,7 +15,7 @@ import (
 
 func openCatalog(ctx context.Context, path string) (*sql.DB, []adapter.Warning) {
 	unavailable := func(err error) (*sql.DB, []adapter.Warning) {
-		return nil, []adapter.Warning{{Kind: "catalog-unavailable", Detail: fmt.Sprintf("%s: %v", path, err)}}
+		return nil, []adapter.Warning{{Kind: "catalog_unavailable", Detail: fmt.Sprintf("%s: %v", path, err)}}
 	}
 	if _, err := os.Stat(path); err != nil {
 		return unavailable(err)

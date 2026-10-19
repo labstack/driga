@@ -299,7 +299,7 @@ func (a *geminiAdapter) readJSONL(ctx context.Context, path string, prev model.O
 	var warnings []adapter.Warning
 	if skipped > 0 {
 		c.fold = conversation{}
-		warnings = append(warnings, adapter.Warning{Kind: "skipped-backlog", Detail: fmt.Sprintf("%s: %d bytes; fold covers retained tail", path, skipped)})
+		warnings = append(warnings, adapter.Warning{Kind: "skipped_backlog", Detail: fmt.Sprintf("%s: %d bytes; fold covers retained tail", path, skipped)})
 		_, err = tail.Scan(ctx, path, model.Offset{}, 1, func(line []byte, _ int64) { _ = c.fold.record(line) })
 		if err != nil {
 			return conversation{}, prev, warnings, err
@@ -307,7 +307,7 @@ func (a *geminiAdapter) readJSONL(ctx context.Context, path string, prev model.O
 	}
 	result, err := tail.Scan(ctx, path, start, maxBytes, func(line []byte, pos int64) {
 		if err := c.fold.record(line); err != nil {
-			warnings = append(warnings, adapter.Warning{Kind: "invalid-json", Detail: fmt.Sprintf("%s:%d", path, pos)})
+			warnings = append(warnings, adapter.Warning{Kind: "invalid_json", Detail: fmt.Sprintf("%s:%d", path, pos)})
 		}
 	})
 	if err != nil {
@@ -318,10 +318,10 @@ func (a *geminiAdapter) readJSONL(ctx context.Context, path string, prev model.O
 		return a.readJSONL(ctx, path, model.Offset{})
 	}
 	if result.Skipped > 0 {
-		warnings = append(warnings, adapter.Warning{Kind: "oversize-line", Detail: path})
+		warnings = append(warnings, adapter.Warning{Kind: "oversize_line", Detail: path})
 	}
 	if c.fold.truncated {
-		warnings = append(warnings, adapter.Warning{Kind: "skipped-backlog", Detail: path + ": fold retains the last 1024 messages"})
+		warnings = append(warnings, adapter.Warning{Kind: "skipped_backlog", Detail: path + ": fold retains the last 1024 messages"})
 	}
 	c.next = result.Next
 	a.remember(path, c)

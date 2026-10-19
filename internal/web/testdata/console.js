@@ -14,7 +14,7 @@
   ["activity", "/activity?machine=all"]
  ];
  for (const [command,url] of cases) assert(parse(command).url === url, command + " => " + JSON.stringify(parse(command)));
- for (const state of ["working", "waiting", "stalled?", "idle", "finished", "dead", "unknown"]) {
+ for (const state of ["working", "waiting", "stalled", "idle", "finished", "dead", "unknown"]) {
   assert(parse("agents --state " + state).url === "/agents?machine=all&state=" + encodeURIComponent(state), "state " + state);
  }
  for (const theme of ["phosphor", "paper", "system"]) assert(parse("theme " + theme).theme === theme, "theme " + theme);

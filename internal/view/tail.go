@@ -3,6 +3,7 @@ package view
 import (
 	"crypto/sha256"
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -14,7 +15,7 @@ import (
 // TailEvent carries only stored text and a stable natural-key digest for reconnects.
 type TailEvent struct {
 	Key     string    `json:"key"`
-	TS      time.Time `json:"ts"`
+	TS      time.Time `json:"occurred_at"`
 	Machine string    `json:"machine"`
 	Adapter string    `json:"adapter"`
 	Kind    string    `json:"kind"`
@@ -30,11 +31,44 @@ func EventTail(r Reader, scope store.Scope, now time.Time) ([]TailEvent, error) 
 		if err != nil {
 			return err
 		}
+		sessions, err := mr.Sessions(store.SessionFilter{EndedSince: now.Add(-24 * time.Hour)})
+		if err != nil {
+			return err
+		}
+		repos, err := mr.Repos()
+		if err != nil {
+			return err
+		}
+		context := map[[2]string]string{}
+		for _, session := range sessions {
+			title := session.Title
+			if title == "" {
+				title = session.LastPrompt
+			}
+			if title == "" {
+				title = "session " + session.ExternalID
+			}
+			project := projectName(session, repos)
+			if project == "" && session.Cwd != "" {
+				project = filepath.Base(session.Cwd)
+			}
+			if project != "" {
+				title = project + " · " + title
+			}
+			context[[2]string{session.Adapter, session.ExternalID}] = title
+		}
 		for _, e := range events {
+			description := context[[2]string{e.Adapter, e.ExternalID}]
+			if description == "" {
+				description = "session " + e.ExternalID
+			}
+			if e.Summary != "" {
+				description += " · " + e.Summary
+			}
 			key := fmt.Sprintf("%x", sha256.Sum256([]byte(fmt.Sprintf("%s\x00%s\x00%s\x00%d\x00%s\x00%s", m.MachineID, e.Adapter, e.ExternalID, e.TS.UnixNano(), e.Kind, e.Summary))))
 			state := "idle"
 			switch strings.ToLower(e.Kind) {
-			case "stop", "finished", "worker-finished", "sessionend":
+			case "stop", "finished", "worker_finished", "sessionend":
 				state = "finished"
 			case "notification", "waiting", "permissionrequest":
 				state = "waiting"
@@ -43,7 +77,7 @@ func EventTail(r Reader, scope store.Scope, now time.Time) ([]TailEvent, error) 
 			case "sessionstart", "turn", "tool", "pretooluse", "posttooluse", "userpromptsubmit":
 				state = "working"
 			}
-			rows = append(rows, TailEvent{Key: key, TS: e.TS, Machine: MachineName(m), Adapter: e.Adapter, Kind: e.Kind, Summary: e.Summary, State: state})
+			rows = append(rows, TailEvent{Key: key, TS: e.TS, Machine: MachineName(m), Adapter: e.Adapter, Kind: e.Kind, Summary: description, State: state})
 		}
 		return nil
 	})

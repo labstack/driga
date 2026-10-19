@@ -150,7 +150,7 @@ func (s *Server) listenControl(ctx context.Context) (net.Listener, error) {
 						case "status":
 							v := s.Status()
 							resp.Status = &v
-						case "enroll", "enroll-poll", "enroll-decision", "enroll-close":
+						case "enroll", "enroll_poll", "enroll_decision", "enroll_close":
 							resp, err = s.pairControl(req)
 						case "revoke":
 							err = s.revoke(req.DeviceID)

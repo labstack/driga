@@ -33,7 +33,7 @@ const (
 type IgnoredPath struct {
 	Path        string `json:"path"`
 	Regenerable bool   `json:"regenerable"`
-	Size        int64  `json:"size"`
+	Size        int64  `json:"size_bytes"`
 }
 type Candidate struct {
 	ID                                        string        `json:"id"`
@@ -43,7 +43,7 @@ type Candidate struct {
 	Branch                                    string        `json:"branch,omitempty"`
 	Evidence                                  []string      `json:"evidence"`
 	Status                                    string        `json:"status"`
-	Size                                      int64         `json:"size"`
+	Size                                      int64         `json:"size_bytes"`
 	SizeCapped                                bool          `json:"size_capped"`
 	Ignored                                   []IgnoredPath `json:"ignored"`
 	head, defaultHead, upstream, upstreamHead string
@@ -67,7 +67,7 @@ type Env struct {
 	Why bool
 	// TempRoots replaces OS temp roots in isolated tests; layout remains binding.
 	TempRoots []string
-	// Rename is an injectable same-filesystem rename, never a copy fallback.
+	// Rename is an injectable same_filesystem rename, never a copy fallback.
 	Rename func(string, string) error
 }
 type ApplyOpts struct{ DryRun, IncludeIgnored bool }
@@ -305,11 +305,11 @@ func Apply(ctx context.Context, e Env, c Candidate, opts ApplyOpts) (r Result, e
 	}
 	defer func() {
 		entry := struct {
-			At        time.Time `json:"at"`
+			At        time.Time `json:"occurred_at"`
 			Candidate Candidate `json:"candidate"`
 			Result    Result    `json:"result"`
 			Error     string    `json:"error,omitempty"`
-		}{At: e.now(), Candidate: c, Result: r}
+		}{At: e.now().UTC(), Candidate: c, Result: r}
 		if err != nil {
 			entry.Error = err.Error()
 		}
@@ -324,7 +324,7 @@ func Apply(ctx context.Context, e Env, c Candidate, opts ApplyOpts) (r Result, e
 	if err != nil {
 		return r, err
 	}
-	if fresh.Status == "needs-review" && !opts.IncludeIgnored {
+	if fresh.Status == "needs_review" && !opts.IncludeIgnored {
 		return r, fmt.Errorf("ignored non-regenerable files require --include-ignored for this candidate")
 	}
 	if fresh.Kind == Worktree {
@@ -342,10 +342,14 @@ func Apply(ctx context.Context, e Env, c Candidate, opts ApplyOpts) (r Result, e
 		}
 		for i, cmd := range r.Commands {
 			if _, gitErr := e.git(ctx, cmd[2], cmd[3:]...); gitErr != nil {
-				if i < 2 {
+				if i == 0 {
 					return r, gitErr
 				}
-				r.Warnings = append(r.Warnings, fmt.Sprintf("kept branch %s: %v", fresh.Branch, gitErr))
+				if i == 1 {
+					r.Warnings = append(r.Warnings, fmt.Sprintf("worktree removed; prune failed: %v", gitErr))
+				} else {
+					r.Warnings = append(r.Warnings, fmt.Sprintf("kept branch %s: %v", fresh.Branch, gitErr))
+				}
 			}
 		}
 		return r, nil

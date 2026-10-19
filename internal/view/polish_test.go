@@ -39,7 +39,7 @@ func TestOTLPNotYetReceiving(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !failure && e.Freshness["otlp"].Status != "not-yet-receiving" {
+		if !failure && e.Freshness["otlp"].Status != "not_yet_receiving" {
 			t.Errorf("missing pending status: %+v", e.Freshness["otlp"])
 		}
 		if e.Freshness["otlp"].Stale != failure {
@@ -95,7 +95,7 @@ func TestNeedsYouNewestPerMachineSession(t *testing.T) {
 	inbox := []InboxRow{
 		{MachineID: "a", InboxItem: model.InboxItem{ID: "old", SessionID: 1, Kind: "finished", TS: now.Add(-time.Minute)}},
 		{MachineID: "a", InboxItem: model.InboxItem{ID: "new", SessionID: 1, Kind: "waiting", TS: now}},
-		{MachineID: "a", InboxItem: model.InboxItem{ID: "middle", SessionID: 1, Kind: "worker-finished", TS: now.Add(-time.Second)}},
+		{MachineID: "a", InboxItem: model.InboxItem{ID: "middle", SessionID: 1, Kind: "worker_finished", TS: now.Add(-time.Second)}},
 		{MachineID: "b", InboxItem: model.InboxItem{ID: "peer", SessionID: 1, Kind: "waiting", TS: now}},
 		{MachineID: "a", InboxItem: model.InboxItem{ID: "acked", SessionID: 1, Kind: "waiting", TS: now.Add(time.Minute), AckedAt: &now}},
 	}
@@ -143,7 +143,7 @@ func TestEventDrivenSourcesDoNotExpire(t *testing.T) {
 				t.Fatal(err)
 			}
 			f := e.Freshness[name]
-			if f.Stale || f.LastOKAt != at || seen && f.AgeSeconds != 86400 {
+			if f.Stale || f.LastOKAt != at || seen && f.AgeMS != 86400000 {
 				t.Fatalf("%s seen=%v: %+v", name, seen, f)
 			}
 		}
@@ -152,7 +152,7 @@ func TestEventDrivenSourcesDoNotExpire(t *testing.T) {
 
 func TestEventDrivenRenderReportsLastEvent(t *testing.T) {
 	var out strings.Builder
-	err := Render(&out, SummaryView{}, RenderOpts{NoColor: true, Envelope: Envelope{Freshness: map[string]Fresh{"otlp": {LastOKAt: testNow, AgeSeconds: 3600, Status: "last-event"}, "sockets": {Status: "not-yet-receiving"}}}})
+	err := Render(&out, SummaryView{}, RenderOpts{NoColor: true, Envelope: Envelope{Freshness: map[string]Fresh{"otlp": {LastOKAt: testNow, AgeMS: 3600000, Status: "last_event"}, "sockets": {Status: "not_yet_receiving"}}}})
 	if err != nil {
 		t.Fatal(err)
 	}

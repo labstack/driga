@@ -2,13 +2,17 @@
 package cli
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/alecthomas/kong"
 	"github.com/labstack/driga/internal/platform"
+	"github.com/labstack/driga/internal/scrub"
 )
 
 // Globals are flags shared by every command.
@@ -50,7 +54,7 @@ type Root struct {
 	Machine   MachineCmd   `cmd:"" help:"Show machine health."`
 	Web       WebCmd       `cmd:"" help:"Open a read-only browser dashboard on loopback."`
 	Top       TopCmd       `cmd:"" help:"Open the interactive session viewer."`
-	Mcp       McpCmd       `cmd:"" help:"Serve read-only MCP tools over stdio."`
+	MCP       MCPCmd       `cmd:"" name:"mcp" help:"Serve read-only MCP tools over stdio."`
 
 	Service    ServiceCmd `cmd:"" help:"Manage the collector service."`
 	Doctor     DoctorCmd  `cmd:"" help:"Check setup and collection health."`
@@ -70,6 +74,9 @@ type Root struct {
 type VersionCmd struct{}
 
 func (VersionCmd) Run(g *Globals) error {
+	if g.JSON {
+		return json.NewEncoder(commandOutput(g)).Encode(map[string]any{"schema": 2, "data": map[string]string{"version": g.Version}})
+	}
 	_, err := fmt.Fprintf(g.Stdout, "driga %s\n", g.Version)
 	return err
 }
@@ -82,6 +89,32 @@ func Main(args []string, version string) int {
 func run(args []string, version string, stdin io.Reader, stdout, stderr io.Writer) int {
 	var root Root
 	root.Version, root.Stdout, root.Stderr, root.Stdin = version, stdout, stderr, stdin
+	jsonMode := false
+	for _, arg := range args {
+		if arg == "--json" || arg == "--json=true" {
+			jsonMode = true
+		}
+		if arg == "--json=false" {
+			jsonMode = false
+		}
+	}
+	report := func(err error, code int) {
+		fmt.Fprintln(stderr, "driga:", err)
+		if jsonMode {
+			var reported reportedError
+			if errors.As(err, &reported) {
+				return
+			}
+			name := "runtime_error"
+			if code == 2 {
+				name = "usage_error"
+			}
+			if strings.Contains(err.Error(), "--json is not supported") {
+				name = "unsupported_output"
+			}
+			_ = json.NewEncoder(stdout).Encode(map[string]any{"schema": 2, "error": map[string]string{"code": name, "message": scrub.Scrub(err.Error())}})
+		}
+	}
 	exit := -1
 	parser, err := kong.New(&root,
 		kong.Name("driga"),
@@ -91,7 +124,7 @@ func run(args []string, version string, stdin io.Reader, stdout, stderr io.Write
 		kong.Bind(&root.Globals),
 	)
 	if err != nil {
-		fmt.Fprintln(stderr, "driga:", err)
+		report(err, 2)
 		return 2
 	}
 	code := func() (code int) {
@@ -106,15 +139,25 @@ func run(args []string, version string, stdin io.Reader, stdout, stderr io.Write
 		}()
 		ctx, err := parser.Parse(args)
 		if err != nil {
-			fmt.Fprintln(stderr, "driga:", err)
+			report(err, 2)
+			return 2
+		}
+		if root.JSON && !supportsJSON(ctx.Command()) {
+			err := fmt.Errorf("%s: --json is not supported", ctx.Command())
+			report(err, 2)
 			return 2
 		}
 		if err := ctx.Run(); err != nil {
-			fmt.Fprintln(stderr, "driga:", err)
-			if c, ok := err.(interface{ ExitCode() int }); ok {
-				return c.ExitCode()
+			code := 1
+			var exitErr interface{ ExitCode() int }
+			if errors.As(err, &exitErr) {
+				code = exitErr.ExitCode()
 			}
-			return 1
+			if strings.Contains(err.Error(), "--json is not supported") {
+				code = 2
+			}
+			report(err, code)
+			return code
 		}
 		return 0
 	}()
@@ -122,3 +165,30 @@ func run(args []string, version string, stdin io.Reader, stdout, stderr io.Write
 }
 
 type exitPanic struct{}
+
+// reportedError preserves a structured partial mutation result already written.
+type reportedError struct{ error }
+
+// Reject unsupported formats before starting interactive commands or mutations.
+func supportsJSON(command string) bool {
+	words := strings.Fields(command)
+	if len(words) == 0 {
+		return false
+	}
+	switch words[0] {
+	case "summary", "activity", "agents", "agent", "projects", "where", "conflicts", "machines", "cleanup", "ask", "summarize", "doctor", "version", "dev", "feed":
+		return true
+	case "inbox", "orphans", "machine":
+		return len(words) < 2 || words[1] == "list" || words[1] == "show"
+	case "config":
+		return len(words) > 1 && (words[1] == "path" || words[1] == "show")
+	case "fleet":
+		return len(words) > 1 && (words[1] == "id" || words[1] == "status" || words[1] == "viewers" || words[1] == "peers" || words[1] == "add")
+	}
+	return false
+}
+
+type usageError struct{ error }
+
+func (usageError) ExitCode() int                    { return 2 }
+func invalidUsage(format string, args ...any) error { return usageError{fmt.Errorf(format, args...)} }

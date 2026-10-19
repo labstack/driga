@@ -604,603 +604,603 @@
   "orphans": [],
   "conflicts": [
     {
-      "kind": "same-worktree",
+      "kind": "same_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-000"
     },
     {
-      "kind": "same-file",
+      "kind": "same_file",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-000/src/shared.go"
     },
     {
-      "kind": "same-file-other-worktree",
+      "kind": "same_file_other_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-000/src/shared.go"
     },
     {
-      "kind": "same-worktree",
+      "kind": "same_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-001"
     },
     {
-      "kind": "same-file",
+      "kind": "same_file",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-001/src/shared.go"
     },
     {
-      "kind": "same-file-other-worktree",
+      "kind": "same_file_other_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-001/src/shared.go"
     },
     {
-      "kind": "same-worktree",
+      "kind": "same_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-002"
     },
     {
-      "kind": "same-file",
+      "kind": "same_file",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-002/src/shared.go"
     },
     {
-      "kind": "same-file-other-worktree",
+      "kind": "same_file_other_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-002/src/shared.go"
     },
     {
-      "kind": "same-worktree",
+      "kind": "same_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-003"
     },
     {
-      "kind": "same-file",
+      "kind": "same_file",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-003/src/shared.go"
     },
     {
-      "kind": "same-file-other-worktree",
+      "kind": "same_file_other_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-003/src/shared.go"
     },
     {
-      "kind": "same-worktree",
+      "kind": "same_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-004"
     },
     {
-      "kind": "same-file",
+      "kind": "same_file",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-004/src/shared.go"
     },
     {
-      "kind": "same-file-other-worktree",
+      "kind": "same_file_other_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-004/src/shared.go"
     },
     {
-      "kind": "same-worktree",
+      "kind": "same_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-005"
     },
     {
-      "kind": "same-file",
+      "kind": "same_file",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-005/src/shared.go"
     },
     {
-      "kind": "same-file-other-worktree",
+      "kind": "same_file_other_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-005/src/shared.go"
     },
     {
-      "kind": "same-worktree",
+      "kind": "same_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-006"
     },
     {
-      "kind": "same-file",
+      "kind": "same_file",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-006/src/shared.go"
     },
     {
-      "kind": "same-file-other-worktree",
+      "kind": "same_file_other_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-006/src/shared.go"
     },
     {
-      "kind": "same-worktree",
+      "kind": "same_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-007"
     },
     {
-      "kind": "same-file",
+      "kind": "same_file",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-007/src/shared.go"
     },
     {
-      "kind": "same-file-other-worktree",
+      "kind": "same_file_other_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-007/src/shared.go"
     },
     {
-      "kind": "same-worktree",
+      "kind": "same_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-008"
     },
     {
-      "kind": "same-file",
+      "kind": "same_file",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-008/src/shared.go"
     },
     {
-      "kind": "same-file-other-worktree",
+      "kind": "same_file_other_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-008/src/shared.go"
     },
     {
-      "kind": "same-worktree",
+      "kind": "same_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-009"
     },
     {
-      "kind": "same-file",
+      "kind": "same_file",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-009/src/shared.go"
     },
     {
-      "kind": "same-file-other-worktree",
+      "kind": "same_file_other_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-009/src/shared.go"
     },
     {
-      "kind": "same-worktree",
+      "kind": "same_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-010"
     },
     {
-      "kind": "same-file",
+      "kind": "same_file",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-010/src/shared.go"
     },
     {
-      "kind": "same-file-other-worktree",
+      "kind": "same_file_other_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-010/src/shared.go"
     },
     {
-      "kind": "same-worktree",
+      "kind": "same_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-011"
     },
     {
-      "kind": "same-file",
+      "kind": "same_file",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-011/src/shared.go"
     },
     {
-      "kind": "same-file-other-worktree",
+      "kind": "same_file_other_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-011/src/shared.go"
     },
     {
-      "kind": "same-worktree",
+      "kind": "same_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-012"
     },
     {
-      "kind": "same-file",
+      "kind": "same_file",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-012/src/shared.go"
     },
     {
-      "kind": "same-file-other-worktree",
+      "kind": "same_file_other_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-012/src/shared.go"
     },
     {
-      "kind": "same-worktree",
+      "kind": "same_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-013"
     },
     {
-      "kind": "same-file",
+      "kind": "same_file",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-013/src/shared.go"
     },
     {
-      "kind": "same-file-other-worktree",
+      "kind": "same_file_other_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-013/src/shared.go"
     },
     {
-      "kind": "same-worktree",
+      "kind": "same_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-014"
     },
     {
-      "kind": "same-file",
+      "kind": "same_file",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-014/src/shared.go"
     },
     {
-      "kind": "same-file-other-worktree",
+      "kind": "same_file_other_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-014/src/shared.go"
     },
     {
-      "kind": "same-worktree",
+      "kind": "same_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-015"
     },
     {
-      "kind": "same-file",
+      "kind": "same_file",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-015/src/shared.go"
     },
     {
-      "kind": "same-file-other-worktree",
+      "kind": "same_file_other_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-015/src/shared.go"
     },
     {
-      "kind": "same-worktree",
+      "kind": "same_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-016"
     },
     {
-      "kind": "same-file",
+      "kind": "same_file",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-016/src/shared.go"
     },
     {
-      "kind": "same-file-other-worktree",
+      "kind": "same_file_other_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-016/src/shared.go"
     },
     {
-      "kind": "same-worktree",
+      "kind": "same_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-017"
     },
     {
-      "kind": "same-file",
+      "kind": "same_file",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-017/src/shared.go"
     },
     {
-      "kind": "same-file-other-worktree",
+      "kind": "same_file_other_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-017/src/shared.go"
     },
     {
-      "kind": "same-worktree",
+      "kind": "same_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-018"
     },
     {
-      "kind": "same-file",
+      "kind": "same_file",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-018/src/shared.go"
     },
     {
-      "kind": "same-file-other-worktree",
+      "kind": "same_file_other_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-018/src/shared.go"
     },
     {
-      "kind": "same-worktree",
+      "kind": "same_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-019"
     },
     {
-      "kind": "same-file",
+      "kind": "same_file",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-019/src/shared.go"
     },
     {
-      "kind": "same-file-other-worktree",
+      "kind": "same_file_other_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-019/src/shared.go"
     },
     {
-      "kind": "same-worktree",
+      "kind": "same_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-020"
     },
     {
-      "kind": "same-file",
+      "kind": "same_file",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-020/src/shared.go"
     },
     {
-      "kind": "same-file-other-worktree",
+      "kind": "same_file_other_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-020/src/shared.go"
     },
     {
-      "kind": "same-worktree",
+      "kind": "same_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-021"
     },
     {
-      "kind": "same-file",
+      "kind": "same_file",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-021/src/shared.go"
     },
     {
-      "kind": "same-file-other-worktree",
+      "kind": "same_file_other_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-021/src/shared.go"
     },
     {
-      "kind": "same-worktree",
+      "kind": "same_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-022"
     },
     {
-      "kind": "same-file",
+      "kind": "same_file",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-022/src/shared.go"
     },
     {
-      "kind": "same-file-other-worktree",
+      "kind": "same_file_other_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-022/src/shared.go"
     },
     {
-      "kind": "same-worktree",
+      "kind": "same_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-023"
     },
     {
-      "kind": "same-file",
+      "kind": "same_file",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-023/src/shared.go"
     },
     {
-      "kind": "same-file-other-worktree",
+      "kind": "same_file_other_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-023/src/shared.go"
     },
     {
-      "kind": "same-worktree",
+      "kind": "same_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-024"
     },
     {
-      "kind": "same-file",
+      "kind": "same_file",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-024/src/shared.go"
     },
     {
-      "kind": "same-file-other-worktree",
+      "kind": "same_file_other_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-024/src/shared.go"
     },
     {
-      "kind": "same-worktree",
+      "kind": "same_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-025"
     },
     {
-      "kind": "same-file",
+      "kind": "same_file",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-025/src/shared.go"
     },
     {
-      "kind": "same-file-other-worktree",
+      "kind": "same_file_other_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-025/src/shared.go"
     },
     {
-      "kind": "same-worktree",
+      "kind": "same_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-026"
     },
     {
-      "kind": "same-file",
+      "kind": "same_file",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-026/src/shared.go"
     },
     {
-      "kind": "same-file-other-worktree",
+      "kind": "same_file_other_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-026/src/shared.go"
     },
     {
-      "kind": "same-worktree",
+      "kind": "same_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-027"
     },
     {
-      "kind": "same-file",
+      "kind": "same_file",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-027/src/shared.go"
     },
     {
-      "kind": "same-file-other-worktree",
+      "kind": "same_file_other_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-027/src/shared.go"
     },
     {
-      "kind": "same-worktree",
+      "kind": "same_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-028"
     },
     {
-      "kind": "same-file",
+      "kind": "same_file",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-028/src/shared.go"
     },
     {
-      "kind": "same-file-other-worktree",
+      "kind": "same_file_other_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-028/src/shared.go"
     },
     {
-      "kind": "same-worktree",
+      "kind": "same_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-029"
     },
     {
-      "kind": "same-file",
+      "kind": "same_file",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-029/src/shared.go"
     },
     {
-      "kind": "same-file-other-worktree",
+      "kind": "same_file_other_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-029/src/shared.go"
     },
     {
-      "kind": "same-worktree",
+      "kind": "same_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-030"
     },
     {
-      "kind": "same-file",
+      "kind": "same_file",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-030/src/shared.go"
     },
     {
-      "kind": "same-file-other-worktree",
+      "kind": "same_file_other_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-030/src/shared.go"
     },
     {
-      "kind": "same-worktree",
+      "kind": "same_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-031"
     },
     {
-      "kind": "same-file",
+      "kind": "same_file",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-031/src/shared.go"
     },
     {
-      "kind": "same-file-other-worktree",
+      "kind": "same_file_other_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-031/src/shared.go"
     },
     {
-      "kind": "same-worktree",
+      "kind": "same_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-032"
     },
     {
-      "kind": "same-file",
+      "kind": "same_file",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-032/src/shared.go"
     },
     {
-      "kind": "same-file-other-worktree",
+      "kind": "same_file_other_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-032/src/shared.go"
     },
     {
-      "kind": "same-worktree",
+      "kind": "same_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-033"
     },
     {
-      "kind": "same-file",
+      "kind": "same_file",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-033/src/shared.go"
     },
     {
-      "kind": "same-file-other-worktree",
+      "kind": "same_file_other_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-033/src/shared.go"
     },
     {
-      "kind": "same-worktree",
+      "kind": "same_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-034"
     },
     {
-      "kind": "same-file",
+      "kind": "same_file",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-034/src/shared.go"
     },
     {
-      "kind": "same-file-other-worktree",
+      "kind": "same_file_other_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-034/src/shared.go"
     },
     {
-      "kind": "same-worktree",
+      "kind": "same_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-035"
     },
     {
-      "kind": "same-file",
+      "kind": "same_file",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-035/src/shared.go"
     },
     {
-      "kind": "same-file-other-worktree",
+      "kind": "same_file_other_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-035/src/shared.go"
     },
     {
-      "kind": "same-worktree",
+      "kind": "same_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-036"
     },
     {
-      "kind": "same-file",
+      "kind": "same_file",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-036/src/shared.go"
     },
     {
-      "kind": "same-file-other-worktree",
+      "kind": "same_file_other_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-036/src/shared.go"
     },
     {
-      "kind": "same-worktree",
+      "kind": "same_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-037"
     },
     {
-      "kind": "same-file",
+      "kind": "same_file",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-037/src/shared.go"
     },
     {
-      "kind": "same-file-other-worktree",
+      "kind": "same_file_other_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-037/src/shared.go"
     },
     {
-      "kind": "same-worktree",
+      "kind": "same_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-038"
     },
     {
-      "kind": "same-file",
+      "kind": "same_file",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-038/src/shared.go"
     },
     {
-      "kind": "same-file-other-worktree",
+      "kind": "same_file_other_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-038/src/shared.go"
     },
     {
-      "kind": "same-worktree",
+      "kind": "same_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-039"
     },
     {
-      "kind": "same-file",
+      "kind": "same_file",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-039/src/shared.go"
     },
     {
-      "kind": "same-file-other-worktree",
+      "kind": "same_file_other_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-039/src/shared.go"
     },
     {
-      "kind": "same-worktree",
+      "kind": "same_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-040"
     },
     {
-      "kind": "same-file",
+      "kind": "same_file",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-040/src/shared.go"
     },
     {
-      "kind": "same-file-other-worktree",
+      "kind": "same_file_other_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-040/src/shared.go"
     },
     {
-      "kind": "same-worktree",
+      "kind": "same_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-041"
     },
     {
-      "kind": "same-file",
+      "kind": "same_file",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-041/src/shared.go"
     },
     {
-      "kind": "same-file-other-worktree",
+      "kind": "same_file_other_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-041/src/shared.go"
     },
     {
-      "kind": "same-worktree",
+      "kind": "same_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-042"
     },
     {
-      "kind": "same-file",
+      "kind": "same_file",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-042/src/shared.go"
     },
     {
-      "kind": "same-file-other-worktree",
+      "kind": "same_file_other_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-042/src/shared.go"
     },
     {
-      "kind": "same-worktree",
+      "kind": "same_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-043"
     },
     {
-      "kind": "same-file",
+      "kind": "same_file",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-043/src/shared.go"
     },
     {
-      "kind": "same-file-other-worktree",
+      "kind": "same_file_other_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-043/src/shared.go"
     },
     {
-      "kind": "same-worktree",
+      "kind": "same_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-044"
     },
     {
-      "kind": "same-file",
+      "kind": "same_file",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-044/src/shared.go"
     },
     {
-      "kind": "same-file-other-worktree",
+      "kind": "same_file_other_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-044/src/shared.go"
     },
     {
-      "kind": "same-worktree",
+      "kind": "same_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-045"
     },
     {
-      "kind": "same-file",
+      "kind": "same_file",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-045/src/shared.go"
     },
     {
-      "kind": "same-file-other-worktree",
+      "kind": "same_file_other_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-045/src/shared.go"
     },
     {
-      "kind": "same-worktree",
+      "kind": "same_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-046"
     },
     {
-      "kind": "same-file",
+      "kind": "same_file",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-046/src/shared.go"
     },
     {
-      "kind": "same-file-other-worktree",
+      "kind": "same_file_other_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-046/src/shared.go"
     },
     {
-      "kind": "same-worktree",
+      "kind": "same_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-047"
     },
     {
-      "kind": "same-file",
+      "kind": "same_file",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-047/src/shared.go"
     },
     {
-      "kind": "same-file-other-worktree",
+      "kind": "same_file_other_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-047/src/shared.go"
     },
     {
-      "kind": "same-worktree",
+      "kind": "same_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-048"
     },
     {
-      "kind": "same-file",
+      "kind": "same_file",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-048/src/shared.go"
     },
     {
-      "kind": "same-file-other-worktree",
+      "kind": "same_file_other_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-048/src/shared.go"
     },
     {
-      "kind": "same-worktree",
+      "kind": "same_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-049"
     },
     {
-      "kind": "same-file",
+      "kind": "same_file",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-049/src/shared.go"
     },
     {
-      "kind": "same-file-other-worktree",
+      "kind": "same_file_other_worktree",
       "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-049/src/shared.go"
     }
   ]

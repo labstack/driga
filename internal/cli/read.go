@@ -154,7 +154,7 @@ type readBuilder func(view.Reader, view.Filter, time.Time) (any, error)
 
 func runRead(g *Globals, base view.Filter, project string, build readBuilder) error {
 	if g.Watch < 0 {
-		return fmt.Errorf("--watch must be a positive duration")
+		return invalidUsage("--watch must be a positive duration")
 	}
 	if _, err := parseSince(g.Since, time.Now()); err != nil {
 		return err
@@ -265,7 +265,7 @@ func parseSince(s string, now time.Time) (time.Time, error) {
 	}
 	dur, err := time.ParseDuration(s)
 	if err != nil || dur < 0 {
-		return time.Time{}, fmt.Errorf("invalid --since %q: use a non-negative duration or yesterday", s)
+		return time.Time{}, invalidUsage("invalid --since %q: use a non-negative duration or yesterday", s)
 	}
 	return now.Add(-dur), nil
 }

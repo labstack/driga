@@ -62,7 +62,7 @@ func readRolloutContext(ctx context.Context, path string, prev model.Offset, sni
 	}
 	var warnings []adapter.Warning
 	if skipped > 0 {
-		warnings = append(warnings, adapter.Warning{Kind: "skipped-backlog", Detail: fmt.Sprintf("%s: %d bytes", path, skipped)})
+		warnings = append(warnings, adapter.Warning{Kind: "skipped_backlog", Detail: fmt.Sprintf("%s: %d bytes", path, skipped)})
 	}
 	r, err := tail.Scan(ctx, path, prev, maxBytes, func(line []byte, offset int64) {
 		var e entry
@@ -71,14 +71,14 @@ func readRolloutContext(ctx context.Context, path string, prev model.Offset, sni
 			err = fold(&obs, e, offset, snippets)
 		}
 		if err != nil {
-			warnings = append(warnings, adapter.Warning{Kind: "invalid-json", Detail: fmt.Sprintf("%s:%d: %v", path, offset, err)})
+			warnings = append(warnings, adapter.Warning{Kind: "invalid_json", Detail: fmt.Sprintf("%s:%d: %v", path, offset, err)})
 		}
 	})
 	if err != nil {
 		return obs, warnings, r.Next, err
 	}
 	for i := 0; i < r.Skipped; i++ {
-		warnings = append(warnings, adapter.Warning{Kind: "oversize-line", Detail: path})
+		warnings = append(warnings, adapter.Warning{Kind: "oversize_line", Detail: path})
 	}
 	return obs, warnings, r.Next, nil
 }

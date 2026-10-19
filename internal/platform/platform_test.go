@@ -91,7 +91,7 @@ n127.0.0.1:4001->127.0.0.1:5001 (ESTABLISHED)
 func TestFakeExternalPeers(t *testing.T) {
 	dir := t.TempDir()
 	for name, contents := range map[string]string{
-		"procs.json":   `[{"pid":10,"start_time":"2026-10-18T00:00:00Z"},{"pid":11,"start_time":"2026-10-18T00:00:00Z"}]`,
+		"procs.json":   `[{"pid":10,"started_at":"2026-10-18T00:00:00Z"},{"pid":11,"started_at":"2026-10-18T00:00:00Z"}]`,
 		"sockets.json": `{"10":true}`,
 		"peers.json":   `{"11":[10]}`,
 	} {
@@ -116,7 +116,7 @@ func TestFakeExternalPeers(t *testing.T) {
 
 func TestFakeAliveUsesExactFixtureIdentity(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "procs.json"), []byte(`[{"pid":10,"start_time":"2026-10-18T00:00:00Z"}]`), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "procs.json"), []byte(`[{"pid":10,"started_at":"2026-10-18T00:00:00Z"}]`), 0600); err != nil {
 		t.Fatal(err)
 	}
 	f, err := platform.LoadFake(dir)

@@ -110,7 +110,7 @@ type Adapter interface {
 
 ### 6.1 Claude Code (formats observed in Claude Code 2.1.x; version-gated)
 - **Live registry** `~/.claude/sessions/<pid>.json`: `sessionId, cwd, name, kind, entrypoint, version, startedAt, status (idle|busy|shell), statusUpdatedAt`. Primary liveness/state source. Stale files (pid gone) ⇒ session dead.
-- **Transcripts** `~/.claude/projects/<slug>/<sessionId>.jsonl`: per entry `cwd, gitBranch, timestamp`; `last-prompt`, `ai-title`; assistant `tool_use` (Edit/Write/MultiEdit/NotebookEdit inputs ⇒ files touched); `system` entries with `stopReason`. Tail incrementally by byte offset.
+- **Transcripts** `~/.claude/projects/<slug>/<sessionId>.jsonl`: per entry `cwd, gitBranch, timestamp`; `last_prompt`, `ai-title`; assistant `tool_use` (Edit/Write/MultiEdit/NotebookEdit inputs ⇒ files touched); `system` entries with `stopReason`. Tail incrementally by byte offset.
 - Sessions whose cwd is inside the OS temp dir (`$TMPDIR`, `/tmp`, `/private/tmp`) are grouped as "temporary" instead of being attributed to a project.
 - **Hooks** (via `driga hooks install`): `Stop` (finished turn), `Notification` (waiting for permission/input), `SessionStart`, `SessionEnd`. Each runs `driga hook claude <event>`; payload from stdin is reduced to `{ts, session_id, cwd, event, message≤200 chars}`.
 
@@ -163,7 +163,7 @@ Sessions may have a **parent**: a session started by another agent (a `codex exe
 - Link by process ancestry first (child pid's ancestor chain contains the parent agent's pid), then by plugin/broker metadata where available (broker cwd + start time inside the parent's lifetime).
 - `sessions.parent_session_id` (nullable) stores the link.
 - A headless child that exits normally becomes **finished** (not dead). Only **top-level** sessions create inbox items; a finished child shows as a count on its parent ("3 workers finished").
-- Same-worktree conflicts are **suppressed inside one family** (supervisor + its workers sharing a worktree is expected); same-file conflicts within a family are still shown but marked `family`.
+- Same-worktree conflicts are **suppressed inside one family** (supervisor + its workers sharing a worktree is expected); same_file conflicts within a family are still shown but marked `family`.
 - Agents tab groups children under their parent (collapsed by default, `→` expands).
 - An orphan's "spawning session dead" check uses this parent link; PPID 1 alone is not enough.
 
@@ -176,9 +176,9 @@ A process tree is an **orphan candidate** when its root is reparented to launchd
 
 ### 7.3 Conflicts
 **Current** conflicts use edits by live sessions in the last 30 min; anything older is shown separately as "recent overlap (last 6 h)", never as a current collision. Report:
-- **same-worktree**: two live sessions with the same cwd/worktree (common, cheap);
-- **same-file**: same absolute path edited by two live sessions;
-- **same-file-other-worktree**: same repo-relative path on the same branch in different worktrees.
+- **same_worktree**: two live sessions with the same cwd/worktree (common, cheap);
+- **same_file**: same absolute path edited by two live sessions;
+- **same_file_other_worktree**: same repo-relative path on the same branch in different worktrees.
 
 ### 7.4 "Where it stands" (no LLM in v1)
 Per project, a composed line from, in order: latest `Stop`-hook handoff (only if text capture is enabled, §13) → Claude `ai-title` / Codex `display_title` of the most recent session → last commit subject. Each part shows its source and age, so a stale title never reads as a fresh handoff. v1.5 replaces this with a cached `claude -p` summary. (README/CLAUDE.md "goal" extraction is cut from v1.)
@@ -212,7 +212,7 @@ driga config path|show|edit
 driga version
 ```
 
-JSON output is stable and versioned (`{"schema":1,...}`); every payload includes `observed_at`, `mode` (`daemon|snapshot`), per-source `freshness`, and `coverage_gaps`, so an agent never mistakes stale data for current. MCP later reuses the same shapes.
+JSON output is stable and versioned (`{"schema":2,...}`); every payload includes `observed_at`, `mode` (`daemon|snapshot`), per-source `freshness`, and `coverage_gaps`, so an agent never mistakes stale data for current. MCP later reuses the same shapes.
 
 ### 8.1 How people use it (journeys)
 1. **First 5 minutes**: `brew install …` → `driga` shows discovered sessions immediately in snapshot mode, plus one line "snapshot · no history — `driga service install` for inbox & history". `driga init` optionally sets roots, service, hooks; each step is skippable and explains what it changes.
@@ -297,7 +297,7 @@ capture_text = "titles"          # "titles" | "snippets"
 
 ## 13. Privacy & safety
 
-- **Text capture is opt-in.** Default `capture_text = "titles"`: only model-generated titles (Claude `ai-title`, Codex `display_title`) and file paths are stored. `capture_text = "snippets"` (set by the user, e.g. via `driga init`) also stores last-prompt and handoff snippets. Scrubbing reduces risk but cannot guarantee privacy, so it is not relied on as the gate.
+- **Text capture is opt-in.** Default `capture_text = "titles"`: only model-generated titles (Claude `ai-title`, Codex `display_title`) and file paths are stored. `capture_text = "snippets"` (set by the user, e.g. via `driga init`) also stores last_prompt and handoff snippets. Scrubbing reduces risk but cannot guarantee privacy, so it is not relied on as the gate.
 - Captured snippets are truncated (≤ 200 chars) and passed through a secret scrubber (API-key/token regexes: `sk-…`, `ghp_…`, `xox…`, AWS keys, JWTs, `-----BEGIN … KEY-----`) before write.
 - DB and spool files `0600`, dirs `0700`.
 - Read-only access to agent data; Codex sqlite opened read-only.
@@ -363,7 +363,7 @@ Exact TUI colors/glyphs; table column widths; internal package boundaries beyond
 - Repos discovered from session cwds; no default root.
 - Repo = unit, worktrees nested.
 - Hooks installed only via explicit `driga hooks install`; Codex `notify` is only set when unset, never replaced.
-- Session families: parent link via process ancestry; only top-level sessions hit the inbox; same-worktree conflicts suppressed within a family.
+- Session families: parent link via process ancestry; only top-level sessions hit the inbox; same_worktree conflicts suppressed within a family.
 - Codex threads hosted by the desktop app / app-server / plugin broker are shown with heuristic (`~`) mtime-based states.
 - Inbox acks go through the spool, so the daemon is the only DB writer.
 - Gemini deferred to v1.5.

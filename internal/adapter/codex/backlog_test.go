@@ -87,11 +87,11 @@ func assertRecentBacklog(t *testing.T, env adapter.Env, path, data string, from 
 	want := fmt.Sprintf("%s: %d bytes", path, boundary-from)
 	var skips int
 	for _, w := range ws {
-		if w.Kind == "catalog-unavailable" {
+		if w.Kind == "catalog_unavailable" {
 			continue
 		}
-		if w.Kind != "skipped-backlog" || w.Detail != want {
-			t.Fatalf("unexpected warning %v, want skipped-backlog %q", w, want)
+		if w.Kind != "skipped_backlog" || w.Detail != want {
+			t.Fatalf("unexpected warning %v, want skipped_backlog %q", w, want)
 		}
 		skips++
 	}
@@ -157,7 +157,7 @@ func TestBaselineSkipsLargeOldRollout(t *testing.T) {
 		t.Fatalf("obs=%v warnings=%v err=%v", obs, ws, err)
 	}
 	for _, w := range ws {
-		if w.Kind != "catalog-unavailable" {
+		if w.Kind != "catalog_unavailable" {
 			t.Fatalf("unexpected warning: %v", w)
 		}
 	}

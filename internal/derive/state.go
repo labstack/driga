@@ -27,6 +27,9 @@ type StateInput struct {
 
 // Display adds the display marker to a heuristic label.
 func Display(label string, heuristic bool) string {
+	if label == "stalled" {
+		label = "stalled?"
+	}
 	if heuristic {
 		return "~" + label
 	}
@@ -36,7 +39,7 @@ func Display(label string, heuristic bool) string {
 // Label returns a state, whether it is heuristic, and human-readable evidence.
 func Label(in StateInput, now time.Time, th Thresholds) (label string, heuristic bool, evidence string) {
 	defer func() {
-		if (label == "working" || label == "stalled?") && in.LastAPIError != "" {
+		if (label == "working" || label == "stalled") && in.LastAPIError != "" {
 			evidence += "; " + in.LastAPIError
 		}
 	}()
@@ -80,13 +83,13 @@ func Label(in StateInput, now time.Time, th Thresholds) (label string, heuristic
 				return "working", false, "busy, " + quiet
 			}
 			if in.Proc == nil {
-				return "stalled?", false, "busy, " + quiet + ", no process sample"
+				return "stalled", false, "busy, " + quiet + ", no process sample"
 			}
 			evidence = fmt.Sprintf("busy, %s, CPU %.1f%%", quiet, in.Proc.CPUPercent)
 			if in.Proc.CPUPercent >= 1 {
 				return "unknown", false, evidence
 			}
-			return "stalled?", false, evidence
+			return "stalled", false, evidence
 		}
 		if finished {
 			return "finished", false, "unacknowledged Stop newer than last user prompt"
@@ -122,7 +125,7 @@ func Label(in StateInput, now time.Time, th Thresholds) (label string, heuristic
 			return "working", false, "process alive, activity " + stateDuration(age) + " ago"
 		}
 		if in.Obs.TurnOpen && age >= th.StuckAfter {
-			return "stalled?", false, "turn open, " + quiet
+			return "stalled", false, "turn open, " + quiet
 		}
 		if !in.Obs.TurnOpen {
 			if in.Unseen {

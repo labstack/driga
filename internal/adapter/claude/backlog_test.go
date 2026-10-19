@@ -74,8 +74,8 @@ func assertRecentBacklog(t *testing.T, env adapter.Env, path, data string, from 
 	target := int64(len(data)) - maxTailBytes
 	boundary := target + int64(strings.IndexByte(data[target-1:], '\n'))
 	want := fmt.Sprintf("%s: %d bytes", path, boundary-from)
-	if len(ws) != 1 || ws[0].Kind != "skipped-backlog" || ws[0].Detail != want {
-		t.Fatalf("warnings=%v want skipped-backlog %q", ws, want)
+	if len(ws) != 1 || ws[0].Kind != "skipped_backlog" || ws[0].Detail != want {
+		t.Fatalf("warnings=%v want skipped_backlog %q", ws, want)
 	}
 	o, ok, err := env.Offsets.GetOffset(path)
 	if err != nil || !ok || o.Pos != int64(len(data)) {
@@ -125,7 +125,7 @@ func TestLargeTranscriptWithoutOffsetStore(t *testing.T) {
 	env.Offsets = nil
 	writeBacklog(t, path, backlogHead+backlogPadding()+backlogTail)
 	obs, ws := collectBacklog(t, env)
-	if !obs.LastActivityAt.Equal(env.Now) || obs.ExternalID != "head-session" || obs.Cwd != "/workspace/example" || obs.Branch != "feat/recent" || len(obs.FilesTouched) != 1 || len(ws) != 1 || ws[0].Kind != "skipped-backlog" {
+	if !obs.LastActivityAt.Equal(env.Now) || obs.ExternalID != "head-session" || obs.Cwd != "/workspace/example" || obs.Branch != "feat/recent" || len(obs.FilesTouched) != 1 || len(ws) != 1 || ws[0].Kind != "skipped_backlog" {
 		t.Fatalf("obs=%+v warnings=%v", obs, ws)
 	}
 }

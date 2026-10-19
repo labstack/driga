@@ -55,7 +55,7 @@ func TestHomeDesignWidthsAndSourceStatus(t *testing.T) {
 	for _, noColor := range []bool{true, false} {
 		for _, width := range []int{80, 120, 160} {
 			s := fixture()
-			s.snap.Freshness = map[string]view.Fresh{"spool": {LastOKAt: s.snap.ObservedAt}, "otlp": {Status: "not-yet-receiving"}}
+			s.snap.Freshness = map[string]view.Fresh{"spool": {LastOKAt: s.snap.ObservedAt}, "otlp": {Status: "not_yet_receiving"}}
 			s.snap.Machine.Sample = model.MachineSample{TS: s.snap.ObservedAt, MemUsed: 85, MemTotal: 100, SwapUsed: 98, SwapTotal: 100, Load1: 16.9, Cores: 14}
 			s.snap.Summary.Sample = s.snap.Machine.Sample
 			s.snap.Activity.Machines = []view.ActivityMachine{{Buckets: make([]view.ActivityBucket, 60)}}

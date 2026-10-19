@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -28,6 +29,9 @@ type ConfigPathCmd struct{}
 
 // Run prints the path without creating a file.
 func (ConfigPathCmd) Run(g *Globals) error {
+	if g.JSON {
+		return json.NewEncoder(commandOutput(g)).Encode(map[string]any{"schema": 2, "data": map[string]string{"path": config.Path()}})
+	}
 	_, err := fmt.Fprintln(commandOutput(g), config.Path())
 	return err
 }

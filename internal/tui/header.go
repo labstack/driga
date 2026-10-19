@@ -157,11 +157,11 @@ func (m *app) footer() string {
 		if _, tail, ok := strings.Cut(name, "/"); ok {
 			sourceName = tail
 		}
-		if f.Status == "not-yet-receiving" {
+		if f.Status == "not_yet_receiving" {
 			text += "\n" + truncate(clean(name)+": not-yet-receiving", m.width)
 			continue
 		}
-		if f.Status == "last-event" {
+		if f.Status == "last_event" {
 			text += "\n" + truncate(fmt.Sprintf("%s: last event %s ago", clean(name), duration(m.opts.Now().Sub(f.LastOKAt))), m.width)
 			if !f.Stale {
 				continue
@@ -181,7 +181,7 @@ func (m *app) footer() string {
 	sort.Strings(names)
 	for _, name := range names {
 		f := m.snap.Freshness[name]
-		age := time.Duration(f.AgeSeconds) * time.Second
+		age := time.Duration(f.AgeMS) * time.Millisecond
 		if !f.LastOKAt.IsZero() {
 			age = m.opts.Now().Sub(f.LastOKAt)
 		}

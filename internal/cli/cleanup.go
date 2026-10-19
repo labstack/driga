@@ -8,15 +8,18 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/labstack/driga/internal/cleanup"
 	"github.com/labstack/driga/internal/collector"
 	"github.com/labstack/driga/internal/config"
 	"github.com/labstack/driga/internal/platform"
+	"github.com/labstack/driga/internal/scrub"
 	"github.com/labstack/driga/internal/signatures"
 	"github.com/labstack/driga/internal/store"
 	"github.com/labstack/driga/internal/view"
@@ -110,24 +113,25 @@ func cleanupRead(ctx context.Context, g *Globals, kind string, sizes, why bool) 
 }
 func (c CleanupCmd) Run(g *Globals) error {
 	if c.Kind != "" && c.Kind != "worktree" && c.Kind != "scratch" && c.Kind != "history" {
-		return fmt.Errorf("unknown cleanup kind %q", c.Kind)
+		return invalidUsage("unknown cleanup kind %q", c.Kind)
 	}
 	if c.ID != "" && c.All {
-		return fmt.Errorf("provide an id or --all")
+		return invalidUsage("provide an id or --all")
 	}
 	if c.All && c.Kind == "" {
-		return fmt.Errorf("--all requires --kind")
+		return invalidUsage("--all requires --kind")
 	}
 	if c.IncludeIgnored && (c.ID == "" || c.All) {
-		return fmt.Errorf("--include-ignored requires one explicit candidate ID")
+		return invalidUsage("--include-ignored requires one explicit candidate ID")
 	}
 	if c.Why && (c.ID != "" || c.All) {
-		return fmt.Errorf("--why only applies to listing")
+		return invalidUsage("--why only applies to listing")
 	}
 	if c.ID == "" && !c.All && (c.Yes || c.DryRun || c.IncludeIgnored) {
-		return fmt.Errorf("action flags require an id or --all")
+		return invalidUsage("action flags require an id or --all")
 	}
-	ctx := context.Background()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 	if c.ID == "" && !c.All {
 		envelope, err := cleanupRead(ctx, g, c.Kind, c.Sizes, c.Why)
 		if err != nil {
@@ -149,17 +153,20 @@ func (c CleanupCmd) Run(g *Globals) error {
 		return err
 	}
 	if g.JSON {
-		var report strings.Builder
-		local := *g
-		local.JSON = false
-		local.Stdout = &report
-		if err := c.runCandidates(ctx, &local, env, cs); err != nil {
-			return err
-		}
+		outcomes, actionErr := c.jsonCandidates(ctx, env, cs)
 		envelope.Data = struct {
-			Report string `json:"report"`
-		}{report.String()}
-		return json.NewEncoder(commandOutput(g)).Encode(envelope)
+			Outcomes []cleanupOutcome `json:"outcomes"`
+		}{outcomes}
+		if actionErr != nil {
+			envelope.Error = &view.ErrorRecord{Code: "cleanup_failed", Message: scrub.Scrub(actionErr.Error())}
+		}
+		if err := json.NewEncoder(commandOutput(g)).Encode(envelope); err != nil {
+			return reportedError{err}
+		}
+		if actionErr != nil {
+			return reportedError{actionErr}
+		}
+		return nil
 	}
 	return c.runCandidates(ctx, g, env, cs)
 }
@@ -254,7 +261,7 @@ func printCleanup(out io.Writer, cs []cleanup.Candidate, sizes bool) error {
 					size = "≥" + size
 				}
 			}
-			if _, err := fmt.Fprintf(out, "%s %s %s %s %s\n", c.Kind, c.ID, c.Status, c.Path, size); err != nil {
+			if _, err := fmt.Fprintf(out, "%s %s %s %s %s\n", c.Kind, c.ID, view.FriendlyEnum(c.Status), c.Path, size); err != nil {
 				return err
 			}
 			for _, e := range c.Evidence {
@@ -277,4 +284,55 @@ func printCleanup(out io.Writer, cs []cleanup.Candidate, sizes bool) error {
 		}
 	}
 	return nil
+}
+
+type cleanupOutcome struct {
+	ID     string            `json:"id"`
+	Kind   cleanup.Kind      `json:"kind"`
+	Status string            `json:"status"`
+	Result *cleanup.Result   `json:"result,omitempty"`
+	Error  *view.ErrorRecord `json:"error,omitempty"`
+	Reason string            `json:"reason,omitempty"`
+}
+
+func (c CleanupCmd) jsonCandidates(ctx context.Context, env cleanup.Env, cs []cleanup.Candidate) ([]cleanupOutcome, error) {
+	outcomes := []cleanupOutcome{}
+	var failures []error
+	for _, candidate := range cs {
+		if c.ID != "" && c.ID != candidate.ID || c.Kind != "" && c.Kind != string(candidate.Kind) {
+			continue
+		}
+		outcome := cleanupOutcome{ID: candidate.ID, Kind: candidate.Kind, Status: "unchanged"}
+		switch {
+		case ctx.Err() != nil:
+			outcome.Status = "cancelled"
+			outcome.Error = &view.ErrorRecord{Code: "cancelled", Message: ctx.Err().Error()}
+			failures = append(failures, ctx.Err())
+		case c.All && candidate.Status != "ready":
+			outcome.Reason = candidate.Status
+		case !c.DryRun && !c.Yes:
+			err := fmt.Errorf("cleanup --json requires --yes to apply; use --dry-run to preview")
+			outcome.Status = "cancelled"
+			outcome.Error = &view.ErrorRecord{Code: "confirmation_required", Message: scrub.Scrub(err.Error())}
+			failures = append(failures, err)
+		default:
+			result, err := cleanup.Apply(ctx, env, candidate, cleanup.ApplyOpts{DryRun: c.DryRun, IncludeIgnored: c.IncludeIgnored})
+			outcome.Result = &result
+			if err != nil {
+				outcome.Status = "failed"
+				if errors.Is(err, context.Canceled) {
+					outcome.Status = "cancelled"
+				}
+				outcome.Error = &view.ErrorRecord{Code: "cleanup_failed", Message: scrub.Scrub(err.Error())}
+				failures = append(failures, err)
+			} else if !c.DryRun {
+				outcome.Status = "completed"
+			}
+		}
+		outcomes = append(outcomes, outcome)
+	}
+	if len(outcomes) == 0 && !c.All {
+		failures = append(failures, fmt.Errorf("unknown or no longer eligible cleanup id %q", c.ID))
+	}
+	return outcomes, errors.Join(failures...)
 }

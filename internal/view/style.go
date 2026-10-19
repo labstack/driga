@@ -68,3 +68,11 @@ func LoadLevel(load float64, cores int) string {
 	}
 	return "normal"
 }
+
+// FriendlyEnum preserves the established human forms while wire enums use snake_case.
+func FriendlyEnum(value string) string {
+	if value == "stalled" || value == "~stalled" {
+		return value + "?"
+	}
+	return strings.ReplaceAll(value, "_", "-")
+}

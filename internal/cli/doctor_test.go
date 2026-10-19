@@ -98,7 +98,7 @@ func TestDoctorStaleSource(t *testing.T) {
 
 func TestDoctorUntestedVersion(t *testing.T) {
 	d, st := doctorFixture(t)
-	if err := st.SetMeta("warn:codex:untested-version", "unknown release"); err != nil {
+	if err := st.SetMeta("warn:codex:untested_version", "unknown release"); err != nil {
 		t.Fatal(err)
 	}
 	c := requireCheck(t, Doctor(context.Background(), d), "version:codex", "warn", "")
@@ -130,7 +130,7 @@ func TestDoctorCadenceAndRSS(t *testing.T) {
 	checks := Doctor(context.Background(), d)
 	requireCheck(t, checks, "collector", "warn", "driga service restart")
 	requireCheck(t, checks, "source:machine", "warn", "driga service restart")
-	c := requireCheck(t, checks, "collector-rss", "warn", "")
+	c := requireCheck(t, checks, "collector_rss", "warn", "")
 	if !strings.Contains(c.Detail, "51.0 MB") {
 		t.Fatal(c)
 	}
@@ -141,7 +141,7 @@ func TestDoctorPermissionsAndLockProbe(t *testing.T) {
 	if err := os.Chmod(d.DataDir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	requireCheck(t, Doctor(context.Background(), d), "data-permissions", "fail", "chmod 700 "+d.DataDir)
+	requireCheck(t, Doctor(context.Background(), d), "data_permissions", "fail", "chmod 700 "+d.DataDir)
 	held, err := probeCollectorLock(d.DataDir)
 	if err != nil || held {
 		t.Fatalf("missing lock: %v %v", held, err)
@@ -177,7 +177,7 @@ func TestDoctorCollectorPaths(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	c := requireCheck(t, Doctor(context.Background(), d), "collector-rss", "ok", "")
+	c := requireCheck(t, Doctor(context.Background(), d), "collector_rss", "ok", "")
 	if c.Detail != "20.0 MB" {
 		t.Fatal(c)
 	}
@@ -204,13 +204,12 @@ func TestDoctorCommandWarningsAndFailures(t *testing.T) {
 		t.Fatal(err)
 	}
 	out.Reset()
-	if err := (DoctorCmd{}).Run(g); err == nil {
-		t.Fatal("failed check must cause nonzero exit")
+	if err := (DoctorCmd{}).Run(g); err == nil || !strings.Contains(err.Error(), "data_permissions") || !strings.Contains(err.Error(), "chmod 700 "+config.DataDir()) {
+		t.Fatalf("failed checks must reach the CLI error handler with guidance: %v", err)
 	}
-	if err := json.Unmarshal(out.Bytes(), &checks); err != nil {
-		t.Fatal(err)
+	if out.Len() != 0 {
+		t.Fatalf("command must leave failure framing to Main: %s", out)
 	}
-	requireCheck(t, checks, "data-permissions", "fail", "chmod 700 "+config.DataDir())
 }
 
 func TestDoctorLinuxChecks(t *testing.T) {
@@ -221,7 +220,7 @@ func TestDoctorLinuxChecks(t *testing.T) {
 	if c.Detail != "psi n/a" {
 		t.Fatal(c)
 	}
-	requireCheck(t, checks, "systemd-user", "warn", "")
+	requireCheck(t, checks, "systemd_user", "warn", "")
 	requireCheck(t, checks, "linger", "warn", "loginctl enable-linger $USER")
 	write := func(rel, body string) {
 		t.Helper()
@@ -242,11 +241,11 @@ func TestDoctorLinuxChecks(t *testing.T) {
 	}
 	checks = Doctor(context.Background(), d)
 	requireCheck(t, checks, "psi", "ok", "")
-	requireCheck(t, checks, "systemd-user", "ok", "")
+	requireCheck(t, checks, "systemd_user", "ok", "")
 	requireCheck(t, checks, "linger", "ok", "")
 	d.OS = "darwin"
 	for _, c := range Doctor(context.Background(), d) {
-		if c.Name == "psi" || c.Name == "systemd-user" || c.Name == "linger" {
+		if c.Name == "psi" || c.Name == "systemd_user" || c.Name == "linger" {
 			t.Fatal(c)
 		}
 	}

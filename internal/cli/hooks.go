@@ -47,6 +47,9 @@ type HooksStatusCmd struct{ HooksOptions }
 
 // Run prints the selected agents' hook status.
 func (c HooksStatusCmd) Run(g *Globals) error {
+	if g.JSON {
+		return errors.New("hooks status: --json is not supported")
+	}
 	if c.OTLP {
 		return c.otlpStatus(g)
 	}

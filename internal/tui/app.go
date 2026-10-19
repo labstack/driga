@@ -116,7 +116,7 @@ func New(src Source, opts Options) tea.Model {
 	if opts.TermProgram == "" {
 		opts.TermProgram = os.Getenv("TERM_PROGRAM")
 	}
-	if _, ok := os.LookupEnv("NO_COLOR"); ok {
+	if os.Getenv("NO_COLOR") != "" {
 		opts.NoColor = true
 	}
 	if opts.Spool == nil {

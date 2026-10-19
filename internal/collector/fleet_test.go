@@ -236,7 +236,7 @@ func TestBadPeerBatchDoesNotFailOthers(t *testing.T) {
 		f.peers[p.MachineID] = &peerPull{peer: p, puller: fleet.NewPuller(p, fleet.Identity{}, f.batches)}
 		b := fleet.Batch{MachineID: p.MachineID, Peer: &p, ContactAt: d.now()}
 		if p.MachineID == "bad" {
-			snap := &fleet.Snapshot{Schema: 1, ObservedAt: d.now()}
+			snap := &fleet.Snapshot{Schema: 2, ObservedAt: d.now()}
 			snap.Data.Machine = []byte(`{"machine_id":"bad"}`)
 			snap.Data.Cursor = fleet.Cursor{Epoch: "epoch"}
 			snap.Data.Sessions = []json.RawMessage{json.RawMessage(`{"adapter":"claude","external_id":"partial"}`), json.RawMessage(`{}`)}

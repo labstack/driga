@@ -39,7 +39,7 @@ var identityMu sync.Mutex
 func LoadOrCreateIdentity(dir string) (Identity, error) {
 	identityMu.Lock()
 	defer identityMu.Unlock()
-	if _, err := os.Lstat(filepath.Join(dir, "reset-pending")); !errors.Is(err, fs.ErrNotExist) {
+	if _, err := os.Lstat(filepath.Join(dir, "reset_pending")); !errors.Is(err, fs.ErrNotExist) {
 		return Identity{}, fmt.Errorf("identity reset incomplete; run driga machine reset-id again")
 	}
 	if err := privateDir(dir); err != nil {

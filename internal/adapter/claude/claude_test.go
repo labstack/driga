@@ -189,7 +189,7 @@ func TestParseToleratesUnknownTypes(t *testing.T) {
 	env := testEnv(t)
 	path := transcript(t, env, fixture(t, "unknown.jsonl"))
 	obs, warnings := collect(t, claude.New(), env)
-	want := []adapter.Warning{{Kind: "invalid-json", Detail: path + ": 2 lines"}}
+	want := []adapter.Warning{{Kind: "invalid_json", Detail: path + ": 2 lines"}}
 	if only(t, obs).Title != "Still parsed" || !reflect.DeepEqual(warnings, want) {
 		t.Fatalf("observations=%+v warnings=%+v", obs, warnings)
 	}
@@ -254,7 +254,7 @@ func TestUntestedVersionWarning(t *testing.T) {
 			}
 			want := []adapter.Warning(nil)
 			if version == "9.0.0" || version == "2.10.0" {
-				want = []adapter.Warning{{Kind: "untested-version", Detail: version}}
+				want = []adapter.Warning{{Kind: "untested_version", Detail: version}}
 			}
 			if !reflect.DeepEqual(warnings, want) {
 				t.Fatalf("warnings=%+v want=%+v", warnings, want)
@@ -308,7 +308,7 @@ func TestRegistryToleranceAndOrigins(t *testing.T) {
 				t.Fatalf("observation=%+v warnings=%+v", o, warnings)
 			}
 			for _, w := range warnings {
-				if w.Kind != "bad-registry" {
+				if w.Kind != "bad_registry" {
 					t.Fatalf("unexpected warning: %+v", w)
 				}
 			}
@@ -424,7 +424,7 @@ func TestTranscriptOversizeAndReadBudget(t *testing.T) {
 	a := claude.New()
 	obs, warnings := collect(t, a, env)
 	offset, _, _ := env.Offsets.GetOffset(path)
-	if len(warnings) != 1 || warnings[0].Kind != "skipped-backlog" || offset.Pos != offset.Size || only(t, obs).Title != "After budget" {
+	if len(warnings) != 1 || warnings[0].Kind != "skipped_backlog" || offset.Pos != offset.Size || only(t, obs).Title != "After budget" {
 		t.Fatalf("recent tail: offset=%+v obs=%+v warnings=%+v", offset, obs, warnings)
 	}
 	obs, _ = collect(t, a, env)
@@ -433,7 +433,7 @@ func TestTranscriptOversizeAndReadBudget(t *testing.T) {
 	}
 	writeFile(t, env, "projects/synthetic/session-a.jsonl", strings.Repeat("x", tail.MaxLine+1)+"\n"+`{"type":"ai-title","aiTitle":"After oversize"}`+"\n")
 	obs, warnings = collect(t, a, env)
-	if only(t, obs).Title != "After oversize" || !reflect.DeepEqual(warnings, []adapter.Warning{{Kind: "oversize-line", Detail: path + ": 1 lines"}}) {
+	if only(t, obs).Title != "After oversize" || !reflect.DeepEqual(warnings, []adapter.Warning{{Kind: "oversize_line", Detail: path + ": 1 lines"}}) {
 		t.Fatalf("oversize: obs=%+v warnings=%+v", obs, warnings)
 	}
 }

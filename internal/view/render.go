@@ -30,25 +30,26 @@ func IsTerminal(w io.Writer) bool { f, ok := w.(*os.File); return ok && term.IsT
 func Render(w io.Writer, v any, opts RenderOpts) error {
 	if opts.JSON {
 		e := opts.Envelope
-		e.Schema = 1
+		e.Schema = 2
 		e.Data = v
 		if e.Freshness == nil {
 			e.Freshness = map[string]Fresh{}
 		}
 		e.CoverageGaps = nonNil(e.CoverageGaps)
 		enc := json.NewEncoder(w)
-		enc.SetIndent("", "  ")
+
 		return enc.Encode(e)
 	}
 	// Buffer table output so footer and formatting errors reach the caller.
 	var buf strings.Builder
-	_, noColor := os.LookupEnv("NO_COLOR")
+	noColor := os.Getenv("NO_COLOR") != ""
 	color := !opts.NoColor && !noColor && IsTerminal(w)
 	if opts.Envelope.Mode == "snapshot" {
 		fmt.Fprintln(&buf, "snapshot · no history")
 	}
 	tw := tabwriter.NewWriter(&buf, 0, 4, 2, ' ', 0)
 	label := func(s string) string {
+		s = FriendlyEnum(s)
 		if !color {
 			return cell(s)
 		}
@@ -199,17 +200,17 @@ func Render(w io.Writer, v any, opts RenderOpts) error {
 	}
 	names := []string{}
 	for name, f := range opts.Envelope.Freshness {
-		if f.Stale || f.Status == "last-event" || f.Status == "not-yet-receiving" {
+		if f.Stale || f.Status == "last_event" || f.Status == "not_yet_receiving" {
 			names = append(names, name)
 		}
 	}
 	sort.Strings(names)
 	for _, name := range names {
 		f := opts.Envelope.Freshness[name]
-		line := fmt.Sprintf("stale: %s (%s)", cell(name), age(time.Duration(f.AgeSeconds)*time.Second))
+		line := fmt.Sprintf("stale: %s (%s)", cell(name), age(time.Duration(f.AgeMS)*time.Millisecond))
 		if !f.Stale {
-			if f.Status == "last-event" {
-				line = fmt.Sprintf("last event: %s %s (%s ago)", cell(name), f.LastOKAt.Format(time.RFC3339), age(time.Duration(f.AgeSeconds)*time.Second))
+			if f.Status == "last_event" {
+				line = fmt.Sprintf("last event: %s %s (%s ago)", cell(name), f.LastOKAt.Format(time.RFC3339), age(time.Duration(f.AgeMS)*time.Millisecond))
 			} else {
 				line = fmt.Sprintf("%s: not-yet-receiving", cell(name))
 			}
@@ -299,7 +300,7 @@ func renderConflicts(w io.Writer, rs []ConflictRow) {
 	fmt.Fprintln(w, "KIND\tPATH\tSESSIONS\tFAMILY")
 	for _, c := range rs {
 		fmt.Fprint(w, machinePrefix(multi, c.MachineID, c.MachineFresh))
-		fmt.Fprintf(w, "%s\t%s\t%v\t%t\n", cell(c.Kind), cell(c.Path), c.SessionIDs, c.Family)
+		fmt.Fprintf(w, "%s\t%s\t%v\t%t\n", cell(FriendlyEnum(c.Kind)), cell(c.Path), c.SessionIDs, c.Family)
 	}
 }
 

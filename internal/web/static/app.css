@@ -344,11 +344,12 @@ dd {
 .tail {
   display:flex;
   flex-direction:column;
-  height:208px;
+  height:216px;
   overflow:auto;
   justify-content:flex-start;
 }
 .tail div {
+  line-height:18px;
   white-space:nowrap;
   overflow:hidden;
   text-overflow:ellipsis;
@@ -667,7 +668,7 @@ dialog dd {
     right:-1px;
   }
   .tail {
-    height:150px;
+    height:144px;
   }
   .cmd {
     margin:4px 10px 12px;
@@ -746,3 +747,5 @@ meter::-moz-meter-bar {
 .normal { color:var(--working); --meter-fill:var(--working); }
 .warning { color:var(--warn); --meter-fill:var(--warn); }
 .critical { color:var(--crit); --meter-fill:var(--crit); }
+
+.project-rows .row-annotation { display:inline; margin-left:1ch; font-size:11px; white-space:nowrap; }

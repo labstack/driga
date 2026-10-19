@@ -75,7 +75,7 @@ func TestProjectDotIsLocal(t *testing.T) {
 	t.Chdir(path)
 	s := machineDB(t, gitscan.NormalizePath(path))
 	out, _ := readRun(t, "agents", "--project", ".", "--machine", "all", "--json")
-	if strings.Contains(out, `"machine_id": "remote-id"`) || !strings.Contains(out, s.MachineID()) {
+	if strings.Contains(out, `"machine_id":"remote-id"`) || !strings.Contains(out, s.MachineID()) {
 		t.Fatal(out)
 	}
 }
@@ -104,7 +104,7 @@ func TestFleetPeersShowsStateAndLastSeen(t *testing.T) {
 		}
 	}
 	out, _ = readRun(t, "fleet", "peers", "--json")
-	for _, want := range []string{`"state":"stale"`, `"last_seen":`, `"last_error":"connection lost"`} {
+	for _, want := range []string{`"state":"stale"`, `"last_seen_at":`, `"last_error":"connection lost"`} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q: %s", want, out)
 		}
@@ -127,7 +127,7 @@ func TestMachinesCommandUsesCachedRows(t *testing.T) {
 		}
 	}
 	out, _ = readRun(t, "machines", "--json", "--machine", "vm")
-	if strings.Contains(out, `"name": "laptop"`) || !strings.Contains(out, `"machine_id": "remote-id"`) {
+	if strings.Contains(out, `"name":"laptop"`) || !strings.Contains(out, `"machine_id":"remote-id"`) {
 		t.Fatal(out)
 	}
 }

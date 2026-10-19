@@ -187,7 +187,7 @@ func (c DevAgySchemaCmd) Run(g *Globals) error {
 	}
 	sort.Slice(report.Schemas, func(i, j int) bool { return report.Schemas[i].Hash < report.Schemas[j].Hash })
 	if g != nil && g.JSON {
-		return json.NewEncoder(commandOutput(g)).Encode(view.Envelope{Schema: 1, ObservedAt: time.Now().UTC(), Mode: "snapshot", Freshness: map[string]view.Fresh{}, CoverageGaps: []model.Gap{}, Data: report})
+		return json.NewEncoder(commandOutput(g)).Encode(view.Envelope{Schema: 2, ObservedAt: time.Now().UTC(), Mode: "snapshot", Freshness: map[string]view.Fresh{}, CoverageGaps: []model.Gap{}, Data: report})
 	}
 	for _, schema := range report.Schemas {
 		if _, err := fmt.Fprintf(commandOutput(g), "schema %s: %d databases\n", schema.Hash, schema.Databases); err != nil {

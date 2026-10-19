@@ -63,3 +63,20 @@ func Decode(kind Kind, payload []byte) (any, error) {
 	}
 	return row, nil
 }
+
+// Decode the process and its natural session reference together; embedding a
+// custom decoder must not swallow the outer session field.
+func (v *ProcRow) UnmarshalJSON(b []byte) error {
+	type plainProc model.Proc
+	var row struct {
+		plainProc
+		Session *SessionKey `json:"session,omitempty"`
+	}
+	if err := json.Unmarshal(b, &row); err != nil {
+		return err
+	}
+	v.Proc = model.Proc(row.plainProc)
+	v.CPUSeconds /= 1000
+	v.Session = row.Session
+	return nil
+}

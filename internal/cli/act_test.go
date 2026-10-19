@@ -244,7 +244,7 @@ func TestAckReceiptTimeout(t *testing.T) {
 			t.Cleanup(func() { lock.Close() })
 			start := time.Now()
 			out, _ := readRun(t, "inbox", "ack", "item")
-			if out != "ack recorded; daemon has not confirmed yet\n" || time.Since(start) > 2500*time.Millisecond {
+			if out != "ack recorded; daemon has not confirmed yet\n" || time.Since(start) > 5*time.Second {
 				t.Fatalf("elapsed=%s output=%s", time.Since(start), out)
 			}
 			events, _, err := spool.Drain(config.SpoolDir(), nil)

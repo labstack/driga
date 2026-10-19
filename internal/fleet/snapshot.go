@@ -29,10 +29,10 @@ type Snapshot struct {
 
 // SnapshotFresh uses the same freshness shape as local view envelopes.
 type SnapshotFresh struct {
-	LastOKAt   time.Time `json:"last_ok_at"`
-	AgeSeconds int       `json:"age_seconds"`
-	Stale      bool      `json:"stale"`
-	LastError  string    `json:"last_error"`
+	LastOKAt  time.Time `json:"last_ok_at"`
+	AgeMS     int64     `json:"age_ms"`
+	Stale     bool      `json:"stale"`
+	LastError string    `json:"last_error"`
 }
 
 // SnapshotData carries privacy-filtered rows with natural references only.
@@ -61,7 +61,7 @@ type snapshotFile struct {
 type snapshotHandoff struct {
 	MachineID string    `json:"machine_id"`
 	SessionID int64     `json:"session_id"`
-	TS        time.Time `json:"ts"`
+	TS        time.Time `json:"occurred_at"`
 	Text      string    `json:"text"`
 }
 
@@ -89,6 +89,22 @@ func snapshotRows[T any](ctx context.Context, tx *sql.Tx, table, machine, suffix
 			name := strings.Split(f.Tag.Get("json"), ",")[0]
 			if name == "" || name == "-" || name == "completions" || name == "files_touched" || name == "parent_external_id" {
 				continue
+			}
+			// Wire names and historical SQL columns are separate contracts.
+			columns := map[string]string{"mem_total_bytes": "mem_total", "mem_used_bytes": "mem_used", "mem_compressed_bytes": "mem_compressed", "swap_used_bytes": "swap_used", "swap_total_bytes": "swap_total", "disk_free_bytes": "disk_free", "cpu_ms": "cpu_seconds", "rss_bytes": "rss", "rss_total_bytes": "rss_total", "first_seen_at": "first_seen", "last_seen_at": "last_seen", "proc_started_at": "proc_start", "oldest_dirty_modified_at": "oldest_dirty_mtime", "occurred_at": "ts", "sampled_at": "ts"}
+			if column, ok := columns[name]; ok {
+				name = column
+			}
+			if table == "gaps" {
+				if name == "started_at" {
+					name = "from_ts"
+				}
+				if name == "ended_at" {
+					name = "to_ts"
+				}
+			}
+			if (table == "procs" || table == "orphans") && name == "started_at" {
+				name = "start_time"
 			}
 			switch name {
 			case "parent_id":

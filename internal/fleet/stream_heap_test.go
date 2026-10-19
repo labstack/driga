@@ -39,13 +39,13 @@ func (w *heapSnapshotWriter) Write(p []byte) (int, error) {
 
 func TestSnapshotStreamsWithoutMaterialising(t *testing.T) {
 	// Isolate SQLite caches and previous tests' heap high-water marks.
-	if os.Getenv("DRIGA_J4_HEAP_CHILD") != "1" {
+	if os.Getenv("DRIGA_FLEET_HEAP_CHILD") != "1" {
 		exe, err := os.Executable()
 		if err != nil {
 			t.Fatal(err)
 		}
 		cmd := exec.Command(exe, "-test.run=^TestSnapshotStreamsWithoutMaterialising$", "-test.v")
-		cmd.Env = append(os.Environ(), "DRIGA_J4_HEAP_CHILD=1")
+		cmd.Env = append(os.Environ(), "DRIGA_FLEET_HEAP_CHILD=1")
 		out, err := cmd.CombinedOutput()
 		if err != nil {
 			t.Fatalf("snapshot heap: %v\n%s", err, out)

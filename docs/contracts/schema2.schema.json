@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Driga schema 2 read envelopes and CLI error records",
+  "type": "object",
+  "required": ["schema"],
+  "anyOf": [{"required": ["data"]}, {"required": ["error"]}],
+  "properties": {
+    "schema": {"const": 2},
+    "observed_at": {"$ref": "#/$defs/utc_instant"},
+    "mode": {"enum": ["daemon", "snapshot"]},
+    "freshness": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["last_ok_at", "age_ms", "stale", "last_error"],
+        "properties": {
+          "last_ok_at": {"$ref": "#/$defs/utc_instant"},
+          "age_ms": {"$ref": "#/$defs/duration_ms"},
+          "stale": {"type": "boolean"},
+          "last_error": {"type": "string"},
+          "status": {"enum": ["last_event", "not_yet_receiving"]}
+        }
+      }
+    },
+    "coverage_gaps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["machine_id", "started_at", "ended_at"],
+        "properties": {
+          "machine_id": {"type": "string"},
+          "started_at": {"$ref": "#/$defs/utc_instant"},
+          "ended_at": {"$ref": "#/$defs/utc_instant"}
+        }
+      }
+    },
+    "data": {},
+    "truncated": {"type": "boolean", "description": "Always present for MCP; true when the limit omits entries."},
+    "error": {"$ref": "#/$defs/error"}
+  },
+  "$defs": {
+    "utc_instant": {"type": "string", "format": "date-time", "pattern": "Z$"},
+    "duration_ms": {"type": "integer", "minimum": 0},
+    "size_bytes": {"type": "integer", "minimum": 0},
+    "error": {
+      "type": "object",
+      "required": ["code", "message"],
+      "properties": {
+        "code": {"type": "string", "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$"},
+        "message": {"type": "string"}
+      },
+      "additionalProperties": false
+    },
+    "cleanup_outcome": {
+      "type": "object",
+      "required": ["id", "kind", "status"],
+      "properties": {
+        "id": {"type": "string"},
+        "kind": {"enum": ["worktree", "scratch", "history"]},
+        "status": {"enum": ["completed", "unchanged", "failed", "cancelled"]},
+        "reason": {"type": "string"},
+        "error": {"$ref": "#/$defs/error"},
+        "result": {"type": "object"}
+      }
+    }
+  }
+}

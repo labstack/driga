@@ -22,9 +22,9 @@ type Machine struct {
 	OS            string    `json:"os"`
 	Arch          string    `json:"arch"`
 	Cores         int       `json:"cores"`
-	MemTotal      uint64    `json:"mem_total"`
-	FirstSeen     time.Time `json:"first_seen"`
-	LastSeen      time.Time `json:"last_seen"`
+	MemTotal      uint64    `json:"mem_total_bytes"`
+	FirstSeen     time.Time `json:"first_seen_at"`
+	LastSeen      time.Time `json:"last_seen_at"`
 }
 
 // Proc is one process in a snapshot.
@@ -32,9 +32,9 @@ type Proc struct {
 	MachineID  string    `json:"machine_id"`
 	PID        int32     `json:"pid"`
 	PPID       int32     `json:"ppid"`
-	StartTime  time.Time `json:"start_time"`
-	RSS        uint64    `json:"rss"`
-	CPUSeconds float64   `json:"cpu_seconds"`
+	StartTime  time.Time `json:"started_at"`
+	RSS        uint64    `json:"rss_bytes"`
+	CPUSeconds float64   `json:"cpu_ms"`
 	CPUPercent float64   `json:"cpu_percent"`
 	Cmdline    string    `json:"cmdline"`
 	Exe        string    `json:"exe"`
@@ -50,17 +50,17 @@ type Proc struct {
 
 // MachineSample is one machine-health reading.
 type MachineSample struct {
-	// DiskTotal is live inspection data for the collector's low-disk threshold.
+	// DiskTotal is live inspection data for the collector's low_disk threshold.
 	// It is not a new persisted column.
 	DiskTotal     uint64    `json:"-"`
 	MachineID     string    `json:"machine_id"`
-	TS            time.Time `json:"ts"`
-	MemUsed       uint64    `json:"mem_used"`
-	MemCompressed uint64    `json:"mem_compressed"`
-	MemTotal      uint64    `json:"mem_total"`
-	SwapUsed      uint64    `json:"swap_used"`
-	SwapTotal     uint64    `json:"swap_total"`
-	DiskFree      uint64    `json:"disk_free"`
+	TS            time.Time `json:"sampled_at"`
+	MemUsed       uint64    `json:"mem_used_bytes"`
+	MemCompressed uint64    `json:"mem_compressed_bytes"`
+	MemTotal      uint64    `json:"mem_total_bytes"`
+	SwapUsed      uint64    `json:"swap_used_bytes"`
+	SwapTotal     uint64    `json:"swap_total_bytes"`
+	DiskFree      uint64    `json:"disk_free_bytes"`
 	PressureFree  float64   `json:"pressure_free"`
 	Load1         float64   `json:"load1"`
 	Load5         float64   `json:"load5"`
@@ -91,7 +91,7 @@ type Worktree struct {
 	Behind            int       `json:"behind"`
 	Dirty             int       `json:"dirty"`
 	Untracked         int       `json:"untracked"`
-	OldestDirtyMtime  time.Time `json:"oldest_dirty_mtime"`
+	OldestDirtyMtime  time.Time `json:"oldest_dirty_modified_at"`
 	LastCommitAt      time.Time `json:"last_commit_at"`
 	LastCommitSubject string    `json:"last_commit_subject"`
 	UpdatedAt         time.Time `json:"updated_at"`
@@ -105,7 +105,7 @@ type SessionObs struct {
 	Origin           string            `json:"origin"`
 	Version          string            `json:"version,omitempty"`
 	PID              int32             `json:"pid"`
-	ProcStart        time.Time         `json:"proc_start"`
+	ProcStart        time.Time         `json:"proc_started_at"`
 	Cwd              string            `json:"cwd"`
 	Branch           string            `json:"branch,omitempty"`
 	Title            string            `json:"title,omitempty"`
@@ -125,7 +125,7 @@ type SessionObs struct {
 type CompletionEvent struct {
 	MachineID string    `json:"machine_id"`
 	ID        string    `json:"id"`
-	TS        time.Time `json:"ts"`
+	TS        time.Time `json:"occurred_at"`
 	Text      string    `json:"text,omitempty"`
 }
 
@@ -133,7 +133,7 @@ type CompletionEvent struct {
 type FileTouch struct {
 	MachineID string    `json:"machine_id"`
 	Path      string    `json:"path"`
-	TS        time.Time `json:"ts"`
+	TS        time.Time `json:"occurred_at"`
 }
 
 // HookEvent is one line in the spool. Event is one of
@@ -142,7 +142,7 @@ type FileTouch struct {
 type HookEvent struct {
 	Summary   *Summary  `json:"summary,omitempty"`
 	MachineID string    `json:"machine_id,omitempty"`
-	TS        time.Time `json:"ts"`
+	TS        time.Time `json:"occurred_at"`
 	Adapter   string    `json:"adapter"`
 	SessionID string    `json:"session_id"`
 	Cwd       string    `json:"cwd,omitempty"`
@@ -183,7 +183,7 @@ type InboxItem struct {
 	ID           string     `json:"id"`
 	SessionID    int64      `json:"session_id"`
 	Kind         string     `json:"kind"` // finished|waiting
-	TS           time.Time  `json:"ts"`
+	TS           time.Time  `json:"occurred_at"`
 	Summary      string     `json:"summary"`
 	AckedAt      *time.Time `json:"acked_at,omitempty"`
 }
@@ -193,21 +193,21 @@ type Orphan struct {
 	MachineID string    `json:"machine_id"`
 	ID        string    `json:"id"` // root_pid:start_unix
 	RootPID   int32     `json:"root_pid"`
-	StartTime time.Time `json:"start_time"`
+	StartTime time.Time `json:"started_at"`
 	Signature string    `json:"signature"`
 	ProcCount int       `json:"proc_count"`
-	RSSTotal  uint64    `json:"rss_total"`
+	RSSTotal  uint64    `json:"rss_total_bytes"`
 	Cwd       string    `json:"cwd"`
 	Young     bool      `json:"young"`
 	Verified  bool      `json:"verified"` // idle with no external peers on consecutive passes
 	Evidence  []string  `json:"evidence"`
-	FirstSeen time.Time `json:"first_seen"`
+	FirstSeen time.Time `json:"first_seen_at"`
 	PIDs      []int32   `json:"pids"`
 }
 
 // Conflict is two or more live sessions overlapping on a worktree or file.
 type Conflict struct {
-	Kind       string  `json:"kind"` // same-worktree|same-file|same-file-other-worktree
+	Kind       string  `json:"kind"` // same_worktree|same_file|same_file_other_worktree
 	Current    bool    `json:"current"`
 	Family     bool    `json:"family"`
 	Path       string  `json:"path"`
@@ -218,9 +218,9 @@ type Conflict struct {
 type Offset struct {
 	MachineID string    `json:"machine_id"`
 	Inode     uint64    `json:"inode"`
-	Size      int64     `json:"size"`
-	Pos       int64     `json:"pos"`
-	Mtime     time.Time `json:"mtime"`
+	Size      int64     `json:"size_bytes"`
+	Pos       int64     `json:"position_bytes"`
+	Mtime     time.Time `json:"modified_at"`
 }
 
 // SourceStatus records a collection source's freshness.
@@ -235,8 +235,8 @@ type SourceStatus struct {
 // Gap is a period the collector was not running.
 type Gap struct {
 	MachineID string    `json:"machine_id"`
-	From      time.Time `json:"from"`
-	To        time.Time `json:"to"`
+	From      time.Time `json:"started_at"`
+	To        time.Time `json:"ended_at"`
 }
 
 // Event is a stored hook event attributed to a session.
@@ -244,7 +244,7 @@ type Event struct {
 	MachineID  string    `json:"machine_id"`
 	Adapter    string    `json:"adapter"`
 	ExternalID string    `json:"external_id"`
-	TS         time.Time `json:"ts"`
+	TS         time.Time `json:"occurred_at"`
 	Kind       string    `json:"kind"`
 	Summary    string    `json:"summary,omitempty"`
 }

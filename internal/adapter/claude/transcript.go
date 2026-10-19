@@ -57,7 +57,7 @@ func tailTranscript(ctx context.Context, path string, o *model.SessionObs, env a
 	}
 	var warnings []adapter.Warning
 	if skipped > 0 {
-		warnings = append(warnings, adapter.Warning{Kind: "skipped-backlog", Detail: fmt.Sprintf("%s: %d bytes", path, skipped)})
+		warnings = append(warnings, adapter.Warning{Kind: "skipped_backlog", Detail: fmt.Sprintf("%s: %d bytes", path, skipped)})
 		if err := readTranscriptIdentity(ctx, path, o, prev.Pos); err != nil {
 			return warnings, err
 		}
@@ -82,10 +82,10 @@ func tailTranscript(ctx context.Context, path string, o *model.SessionObs, env a
 		}
 	}
 	if invalid > 0 {
-		warnings = append(warnings, adapter.Warning{Kind: "invalid-json", Detail: fmt.Sprintf("%s: %d lines", path, invalid)})
+		warnings = append(warnings, adapter.Warning{Kind: "invalid_json", Detail: fmt.Sprintf("%s: %d lines", path, invalid)})
 	}
 	if r.Skipped > 0 {
-		warnings = append(warnings, adapter.Warning{Kind: "oversize-line", Detail: fmt.Sprintf("%s: %d lines", path, r.Skipped)})
+		warnings = append(warnings, adapter.Warning{Kind: "oversize_line", Detail: fmt.Sprintf("%s: %d lines", path, r.Skipped)})
 	}
 	return warnings, nil
 }

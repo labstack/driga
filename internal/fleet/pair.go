@@ -174,7 +174,7 @@ func (s *Server) openEnrollment(opts EnrollOpts) (string, error) {
 		ExpiresAt time.Time `json:"expires_at"`
 		AllowID   string    `json:"allow_id,omitempty"`
 		Ack       bool      `json:"ack"`
-	}{until, opts.AllowID, opts.Ack})
+	}{until.UTC(), opts.AllowID, opts.Ack})
 	if err != nil {
 		return "", err
 	}
@@ -455,7 +455,7 @@ func (s *Server) pairControl(req ControlRequest) (ControlResponse, error) {
 	if e == nil || req.Token != e.token {
 		return ControlResponse{}, fmt.Errorf("enrollment session changed")
 	}
-	if req.Op == "enroll-close" {
+	if req.Op == "enroll_close" {
 		s.closeEnrollmentLocked()
 		return ControlResponse{}, nil
 	}
@@ -465,7 +465,7 @@ func (s *Server) pairControl(req ControlRequest) (ControlResponse, error) {
 	if !s.now().Before(s.enrollUntil) {
 		return ControlResponse{}, fmt.Errorf("enrollment closed (expired or 3 attempts)")
 	}
-	if req.Op == "enroll-decision" {
+	if req.Op == "enroll_decision" {
 		p := e.pairs[req.Attempt]
 		if p == nil || !p.revealed || p.decided || p.finished || !s.now().Before(p.until) {
 			return ControlResponse{}, fmt.Errorf("pairing attempt expired")
@@ -501,12 +501,12 @@ func Enroll(ctx context.Context, dataDir string, opts EnrollOpts, prompt func(st
 	defer func() {
 		cleanup, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
-		Control(cleanup, dataDir, ControlRequest{Op: "enroll-close", Token: token})
+		Control(cleanup, dataDir, ControlRequest{Op: "enroll_close", Token: token})
 	}()
 	tick := time.NewTicker(25 * time.Millisecond)
 	defer tick.Stop()
 	for {
-		resp, err = Control(ctx, dataDir, ControlRequest{Op: "enroll-poll", Token: token})
+		resp, err = Control(ctx, dataDir, ControlRequest{Op: "enroll_poll", Token: token})
 		if err != nil {
 			return Viewer{}, err
 		}
@@ -518,7 +518,7 @@ func Enroll(ctx context.Context, dataDir string, opts EnrollOpts, prompt func(st
 			if promptErr != nil {
 				return Viewer{}, promptErr
 			}
-			_, err = Control(ctx, dataDir, ControlRequest{Op: "enroll-decision", Token: token, Attempt: resp.Attempt, Approve: yes})
+			_, err = Control(ctx, dataDir, ControlRequest{Op: "enroll_decision", Token: token, Attempt: resp.Attempt, Approve: yes})
 			if err != nil {
 				return Viewer{}, err
 			}

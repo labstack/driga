@@ -28,11 +28,11 @@ func TestLabel(t *testing.T) {
 	}{
 		{name: "claude notification", label: "waiting", in: claude("busy", 5*time.Minute)},
 		{name: "claude busy recent", label: "working", in: claude("busy", time.Minute)},
-		{name: "claude busy quiet low cpu", label: "stalled?", evidence: "CPU 0.2%", in: claude("busy", 14*time.Minute)},
-		{name: "claude busy threshold", label: "stalled?", in: claude("busy", 10*time.Minute)},
+		{name: "claude busy quiet low cpu", label: "stalled", evidence: "CPU 0.2%", in: claude("busy", 14*time.Minute)},
+		{name: "claude busy threshold", label: "stalled", in: claude("busy", 10*time.Minute)},
 		{name: "claude busy quiet high cpu", label: "unknown", evidence: "CPU 5.0%", in: claude("busy", 14*time.Minute)},
 		{name: "claude busy cpu boundary", label: "unknown", evidence: "CPU 1.0%", in: claude("busy", 14*time.Minute)},
-		{name: "claude busy no sample", label: "stalled?", evidence: "no process sample", in: claude("busy", 14*time.Minute)},
+		{name: "claude busy no sample", label: "stalled", evidence: "no process sample", in: claude("busy", 14*time.Minute)},
 		{name: "claude stop", label: "finished", in: claude("idle", 5*time.Minute)},
 		{name: "claude stop already seen", label: "idle", in: claude("idle", 5*time.Minute)},
 		{name: "claude stop before prompt", label: "idle", in: claude("idle", 5*time.Minute)},
@@ -45,7 +45,7 @@ func TestLabel(t *testing.T) {
 		{name: "claude pid zero no registry", label: "unknown", in: StateInput{Obs: model.SessionObs{Adapter: "claude"}}},
 		{name: "claude notification old", label: "idle", in: claude("idle", time.Second)},
 		{name: "codex recent", label: "working", in: codex(true, false, time.Second)},
-		{name: "codex quiet open", label: "stalled?", in: codex(true, false, 14*time.Minute)},
+		{name: "codex quiet open", label: "stalled", in: codex(true, false, 14*time.Minute)},
 		{name: "codex tool approval never waiting", label: "unknown", in: codex(true, false, 2*time.Minute)},
 		{name: "codex idle", label: "idle", in: codex(false, false, time.Hour)},
 		{name: "codex unseen completion", label: "finished", in: codex(false, false, time.Hour)},
@@ -59,7 +59,7 @@ func TestLabel(t *testing.T) {
 		{name: "hosted minute boundary", label: "unknown", heuristic: true, in: codex(true, true, time.Minute)},
 		{name: "gemini recent", label: "working", in: gemini(true, time.Second)},
 		{name: "gemini open tool never waiting", label: "unknown", in: gemini(true, 2*time.Minute)},
-		{name: "gemini quiet open", label: "stalled?", in: gemini(true, 14*time.Minute)},
+		{name: "gemini quiet open", label: "stalled", in: gemini(true, 14*time.Minute)},
 		{name: "gemini completed alive", label: "idle", in: gemini(false, time.Hour)},
 		{name: "gemini gone open", label: "dead", in: gemini(true, time.Hour)},
 		{name: "gemini gone completed", label: "finished", in: gemini(false, time.Hour)},
@@ -104,8 +104,11 @@ func TestLabel(t *testing.T) {
 				t.Fatalf("duration not rounded: %q", evidence)
 			}
 			wantDisplay := label
+			if label == "stalled" {
+				wantDisplay = "stalled?"
+			}
 			if heuristic {
-				wantDisplay = "~" + label
+				wantDisplay = "~" + wantDisplay
 			}
 			if got := Display(label, heuristic); got != wantDisplay {
 				t.Fatalf("Display = %q, want %q", got, wantDisplay)

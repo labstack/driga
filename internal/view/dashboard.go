@@ -35,7 +35,7 @@ func NeedsYou(inbox []InboxRow, agents []AgentRow, details map[int64]AgentView) 
 	}
 	walk(agents)
 	for _, i := range inbox {
-		if i.AckedAt != nil || i.Kind != "waiting" && i.Kind != "finished" && i.Kind != "worker-finished" {
+		if i.AckedAt != nil || i.Kind != "waiting" && i.Kind != "finished" && i.Kind != "worker_finished" {
 			continue
 		}
 		key := sessionKey{i.MachineID, i.SessionID}
@@ -46,8 +46,8 @@ func NeedsYou(inbox []InboxRow, agents []AgentRow, details map[int64]AgentView) 
 		items[key] = Attention{MachineID: i.MachineID, ID: i.SessionID, State: i.Kind, Project: i.Project, Machine: i.MachineName, Summary: i.Summary, At: i.TS, Inbox: &item, Adapter: i.Adapter, Title: i.Title, Branch: i.Branch}
 	}
 	for key, a := range rows {
-		state := strings.TrimPrefix(a.Label, "~")
-		if _, ok := items[key]; ok || state != "waiting" && state != "stalled?" {
+		state := strings.TrimSuffix(strings.TrimPrefix(a.Label, "~"), "?")
+		if _, ok := items[key]; ok || state != "waiting" && state != "stalled" {
 			continue
 		}
 		at := a.LastActivityAt
@@ -97,7 +97,7 @@ func NeedsYou(inbox []InboxRow, agents []AgentRow, details map[int64]AgentView) 
 		if label == "" {
 			label = a.Label
 		}
-		if state := strings.TrimPrefix(label, "~"); state == "waiting" || state == "stalled?" {
+		if state := strings.TrimSuffix(strings.TrimPrefix(label, "~"), "?"); state == "waiting" || state == "stalled" {
 			item.State = label
 		}
 		if item.Summary == "" {
@@ -127,10 +127,10 @@ type StateCount struct {
 func StateCounts(agents []AgentRow) []StateCount {
 	counts := map[string]int{}
 	for _, a := range agents {
-		counts[strings.TrimPrefix(a.Label, "~")]++
+		counts[strings.TrimSuffix(strings.TrimPrefix(a.Label, "~"), "?")]++
 	}
 	result := []StateCount{}
-	for _, label := range []string{"working", "waiting", "stalled?", "idle", "finished", "dead", "unknown"} {
+	for _, label := range []string{"working", "waiting", "stalled", "idle", "finished", "dead", "unknown"} {
 		if counts[label] > 0 {
 			result = append(result, StateCount{label, counts[label]})
 		}

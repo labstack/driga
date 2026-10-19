@@ -306,7 +306,7 @@ func (s *Server) hello(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
-		value = map[string]any{"schema": 1, "observed_at": s.now().UTC(), "driga_version": m.DrigaVersion, "machine_id": tx.MachineID(), "hostname": m.Hostname, "os": m.OS, "arch": m.Arch, "feed_epoch": epoch, "feed_seq": seq, "share_text": s.share(), "capabilities": []string{"snapshot", "events", "ack"}}
+		value = map[string]any{"schema": 2, "observed_at": s.now().UTC(), "driga_version": m.DrigaVersion, "machine_id": tx.MachineID(), "hostname": m.Hostname, "os": m.OS, "arch": m.Arch, "feed_epoch": epoch, "feed_seq": seq, "share_text": s.share(), "capabilities": []string{"snapshot", "events", "ack"}}
 		return nil
 	})
 	if err != nil {

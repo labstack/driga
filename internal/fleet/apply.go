@@ -48,7 +48,7 @@ func ApplyBatch(tx *store.Tx, b Batch, now time.Time) error {
 	if b.Cursor.Seq < 0 || b.Snapshot == nil && len(b.Rows) > 0 && b.Cursor.Epoch == "" {
 		return store.ErrResnapshot
 	}
-	if b.Snapshot != nil && b.Snapshot.Schema != 1 {
+	if b.Snapshot != nil && b.Snapshot.Schema != 2 {
 		return fmt.Errorf("incompatible (schema %d)", b.Snapshot.Schema)
 	}
 	r := tx.ForMachine(b.MachineID)

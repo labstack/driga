@@ -154,7 +154,7 @@ func TestPullerIncompatibleSchema(t *testing.T) {
 	var machine string
 	p, out, st, count, _ := pullFixture(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"schema":2,"machine_id":%q}`, machine)
+		fmt.Fprintf(w, `{"schema":1,"machine_id":%q}`, machine)
 	})
 	machine = st.MachineID()
 	runPull(t, p)
@@ -169,9 +169,9 @@ func TestPullerStopsOn204(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/v1/hello":
-			fmt.Fprintf(w, `{"schema":1,"machine_id":%q}`, machine)
+			fmt.Fprintf(w, `{"schema":2,"machine_id":%q}`, machine)
 		case "/v1/snapshot":
-			fmt.Fprintf(w, `{"schema":1,"observed_at":%q,"data":{"machine":{"machine_id":%q},"cursor":{"epoch":"epoch","seq":0}}}`, time.Now().UTC().Format(time.RFC3339Nano), machine)
+			fmt.Fprintf(w, `{"schema":2,"observed_at":%q,"data":{"machine":{"machine_id":%q},"cursor":{"epoch":"epoch","seq":0}}}`, time.Now().UTC().Format(time.RFC3339Nano), machine)
 		default:
 			w.WriteHeader(http.StatusNoContent)
 		}
@@ -207,7 +207,7 @@ func TestPullerBatchesBurst(t *testing.T) {
 	p, out, st, snapshots, _ := pullFixture(t, func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/v1/hello":
-			json.NewEncoder(w).Encode(hello{Schema: 1, MachineID: peerID, FeedEpoch: epoch, ObservedAt: time.Now()})
+			json.NewEncoder(w).Encode(hello{Schema: 2, MachineID: peerID, FeedEpoch: epoch, ObservedAt: time.Now()})
 		case "/v1/events":
 			w.Header().Set("Content-Type", "text/event-stream")
 			for i := 1; i <= 1000; i++ {

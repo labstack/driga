@@ -31,19 +31,19 @@ type toolCase struct {
 
 func toolCases(id int64) []toolCase {
 	return []toolCase{
-		{"driga_summary", nil, []string{"summary"}},
-		{"driga_activity", map[string]any{"machine": "local"}, []string{"activity", "--machine", "local"}},
-		{"driga_agents", map[string]any{"all": true, "machine": "local", "project": "api"}, []string{"agents", "--all", "--machine", "local", "--project", "api"}},
-		{"driga_agent", map[string]any{"id": id, "machine": "local"}, []string{"agent", fmt.Sprint(id), "--machine", "local"}},
-		{"driga_projects", map[string]any{"active": true, "at_risk": true}, []string{"projects", "--active", "--at-risk"}},
-		{"driga_where", map[string]any{"project": "api"}, []string{"where", "api"}},
-		{"driga_inbox", map[string]any{"since": "yesterday", "all": true, "project": "api", "machine": "local"}, []string{"inbox", "--since", "yesterday", "--all", "--project", "api", "--machine", "local"}},
-		{"driga_conflicts", map[string]any{"project": "api", "machine": "local"}, []string{"conflicts", "--project", "api", "--machine", "local"}},
-		{"driga_orphans", map[string]any{"machine": "local"}, []string{"orphans", "--machine", "local"}},
-		{"driga_machine", map[string]any{"machine": "local"}, []string{"machine", "--machine", "local"}},
-		{"driga_machines", nil, []string{"machines"}},
-		{"driga_doctor", nil, []string{"doctor"}},
-		{"driga_cleanup_candidates", nil, []string{"cleanup"}},
+		{"get_summary", nil, []string{"summary"}},
+		{"get_activity", map[string]any{"machine": "local"}, []string{"activity", "--machine", "local"}},
+		{"list_agents", map[string]any{"all": true, "machine": "local", "project": "api"}, []string{"agents", "--all", "--machine", "local", "--project", "api"}},
+		{"get_agent", map[string]any{"id": id, "machine": "local"}, []string{"agent", fmt.Sprint(id), "--machine", "local"}},
+		{"list_projects", map[string]any{"active": true, "at_risk": true}, []string{"projects", "--active", "--at-risk"}},
+		{"inspect_project", map[string]any{"project": "api"}, []string{"where", "api"}},
+		{"list_inbox", map[string]any{"since": "yesterday", "all": true, "project": "api", "machine": "local"}, []string{"inbox", "--since", "yesterday", "--all", "--project", "api", "--machine", "local"}},
+		{"list_conflicts", map[string]any{"project": "api", "machine": "local"}, []string{"conflicts", "--project", "api", "--machine", "local"}},
+		{"list_orphans", map[string]any{"machine": "local"}, []string{"orphans", "--machine", "local"}},
+		{"get_machine", map[string]any{"machine": "local"}, []string{"machine", "--machine", "local"}},
+		{"list_machines", nil, []string{"machines"}},
+		{"inspect_setup", nil, []string{"doctor"}},
+		{"list_cleanup_candidates", nil, []string{"cleanup"}},
 	}
 }
 
@@ -190,6 +190,7 @@ func canonical(t *testing.T, v any) []byte {
 		switch x := x.(type) {
 		case map[string]any:
 			delete(x, "observed_at")
+			delete(x, "truncated")
 			for _, v := range x {
 				normalize(v)
 			}
@@ -214,9 +215,9 @@ func TestEveryToolMatchesCLIJSON(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			r := call(t, cs, tc)
 			got := r.StructuredContent
-			if tc.name == "driga_doctor" {
+			if tc.name == "inspect_setup" {
 				// The existing doctor CLI emits a bare array; §10 requires
-				// MCP diagnostics to carry the shared schema-1 envelope.
+				// MCP diagnostics to carry the shared schema-2 envelope.
 				got = got.(map[string]any)["data"]
 			}
 			want := canonical(t, json.RawMessage(cliJSON(t, tc.cli)))
@@ -281,10 +282,10 @@ func TestSnapshotModeLabelled(t *testing.T) {
 	g := globals()
 	g.Snapshot = true
 	cs := connect(t, g)
-	for _, name := range []string{"driga_summary", "driga_agents", "driga_inbox", "driga_machines", "driga_doctor"} {
+	for _, name := range []string{"get_summary", "list_agents", "list_inbox", "list_machines", "inspect_setup"} {
 		r := call(t, cs, toolCase{name: name})
 		e := r.StructuredContent.(map[string]any)
-		if e["mode"] != "snapshot" || e["schema"] != float64(1) {
+		if e["mode"] != "snapshot" || e["schema"] != float64(2) {
 			t.Fatalf("%s: %+v", name, e)
 		}
 		if !strings.Contains(r.Content[0].(*sdk.TextContent).Text, "snapshot · no history") {
@@ -300,7 +301,7 @@ func TestScopesAndToolErrors(t *testing.T) {
 		machine string
 		rows    int
 	}{{"all", 2}, {"local", 1}, {"vm", 1}, {"remote", 1}} {
-		r := call(t, cs, toolCase{name: "driga_agents", args: map[string]any{"machine": tc.machine}})
+		r := call(t, cs, toolCase{name: "list_agents", args: map[string]any{"machine": tc.machine}})
 		rows := r.StructuredContent.(map[string]any)["data"].(map[string]any)["rows"].([]any)
 		if len(rows) != tc.rows {
 			t.Fatalf("%s: %d rows, want %d", tc.machine, len(rows), tc.rows)
@@ -310,15 +311,15 @@ func TestScopesAndToolErrors(t *testing.T) {
 		}
 	}
 	for _, tc := range []toolCase{
-		{name: "driga_agents", args: map[string]any{"machine": "missing"}},
-		{name: "driga_agents", args: map[string]any{"project": "missing"}},
-		{name: "driga_inbox", args: map[string]any{"since": "-1h"}},
-		{name: "driga_inbox", args: map[string]any{"since": "invalid"}},
-		{name: "driga_agent", args: map[string]any{}},
-		{name: "driga_agent", args: map[string]any{"id": "invalid"}},
-		{name: "driga_agent", args: map[string]any{"id": id, "machine": "vm"}},
-		{name: "driga_where", args: map[string]any{}},
-		{name: "driga_where", args: map[string]any{"project": ""}},
+		{name: "list_agents", args: map[string]any{"machine": "missing"}},
+		{name: "list_agents", args: map[string]any{"project": "missing"}},
+		{name: "list_inbox", args: map[string]any{"since": "-1h"}},
+		{name: "list_inbox", args: map[string]any{"since": "invalid"}},
+		{name: "get_agent", args: map[string]any{}},
+		{name: "get_agent", args: map[string]any{"id": "invalid"}},
+		{name: "get_agent", args: map[string]any{"id": id, "machine": "vm"}},
+		{name: "inspect_project", args: map[string]any{}},
+		{name: "inspect_project", args: map[string]any{"project": ""}},
 	} {
 		r, err := cs.CallTool(context.Background(), &sdk.CallToolParams{Name: tc.name, Arguments: tc.args})
 		if err != nil || !r.IsError || r.StructuredContent != nil {
@@ -338,7 +339,7 @@ func TestScopesAndToolErrors(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r := call(t, cs, toolCase{name: "driga_where", args: map[string]any{"project": "."}})
+	r := call(t, cs, toolCase{name: "inspect_project", args: map[string]any{"project": "."}})
 	if got := r.StructuredContent.(map[string]any)["data"].(map[string]any)["machine_id"]; got != s.MachineID() {
 		t.Fatalf("dot resolved to %v", got)
 	}
@@ -352,7 +353,7 @@ func TestMachinesUsesStaleCache(t *testing.T) {
 	if err := s.SetMeta("last_pass_at", time.Now().Add(-time.Hour).Format(time.RFC3339Nano)); err != nil {
 		t.Fatal(err)
 	}
-	r := call(t, connect(t, globals()), toolCase{name: "driga_machines"})
+	r := call(t, connect(t, globals()), toolCase{name: "list_machines"})
 	e := r.StructuredContent.(map[string]any)
 	if e["mode"] != "daemon" {
 		t.Fatalf("mode=%v", e["mode"])
@@ -379,10 +380,10 @@ func TestMCPStdio(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer cs.Close()
-	call(t, cs, toolCase{name: "driga_summary"})
+	call(t, cs, toolCase{name: "get_summary"})
 	// A valid JSON frame exceeding four MiB must close the transport rather
 	// than reach the tool handler and return a normal validation error.
-	_, err = cs.CallTool(ctx, &sdk.CallToolParams{Name: "driga_where", Arguments: map[string]any{"project": strings.Repeat("x", 4*1024*1024+1)}})
+	_, err = cs.CallTool(ctx, &sdk.CallToolParams{Name: "inspect_project", Arguments: map[string]any{"project": strings.Repeat("x", 4*1024*1024+1)}})
 	if err == nil {
 		t.Fatal("stdio accepted a frame larger than four MiB")
 	}
@@ -432,7 +433,7 @@ func TestStructuredContentPreservesIntegers(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer cs.Close()
-	call(t, cs, toolCase{name: "driga_machine"})
+	call(t, cs, toolCase{name: "get_machine"})
 	// Inspect wire JSON before the SDK client decodes numbers into float64.
 	for _, line := range strings.Split(log.String(), "\n") {
 		var response struct {

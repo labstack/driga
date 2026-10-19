@@ -75,6 +75,7 @@ func TestHeldOutFixtures(t *testing.T) {
 }
 
 type sessionLabel struct {
+	Heuristic  bool   `json:"heuristic,omitempty"`
 	ExternalID string `json:"external_id"`
 	Label      string `json:"label"`
 }
@@ -252,7 +253,7 @@ func validateFixture(t *testing.T, src string) {
 	}
 	got := expected{Sessions: []sessionLabel{}, Orphans: []string{}, Conflicts: []conflictLabel{}}
 	for _, s := range ss {
-		got.Sessions = append(got.Sessions, sessionLabel{s.ExternalID, derive.Display(s.Label, s.Heuristic)})
+		got.Sessions = append(got.Sessions, sessionLabel{s.Heuristic, s.ExternalID, s.Label})
 		if s.LastPrompt != "" {
 			t.Errorf("fixture %s: privacy default stored prompt for %s", src, s.ExternalID)
 		}
@@ -341,7 +342,7 @@ func validateFixture(t *testing.T, src string) {
 	}
 	if filepath.Base(src) == "untested-versions" {
 		for _, a := range sc.Agents {
-			v, err := st.Meta("warn:" + a.Adapter + ":untested-version")
+			v, err := st.Meta("warn:" + a.Adapter + ":untested_version")
 			if err != nil || v != a.Version {
 				t.Errorf("untested %s version warning = %q, %v; expected %q (§2a)", a.Adapter, v, err, a.Version)
 			}
@@ -414,7 +415,7 @@ func TestHeldOutFleetTraces(t *testing.T) {
 		MachineID string `json:"machine_id"`
 		Steps     []struct {
 			Name      string          `json:"name"`
-			At        time.Time       `json:"at"`
+			At        time.Time       `json:"occurred_at"`
 			Snapshot  *fleet.Snapshot `json:"snapshot"`
 			Rows      []fleet.FeedRow `json:"rows"`
 			Cursor    fleet.Cursor    `json:"cursor"`
@@ -450,7 +451,7 @@ func TestHeldOutFleetTraces(t *testing.T) {
 				t.Fatal(e)
 			}
 			for _, s := range ss {
-				got.Sessions = append(got.Sessions, sessionLabel{s.ExternalID, derive.Display(s.Label, s.Heuristic)})
+				got.Sessions = append(got.Sessions, sessionLabel{s.Heuristic, s.ExternalID, s.Label})
 			}
 			sort.Slice(got.Sessions, func(i, j int) bool { return got.Sessions[i].ExternalID < got.Sessions[j].ExternalID })
 			if diff := cmp.Diff(want[i], got); diff != "" {

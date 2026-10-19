@@ -41,15 +41,22 @@ type Intervals = collector.Intervals
 
 // Fresh describes the age and last error of a collection source.
 type Fresh struct {
-	LastOKAt   time.Time `json:"last_ok_at"`
-	AgeSeconds int       `json:"age_seconds"`
-	Stale      bool      `json:"stale"`
-	LastError  string    `json:"last_error"`
-	Status     string    `json:"status,omitempty"`
+	LastOKAt  time.Time `json:"last_ok_at"`
+	AgeMS     int64     `json:"age_ms"`
+	Stale     bool      `json:"stale"`
+	LastError string    `json:"last_error"`
+	Status    string    `json:"status,omitempty"`
 }
 
 // Envelope is the versioned JSON contract shared by all read commands.
+type ErrorRecord struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
 type Envelope struct {
+	Error        *ErrorRecord     `json:"error,omitempty"`
+	Truncated    *bool            `json:"truncated,omitempty"`
 	Schema       int              `json:"schema"`
 	ObservedAt   time.Time        `json:"observed_at"`
 	Mode         string           `json:"mode"`
@@ -60,7 +67,7 @@ type Envelope struct {
 
 // NewEnvelope adds source freshness and the last day's coverage gaps to data.
 func newEnvelopeLocal(r Reader, mode string, now time.Time, intervals Intervals, data any) (Envelope, error) {
-	e := Envelope{Schema: 1, ObservedAt: now, Mode: mode, Freshness: map[string]Fresh{}, CoverageGaps: []model.Gap{}, Data: data}
+	e := Envelope{Schema: 2, ObservedAt: now, Mode: mode, Freshness: map[string]Fresh{}, CoverageGaps: []model.Gap{}, Data: data}
 	sources, err := r.Sources()
 	if err != nil {
 		return e, err
@@ -77,12 +84,12 @@ func newEnvelopeLocal(r Reader, mode string, now time.Time, intervals Intervals,
 		status := ""
 		if s.Name == "otlp" || s.Name == "sockets" {
 			stale = s.LastError != ""
-			status = "last-event"
+			status = "last_event"
 			if s.LastOKAt.IsZero() && !stale {
-				status = "not-yet-receiving"
+				status = "not_yet_receiving"
 			}
 		}
-		e.Freshness[s.Name] = Fresh{LastOKAt: s.LastOKAt, AgeSeconds: int(age / time.Second), Stale: stale, LastError: s.LastError, Status: status}
+		e.Freshness[s.Name] = Fresh{LastOKAt: s.LastOKAt, AgeMS: age.Milliseconds(), Stale: stale, LastError: s.LastError, Status: status}
 	}
 	gaps, err := r.Gaps(now.Add(-24 * time.Hour))
 	if err != nil {
@@ -113,14 +120,15 @@ type AgentRow struct {
 	RepoID           int64         `json:"repo_id"`
 	LastActivityAt   time.Time     `json:"last_activity_at"`
 	TitleFromPrompt  bool          `json:"title_from_prompt,omitempty"`
+	Heuristic        bool          `json:"heuristic"`
 	Label            string        `json:"label"`
 	Adapter          string        `json:"adapter"`
 	Origin           string        `json:"origin"`
 	Project          string        `json:"project"`
 	Branch           string        `json:"branch"`
 	Title            string        `json:"title"`
-	Age              time.Duration `json:"age"`
-	Mem              uint64        `json:"mem"`
+	Age              time.Duration `json:"age_ms"`
+	Mem              uint64        `json:"mem_bytes"`
 	Evidence         string        `json:"evidence"`
 	ObservedAt       time.Time     `json:"observed_at"`
 	FinishedChildren int           `json:"finished_children"`
@@ -137,6 +145,7 @@ type AgentView struct {
 	MachineFresh
 	MachineID  string        `json:"machine_id"`
 	Session    model.Session `json:"session"`
+	Heuristic  bool          `json:"heuristic"`
 	Label      string        `json:"label"`
 	ObservedAt time.Time     `json:"observed_at"`
 	Files      []FileRow     `json:"files"`
@@ -190,7 +199,7 @@ type WherePart struct {
 	MachineID string    `json:"machine_id"`
 	Source    string    `json:"source"`
 	Text      string    `json:"text"`
-	At        time.Time `json:"at"`
+	At        time.Time `json:"occurred_at"`
 }
 
 // ProjectRow is a derived repository status with checkout totals.
@@ -223,7 +232,7 @@ type InboxRow struct {
 	MachineFresh
 	MachineID string `json:"machine_id"`
 	model.InboxItem
-	Age     time.Duration `json:"age"`
+	Age     time.Duration `json:"age_ms"`
 	Project string        `json:"project"`
 	Adapter string        `json:"adapter"`
 	Title   string        `json:"title"`
@@ -253,7 +262,7 @@ type OrphanRow struct {
 	MachineFresh
 	MachineID string `json:"machine_id"`
 	model.Orphan
-	Age time.Duration `json:"age"`
+	Age time.Duration `json:"age_ms"`
 }
 
 // OrphansView lists reclaim candidates.
@@ -267,7 +276,7 @@ type MemoryRow struct {
 	MachineID string `json:"machine_id"`
 	Agent     string `json:"agent"`
 	Role      string `json:"role"`
-	RSS       uint64 `json:"rss"`
+	RSS       uint64 `json:"rss_bytes"`
 }
 
 // MachineView contains the most recent sample and top agent memory users.
@@ -289,7 +298,7 @@ type SummaryView struct {
 	Inbox     int                 `json:"inbox"`
 	Sample    model.MachineSample `json:"sample"`
 	Orphans   int                 `json:"orphans"`
-	Reclaim   uint64              `json:"reclaim"`
+	Reclaim   uint64              `json:"reclaim_bytes"`
 }
 
 func nonNil[T any](s []T) []T {
@@ -304,8 +313,8 @@ type MachineFresh struct {
 	MachineName string        `json:"machine_name"`
 	State       string        `json:"machine_state"`
 	Stale       bool          `json:"stale"`
-	LastSeen    time.Time     `json:"last_seen"`
-	LastSeenAge time.Duration `json:"last_seen_age"`
+	LastSeen    time.Time     `json:"last_seen_at"`
+	LastSeenAge time.Duration `json:"last_seen_age_ms"`
 }
 
 // MachineRow lists a known machine, cached counts, and clock health.
@@ -313,7 +322,7 @@ type MachineRow struct {
 	model.Machine
 	Agents      int           `json:"agents"`
 	Inbox       int           `json:"inbox"`
-	LastSeenAge time.Duration `json:"last_seen_age"`
+	LastSeenAge time.Duration `json:"last_seen_age_ms"`
 	SkewWarning string        `json:"skew_warning,omitempty"`
 }
 

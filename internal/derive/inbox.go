@@ -10,7 +10,7 @@ import (
 )
 
 // InboxItems returns deduplicated events, acknowledging imports at or before
-// baseline. Workers' completions are worker-finished records on the top-level
+// baseline. Workers' completions are worker_finished records on the top-level
 // parent, as are their attention requests. Event IDs retain the worker identity.
 // Codex notify hooks are deliberately ignored: rollouts already emit completions.
 func InboxItems(sessions []model.Session, parents map[int64]int64, hooks []model.HookEvent, baseline time.Time) []model.InboxItem {
@@ -18,7 +18,7 @@ func InboxItems(sessions []model.Session, parents map[int64]int64, hooks []model
 	for _, item := range inboxEvents(sessions, hooks, baseline) {
 		root := inboxRoot(item.SessionID, parents)
 		if root != item.SessionID && item.Kind == "finished" {
-			item.Kind = "worker-finished"
+			item.Kind = "worker_finished"
 		}
 		item.SessionID = root
 		result = append(result, item)

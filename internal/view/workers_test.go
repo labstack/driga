@@ -79,7 +79,7 @@ func TestChildFinishedStoredAsWorkerItem(t *testing.T) {
 	}
 	workers, unseen := 0, 0
 	for _, item := range items {
-		if item.Kind == "worker-finished" {
+		if item.Kind == "worker_finished" {
 			workers++
 			if item.SessionID != parent {
 				t.Fatalf("worker completion must retain its top-level parent: %+v", item)
@@ -160,7 +160,7 @@ func TestWorkerItemsNotListedInInbox(t *testing.T) {
 			if ack != nil {
 				id = "worker-acked"
 			}
-			if err := tx.UpsertInboxItem(model.InboxItem{ID: id, SessionID: parent, Kind: "worker-finished", TS: workerNow, AckedAt: ack}); err != nil {
+			if err := tx.UpsertInboxItem(model.InboxItem{ID: id, SessionID: parent, Kind: "worker_finished", TS: workerNow, AckedAt: ack}); err != nil {
 				return err
 			}
 		}
@@ -177,7 +177,7 @@ func TestWorkerItemsNotListedInInbox(t *testing.T) {
 			t.Fatalf("all=%v: want only parent completion and worker attention: %+v", all, v.Rows)
 		}
 		for _, row := range v.Rows {
-			if row.Kind == "worker-finished" {
+			if row.Kind == "worker_finished" {
 				t.Fatalf("worker item listed: %+v", row)
 			}
 		}

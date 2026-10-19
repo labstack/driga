@@ -35,7 +35,7 @@ func TestLowDiskInboxOnce(t *testing.T) {
 	}
 	var lows []model.InboxItem
 	for _, item := range inbox(t, st) {
-		if item.Kind == "low-disk" {
+		if item.Kind == "low_disk" {
 			lows = append(lows, item)
 		}
 	}
@@ -52,7 +52,7 @@ func TestLowDiskInboxOnce(t *testing.T) {
 	}
 	count := 0
 	for _, item := range items {
-		if item.Kind == "low-disk" {
+		if item.Kind == "low_disk" {
 			count++
 		}
 	}

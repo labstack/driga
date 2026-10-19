@@ -64,11 +64,11 @@ func (a claudeAdapter) Collect(ctx context.Context, env adapter.Env) ([]model.Se
 		}
 		o, err := readRegistry(path, env)
 		if err != nil {
-			warnings = append(warnings, adapter.Warning{Kind: "bad-registry", Detail: fmt.Sprintf("%s: %v", path, err)})
+			warnings = append(warnings, adapter.Warning{Kind: "bad_registry", Detail: fmt.Sprintf("%s: %v", path, err)})
 			continue
 		}
 		if !a.testedVersion(o.Version) && !warnedVersions[o.Version] {
-			warnings = append(warnings, adapter.Warning{Kind: "untested-version", Detail: o.Version})
+			warnings = append(warnings, adapter.Warning{Kind: "untested_version", Detail: o.Version})
 			warnedVersions[o.Version] = true
 		}
 		registered[o.ExternalID] = true

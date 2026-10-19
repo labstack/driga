@@ -28,7 +28,7 @@ func TestOrphansRenderVerifiedAndSnapshotFooter(t *testing.T) {
 	if err := Render(&out, v, RenderOpts{JSON: true}); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out.String(), `"verified": true`) {
+	if !strings.Contains(out.String(), `"verified":true`) {
 		t.Fatal(out.String())
 	}
 }

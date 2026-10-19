@@ -52,7 +52,7 @@ func TestEnvelopeShape(t *testing.T) {
 	}
 	sort.Strings(keys)
 	want := []string{"coverage_gaps", "data", "freshness", "mode", "observed_at", "schema"}
-	if !reflect.DeepEqual(keys, want) || string(got["schema"]) != "1" || string(got["coverage_gaps"]) != "[]" {
+	if !reflect.DeepEqual(keys, want) || string(got["schema"]) != "2" || string(got["coverage_gaps"]) != "[]" {
 		t.Fatal(out.String())
 	}
 }
@@ -77,7 +77,7 @@ func TestFreshnessStale(t *testing.T) {
 				t.Errorf("%s %s: %+v", mode, name, f)
 			}
 		}
-		if e.Freshness["procs"].AgeSeconds != 16 || e.Freshness["procs"].LastError != "permission denied" {
+		if e.Freshness["procs"].AgeMS != 16000 || e.Freshness["procs"].LastError != "permission denied" {
 			t.Fatal(e)
 		}
 	}
@@ -85,7 +85,7 @@ func TestFreshnessStale(t *testing.T) {
 
 func TestSummaryLineFormat(t *testing.T) {
 	s := fixture(t, func(tx *store.Tx) error {
-		for _, label := range []string{"working", "waiting", "stalled?"} {
+		for _, label := range []string{"working", "waiting", "stalled"} {
 			if _, err := tx.UpsertSession(model.Session{SessionObs: model.SessionObs{Adapter: "test", ExternalID: label, StartedAt: testNow, LastActivityAt: testNow}, Label: label, Heuristic: true}); err != nil {
 				return err
 			}
@@ -193,7 +193,7 @@ func TestConflictsComputedAtRead(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(v.Current) != 1 || v.Current[0].Kind != "same-file-other-worktree" {
+	if len(v.Current) != 1 || v.Current[0].Kind != "same_file_other_worktree" {
 		t.Fatal(v)
 	}
 	v, err = Conflicts(s, Filter{}, testNow.Add(time.Hour))

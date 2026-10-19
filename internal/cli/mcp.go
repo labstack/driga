@@ -17,18 +17,18 @@ import (
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// McpCmd serves read-only tools over stdio.
-type McpCmd struct{}
+// MCPCmd serves read-only tools over stdio.
+type MCPCmd struct{}
 
 // Help documents client registration without changing client configuration.
-func (McpCmd) Help() string {
+func (MCPCmd) Help() string {
 	return "Read-only MCP server on stdio. Reading never acknowledges inbox items; snapshot mode has no history.\n\n" +
 		"Claude Code: claude mcp add --scope user driga -- driga mcp\n\n" +
 		"Codex configuration:\n[mcp_servers.driga]\ncommand = \"driga\"\nargs = [\"mcp\"]"
 }
 
 // Run reserves stdout for the MCP transport and sends diagnostics to stderr.
-func (McpCmd) Run(g *Globals) error {
+func (MCPCmd) Run(g *Globals) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	err := NewMCPServer(g).Run(ctx, &sdk.StdioTransport{MaxLineLength: drigamcp.MaxLineLength})

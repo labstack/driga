@@ -20,7 +20,7 @@ func TestMCPCleanupReadOnly(t *testing.T) {
 			t.Fatal("mutating tool", tool.Name)
 		}
 		if strings.Contains(tool.Name, "cleanup") {
-			if tool.Name != "driga_cleanup_candidates" {
+			if tool.Name != "list_cleanup_candidates" {
 				t.Fatal("mutating cleanup tool", tool.Name)
 			}
 			found = true
@@ -29,11 +29,11 @@ func TestMCPCleanupReadOnly(t *testing.T) {
 	if !found {
 		t.Fatal("cleanup read tool missing")
 	}
-	result, err := cs.CallTool(context.Background(), &sdk.CallToolParams{Name: "driga_cleanup_candidates", Arguments: map[string]any{}})
+	result, err := cs.CallTool(context.Background(), &sdk.CallToolParams{Name: "list_cleanup_candidates", Arguments: map[string]any{}})
 	if err != nil || result.IsError {
 		t.Fatal(result, err)
 	}
-	if result.StructuredContent.(map[string]any)["schema"] != float64(1) {
+	if result.StructuredContent.(map[string]any)["schema"] != float64(2) {
 		t.Fatal(result)
 	}
 }

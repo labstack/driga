@@ -155,8 +155,8 @@ func (m *app) homeView() string {
 	}
 	counts := map[string]int{}
 	total := 0
-	m.eachAgent(func(a view.AgentRow) { counts[strings.TrimPrefix(a.Label, "~")]++; total++ })
-	stateOrder := []string{"working", "waiting", "stalled?", "idle", "finished", "dead", "unknown"}
+	m.eachAgent(func(a view.AgentRow) { counts[strings.TrimSuffix(strings.TrimPrefix(a.Label, "~"), "?")]++; total++ })
+	stateOrder := []string{"working", "waiting", "stalled", "idle", "finished", "dead", "unknown"}
 	segmented := ""
 	legend := []string{}
 	used := 0
@@ -369,7 +369,7 @@ func (m *app) homeView() string {
 		f := m.snap.Freshness[name]
 		status := "source healthy"
 		token := "working"
-		if f.Status == "not-yet-receiving" {
+		if f.Status == "not_yet_receiving" {
 			status = "waiting for first event"
 			token = "waiting"
 		} else if f.Stale || f.LastError != "" {

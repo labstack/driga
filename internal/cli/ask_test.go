@@ -188,8 +188,8 @@ func TestAskBadStreamAndCleanup(t *testing.T) {
 			if code := run([]string{"ask", "question", "--json"}, "test", nil, &out, &errout); code == 0 || !strings.Contains(errout.String(), tc.want) {
 				t.Fatal(code, out.String(), errout.String())
 			}
-			if out.Len() != 0 {
-				t.Fatal("partial JSON", out.String())
+			if !json.Valid(out.Bytes()) || !strings.Contains(out.String(), `"error":`) {
+				t.Fatal("invalid structured failure", out.String())
 			}
 			entries, err := os.ReadDir(filepath.Join(os.Getenv("DRIGA_DATA_DIR"), "tmp"))
 			if err != nil || len(entries) != 0 {

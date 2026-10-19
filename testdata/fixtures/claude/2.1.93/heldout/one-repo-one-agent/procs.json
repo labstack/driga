@@ -2,9 +2,9 @@
   {
     "pid": 4000,
     "ppid": 200,
-    "start_time": "2026-10-18T16:59:40Z",
-    "rss": 49283072,
-    "cpu_seconds": 3,
+    "started_at": "2026-10-18T16:59:40Z",
+    "rss_bytes": 49283072,
+    "cpu_ms": 3000,
     "cpu_percent": 0,
     "cmdline": "claude",
     "exe": "/opt/heldout/bin/claude",

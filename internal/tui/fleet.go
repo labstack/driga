@@ -110,12 +110,12 @@ func (m *app) visibleSummary() view.SummaryView {
 		for _, r := range rows {
 			if m.machineVisible(r.MachineID) {
 				s.Agents++
-				switch strings.TrimPrefix(r.Label, "~") {
+				switch strings.TrimSuffix(strings.TrimPrefix(r.Label, "~"), "?") {
 				case "working":
 					s.Working++
 				case "waiting":
 					s.Waiting++
-				case "stalled?":
+				case "stalled":
 					s.Stalled++
 				}
 			}

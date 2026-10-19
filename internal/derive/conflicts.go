@@ -83,12 +83,12 @@ func Conflicts(sessions []model.Session, files map[int64][]model.FileTouch, pare
 	var result []model.Conflict
 	for path, edits := range worktrees {
 		if len(edits) >= 2 && !conflictFamily(edits) {
-			result = append(result, model.Conflict{Kind: "same-worktree", Path: path, Current: true, SessionIDs: conflictIDs(edits)})
+			result = append(result, model.Conflict{Kind: "same_worktree", Path: path, Current: true, SessionIDs: conflictIDs(edits)})
 		}
 	}
 	for path, edits := range absoluteFiles {
 		if len(edits) >= 2 {
-			result = append(result, conflictFile("same-file", path, edits, now))
+			result = append(result, conflictFile("same_file", path, edits, now))
 		}
 	}
 	for key, edits := range otherFiles {
@@ -97,7 +97,7 @@ func Conflicts(sessions []model.Session, files map[int64][]model.FileTouch, pare
 			wts[e.worktree] = true
 		}
 		if len(edits) >= 2 && len(wts) >= 2 {
-			result = append(result, conflictFile("same-file-other-worktree", filepath.Join(key.repo, key.rel), edits, now))
+			result = append(result, conflictFile("same_file_other_worktree", filepath.Join(key.repo, key.rel), edits, now))
 		}
 	}
 	sort.Slice(result, func(i, j int) bool {

@@ -43,12 +43,12 @@ func TestCleanupTab(t *testing.T) {
 	if calls != 1 {
 		t.Fatal(calls)
 	}
-	src.snap.Cleanup[0].Status = "needs-review"
+	src.snap.Cleanup[0].Status = "needs_review"
 	src.version++
 	m = execute(t, m, m.(*app).poll())
 	m = key(m, tea.KeyEsc)
 	m = key(m, 'x')
 	if m.(*app).confirm != nil || calls != 1 {
-		t.Fatal("needs-review must use explicit CLI include-ignored")
+		t.Fatal("needs_review must use explicit CLI include-ignored")
 	}
 }

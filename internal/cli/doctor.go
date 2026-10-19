@@ -67,7 +67,7 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 		{"storage:wal", filepath.Join(d.DataDir, "driga.db-wal")},
 		{"storage:spool", config.SpoolDir()},
 		{"storage:log", service.LogPath()},
-		{"storage:cleanup-log", filepath.Join(d.DataDir, "cleanup.log")},
+		{"storage:cleanup_log", filepath.Join(d.DataDir, "cleanup.log")},
 	} {
 		size, capped, err := cleanup.WalkSize(ctx, entry.path)
 		status, detail := "info", fmt.Sprintf("%d bytes", size)
@@ -146,7 +146,7 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 		}
 		procs, err := d.Store.Procs()
 		if err != nil {
-			add("collector-rss", "fail", err.Error(), "check database access; run driga service restart")
+			add("collector_rss", "fail", err.Error(), "check database access; run driga service restart")
 		} else {
 			sigs, _ := signatures.Load(nil)
 			for _, p := range procs {
@@ -170,7 +170,7 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 			} else if rss > 50_000_000 {
 				status, fix = "warn", "driga service restart; inspect driga service logs"
 			}
-			add("collector-rss", status, detail, fix)
+			add("collector_rss", status, detail, fix)
 		}
 	}
 	if info, err := os.Stat(filepath.Join(d.Home, ".gemini", "antigravity-cli")); err == nil && info.IsDir() {
@@ -221,7 +221,7 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 			add("adapter:"+name, "warn", "session directory not found", "start a "+name+" session or disable [adapters."+name+"] in driga config edit")
 		}
 		if d.Store != nil {
-			warning, err := d.Store.Meta("warn:" + name + ":untested-version")
+			warning, err := d.Store.Meta("warn:" + name + ":untested_version")
 			if err == nil && warning != "" {
 				add("version:"+name, "warn", "untested version; tolerant parsing: "+warning, "update driga to a release tested with this agent version")
 			} else if err != nil && !errors.Is(err, store.ErrNotFound) {
@@ -252,15 +252,15 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 	info, err := os.Stat(d.DataDir)
 	switch {
 	case errors.Is(err, os.ErrNotExist):
-		add("data-permissions", "warn", "data directory does not exist", "driga service install")
+		add("data_permissions", "warn", "data directory does not exist", "driga service install")
 	case err != nil:
-		add("data-permissions", "fail", err.Error(), "check access to "+d.DataDir)
+		add("data_permissions", "fail", err.Error(), "check access to "+d.DataDir)
 	case !info.IsDir():
-		add("data-permissions", "fail", "data path is not a directory", "set DRIGA_DATA_DIR to a private directory")
+		add("data_permissions", "fail", "data path is not a directory", "set DRIGA_DATA_DIR to a private directory")
 	case info.Mode().Perm() != 0700:
-		add("data-permissions", "fail", fmt.Sprintf("directory permissions are %04o; expected 0700", info.Mode().Perm()), "chmod 700 "+d.DataDir)
+		add("data_permissions", "fail", fmt.Sprintf("directory permissions are %04o; expected 0700", info.Mode().Perm()), "chmod 700 "+d.DataDir)
 	default:
-		add("data-permissions", "ok", "0700", "")
+		add("data_permissions", "ok", "0700", "")
 	}
 	goos := d.OS
 	if goos == "" {
@@ -334,9 +334,9 @@ func doctorLinuxChecks(d DoctorDeps) []Check {
 		checks = append(checks, Check{"psi", "ok", fmt.Sprintf("memory some avg10=%.2f", *psi), ""})
 	}
 	if pid, ok := platform.UserSubreaper(root, uid); ok {
-		checks = append(checks, Check{"systemd-user", "ok", fmt.Sprintf("systemd --user pid %d", pid), ""})
+		checks = append(checks, Check{"systemd_user", "ok", fmt.Sprintf("systemd --user pid %d", pid), ""})
 	} else {
-		checks = append(checks, Check{"systemd-user", "warn", "no systemd user instance found", "start a systemd user session or run driga collect in the foreground"})
+		checks = append(checks, Check{"systemd_user", "warn", "no systemd user instance found", "start a systemd user session or run driga collect in the foreground"})
 	}
 	linger := d.LingerDir
 	if linger == "" {
@@ -410,12 +410,21 @@ func (DoctorCmd) Run(g *Globals) error {
 		checks = append(checks, Check{"database", status, openErr.Error(), fix})
 	}
 	if g.JSON {
+		var failed []string
+		for _, check := range checks {
+			if check.Status == "fail" {
+				failed = append(failed, check.Name+": "+check.Detail+"; "+check.Fix)
+			}
+		}
+		if len(failed) > 0 {
+			return fmt.Errorf("doctor found failed checks: %s", strings.Join(failed, "; "))
+		}
 		err = json.NewEncoder(commandOutput(g)).Encode(checks)
 	} else {
 		w := tabwriter.NewWriter(commandOutput(g), 0, 4, 2, ' ', 0)
 		fmt.Fprintln(w, "CHECK\tSTATUS\tDETAIL\tFIX")
 		for _, check := range checks {
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", check.Name, check.Status, check.Detail, check.Fix)
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", strings.ReplaceAll(check.Name, "_", "-"), check.Status, check.Detail, check.Fix)
 		}
 		err = w.Flush()
 	}

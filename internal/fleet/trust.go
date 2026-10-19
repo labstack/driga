@@ -34,7 +34,7 @@ type Viewer struct {
 	MachineID     string    `json:"machine_id"`
 	Permissions   []string  `json:"permissions"`
 	PairedAt      time.Time `json:"paired_at"`
-	LastConnected time.Time `json:"last_connected"`
+	LastConnected time.Time `json:"last_connected_at"`
 	EnrolledFrom  string    `json:"enrolled_from"`
 }
 
@@ -65,6 +65,12 @@ func loadTrust[T any](path string) ([]T, error) {
 	}
 	if err != nil {
 		return nil, err
+	}
+	if filepath.Base(path) == "viewers.json" {
+		b, err = migrateViewerContract(path, b)
+		if err != nil {
+			return nil, err
+		}
 	}
 	var entries []T
 	if err := json.Unmarshal(b, &entries); err != nil {

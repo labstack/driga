@@ -4,7 +4,6 @@ package collector
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -23,6 +22,7 @@ import (
 	"github.com/labstack/driga/internal/feed"
 	"github.com/labstack/driga/internal/fleet"
 	"github.com/labstack/driga/internal/gitscan"
+	"github.com/labstack/driga/internal/jsonwire"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/platform"
 	"github.com/labstack/driga/internal/scrub"
@@ -118,7 +118,7 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 			}
 			for _, w := range result.warnings {
 				detail := w.Detail
-				if w.Kind == "untested-version" {
+				if w.Kind == "untested_version" {
 					if _, v, ok := strings.Cut(detail, ": "); ok {
 						detail = v
 					}
@@ -213,7 +213,7 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 		for i := range ss {
 			s := &ss[i]
 			if s.Adapter == "agy" {
-				if err := tx.SetMeta("warn:agy:unsupported-version", "process-level; title/state schema not yet supported"); err != nil {
+				if err := tx.SetMeta("warn:agy:unsupported_version", "process-level; title/state schema not yet supported"); err != nil {
 					return err
 				}
 			}
@@ -647,7 +647,7 @@ func passFeedRows(tx *store.Tx, now time.Time, share feed.ShareText) (map[string
 			w.UpdatedAt = time.Time{}
 			comparisonRow = w
 		}
-		comparison, _ := json.Marshal(comparisonRow)
+		comparison, _ := jsonwire.Marshal(comparisonRow)
 		if kind == feed.Machine {
 			comparison = payload
 		} // LastSeen is collection cadence, not host metadata.
@@ -724,7 +724,7 @@ func passFeedRows(tx *store.Tx, now time.Time, share feed.ShareText) (map[string
 	for _, i := range items {
 		// Cleanup's machine-level attention stays local. The v1.5 feed
 		// requires session keys; never publish an empty session reference.
-		if i.Kind == "low-disk" && i.SessionID == 0 {
+		if i.Kind == "low_disk" && i.SessionID == 0 {
 			continue
 		}
 		add(feed.Inbox, feed.InboxRow{InboxItem: i, Session: keys[i.SessionID]})

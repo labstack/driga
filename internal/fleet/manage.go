@@ -56,7 +56,7 @@ func resetIdentity(ctx context.Context, dataDir string, restamp bool) error {
 	defer st.Close()
 	// A crash or write failure across the DB/certificate boundary fails closed.
 	// Retrying reset-id repairs it without ever accepting an old certificate.
-	marker := filepath.Join(dir, "reset-pending")
+	marker := filepath.Join(dir, "reset_pending")
 	if err := atomicPrivateWrite(marker, []byte("identity maintenance pending\n")); err != nil {
 		return err
 	}

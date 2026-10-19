@@ -42,7 +42,7 @@ func TestTUIHeaderAndMachineColumn(t *testing.T) {
 	}
 }
 func TestStaleRowsDimmed(t *testing.T) {
-	t.Setenv("NO_COLOR", "")
+	t.Setenv("NO_COLOR", "1")
 	m := setup(t, fleetSource(), Options{}).(*app)
 	key(m, '1')
 	m.opts.NoColor = false

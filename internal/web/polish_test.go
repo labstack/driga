@@ -162,7 +162,7 @@ func TestFreshnessCompactAndActivityEmpty(t *testing.T) {
 		t.Fatal(err)
 	}
 	body := request(s, "GET", "/", s.token).Body.String()
-	if !strings.Contains(body, "Stale: cwds") || !strings.Contains(body, `title="cwds`) {
+	if !strings.Contains(body, "Stale: cwds") || !strings.Contains(body, `class="seg intake-status"`) || !strings.Contains(body, "last successful reading") {
 		t.Error("missing compact stale line with hover details")
 	}
 	p := pageData{Page: "/"}

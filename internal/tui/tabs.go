@@ -166,7 +166,7 @@ func (m *app) rebuild() {
 		titles = []string{"", "KIND", "STATUS", "PATH"}
 		weights = []int{2, 10, 18, 50}
 		for _, c := range m.snap.Cleanup {
-			add(tabRow{machine: m.snap.LocalMachineID, key: c.ID, cleanup: &c, cwd: c.Path, cells: []string{"", string(c.Kind), c.Status, c.Path}})
+			add(tabRow{machine: m.snap.LocalMachineID, key: c.ID, cleanup: &c, cwd: c.Path, cells: []string{"", string(c.Kind), view.FriendlyEnum(c.Status), c.Path}})
 		}
 	case 0:
 		titles = []string{"", "STATE", "AGENT", "PROJECT", "BRANCH", "TITLE / LAST PROMPT", "AGE", "MEM"}
@@ -247,7 +247,7 @@ func (m *app) rebuild() {
 		weights = []int{2, 16, 9, 6, 12, 35}
 		for _, r := range m.snap.Inbox.Rows {
 			item := r.InboxItem
-			add(tabRow{machine: r.MachineID, key: "inbox:" + r.MachineID + ":" + r.ID, agent: r.SessionID, inbox: &item, cells: []string{"", r.ID, r.Kind, duration(r.Age), r.Project, r.Summary}})
+			add(tabRow{machine: r.MachineID, key: "inbox:" + r.MachineID + ":" + r.ID, agent: r.SessionID, inbox: &item, cells: []string{"", r.ID, view.FriendlyEnum(r.Kind), duration(r.Age), r.Project, r.Summary}})
 		}
 	case 3:
 		titles = []string{"", "ID", "AGE", "SIGNATURE", "PROCS", "~RECLAIM", "CWD", "VERIFIED", "EVIDENCE"}

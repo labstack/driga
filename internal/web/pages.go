@@ -187,7 +187,7 @@ func (s *Server) loadPage(r *http.Request) (pageData, int, error) {
 	if p.Page == "/agents" {
 		rows := []view.AgentRow{}
 		for _, a := range p.AgentRows {
-			if q.Get("state") != "" && strings.TrimPrefix(a.Label, "~") != q.Get("state") {
+			if q.Get("state") != "" && strings.TrimSuffix(strings.TrimPrefix(a.Label, "~"), "?") != q.Get("state") {
 				continue
 			}
 			if q.Get("project") != "" && a.Project != q.Get("project") {
@@ -220,9 +220,9 @@ func (p *pageData) prepare() {
 	p.AgentRows = flatten(p.Agents.Rows)
 	counts := map[string]int{}
 	for _, a := range p.AgentRows {
-		counts[strings.TrimPrefix(a.Label, "~")]++
+		counts[strings.TrimSuffix(strings.TrimPrefix(a.Label, "~"), "?")]++
 	}
-	for _, label := range []string{"working", "waiting", "stalled?", "idle", "finished", "dead", "unknown"} {
+	for _, label := range []string{"working", "waiting", "stalled", "idle", "finished", "dead", "unknown"} {
 		if counts[label] > 0 || label != "dead" && label != "unknown" {
 			p.States = append(p.States, view.StateCount{Label: label, Count: counts[label]})
 		}
@@ -239,7 +239,7 @@ func (p *pageData) prepare() {
 	for name, f := range p.Freshness {
 		if f.Stale {
 			names = append(names, name)
-		} else if f.Status == "not-yet-receiving" {
+		} else if f.Status == "not_yet_receiving" {
 			pending = append(pending, name)
 		}
 	}
@@ -248,7 +248,7 @@ func (p *pageData) prepare() {
 	p.StaleSources = strings.Join(names, ", ")
 	events := []string{}
 	for name, f := range p.Freshness {
-		if f.Status == "last-event" {
+		if f.Status == "last_event" {
 			events = append(events, fmt.Sprintf("%s: last event %s", name, f.LastOKAt.Format(time.RFC3339)))
 		}
 	}
@@ -380,9 +380,9 @@ func templateFuncs() template.FuncMap {
 			switch strings.TrimPrefix(s, "~") {
 			case "working", "ready", "live", "local":
 				return "working"
-			case "waiting", "needs-review":
+			case "waiting", "needs_review":
 				return "waiting"
-			case "stalled?", "dead", "refused", "error":
+			case "stalled", "dead", "refused", "error":
 				return "stalled"
 			case "idle":
 				return "idle"
@@ -391,6 +391,7 @@ func templateFuncs() template.FuncMap {
 			}
 		},
 		"bytes":      humanBytes,
+		"friendly":   func(v any) string { return view.FriendlyEnum(fmt.Sprint(v)) },
 		"gaugeLevel": view.GaugeLevel,
 		"percent":    view.GaugePercent,
 		"hasSamples": view.ActivityHasSamples,

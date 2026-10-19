@@ -90,7 +90,7 @@ func agentsLocal(r Reader, f AgentFilter, now time.Time) (AgentsView, error) {
 		}
 	}
 	for _, item := range items {
-		if item.Kind == "worker-finished" {
+		if item.Kind == "worker_finished" {
 			counts[item.SessionID]++
 		} else if item.Kind == "finished" {
 			completed[item.SessionID] = append(completed[item.SessionID], model.CompletionEvent{ID: item.ID, TS: item.TS})
@@ -109,7 +109,7 @@ func agentsLocal(r Reader, f AgentFilter, now time.Time) (AgentsView, error) {
 		if title == "" {
 			title = s.LastPrompt
 		}
-		row := AgentRow{MachineID: r.MachineID(), ID: s.ID, Label: derive.Display(s.Label, s.Heuristic), Adapter: s.Adapter, Origin: s.Origin, Project: projectName(s, repos), Branch: s.Branch, Title: title, Age: sessionAge(s, now), Evidence: s.Evidence, ObservedAt: now, Children: []AgentRow{}, FinishedChildren: counts[s.ID]}
+		row := AgentRow{MachineID: r.MachineID(), ID: s.ID, Heuristic: s.Heuristic, Label: derive.Display(s.Label, s.Heuristic), Adapter: s.Adapter, Origin: s.Origin, Project: projectName(s, repos), Branch: s.Branch, Title: title, Age: sessionAge(s, now), Evidence: s.Evidence, ObservedAt: now, Children: []AgentRow{}, FinishedChildren: counts[s.ID]}
 		if s.RepoID != nil {
 			row.RepoID = *s.RepoID
 		}
@@ -164,6 +164,7 @@ func agentLocal(r Reader, id int64, now time.Time) (AgentView, error) {
 	}
 	v.Session = s
 	v.Label = derive.Display(s.Label, s.Heuristic)
+	v.Heuristic = s.Heuristic
 	files, err := r.SessionFiles(now.Add(-24 * time.Hour))
 	if err != nil {
 		return v, err
@@ -341,7 +342,7 @@ func inboxLocal(r Reader, f Filter, now time.Time) (InboxView, error) {
 		byID[s.ID] = s
 	}
 	for _, item := range items {
-		if item.Kind == "worker-finished" {
+		if item.Kind == "worker_finished" {
 			continue
 		}
 		s := byID[item.SessionID]
@@ -502,9 +503,6 @@ func machineLocal(r Reader, f Filter, now time.Time) (MachineView, error) {
 		}
 		return a.Role < b.Role
 	})
-	if len(v.Memory) > 10 {
-		v.Memory = v.Memory[:10]
-	}
 	return v, nil
 }
 
@@ -520,12 +518,12 @@ func summaryLocal(r Reader, f Filter, now time.Time) (SummaryView, error) {
 	count = func(rows []AgentRow) {
 		for _, row := range rows {
 			v.Agents++
-			switch strings.TrimPrefix(row.Label, "~") {
+			switch strings.TrimSuffix(strings.TrimSuffix(strings.TrimPrefix(row.Label, "~"), "?"), "?") {
 			case "working":
 				v.Working++
 			case "waiting":
 				v.Waiting++
-			case "stalled?":
+			case "stalled":
 				v.Stalled++
 			}
 			count(row.Children)

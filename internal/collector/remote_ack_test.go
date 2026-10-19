@@ -138,7 +138,7 @@ func (f *ackFixture) wait(t *testing.T, ready func() bool) {
 
 func (f *ackFixture) queue(t *testing.T) {
 	t.Helper()
-	data, _ := json.Marshal(map[string]any{"event": "ack", "message": "item", "machine_id": f.sa.MachineID(), "ts": f.b.now()})
+	data, _ := json.Marshal(map[string]any{"event": "ack", "message": "item", "machine_id": f.sa.MachineID(), "occurred_at": f.b.now()})
 	var ev model.HookEvent
 	json.Unmarshal(data, &ev)
 	if err := spool.Append(f.b.SpoolDir, ev); err != nil {

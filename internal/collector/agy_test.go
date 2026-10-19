@@ -20,7 +20,7 @@ func TestAgyProcessSession(t *testing.T) {
 	if s.Adapter != "agy" || s.PID != 42 || s.Cwd != p.procs[0].Cwd || s.Label != "unknown" || s.Title != "" {
 		t.Fatal(s)
 	}
-	if got, err := st.Meta("warn:agy:unsupported-version"); err != nil || got == "" {
+	if got, err := st.Meta("warn:agy:unsupported_version"); err != nil || got == "" {
 		t.Fatal(got, err)
 	}
 	pass(t, d, st, Plan{Procs: true})

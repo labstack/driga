@@ -27,13 +27,13 @@ import (
 func TestInitialImportPeakHeap(t *testing.T) {
 	// Measure a fresh process so earlier tests' SQLite caches and large-line
 	// buffers cannot change the initial-import peak depending on test order.
-	if os.Getenv("DRIGA_J3_HEAP_CHILD") != "1" {
+	if os.Getenv("DRIGA_COLLECTOR_HEAP_CHILD") != "1" {
 		exe, err := os.Executable()
 		if err != nil {
 			t.Fatal(err)
 		}
 		cmd := exec.Command(exe, "-test.run=^TestInitialImportPeakHeap$", "-test.v")
-		cmd.Env = append(os.Environ(), "DRIGA_J3_HEAP_CHILD=1")
+		cmd.Env = append(os.Environ(), "DRIGA_COLLECTOR_HEAP_CHILD=1")
 		out, err := cmd.CombinedOutput()
 		if err != nil {
 			t.Fatalf("initial import: %v\n%s", err, out)

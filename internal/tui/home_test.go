@@ -62,7 +62,7 @@ func TestHomeWaitingAndStalledWithoutInbox(t *testing.T) {
 	s := fixture()
 	s.snap.Inbox.Rows = nil
 	s.snap.Agents.Rows[0].Label = "waiting"
-	s.snap.Agents.Rows = append(s.snap.Agents.Rows, view.AgentRow{ID: 2, Label: "~stalled?", Title: "stalled agent"})
+	s.snap.Agents.Rows = append(s.snap.Agents.Rows, view.AgentRow{ID: 2, Label: "~stalled", Title: "stalled agent"})
 	s.snap.AgentDetails[2] = view.AgentView{Session: model.Session{ID: 2, SessionObs: model.SessionObs{LastActivityAt: s.snap.ObservedAt}}}
 	m := setup(t, s, Options{Spool: func(model.HookEvent) error { t.Fatal("invented ack event"); return nil }}).(*app)
 	if len(m.rows) != 2 || m.rows[0].agent != 2 {
@@ -152,22 +152,34 @@ func TestHomePanelsFitWithoutClipping(t *testing.T) {
 func TestAgentDetailUsesStateColors(t *testing.T) {
 	s := fixture()
 	d := s.snap.AgentDetails[1]
-	d.Label = "stalled?"
+	d.Label = "stalled"
 	s.snap.AgentDetails[1] = d
 	m := setup(t, s, Options{}).(*app)
 	m.opts.NoColor = false
 	key(m, tea.KeyEnter)
-	if !strings.Contains(m.View().Content, view.StateStyle("stalled?", false).Render("stalled?")) {
+	if !strings.Contains(m.View().Content, view.StateStyle("stalled", false).Render("stalled")) {
 		t.Fatalf("detail state lacks red: %q", m.View().Content)
 	}
 }
 
 func TestHomeHonorsNO_COLOR(t *testing.T) {
-	t.Setenv("NO_COLOR", "")
+	t.Setenv("NO_COLOR", "1")
 	m := New(fixture(), Options{DataDir: t.TempDir()}).(*app)
 	m.Update(refreshMsg{snap: fixture().snap, changed: true})
 	if !m.opts.NoColor || strings.Contains(m.View().Content, "\x1b") {
 		t.Fatal("NO_COLOR ignored")
+	}
+}
+
+func TestNOColorEmptyMeansUnset(t *testing.T) {
+	for _, value := range []string{"", "0", "1"} {
+		t.Run(value, func(t *testing.T) {
+			t.Setenv("NO_COLOR", value)
+			m := New(&fakeSource{}, Options{}).(*app)
+			if m.opts.NoColor != (value != "") {
+				t.Fatalf("NO_COLOR=%q disables color: %v", value, m.opts.NoColor)
+			}
+		})
 	}
 }
 
@@ -187,9 +199,9 @@ func TestHomeFleetAttentionKeepsFields(t *testing.T) {
 func TestHomeCurrentAttentionNotHiddenByCompletion(t *testing.T) {
 	s := fixture()
 	s.snap.Inbox.Rows[0].Kind = "finished"
-	s.snap.Agents.Rows[0].Label = "~stalled?"
+	s.snap.Agents.Rows[0].Label = "~stalled"
 	m := setup(t, s, Options{}).(*app)
-	if len(m.rows) != 1 || m.rows[0].cells[1] != "~stalled?" {
+	if len(m.rows) != 1 || m.rows[0].cells[1] != "~stalled" {
 		t.Fatalf("session must appear once with its current stalled state: %+v", m.rows)
 	}
 }
@@ -323,7 +335,7 @@ func TestHomeSameNamedReposStaySeparate(t *testing.T) {
 func TestEventDrivenFooterReportsLastEvent(t *testing.T) {
 	s := fixture()
 	at := s.snap.ObservedAt.Add(-24 * time.Hour)
-	s.snap.Freshness = map[string]view.Fresh{"otlp": {LastOKAt: at, Status: "last-event"}, "sockets": {LastOKAt: at, Status: "last-event"}}
+	s.snap.Freshness = map[string]view.Fresh{"otlp": {LastOKAt: at, Status: "last_event"}, "sockets": {LastOKAt: at, Status: "last_event"}}
 	m := setup(t, s, Options{}).(*app)
 	if strings.Contains(m.footer(), "stale") || !strings.Contains(m.footer(), "last event") {
 		t.Fatal(m.footer())

@@ -318,7 +318,7 @@ func TestHeartbeatWhileLoadPending(t *testing.T) {
 func TestRendersAt80Columns(t *testing.T) {
 	s := fixture()
 	s.snap.Agents.Rows[0].Title = strings.Repeat("界é", 100) + "\x1b[31m\nline"
-	s.snap.Freshness = map[string]view.Fresh{"procs": {Stale: true, AgeSeconds: 90}}
+	s.snap.Freshness = map[string]view.Fresh{"procs": {Stale: true, AgeMS: 90000}}
 	m := setup(t, s, Options{})
 	m, _ = m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	for _, k := range []rune{'1', tea.KeyEnter, tea.KeyEscape, '2', '3', '4', 'k', tea.KeyEscape, '5', '?'} {

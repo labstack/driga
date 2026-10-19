@@ -127,13 +127,13 @@ func (a codexAdapter) Collect(ctx context.Context, env adapter.Env) ([]model.Ses
 				tested = tested || strings.HasPrefix(obs.Version, prefix)
 			}
 			if !tested {
-				warnings = append(warnings, adapter.Warning{Kind: "untested-version", Detail: path + ": " + obs.Version})
+				warnings = append(warnings, adapter.Warning{Kind: "untested_version", Detail: path + ": " + obs.Version})
 			}
 		}
 		if db != nil {
 			title, err := catalogTitle(ctx, db, obs.ExternalID)
 			if err != nil {
-				warnings = append(warnings, adapter.Warning{Kind: "catalog-unavailable", Detail: err.Error()})
+				warnings = append(warnings, adapter.Warning{Kind: "catalog_unavailable", Detail: err.Error()})
 				// Report one catalog failure per collection, even for many rollouts.
 				db.Close()
 				db = nil

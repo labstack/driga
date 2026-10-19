@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/labstack/driga/internal/jsonwire"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/store"
 	"github.com/labstack/driga/internal/view"
@@ -210,8 +211,10 @@ func (FleetPeersCmd) Run(g *Globals) error {
 
 type peerStatus struct {
 	fleet.Peer
-	LastSeen  time.Time `json:"last_seen"`
+	LastSeen  time.Time `json:"last_seen_at"`
 	LastError string    `json:"last_error"`
 	FeedEpoch string    `json:"feed_epoch"`
 	FeedSeq   int64     `json:"feed_seq"`
 }
+
+func (v peerStatus) MarshalJSON() ([]byte, error) { return jsonwire.Marshal(v) }

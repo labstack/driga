@@ -24,7 +24,7 @@ func (a *geminiAdapter) readLegacy(ctx context.Context, path string, prev model.
 	next.Pos = next.Size
 	if next.Size > maxBytes {
 		delete(a.cache, path)
-		return conversation{}, next, []adapter.Warning{{Kind: "skipped-backlog", Detail: fmt.Sprintf("%s: legacy JSON exceeds 8 MiB", path)}}, nil
+		return conversation{}, next, []adapter.Warning{{Kind: "skipped_backlog", Detail: fmt.Sprintf("%s: legacy JSON exceeds 8 MiB", path)}}, nil
 	}
 	if c, ok := a.cache[path]; ok && c.next.Inode == next.Inode && c.next.Size == next.Size && c.next.Mtime.Equal(next.Mtime) {
 		return c.fold, next, nil, nil
@@ -39,16 +39,16 @@ func (a *geminiAdapter) readLegacy(ctx context.Context, path string, prev model.
 		return conversation{}, prev, nil, err
 	}
 	if int64(len(data)) > maxBytes {
-		return conversation{}, next, []adapter.Warning{{Kind: "skipped-backlog", Detail: path}}, nil
+		return conversation{}, next, []adapter.Warning{{Kind: "skipped_backlog", Detail: path}}, nil
 	}
 	var fold conversation
 	if err := fold.metadata(data); err != nil {
-		return conversation{}, next, []adapter.Warning{{Kind: "invalid-json", Detail: path}}, nil
+		return conversation{}, next, []adapter.Warning{{Kind: "invalid_json", Detail: path}}, nil
 	}
 	a.remember(path, cachedFile{next: next, fold: fold})
 	var warnings []adapter.Warning
 	if fold.truncated {
-		warnings = append(warnings, adapter.Warning{Kind: "skipped-backlog", Detail: path + ": fold retains the last 1024 messages"})
+		warnings = append(warnings, adapter.Warning{Kind: "skipped_backlog", Detail: path + ": fold retains the last 1024 messages"})
 	}
 	return fold, next, warnings, nil
 }

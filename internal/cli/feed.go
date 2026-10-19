@@ -3,11 +3,9 @@ package cli
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"os"
 	"os/signal"
 	"path/filepath"
-	"strconv"
 	"syscall"
 	"time"
 
@@ -22,19 +20,18 @@ type FeedCmd struct {
 
 // FeedTailCmd reads the local feed without collecting or acknowledging anything.
 type FeedTailCmd struct {
-	Follow bool `help:"Keep printing new rows until interrupted." short:"f"`
+	AfterSeq int64 `name:"after-seq" help:"Print rows after this non-negative sequence (default retained beginning)."`
+	Follow   bool  `help:"Keep printing new rows until interrupted." short:"f"`
 }
 
 // Run prints the retained feed and optionally follows subsequent commits.
 func (c FeedTailCmd) Run(g *Globals) error {
-	// --since is inherited from Globals; Kong disallows redeclaring it here.
-	var seq int64
-	if g != nil && g.Since != "" {
-		var err error
-		seq, err = strconv.ParseInt(g.Since, 10, 64)
-		if err != nil || seq < 0 {
-			return fmt.Errorf("feed tail --since must be a nonnegative sequence")
-		}
+	if g.Since != "" {
+		return invalidUsage("feed tail uses --after-seq, not --since")
+	}
+	seq := c.AfterSeq
+	if seq < 0 {
+		return invalidUsage("feed tail --after-seq must be a nonnegative sequence")
 	}
 	st, err := store.Open(filepath.Join(config.DataDir(), "driga.db"), store.ReadOnly)
 	if err != nil {

@@ -73,7 +73,7 @@ func (a AskCmd) Run(g *Globals) error {
 			return err
 		}
 		now := time.Now().UTC()
-		envelope := view.Envelope{Schema: 1, ObservedAt: now, Mode: mode, Freshness: map[string]view.Fresh{}, CoverageGaps: []model.Gap{}, Data: stream.result}
+		envelope := view.Envelope{Schema: 2, ObservedAt: now, Mode: mode, Freshness: map[string]view.Fresh{}, CoverageGaps: []model.Gap{}, Data: stream.result}
 		if r != nil {
 			defer r.Close()
 			envelope, err = view.NewEnvelope(r, mode, now, collector.Cadence(0), stream.result)

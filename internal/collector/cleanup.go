@@ -20,17 +20,17 @@ func lowDiskInbox(tx *store.Tx, cfg config.CleanupConfig, s model.MachineSample,
 		return nil
 	}
 	threshold := min(cfg.LowDiskBytes, uint64(float64(s.DiskTotal)*cfg.LowDiskPercent/100))
-	active, err := tx.Meta("cleanup:low-disk")
+	active, err := tx.Meta("cleanup:low_disk")
 	if err != nil && !errors.Is(err, store.ErrNotFound) {
 		return err
 	}
 	if s.DiskFree > threshold {
-		return tx.SetMeta("cleanup:low-disk", "0")
+		return tx.SetMeta("cleanup:low_disk", "0")
 	}
 	if s.DiskFree >= threshold || active == "1" {
 		return nil
 	}
-	raw, err := tx.Meta("cleanup:low-disk-episode")
+	raw, err := tx.Meta("cleanup:low_disk_episode")
 	if err != nil && !errors.Is(err, store.ErrNotFound) {
 		return err
 	}
@@ -49,11 +49,11 @@ func lowDiskInbox(tx *store.Tx, cfg config.CleanupConfig, s model.MachineSample,
 	if len(names) > 0 {
 		summary += " Oldest stored worktrees to inspect: " + strings.Join(names, ", ")
 	}
-	if err := tx.UpsertInboxItem(model.InboxItem{ID: fmt.Sprintf("low-disk:%d", episode), Kind: "low-disk", TS: now, Summary: summary}); err != nil {
+	if err := tx.UpsertInboxItem(model.InboxItem{ID: fmt.Sprintf("low_disk:%d", episode), Kind: "low_disk", TS: now, Summary: summary}); err != nil {
 		return err
 	}
-	if err := tx.SetMeta("cleanup:low-disk-episode", strconv.FormatUint(episode, 10)); err != nil {
+	if err := tx.SetMeta("cleanup:low_disk_episode", strconv.FormatUint(episode, 10)); err != nil {
 		return err
 	}
-	return tx.SetMeta("cleanup:low-disk", "1")
+	return tx.SetMeta("cleanup:low_disk", "1")
 }

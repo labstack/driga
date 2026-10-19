@@ -78,7 +78,7 @@ func TestChildFinishedCounted(t *testing.T) {
 		t.Fatal(got)
 	}
 	for _, item := range got {
-		if item.Kind != "worker-finished" || item.SessionID != 1 {
+		if item.Kind != "worker_finished" || item.SessionID != 1 {
 			t.Fatal(item)
 		}
 	}

@@ -6,7 +6,8 @@
     },
     {
       "external_id": "future-river",
-      "label": "~idle"
+      "label": "idle",
+      "heuristic": true
     }
   ],
   "orphans": [],

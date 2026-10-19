@@ -103,7 +103,7 @@ func inspectWorktree(ctx context.Context, e Env, s snapshot, w model.Worktree, e
 			}
 			c.Ignored = append(c.Ignored, IgnoredPath{Path: path, Regenerable: regen})
 			if !regen {
-				c.Status = "needs-review"
+				c.Status = "needs_review"
 			}
 		default:
 			return fail("worktree has tracked changes")

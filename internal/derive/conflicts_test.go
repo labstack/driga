@@ -39,7 +39,7 @@ func TestSameWorktree(t *testing.T) {
 	now := time.Now()
 	sessions := []model.Session{conflictTestSession(2, "/repo/wt1/sub"), conflictTestSession(1, "/repo/wt1")}
 	got := Conflicts(sessions, nil, nil, conflictTestWorktree, now)
-	want := []model.Conflict{{Kind: "same-worktree", Current: true, Path: "/repo/wt1", SessionIDs: []int64{1, 2}}}
+	want := []model.Conflict{{Kind: "same_worktree", Current: true, Path: "/repo/wt1", SessionIDs: []int64{1, 2}}}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %+v, want %+v", got, want)
 	}
@@ -75,7 +75,7 @@ func TestSameFileCurrentVsRecent(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			files := map[int64][]model.FileTouch{1: {{Path: "/repo/wt1/a.go", TS: now.Add(-time.Minute)}, {Path: "/repo/wt1/a.go", TS: now.Add(-2 * time.Minute)}}, 2: {{Path: "a.go", TS: now.Add(-tt.age)}}}
-			got := conflictTestKind(Conflicts(sessions, files, map[int64]int64{2: 1}, conflictTestWorktree, now), "same-file")
+			got := conflictTestKind(Conflicts(sessions, files, map[int64]int64{2: 1}, conflictTestWorktree, now), "same_file")
 			if !tt.include {
 				if len(got) != 0 {
 					t.Fatalf("expired: %+v", got)
@@ -88,7 +88,7 @@ func TestSameFileCurrentVsRecent(t *testing.T) {
 		})
 	}
 	files := map[int64][]model.FileTouch{1: {{Path: "/repo/wt1/a.go", TS: now}, {Path: "/repo/wt1/a.go", TS: now.Add(-time.Minute)}}}
-	if got := conflictTestKind(Conflicts(sessions, files, nil, conflictTestWorktree, now), "same-file"); len(got) != 0 {
+	if got := conflictTestKind(Conflicts(sessions, files, nil, conflictTestWorktree, now), "same_file"); len(got) != 0 {
 		t.Fatalf("one writer: %+v", got)
 	}
 }
@@ -98,7 +98,7 @@ func TestSameFileOtherWorktree(t *testing.T) {
 	sessions := []model.Session{conflictTestSession(2, "/repo/wt2"), conflictTestSession(1, "/repo/wt1")}
 	files := map[int64][]model.FileTouch{1: {{Path: "/repo/wt1/a.go", TS: now.Add(-10 * time.Minute)}}, 2: {{Path: "/repo/wt2/a.go", TS: now.Add(-20 * time.Minute)}}}
 	got := Conflicts(sessions, files, nil, conflictTestWorktree, now)
-	if len(got) != 1 || got[0].Kind != "same-file-other-worktree" || !got[0].Current || got[0].Family || got[0].Path != "/repo/a.go" || !reflect.DeepEqual(got[0].SessionIDs, []int64{1, 2}) {
+	if len(got) != 1 || got[0].Kind != "same_file_other_worktree" || !got[0].Current || got[0].Family || got[0].Path != "/repo/a.go" || !reflect.DeepEqual(got[0].SessionIDs, []int64{1, 2}) {
 		t.Fatalf("got %+v", got)
 	}
 	files[2][0].TS = now.Add(-3 * time.Hour)

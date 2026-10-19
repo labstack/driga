@@ -1,11 +1,159 @@
 [
- {"name":"snapshot","rejected":false,"epoch":"epoch-A","seq":10,"state":"live","sessions":[{"external_id":"build","label":"working"},{"external_id":"review","label":"~idle"}]},
- {"name":"waiting","rejected":false,"epoch":"epoch-A","seq":11,"state":"live","sessions":[{"external_id":"build","label":"waiting"},{"external_id":"review","label":"~idle"}]},
- {"name":"duplicate","rejected":false,"epoch":"epoch-A","seq":11,"state":"live","sessions":[{"external_id":"build","label":"waiting"},{"external_id":"review","label":"~idle"}]},
- {"name":"out-of-order-atomic","rejected":true,"epoch":"epoch-A","seq":11,"state":"live","sessions":[{"external_id":"build","label":"waiting"},{"external_id":"review","label":"~idle"}]},
- {"name":"missing-epoch","rejected":true,"epoch":"epoch-A","seq":11,"state":"live","sessions":[{"external_id":"build","label":"waiting"},{"external_id":"review","label":"~idle"}]},
- {"name":"wrong-epoch","rejected":true,"epoch":"epoch-A","seq":11,"state":"live","sessions":[{"external_id":"build","label":"waiting"},{"external_id":"review","label":"~idle"}]},
- {"name":"missing-sequence","rejected":true,"epoch":"epoch-A","seq":11,"state":"live","sessions":[{"external_id":"build","label":"waiting"},{"external_id":"review","label":"~idle"}]},
- {"name":"stale-at-deadline","rejected":false,"epoch":"epoch-A","seq":11,"state":"stale","sessions":[{"external_id":"build","label":"waiting"},{"external_id":"review","label":"~idle"}]},
- {"name":"replacement-snapshot","rejected":false,"epoch":"epoch-B","seq":0,"state":"live","sessions":[{"external_id":"build","label":"finished"}]}
+  {
+    "name": "snapshot",
+    "rejected": false,
+    "epoch": "epoch-A",
+    "seq": 10,
+    "state": "live",
+    "sessions": [
+      {
+        "external_id": "build",
+        "label": "working"
+      },
+      {
+        "external_id": "review",
+        "label": "idle",
+        "heuristic": true
+      }
+    ]
+  },
+  {
+    "name": "waiting",
+    "rejected": false,
+    "epoch": "epoch-A",
+    "seq": 11,
+    "state": "live",
+    "sessions": [
+      {
+        "external_id": "build",
+        "label": "waiting"
+      },
+      {
+        "external_id": "review",
+        "label": "idle",
+        "heuristic": true
+      }
+    ]
+  },
+  {
+    "name": "duplicate",
+    "rejected": false,
+    "epoch": "epoch-A",
+    "seq": 11,
+    "state": "live",
+    "sessions": [
+      {
+        "external_id": "build",
+        "label": "waiting"
+      },
+      {
+        "external_id": "review",
+        "label": "idle",
+        "heuristic": true
+      }
+    ]
+  },
+  {
+    "name": "out-of-order-atomic",
+    "rejected": true,
+    "epoch": "epoch-A",
+    "seq": 11,
+    "state": "live",
+    "sessions": [
+      {
+        "external_id": "build",
+        "label": "waiting"
+      },
+      {
+        "external_id": "review",
+        "label": "idle",
+        "heuristic": true
+      }
+    ]
+  },
+  {
+    "name": "missing-epoch",
+    "rejected": true,
+    "epoch": "epoch-A",
+    "seq": 11,
+    "state": "live",
+    "sessions": [
+      {
+        "external_id": "build",
+        "label": "waiting"
+      },
+      {
+        "external_id": "review",
+        "label": "idle",
+        "heuristic": true
+      }
+    ]
+  },
+  {
+    "name": "wrong-epoch",
+    "rejected": true,
+    "epoch": "epoch-A",
+    "seq": 11,
+    "state": "live",
+    "sessions": [
+      {
+        "external_id": "build",
+        "label": "waiting"
+      },
+      {
+        "external_id": "review",
+        "label": "idle",
+        "heuristic": true
+      }
+    ]
+  },
+  {
+    "name": "missing-sequence",
+    "rejected": true,
+    "epoch": "epoch-A",
+    "seq": 11,
+    "state": "live",
+    "sessions": [
+      {
+        "external_id": "build",
+        "label": "waiting"
+      },
+      {
+        "external_id": "review",
+        "label": "idle",
+        "heuristic": true
+      }
+    ]
+  },
+  {
+    "name": "stale-at-deadline",
+    "rejected": false,
+    "epoch": "epoch-A",
+    "seq": 11,
+    "state": "stale",
+    "sessions": [
+      {
+        "external_id": "build",
+        "label": "waiting"
+      },
+      {
+        "external_id": "review",
+        "label": "idle",
+        "heuristic": true
+      }
+    ]
+  },
+  {
+    "name": "replacement-snapshot",
+    "rejected": false,
+    "epoch": "epoch-B",
+    "seq": 0,
+    "state": "live",
+    "sessions": [
+      {
+        "external_id": "build",
+        "label": "finished"
+      }
+    ]
+  }
 ]

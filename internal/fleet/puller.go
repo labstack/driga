@@ -219,7 +219,7 @@ func (p *Puller) connect(ctx context.Context) error {
 	if h.MachineID != p.peer.MachineID {
 		return fmt.Errorf("hello machine_id mismatch; run driga fleet rekey on the peer (pairings must be redone)")
 	}
-	if h.Schema != 1 {
+	if h.Schema != 2 {
 		return &schemaError{h.Schema}
 	}
 	p.ackEpoch.Add(1)
@@ -238,7 +238,7 @@ func (p *Puller) connect(ctx context.Context) error {
 			if err != nil {
 				return err
 			}
-			if snap.Schema != 1 {
+			if snap.Schema != 2 {
 				return &schemaError{snap.Schema}
 			}
 			if err = p.emit(ctx, Batch{Snapshot: &snap, Cursor: snap.Data.Cursor, ContactAt: p.now(), ClockSkewMS: p.skewMS, Resnapshot: p.resnapshot}); err != nil {
