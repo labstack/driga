@@ -37,10 +37,34 @@ var themeTokens = [...]ThemeToken{
 	{"ok", "#2C5FBF", "#7FA8F5"},
 }
 
+// consoleTokens preserves the console mockup's roles without changing TUI colors.
+var consoleTokens = [...]ThemeToken{
+	{"bg", "#F1F2EE", "#0A0E13"}, {"pane", "#FAFAF7", "#0E141B"},
+	{"raise", "#ECEDE7", "#151D27"}, {"line", "#C9CDC4", "#233040"},
+	{"fg", "#1D211F", "#D9E1EA"}, {"mid", "#4E5650", "#93A1B3"},
+	{"dim", "#7C847E", "#5D6B7D"}, {"accent", "#B5590A", "#FFB547"},
+	{"on-accent", "#FFFFFF", "#1A1206"}, {"working", "#17784A", "#4BD08A"},
+	{"waiting", "#9A5B00", "#F5B84B"}, {"stalled", "#B3302A", "#FF7A6E"},
+	{"idle", "#2B5BB8", "#78A6F5"}, {"finished", "#5E6660", "#9AA6B6"},
+	{"crit", "#B3302A", "#FF6F62"}, {"warn", "#9A5B00", "#F5B84B"},
+}
+
+func consoleCSS() string {
+	var paper, phosphor strings.Builder
+	for _, t := range consoleTokens {
+		fmt.Fprintf(&paper, "--%s:%s;", t.Name, t.Light)
+		fmt.Fprintf(&phosphor, "--%s:%s;", t.Name, t.Dark)
+	}
+	return `:root,[data-theme="phosphor"]{` + phosphor.String() + "color-scheme:dark;}\n" +
+		`[data-theme="paper"]{` + paper.String() + "color-scheme:light;}\n" +
+		`@media (prefers-color-scheme: light){:root:not([data-theme="phosphor"]):not([data-theme="paper"]){` + paper.String() + "color-scheme:light;}}\n"
+}
+
 // ThemeTokens returns a copy so callers cannot change the shared palette.
 func ThemeTokens() []ThemeToken { return append([]ThemeToken(nil), themeTokens[:]...) }
 
-// ThemeCSS supports explicit preferences and the system default without script.
+// ThemeCSS supports explicit preferences and the console system default without script.
+// Keep the legacy dark media rule explicit-only so it cannot override console colors.
 func ThemeCSS() string {
 	var light, dark strings.Builder
 	for _, t := range themeTokens {
@@ -49,7 +73,7 @@ func ThemeCSS() string {
 	}
 	return ":root,[data-theme=\"light\"]{" + light.String() + "color-scheme:light;}\n" +
 		"[data-theme=\"dark\"]{" + dark.String() + "color-scheme:dark;}\n" +
-		"@media (prefers-color-scheme: dark){:root:not([data-theme=\"light\"]):not([data-theme=\"dark\"]){" + dark.String() + "color-scheme:dark;}}\n"
+		"@media (prefers-color-scheme: dark){:root[data-theme=\"dark\"]{" + dark.String() + "color-scheme:dark;}}\n" + consoleCSS()
 }
 
 // ThemeColor adapts to Lip Gloss's terminal background detection.

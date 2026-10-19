@@ -51,3 +51,26 @@ func TestThemeTerminalParity(t *testing.T) {
 		}
 	}
 }
+
+func TestConsoleThemeTokenParity(t *testing.T) {
+	css := ThemeCSS()
+	// A high-specificity legacy system selector must never override console tokens
+	// (especially paper selected while the OS uses dark mode).
+	if strings.Contains(css, `:root:not([data-theme="light"]):not([data-theme="dark"])`) {
+		t.Error("legacy automatic dark selector overrides named console palettes")
+	}
+
+	for _, set := range []string{
+		`--bg:#0A0E13;--pane:#0E141B;--raise:#151D27;--line:#233040;--fg:#D9E1EA;--mid:#93A1B3;--dim:#5D6B7D;--accent:#FFB547;--on-accent:#1A1206;--working:#4BD08A;--waiting:#F5B84B;--stalled:#FF7A6E;--idle:#78A6F5;--finished:#9AA6B6;--crit:#FF6F62;--warn:#F5B84B;`,
+		`--bg:#F1F2EE;--pane:#FAFAF7;--raise:#ECEDE7;--line:#C9CDC4;--fg:#1D211F;--mid:#4E5650;--dim:#7C847E;--accent:#B5590A;--on-accent:#FFFFFF;--working:#17784A;--waiting:#9A5B00;--stalled:#B3302A;--idle:#2B5BB8;--finished:#5E6660;--crit:#B3302A;--warn:#9A5B00;`,
+	} {
+		if !strings.Contains(css, set) {
+			t.Errorf("missing exact console token set %s", set)
+		}
+	}
+	for _, selector := range []string{`[data-theme="phosphor"]`, `[data-theme="paper"]`, `prefers-color-scheme: light`} {
+		if !strings.Contains(css, selector) {
+			t.Errorf("missing %s", selector)
+		}
+	}
+}

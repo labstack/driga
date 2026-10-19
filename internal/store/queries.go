@@ -535,6 +535,12 @@ func (q *querier) Events(adapter, externalID string, since time.Time) ([]model.E
 	return readMany(q, "SELECT machine_id,adapter,external_id,ts,kind,summary FROM events WHERE machine_id=? AND adapter=? AND external_id=? AND ts>=? ORDER BY ts,id", []any{q.machineID, adapter, externalID, unix(since)}, scanEvent)
 }
 
+// RecentEvents reads a bounded tail, newest first, including equal timestamps.
+func (q *querier) RecentEvents(until time.Time, limit int) ([]model.Event, error) {
+	limit = max(0, min(limit, 200))
+	return readMany(q, "SELECT machine_id,adapter,external_id,ts,kind,summary FROM events WHERE machine_id=? AND ts<=? ORDER BY ts DESC,id DESC LIMIT ?", []any{q.machineID, unix(until), limit}, scanEvent)
+}
+
 // LatestEvents returns events across sessions at or after since, newest first.
 func (q *querier) LatestEvents(since time.Time) ([]model.Event, error) {
 	return readMany(q, "SELECT machine_id,adapter,external_id,ts,kind,summary FROM events WHERE machine_id=? AND ts>=? ORDER BY ts DESC,id DESC", []any{q.machineID, unix(since)}, scanEvent)

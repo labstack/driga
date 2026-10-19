@@ -8,6 +8,7 @@ import (
 	"crypto/subtle"
 	"embed"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"html/template"
@@ -223,21 +224,71 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 	s.clients[ch] = true
 	s.mu.Unlock()
 	defer func() { s.mu.Lock(); delete(s.clients, ch); s.mu.Unlock() }()
-	writeEvent := func(event string) error {
+	writePayload := func(event, payload string) error {
 		rc := http.NewResponseController(w)
 		if err := rc.SetWriteDeadline(time.Now().Add(s.sseWriteTimeout)); err != nil && !errors.Is(err, http.ErrNotSupported) {
 			return err
 		}
-		if _, err := fmt.Fprintf(w, "event: %s\ndata: refresh\n\n", event); err != nil {
+		if _, err := fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event, payload); err != nil {
 			return err
 		}
 		return rc.Flush()
 	}
+	writeEvent := func(event string) error { return writePayload(event, "refresh") }
+	seen := map[string]bool{}
+	var lastTail time.Time
+	sendTail := func() error {
+		if !lastTail.IsZero() && time.Since(lastTail) < time.Second {
+			return nil
+		}
+		clone := r.Clone(r.Context())
+		u := *r.URL
+		u.Path = "/"
+		clone.URL = &u
+		page, _, err := s.loadPage(clone)
+		if err != nil {
+			return nil
+		} // Keep refreshes alive through a transient read failure.
+		pending := []view.TailEvent{}
+		nextSeen := map[string]bool{}
+		for _, row := range page.Tail {
+			nextSeen[row.Key] = true
+			if !seen[row.Key] {
+				pending = append(pending, row)
+			}
+		}
+		seen = nextSeen
+		// Flood policy: retain the newest twenty per second; no unbounded client queue.
+		if len(pending) > 20 {
+			pending = pending[len(pending)-20:]
+		}
+		if len(pending) == 0 {
+			return nil
+		}
+		data, err := json.Marshal(pending)
+		if err != nil {
+			return err
+		}
+		if err := writePayload("tail", string(data)); err != nil {
+			return err
+		}
+		lastTail = time.Now()
+		return nil
+	}
 	if err := writeEvent("ready"); err != nil {
 		return
 	}
+	if err := sendTail(); err != nil {
+		return
+	}
+	tailTick := time.NewTicker(time.Second)
+	defer tailTick.Stop()
 	for {
 		select {
+		case <-tailTick.C:
+			if err := sendTail(); err != nil {
+				return
+			}
 		case <-r.Context().Done():
 			return
 		case <-ch:

@@ -23,6 +23,7 @@ type Reader interface {
 	Summaries(int64) ([]model.Summary, error)
 	SessionFiles(time.Time) (map[int64][]model.FileTouch, error)
 	Events(string, string, time.Time) ([]model.Event, error)
+	RecentEvents(time.Time, int) ([]model.Event, error)
 	Inbox(time.Time, bool) ([]model.InboxItem, error)
 	Orphans() ([]model.Orphan, error)
 	LatestSample() (model.MachineSample, error)

@@ -49,7 +49,7 @@ type pageData struct {
 func (s *Server) loadPage(r *http.Request) (pageData, int, error) {
 	p := pageData{Nav: navigation, Page: r.URL.Path, Scope: r.URL.Query().Get("machine"), All: r.URL.Query().Get("all") == "1"}
 	switch p.Page {
-	case "/", "/agents", "/projects", "/inbox", "/orphans", "/machines", "/cleanup":
+	case "/", "/activity", "/agents", "/projects", "/inbox", "/orphans", "/machines", "/cleanup":
 	default:
 		if !strings.HasPrefix(p.Page, "/agents/") && !strings.HasPrefix(p.Page, "/projects/") {
 			return p, 404, fmt.Errorf("page not found")
@@ -86,11 +86,45 @@ func (s *Server) loadPage(r *http.Request) (pageData, int, error) {
 		}
 	}
 	p.Snapshot = snap
+	if p.Scope != "all" {
+		for _, m := range snap.Machines.Rows {
+			if m.MachineID == p.Scope {
+				p.Hostname = view.MachineName(m.Machine)
+			}
+		}
+	} else if len(snap.Machines.Rows) > 1 {
+		p.Hostname = "all machines"
+	}
 	p.RefreshURL = pageLink(p.Page, p.Scope, p.All)
 	if p.AttentionOnly {
 		p.RefreshURL += "&attention=1"
 	}
+	q := r.URL.Query()
+	refresh, _ := url.Parse(p.RefreshURL)
+	values := refresh.Query()
+	for _, key := range []string{"state", "project", "why"} {
+		if q.Has(key) {
+			values.Set(key, q.Get(key))
+		}
+	}
+	refresh.RawQuery = values.Encode()
+	p.RefreshURL = refresh.String()
+	if p.Page == "/projects" && q.Get("project") != "" {
+		matches := []view.ProjectRow{}
+		for _, row := range snap.Projects.Rows {
+			if row.Status.Repo.Name == q.Get("project") || row.Status.Repo.Path == q.Get("project") {
+				matches = append(matches, row)
+			}
+		}
+		if len(matches) != 1 {
+			return p, 400, fmt.Errorf("unknown or ambiguous project")
+		}
+		p.Page = fmt.Sprint("/projects/", matches[0].Status.Repo.ID)
+	}
 	p.Title = "Home"
+	if p.Page == "/activity" {
+		p.Title = "Activity"
+	}
 	for _, n := range navigation {
 		if p.Page == n.Path {
 			p.Title = n.Name
@@ -150,6 +184,19 @@ func (s *Server) loadPage(r *http.Request) (pageData, int, error) {
 		}
 	}
 	p.prepare()
+	if p.Page == "/agents" {
+		rows := []view.AgentRow{}
+		for _, a := range p.AgentRows {
+			if q.Get("state") != "" && strings.TrimPrefix(a.Label, "~") != q.Get("state") {
+				continue
+			}
+			if q.Get("project") != "" && a.Project != q.Get("project") {
+				continue
+			}
+			rows = append(rows, a)
+		}
+		p.AgentRows = rows
+	}
 	return p, 200, nil
 }
 
@@ -288,6 +335,7 @@ func templateFuncs() template.FuncMap {
 			return 0
 		},
 		"lower": strings.ToLower,
+		"clock": func(t time.Time) string { return t.Local().Format("15:04:05") },
 		"add":   func(a, b int) int { return a + b },
 		"initial": func(s string) string {
 			if s == "" {
