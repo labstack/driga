@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -45,7 +46,7 @@ func TestBlockActivitySpark(t *testing.T) {
 	for _, load := range []bool{false, true} {
 		for _, width := range []int{1, 2, 4, 90} {
 			got := activitySpark(b, width, load)
-			if lipgloss.Width(got) != min(width, len(b)) {
+			if lipgloss.Width(got) != width {
 				t.Errorf("width %d: %q", width, got)
 			}
 			for _, r := range got {
@@ -94,38 +95,92 @@ func TestActivityCurrentAndMaxFit(t *testing.T) {
 
 func TestLoadSparkAboveCoresIsCritical(t *testing.T) {
 	b := []view.ActivityBucket{{Sample: &model.MachineSample{Load1: 2, Cores: 4}}, {Sample: &model.MachineSample{Load1: 8, Cores: 4}}}
-	got := styledSpark(b, 2, true, false)
-	if !strings.Contains(got, view.TokenStyle("crit", false).Render("█")) {
-		t.Fatalf("above cores lacks crit color: %q", got)
-	}
-	if !strings.Contains(got, view.TokenStyle("ink", false).Render("▂")) {
-		t.Fatalf("normal load color: %q", got)
+	for _, width := range []int{2, 5} {
+		got := styledSpark(b, width, true, false)
+		if !strings.Contains(got, view.TokenStyle("crit", false).Render(strings.Repeat("█", width/2))) {
+			t.Fatalf("above cores lacks crit color: %q", got)
+		}
+		if !strings.Contains(got, view.TokenStyle("ink", false).Render(strings.Repeat("▂", (width+1)/2))) {
+			t.Fatalf("normal load color: %q", got)
+		}
 	}
 }
 
-func TestActivityAxisMatchesBinnedRows(t *testing.T) {
-	s := fixture()
+func TestActivityExpandedMinutesAndGaps(t *testing.T) {
+	buckets := []view.ActivityBucket{
+		{Events: 1, Sample: &model.MachineSample{Load1: 1}},
+		{},
+		{Sample: &model.MachineSample{}},
+		{Events: 8, Sample: &model.MachineSample{Load1: 8}},
+	}
+	for _, tc := range []struct {
+		width int
+		spans [4]int
+	}{{4, [4]int{1, 1, 1, 1}}, {5, [4]int{2, 1, 1, 1}}, {10, [4]int{3, 3, 2, 2}}, {90, [4]int{23, 23, 22, 22}}} {
+		for _, load := range []bool{false, true} {
+			want := strings.Repeat("▁", tc.spans[0]) + strings.Repeat("·", tc.spans[1]) + strings.Repeat("▁", tc.spans[2]) + strings.Repeat("█", tc.spans[3])
+			if got := activitySpark(buckets, tc.width, load); got != want {
+				t.Errorf("width %d load %v: got %q, want %q", tc.width, load, got, want)
+			}
+			if got := styledSpark(buckets, tc.width, load, false); !strings.Contains(got, view.TokenStyle("faint", false).Render(strings.Repeat("·", tc.spans[1]))) {
+				t.Errorf("width %d load %v: gap span lost faint style: %q", tc.width, load, got)
+			}
+		}
+	}
+}
+
+func TestActivityRowsFillWidthAndAxisMatchesMinutes(t *testing.T) {
 	buckets := make([]view.ActivityBucket, 60)
 	for i := range buckets {
 		buckets[i] = view.ActivityBucket{Events: 10, Sample: &model.MachineSample{Load1: 2, Cores: 4}}
 	}
-	s.snap.Activity.Machines = []view.ActivityMachine{{Buckets: buckets}}
-	m := setup(t, s, Options{}).(*app)
-	m.width, m.height = 80, 100
-	var chartEnd, axisEnd int
-	for _, line := range strings.Split(m.homeView(), "\n") {
-		if strings.Contains(line, "events  ") {
-			for i, r := range []rune(line) {
-				if strings.ContainsRune("▁▂▃▄▅▆▇█", r) {
-					chartEnd = i + 1
+	for _, tc := range []struct {
+		width  int
+		starts [5]int // Start columns of minutes 0, 15, 30, 45 and 59.
+	}{{160, [5]int{0, 39, 69, 99, 127}}, {120, [5]int{0, 30, 59, 74, 88}}, {80, [5]int{0, 13, 25, 37, 48}}} {
+		t.Run(fmt.Sprint(tc.width), func(t *testing.T) {
+			s := fixture()
+			s.snap.Activity.Machines = []view.ActivityMachine{{Buckets: buckets}}
+			m := setup(t, s, Options{}).(*app)
+			m.width, m.height = tc.width, 44
+			rows, axes := 0, 0
+			for _, line := range strings.Split(m.homeView(), "\n") {
+				for _, summary := range []string{"10/min max 10", "2.0 max 2.0"} {
+					value := strings.Index(line, summary)
+					if value < 0 {
+						continue
+					}
+					rows++
+					prefix := []rune(line[:value])
+					end := len(prefix)
+					for end > 0 && prefix[end-1] == ' ' {
+						end--
+					}
+					if len(prefix)-end > 1 {
+						t.Errorf("spark leaves %d blank columns before value: %s", len(prefix)-end, line)
+					}
+					if end == 0 || !strings.ContainsRune("▁▂▃▄▅▆▇█", prefix[end-1]) {
+						t.Errorf("spark missing before value: %s", line)
+					}
+					if got := lipgloss.Width(line[:value]); got != tc.width-20 {
+						t.Errorf("value column at %d, want %d", got, tc.width-20)
+					}
+				}
+				if strings.Contains(line, "−60m") {
+					axes++
+					for i, label := range []string{"−60m", "−45m", "−30m", "−15m", "now"} {
+						at := strings.Index(line, label)
+						if at < 0 {
+							t.Errorf("missing axis label %s", label)
+						} else if got, want := lipgloss.Width(line[:at]), 10+tc.starts[i]; got != want {
+							t.Errorf("%s at column %d, want minute start %d", label, got, want)
+						}
+					}
 				}
 			}
-		}
-		if strings.Contains(line, "−60m") {
-			axisEnd = lipgloss.Width(strings.Split(line, "now")[0]) + 3
-		}
-	}
-	if chartEnd != axisEnd {
-		t.Fatalf("time axis ends at %d, binned chart at %d", axisEnd, chartEnd)
+			if rows != 2 || axes != 1 {
+				t.Fatalf("found %d activity rows and %d axes", rows, axes)
+			}
+		})
 	}
 }

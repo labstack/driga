@@ -240,8 +240,8 @@ func TestHomeGaugeTrackAndPercent(t *testing.T) {
 func TestActivityFullWidthAndEmptyNotes(t *testing.T) {
 	buckets := make([]view.ActivityBucket, 60)
 	buckets[59] = view.ActivityBucket{Events: 3, Sample: &model.MachineSample{Load1: 2}}
-	if got := lipgloss.Width(activitySpark(buckets, 90, true)); got != 60 {
-		t.Errorf("spark width %d, want one column for each of 60 minutes", got)
+	if got := lipgloss.Width(activitySpark(buckets, 90, true)); got != 90 {
+		t.Errorf("spark width %d, want full available width 90", got)
 	}
 	for _, withBuckets := range []bool{false, true} {
 		s := fixture()

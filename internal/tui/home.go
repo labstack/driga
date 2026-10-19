@@ -217,7 +217,7 @@ func (m *app) homeView() string {
 		machine = append(machine, "Health unavailable")
 	}
 	activity := []string{}
-	sparkW := min(60, max(1, m.width-4-8-18-2))
+	sparkW := max(1, m.width-4-8-18-1)
 	for _, a := range m.snap.Activity.Machines {
 		if !m.machineVisible(a.MachineID) {
 			continue
@@ -255,7 +255,8 @@ func (m *app) homeView() string {
 	axis := []string{"−60m", "−45m", "−30m", "−15m", "now"}
 	axisLine := ""
 	for i, label := range axis {
-		pos := i * (sparkW - 3) / 4
+		minute := min(i*15, 59)
+		pos := activityMinuteColumn(minute, 60, sparkW)
 		axisLine += strings.Repeat(" ", max(0, pos-lipgloss.Width(axisLine))) + label
 	}
 	activity = append(activity, dim.Render("        "+axisLine))
@@ -442,7 +443,16 @@ func gaugeBar(used, total uint64, width int, noColor bool) string {
 	return view.GaugeStyle(used, total, noColor).Render(strings.Repeat("█", filled)) + track
 }
 
-// activitySpark renders one block per minute, binning peaks when space is tight.
+// activityMinuteColumn maps a minute to its first column, or its peak bin.
+// Extra columns go to the oldest minutes first.
+func activityMinuteColumn(minute, minutes, width int) int {
+	if width >= minutes {
+		return minute*(width/minutes) + min(minute, width%minutes)
+	}
+	return ((minute+1)*width - 1) / minutes
+}
+
+// activitySpark fills the width with minute blocks, binning peaks when space is tight.
 // A bin containing a missing minute remains a dim dot rather than inventing history.
 func activitySpark(buckets []view.ActivityBucket, width int, load bool) string {
 	return styledSpark(buckets, width, load, true)
@@ -462,6 +472,7 @@ func styledSpark(buckets []view.ActivityBucket, width int, load, noColor bool) s
 	var out strings.Builder
 	for x := 0; x < count; x++ {
 		from, to := x*len(buckets)/count, (x+1)*len(buckets)/count
+		span := activityMinuteColumn(x+1, count, max(1, width)) - activityMinuteColumn(x, count, max(1, width))
 		value, valid, critical := 0.0, true, false
 		for _, b := range buckets[from:to] {
 			if load {
@@ -479,7 +490,7 @@ func styledSpark(buckets []view.ActivityBucket, width int, load, noColor bool) s
 			}
 		}
 		if !valid {
-			out.WriteString(view.TokenStyle("faint", noColor).Render("·"))
+			out.WriteString(view.TokenStyle("faint", noColor).Render(strings.Repeat("·", span)))
 			continue
 		}
 		token := "idle"
@@ -490,7 +501,7 @@ func styledSpark(buckets []view.ActivityBucket, width int, load, noColor bool) s
 			}
 		}
 		level := min(7, max(0, int(value/ceiling*8)-1))
-		out.WriteString(view.TokenStyle(token, noColor).Render(string(glyphs[level])))
+		out.WriteString(view.TokenStyle(token, noColor).Render(strings.Repeat(string(glyphs[level]), span)))
 	}
 	return out.String()
 }
@@ -528,8 +539,8 @@ func activityRow(buckets []view.ActivityBucket, width int, load, noColor bool) s
 		summary = fmt.Sprintf("%s max %.1f", current, peak)
 	}
 	// Reserve the same value column for both rows and the shared time axis.
-	spark := styledSpark(buckets, max(1, width-8-max(18, lipgloss.Width(summary))-2), load, noColor)
-	return view.TokenStyle("faint", noColor).Render(label) + spark + strings.Repeat(" ", max(2, width-8-lipgloss.Width(spark)-lipgloss.Width(summary))) + view.TokenStyle(token, noColor).Render(summary)
+	spark := styledSpark(buckets, max(1, width-8-max(18, lipgloss.Width(summary))-1), load, noColor)
+	return view.TokenStyle("faint", noColor).Render(label) + spark + " " + view.TokenStyle(token, noColor).Render(summary)
 }
 
 func (m *app) splitDetail() bool { return m.tab == 0 && m.width >= 140 && !m.detail }
