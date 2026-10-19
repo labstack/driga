@@ -82,6 +82,7 @@ func (m *app) flowSession(delta int) {
 	}
 	i = (i + delta + len(roots)) % len(roots)
 	m.flowID = roots[i].ID
+	m.flowExpanded = false
 	m.cursors[flowTab] = 0
 	m.flowPulse = nil
 	m.flowSeen = nil
@@ -141,7 +142,7 @@ func (m *app) flowLeadLines() []string {
 	if n.Label == "stalled" {
 		state += "?"
 	}
-	lines := []string{clean(n.Title), view.StateStyle(n.Label, m.opts.NoColor).Render("● " + state), "project " + clean(n.Project) + " · " + clean(n.Branch), "age     " + agentAge(n.Age)}
+	lines := []string{clean(n.DisplayTitle()), view.StateStyle(n.Label, m.opts.NoColor).Render("● " + state), "project " + clean(view.FlowJoin(n.Project, n.Branch)), "age     " + agentAge(n.Age)}
 	if n.Model != "" {
 		lines = append(lines, "model   "+clean(n.Model))
 	}
@@ -180,78 +181,158 @@ func (m *app) flowMixerLines() []string {
 	if m.flow.Mixer.Heuristic {
 		lines = append(lines, "heuristic")
 	}
+	if m.flow.Mixer.Evidence != "" {
+		lines = append(lines, clean(m.flow.Mixer.Evidence))
+	}
 	return lines
 }
-func (m *app) flowWorkerPanel(i, width int) string {
-	n := m.flow.Children[i]
+func (m *app) flowWorkerPanel(n view.FlowNode, i, width int) string {
 	kind := n.Kind
 	if kind == "" {
 		kind = "worker"
 	}
-	title := kind + " · " + n.Adapter
+	title := view.FlowJoin(kind, n.Adapter)
 	activity := "activity unavailable"
 	if !n.LastActivityAt.IsZero() {
-		activity = clean(n.LastActivity) + " · " + duration(m.opts.Now().Sub(n.LastActivityAt)) + " ago"
+		activity = view.FlowJoin(clean(n.LastActivity), duration(m.opts.Now().Sub(n.LastActivityAt))+" ago")
 	}
 	if n.LastTool != "" {
-		activity = clean(n.LastTool) + " · " + activity
+		activity = view.FlowJoin(clean(n.LastTool), activity)
 	}
-	lines := []string{clean(n.Title) + " · " + view.StateStyle(n.Label, m.opts.NoColor).Render(derive.Display(n.Label, n.Heuristic)), activity, view.TokenStyle("idle", m.opts.NoColor).Render(view.FlowSpark(n.Activity)) + " · " + agentAge(n.Elapsed)}
+	state := view.StateStyle(n.Label, m.opts.NoColor).Render(derive.Display(n.Label, n.Heuristic))
+	titleText := truncate(clean(n.DisplayTitle()), max(0, width-7-lipgloss.Width(state)))
+	spark := view.FlowSpark(n.Activity)
+	elapsed := agentAge(n.Elapsed)
+	if strings.TrimSpace(spark) != "" {
+		elapsed = view.TokenStyle("idle", m.opts.NoColor).Render(spark) + " · " + elapsed
+	}
+	lines := []string{view.FlowJoin(titleText, state), activity, elapsed}
 
 	return m.flowPanel(title, lines, width, m.cursors[flowTab] == i)
+}
+
+// flowWorkers reserves room for the shared panels, tail and summary. Expanded
+// families remain scrollable so every thread can still be opened.
+func (m *app) flowWorkers() view.FlowWorkers {
+	top := max(len(m.flowLeadLines()), len(m.flowMixerLines())) + 2
+	available := m.bodyHeight() - 9
+	if m.width < 150 {
+		if m.width < 110 {
+			top = len(m.flowLeadLines()) + len(m.flowMixerLines()) + 5
+		}
+		available -= top + 1
+	}
+	return m.flow.Workers(max(1, (available-3)/6), m.flowExpanded, m.opts.Now())
 }
 
 // flowLayout produces both the view and hit regions from the same geometry.
 func (m *app) flowLayout() (string, []flowHit) {
 	if m.flow.Lead == nil {
-		return "No live interactive session. Select an agent, then press 7.", nil
+		return truncate("No live interactive session. Select an agent, then press 7.", max(0, m.width)), nil
+	}
+	if m.width < 12 {
+		return truncate("Widen terminal for flow", max(0, m.width)), nil
 	}
 	width := m.width
+	visible := m.flowWorkers()
 	hits := []flowHit{}
+
+	summary := func(w int) string {
+		return m.flowPanel(fmt.Sprintf("+%d quiet threads", visible.Quiet), []string{"Enter / click to expand"}, w, m.cursors[flowTab] == len(visible.Nodes))
+	}
 	body := ""
+	// Draw the branch rail once; each event marker belongs to its worker only.
+	branchStack := func(panelWidth, prefixWidth, x, y int, wide bool) string {
+		panels := []string{}
+		for i, n := range visible.Nodes {
+			panels = append(panels, m.flowWorkerPanel(n, i, panelWidth))
+		}
+		if visible.Quiet > 0 {
+			panels = append(panels, summary(panelWidth))
+		}
+		out := []string{}
+		for i, panel := range panels {
+			lines := strings.Split(panel, "\n")
+			hits = append(hits, flowHit{x: x, y: y + len(out), width: panelWidth, height: len(lines), index: i})
+			for j, line := range lines {
+				wire := "  │" + strings.Repeat(" ", prefixWidth-3)
+				if wide && i == 0 && j < 2 || i == len(panels)-1 && j > 2 {
+					wire = strings.Repeat(" ", prefixWidth)
+				}
+				if j == 2 {
+					joint := "├"
+					if i == len(panels)-1 {
+						joint = "└"
+					}
+					if wide && i == 0 {
+						joint = "┬"
+					}
+					wire = "  " + joint + strings.Repeat("─", prefixWidth-4) + "▶"
+					if wide && i == 0 {
+						wire = "──" + wire[2:]
+					}
+					if i < len(visible.Nodes) {
+						n := visible.Nodes[i]
+						if m.opts.Now().Before(m.flowPulse[n.Adapter+":"+n.ExternalID]) {
+							wire = "  " + joint + "──●" + strings.Repeat("─", prefixWidth-7) + "▶"
+							if wide && i == 0 {
+								wire = "──" + wire[2:]
+							}
+						}
+					}
+				}
+				out = append(out, wire+line)
+			}
+			if i < len(panels)-1 {
+				out = append(out, "  │"+strings.Repeat(" ", prefixWidth-3+panelWidth))
+			}
+		}
+		return strings.Join(out, "\n")
+	}
+	leadPanel := func(w int) string { return m.flowPanel("lead · "+m.flow.Lead.Adapter, m.flowLeadLines(), w, true) }
+	mixerPanel := func(w int) string {
+		return m.flowPanel("signal mixer · why: "+m.flow.Mixer.Verdict, m.flowMixerLines(), w, false)
+	}
 	if width >= 150 {
 		col := (width - 16) / 3
-		workerWidth := width - 2*col - 16
-		lead := m.flowPanel("lead · "+m.flow.Lead.Adapter, m.flowLeadLines(), col, true)
-		mixer := m.flowPanel("signal mixer · why: "+m.flow.Mixer.Verdict, m.flowMixerLines(), col, false)
-		workers := []string{}
-		for i, n := range m.flow.Children {
-			p := strings.Split(m.flowWorkerPanel(i, workerWidth), "\n")
-			for j := range p {
-				wire := "      "
-				if j == 2 {
-					wire = m.flowWire(n)
-				}
-				p[j] = wire + p[j]
-			}
-			hits = append(hits, flowHit{x: 2*col + 16, y: i * 6, width: workerWidth, height: 5, index: i})
-			workers = append(workers, strings.Join(p, "\n"))
-		}
-		leadWire := []string{}
+		lead, mixer := leadPanel(col), mixerPanel(col)
+		wire := []string{}
 		for i := 0; i < max(lipgloss.Height(lead), lipgloss.Height(mixer)); i++ {
 			w := "      "
 			if i == 2 {
 				w = m.flowWire(*m.flow.Lead)
 			}
-			leadWire = append(leadWire, w)
+			wire = append(wire, w)
 		}
-		body = lipgloss.JoinHorizontal(lipgloss.Top, lead, strings.Join(leadWire, "\n"), mixer, "    ", strings.Join(workers, "\n\n"))
+		body = lipgloss.JoinHorizontal(lipgloss.Top, lead, strings.Join(wire, "\n"), mixer, branchStack(width-2*col-16, 10, 2*col+16, 0, true))
 	} else {
+		mixerX := 2
 		if width >= 110 {
 			col := (width - 6) / 2
-			body = lipgloss.JoinHorizontal(lipgloss.Top, m.flowPanel("lead · "+m.flow.Lead.Adapter, m.flowLeadLines(), col, true), " ──▶ ", m.flowPanel("signal mixer · why: "+m.flow.Mixer.Verdict, m.flowMixerLines(), width-col-5, false))
+			lead, mixer := leadPanel(col), mixerPanel(width-col-6)
+			wire := []string{}
+			for i := 0; i < max(lipgloss.Height(lead), lipgloss.Height(mixer)); i++ {
+				w := "      "
+				if i == 2 {
+					w = m.flowWire(*m.flow.Lead)
+				}
+				wire = append(wire, w)
+			}
+			body = lipgloss.JoinHorizontal(lipgloss.Top, lead, strings.Join(wire, "\n"), mixer)
+			mixerX = col + 8
 		} else {
-			body = m.flowPanel("lead · "+m.flow.Lead.Adapter, m.flowLeadLines(), width, true) + "\n" + m.flowPanel("signal mixer · why: "+m.flow.Mixer.Verdict, m.flowMixerLines(), width, false)
+			body = leadPanel(width) + "\n  │\n  ▼\n" + mixerPanel(width)
 		}
-		// At 120/80 columns workers stack beneath the lead and mixer.
-		for i, n := range m.flow.Children {
-			body += "\n" + m.flowWire(n) + "\n"
+		if len(visible.Nodes) > 0 || visible.Quiet > 0 {
+			if width >= 110 {
+				body += "\n  ┌" + strings.Repeat("─", max(0, mixerX-3)) + "┘\n"
+			} else {
+				body += "\n  │\n"
+			}
 			y := lipgloss.Height(body) - 1
-			hits = append(hits, flowHit{x: 0, y: y, width: width, height: 5, index: i})
-			body += m.flowWorkerPanel(i, width)
+			body += branchStack(width-8, 8, 8, y, false)
 		}
 	}
-	body += "\n" + truncate("╰──── results return to lead ────╯", width)
 	tail := []string{}
 	for _, e := range m.flow.Tail {
 		tail = append(tail, e.TS.Local().Format("15:04:05")+" "+clean(e.Adapter)+" "+clean(e.Kind)+" "+clean(e.Summary))

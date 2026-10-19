@@ -53,6 +53,65 @@ type FlowView struct {
 func (v FlowView) MarshalJSON() ([]byte, error) { return jsonwire.Marshal(v) }
 func (v FlowNode) MarshalJSON() ([]byte, error) { return jsonwire.Marshal(v) }
 
+// FlowWorkers is a presentation window; the complete family stays in FlowView.
+type FlowWorkers struct {
+	Nodes []FlowNode
+	Quiet int
+}
+
+func (v FlowView) Workers(limit int, expanded bool, now time.Time) FlowWorkers {
+	nodes := append([]FlowNode(nil), v.Children...)
+	sortFlowWorkers(nodes)
+	w := FlowWorkers{Nodes: []FlowNode{}}
+	for _, n := range nodes {
+		oldHosted := n.Kind == "hosted" && n.Label == "idle" && (n.LastActivityAt.IsZero() || now.Sub(n.LastActivityAt) > time.Hour)
+		if !expanded && (oldHosted || len(w.Nodes) >= max(0, limit)) {
+			w.Quiet++
+		} else {
+			w.Nodes = append(w.Nodes, n)
+		}
+	}
+	return w
+}
+
+func sortFlowWorkers(nodes []FlowNode) {
+	active := func(n FlowNode) bool { return n.Label == "working" || n.Label == "waiting" || n.Label == "stalled" }
+	sort.SliceStable(nodes, func(i, j int) bool {
+		if active(nodes[i]) != active(nodes[j]) {
+			return active(nodes[i])
+		}
+		if nodes[i].LastActivityAt.Equal(nodes[j].LastActivityAt) {
+			return nodes[i].ID < nodes[j].ID
+		}
+		return nodes[i].LastActivityAt.After(nodes[j].LastActivityAt)
+	})
+}
+
+// FlowJoin omits empty fields before adding separators.
+func FlowJoin(parts ...string) string {
+	kept := []string{}
+	for _, p := range parts {
+		if p = strings.TrimSpace(p); p != "" {
+			kept = append(kept, p)
+		}
+	}
+	return strings.Join(kept, " · ")
+}
+
+func (n FlowNode) DisplayTitle() string {
+	if title := strings.TrimSpace(n.Title); title != "" {
+		return title
+	}
+	if n.Project != "" {
+		return FlowJoin(n.Project, n.Branch)
+	}
+	agent := strings.TrimSpace(n.Adapter)
+	if agent == "" {
+		agent = "agent"
+	}
+	return agent + " thread"
+}
+
 // Flow selects an explicit session's root, or the newest live interactive root.
 // Machine and project scopes apply before selection; ancestry never crosses machines.
 func Flow(r Reader, f Filter, sessionID int64, now time.Time) (FlowView, error) {
@@ -147,9 +206,11 @@ func Flow(r Reader, f Filter, sessionID int64, now time.Time) (FlowView, error) 
 			return v, err
 		}
 		n := FlowNode{MachineID: selectedReader.MachineID(), ID: s.ID, ExternalID: s.ExternalID, Adapter: s.Adapter, Kind: "worker", Title: s.Title, Project: projectName(s, repos), Branch: s.Branch, Label: s.Label, Heuristic: s.Heuristic, Age: sessionAge(s, now), LastActivityAt: s.LastActivityAt, Activity: make([]int, 10)}
-		if n.Title == "" {
-			n.Title = s.LastPrompt
+		if strings.TrimSpace(n.Title) == "" {
+			// LastPrompt has already passed the collector's capture policy.
+			n.Title = strings.TrimSpace(s.LastPrompt)
 		}
+		n.Title = n.DisplayTitle()
 		if s.Hosted || strings.HasPrefix(s.Origin, "hosted") {
 			n.Kind = "hosted"
 		}
@@ -224,12 +285,7 @@ func Flow(r Reader, f Filter, sessionID int64, now time.Time) (FlowView, error) 
 			v.Children = append(v.Children, n)
 		}
 	}
-	sort.SliceStable(v.Children, func(i, j int) bool {
-		if v.Children[i].LastActivityAt.Equal(v.Children[j].LastActivityAt) {
-			return v.Children[i].ID < v.Children[j].ID
-		}
-		return v.Children[i].LastActivityAt.After(v.Children[j].LastActivityAt)
-	})
+	sortFlowWorkers(v.Children)
 	if lead.Mixer != nil {
 		v.Mixer = *lead.Mixer
 		v.Mixer.Rows = append([]model.StateSignal(nil), lead.Mixer.Rows...)

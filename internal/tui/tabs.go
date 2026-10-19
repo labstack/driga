@@ -183,13 +183,18 @@ func (m *app) rebuild() {
 	case flowTab:
 		titles = []string{"", "STATE", "WORKER"}
 		weights = []int{2, 10, 40}
-		nodes := m.flow.Children
-		if len(nodes) == 0 && m.flow.Lead != nil {
+		window := m.flowWorkers()
+		nodes := window.Nodes
+		if len(nodes) == 0 && window.Quiet == 0 && m.flow.Lead != nil {
 			nodes = []view.FlowNode{*m.flow.Lead}
 		}
 		for _, n := range nodes {
 			add(tabRow{machine: n.MachineID, key: fmt.Sprint(n.ID), agent: n.ID, cells: []string{"", n.Label, n.Title}})
 		}
+		if window.Quiet > 0 {
+			add(tabRow{key: "flow-quiet", cells: []string{"", "", fmt.Sprintf("+%d quiet threads", window.Quiet)}})
+		}
+
 	case homeTab:
 		titles = []string{"", "STATE", "PROJECT", "SUMMARY"}
 		weights = []int{2, 10, 14, 40}

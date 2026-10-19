@@ -2,12 +2,69 @@ package view
 
 import (
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/store"
 )
+
+func TestFlowTitlesAndRelevance(t *testing.T) {
+	var lead int64
+	st := fixture(t, func(tx *store.Tx) error {
+		var err error
+		lead, err = tx.UpsertSession(model.Session{SessionObs: model.SessionObs{Adapter: "claude", ExternalID: "lead", PID: 1}})
+		if err != nil {
+			return err
+		}
+		for i, obs := range []model.SessionObs{
+			{Title: "  named  ", LastPrompt: "prompt", Cwd: "/repo", Branch: "main"},
+			{Title: " ", LastPrompt: "retained prompt", Cwd: "/repo"},
+			{Cwd: "/repo", Branch: "main"},
+			{}, // No retained prompt means capture policy supplied no text.
+		} {
+			obs.Adapter, obs.ExternalID = "codex", fmt.Sprint(i)
+			if _, err := tx.UpsertSession(model.Session{ParentID: &lead, SessionObs: obs, Label: "idle"}); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	v, err := Flow(st, Filter{}, lead, testNow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, want := range []string{"named", "retained prompt", "repo · main", "codex thread"} {
+		if v.Children[i].Title != want {
+			t.Errorf("title %d = %q, want %q", i, v.Children[i].Title, want)
+		}
+	}
+}
+
+func TestFlowWorkerOrderAndCap(t *testing.T) {
+	v := FlowView{}
+	for i := 0; i < 11; i++ {
+		v.Children = append(v.Children, FlowNode{ID: int64(i + 1), Kind: "hosted", Label: "idle", LastActivityAt: testNow.Add(-2 * time.Hour)})
+	}
+	v.Children = append(v.Children, FlowNode{ID: 20, Label: "idle", LastActivityAt: testNow}, FlowNode{ID: 21, Label: "working", LastActivityAt: testNow.Add(-time.Minute)}, FlowNode{ID: 22, Label: "waiting", LastActivityAt: testNow.Add(-2 * time.Minute)}, FlowNode{ID: 23, Label: "stalled", LastActivityAt: testNow.Add(-3 * time.Minute)}, FlowNode{ID: 24, Label: "finished", LastActivityAt: testNow.Add(-time.Second)}, FlowNode{ID: 25, Label: "idle", LastActivityAt: testNow.Add(-time.Minute)})
+	w := v.Workers(5, false, testNow)
+	if len(w.Nodes) != 5 || w.Quiet != 12 {
+		t.Fatalf("%+v", w)
+	}
+	for i, id := range []int64{21, 22, 23, 20, 24} {
+		if w.Nodes[i].ID != id {
+			t.Fatal(w.Nodes)
+		}
+	}
+	if all := v.Workers(5, true, testNow); len(all.Nodes) != 17 || all.Quiet != 0 {
+		t.Fatal(all)
+	}
+	w = v.Workers(20, false, testNow)
+	if len(w.Nodes) != 6 || w.Quiet != 11 {
+		t.Fatal("old hosted threads escaped summary", w)
+	}
+}
 
 func TestFlowFamily(t *testing.T) {
 	var lead int64

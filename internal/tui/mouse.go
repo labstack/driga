@@ -36,6 +36,10 @@ func (m *app) mouseClick(msg tea.MouseClickMsg) tea.Cmd {
 		for _, h := range m.flowWorkerHits() {
 			if msg.X >= h.x && msg.X < h.x+h.width && y >= h.y && y < h.y+h.height {
 				m.cursors[flowTab] = h.index
+				window := m.flowWorkers()
+				if window.Quiet > 0 && h.index == len(window.Nodes) {
+					m.flowExpanded = true
+				}
 				m.rebuild()
 				return nil
 			}

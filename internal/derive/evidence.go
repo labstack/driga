@@ -3,6 +3,7 @@ package derive
 import (
 	"fmt"
 	"math"
+	"strings"
 	"time"
 
 	"github.com/labstack/driga/internal/model"
@@ -16,7 +17,7 @@ func LabelWithEvidence(in StateInput, now time.Time, th Thresholds) model.StateM
 	if th.StalledAfter <= 0 {
 		th.StalledAfter = 10 * time.Minute
 	}
-	add := func(name, reading string, at time.Time, available bool, state string) {
+	add := func(name, reading string, at time.Time, available bool) {
 		row := model.StateSignal{Name: name, Reading: reading, At: at}
 		if available {
 			row.Strength = 1
@@ -24,52 +25,26 @@ func LabelWithEvidence(in StateInput, now time.Time, th Thresholds) model.StateM
 				row.Age = max(time.Duration(0), now.Sub(at))
 				row.Strength = 1 / (1 + float64(row.Age)/float64(th.StalledAfter))
 			}
-			row.Supports = state == verdict
-		}
-		if row.Supports {
-			m.Agreement++
 		}
 		m.Rows = append(m.Rows, row)
 	}
-	registryState := "unknown"
-	switch in.Obs.RegistryStatus {
-	case "busy":
-		registryState = "working"
-		if now.Sub(in.Obs.LastActivityAt) >= th.StalledAfter {
-			registryState = "stalled"
-			if in.Proc != nil && in.Proc.CPUPercent >= 1 {
-				registryState = "unknown"
-			}
-		}
-	case "idle", "shell":
-		registryState = "idle"
-	}
-	if in.Obs.PID == 0 && in.Obs.RegistryStatus != "" {
-		registryState = "dead"
-	}
-	add("registry", in.Obs.RegistryStatus, in.Obs.LastActivityAt, in.Obs.RegistryStatus != "", registryState)
+	add("registry", in.Obs.RegistryStatus, in.Obs.LastActivityAt, in.Obs.RegistryStatus != "")
 	hookAt := time.Time{}
 	hookName := "unavailable"
-	hookState := "unknown"
 	for _, v := range []struct {
-		name, state string
-		at          *time.Time
-	}{{"Stop", "finished", in.LastStop}, {"Notification", "waiting", in.LastNotification}} {
+		name string
+		at   *time.Time
+	}{{"Stop", in.LastStop}, {"Notification", in.LastNotification}} {
 		if v.at != nil && v.at.After(hookAt) {
 			hookAt = *v.at
 			hookName = v.name
-			hookState = v.state
 		}
-	}
-	if hookState == "finished" && !in.Unseen {
-		hookState = "idle"
 	}
 	if in.LastHookAt.After(hookAt) {
 		hookAt = in.LastHookAt
 		hookName = in.LastHook
-		hookState = "unknown"
 	}
-	add("hooks", hookName, hookAt, !hookAt.IsZero(), hookState)
+	add("hooks", hookName, hookAt, !hookAt.IsZero())
 	telemetryAt := time.Time{}
 	telemetryName := "unavailable"
 	for _, v := range []struct {
@@ -81,43 +56,28 @@ func LabelWithEvidence(in StateInput, now time.Time, th Thresholds) model.StateM
 			telemetryName = v.name
 		}
 	}
-	ts := "unknown"
-	if !telemetryAt.IsZero() && now.Sub(telemetryAt) < th.StalledAfter {
-		ts = "working"
-	}
-	add("telemetry", telemetryName, telemetryAt, !telemetryAt.IsZero(), ts)
+	add("telemetry", telemetryName, telemetryAt, !telemetryAt.IsZero())
 	alive := in.Proc != nil
-	ps := "unknown"
 	reading := "unavailable"
-	available := !in.Obs.Hosted && (in.Obs.PID != 0 || in.Obs.RegistryStatus != "")
-	// Claude can retain a live registry without a successful process sample.
-	// A missing sample is not proof of process death.
-	if in.Obs.Adapter == "claude" && in.Obs.PID != 0 && in.Proc == nil {
+	available := !in.Obs.Hosted && (in.Obs.PID != 0 || in.Obs.RegistryStatus != "" || in.Obs.Adapter == "agy" || in.Obs.Adapter == "codex" || in.Obs.Adapter == "gemini")
+	// A missing Claude process sample is not proof of death.
+	if in.Obs.Adapter == "claude" && in.Obs.PID != 0 && !alive {
 		available = false
 	}
 	if available {
 		reading = "process gone"
-		ps = "dead"
 		if alive {
 			reading = fmt.Sprintf("alive · CPU %.1f%%", in.Proc.CPUPercent)
-			ps = "idle"
-			if now.Sub(in.Obs.LastActivityAt) < time.Minute {
-				ps = "working"
+		}
+		if in.Obs.Adapter == "codex" || in.Obs.Adapter == "gemini" {
+			if in.Obs.TurnOpen {
+				reading += " · turn open"
+			} else {
+				reading += " · turn completed"
 			}
-			if in.Obs.TurnOpen && now.Sub(in.Obs.LastActivityAt) >= th.StalledAfter {
-				ps = "stalled"
-			}
-			if in.Obs.RegistryStatus == "busy" && now.Sub(in.Obs.LastActivityAt) >= th.StalledAfter {
-				ps = "stalled"
-				if in.Proc.CPUPercent >= 1 {
-					ps = "unknown"
-				}
-			}
-		} else if !in.Obs.TurnOpen && (in.Obs.Adapter == "codex" || in.Obs.Adapter == "gemini") {
-			ps = "finished"
 		}
 	}
-	add("process", reading, time.Time{}, available, ps)
+	add("process", reading, time.Time{}, available)
 	if available {
 		m.Rows[3].Alive = &alive
 	}
@@ -127,5 +87,78 @@ func LabelWithEvidence(in StateInput, now time.Time, th Thresholds) model.StateM
 			m.Rows[3].CPUPercent = &cpu
 		}
 	}
+	// Support is verdict-specific, not a separate prediction from each source.
+	// In particular, a live process is compatible with an unacknowledged completion.
+	age := now.Sub(in.Obs.LastActivityAt)
+	finished := in.LastStop != nil && in.LastStop.After(in.LastUserPrompt) && in.Unseen
+	support := [4]bool{}
+	deciding := "registry"
+	switch in.Obs.Adapter {
+	case "claude":
+		switch verdict {
+		case "waiting":
+			support[1] = true // label checked Notification against activity and cleared waits.
+			deciding = "hooks"
+		case "finished":
+			support[0] = in.Obs.RegistryStatus == "idle" || in.Obs.RegistryStatus == "shell"
+			support[1] = finished
+			support[3] = available && finished
+			deciding = "hooks"
+		case "idle":
+			support[0] = in.Obs.RegistryStatus == "idle" || in.Obs.RegistryStatus == "shell"
+			support[1] = in.LastStop != nil && in.LastStop.After(in.LastUserPrompt) && !in.Unseen
+			support[3] = available && alive
+		case "working":
+			support[0] = in.Obs.RegistryStatus == "busy" && age < th.StalledAfter
+			tool := in.LastToolResult != nil && !in.LastToolResult.Before(in.Obs.LastActivityAt) && (in.LastStop == nil || in.LastToolResult.After(*in.LastStop)) && now.Sub(*in.LastToolResult) < th.StalledAfter
+			api := in.LastAPIRequest != nil && in.LastAPIRequest.After(in.Obs.LastActivityAt) && (in.LastStop == nil || in.LastAPIRequest.After(*in.LastStop)) && now.Sub(*in.LastAPIRequest) < th.StalledAfter
+			support[2] = in.Obs.PID != 0 && (tool || api)
+			if strings.HasPrefix(evidence, "OTLP") || strings.HasPrefix(evidence, "API") {
+				deciding = "telemetry"
+			}
+		case "stalled":
+			support[0] = in.Obs.RegistryStatus == "busy" && age >= th.StalledAfter
+			support[3] = available && alive && in.Proc.CPUPercent < 1
+		case "dead":
+			support[0] = in.Obs.PID == 0 && in.Obs.RegistryStatus != ""
+			support[3] = available && !alive
+		case "unknown":
+			// Missing/unrecognized registry state is negative evidence for unknown.
+			support[0] = true
+			support[3] = available && alive && in.Obs.RegistryStatus == "busy" && age >= th.StalledAfter && in.Proc.CPUPercent >= 1
+		}
+	case "codex", "gemini":
+		deciding = "process"
+		if in.Obs.Hosted {
+			deciding = "registry"
+			m.Rows[0].Reading = "hosted transcript · " + verdict
+			support[0] = true
+		} else {
+			switch verdict {
+			case "finished", "idle":
+				support[3] = !in.Obs.TurnOpen
+			case "dead":
+				support[3] = !alive && in.Obs.TurnOpen
+			case "working":
+				support[3] = alive && age < time.Minute
+			case "stalled":
+				support[3] = alive && in.Obs.TurnOpen && age >= th.StalledAfter
+			case "unknown":
+				support[3] = alive && in.Obs.TurnOpen && age >= time.Minute && age < th.StalledAfter
+			}
+		}
+	case "agy":
+		deciding = "process"
+		support[3] = true
+	default:
+		support[0] = true // The adapter itself is unrecognized.
+	}
+	for i := range m.Rows {
+		m.Rows[i].Supports = support[i]
+		if support[i] {
+			m.Agreement++
+		}
+	}
+	m.Evidence = "because " + deciding + ": " + evidence
 	return m
 }

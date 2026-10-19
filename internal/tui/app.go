@@ -48,6 +48,7 @@ type app struct {
 	flow             view.FlowView
 	flowID           int64
 	flowOffset       int
+	flowExpanded     bool
 	flowPulse        map[string]time.Time
 	flowSeen         map[string]bool
 	machineScope     string
@@ -214,8 +215,8 @@ func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		var selectedID int64
-		if i := m.cursors[flowTab]; i < len(m.flow.Children) {
-			selectedID = m.flow.Children[i].ID
+		if i := m.cursors[flowTab]; i >= 0 && i < len(m.flowWorkers().Nodes) {
+			selectedID = m.flowWorkers().Nodes[i].ID
 		}
 		m.flow = msg.flow
 		if m.flowSeen == nil {
@@ -227,7 +228,7 @@ func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.flowID == 0 && m.flow.Lead != nil {
 			m.flowID = m.flow.Lead.ID
 		}
-		for i, n := range m.flow.Children {
+		for i, n := range m.flowWorkers().Nodes {
 			if n.ID == selectedID {
 				m.cursors[flowTab] = i
 			}
@@ -429,13 +430,26 @@ func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.flowSession(delta)
 				return m, m.loadFlow()
+			case "enter":
+				w := m.flowWorkers()
+				if w.Quiet > 0 && m.cursors[flowTab] == len(w.Nodes) {
+					m.flowExpanded = true
+					m.rebuild()
+					m.flowEnsureVisible()
+					return m, nil
+				}
 			case "j", "down", "k", "up":
-				if len(m.flow.Children) > 0 {
+				w := m.flowWorkers()
+				count := len(w.Nodes)
+				if w.Quiet > 0 {
+					count++
+				}
+				if count > 0 {
 					delta := 1
 					if k == "k" || k == "up" {
 						delta = -1
 					}
-					m.cursors[flowTab] = (m.cursors[flowTab] + delta + len(m.flow.Children)) % len(m.flow.Children)
+					m.cursors[flowTab] = (m.cursors[flowTab] + delta + count) % count
 					m.rebuild()
 					m.flowEnsureVisible()
 				}
@@ -505,6 +519,7 @@ func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.tab == flowTab {
 				m.flowID = 0
 				m.flow = view.FlowView{}
+				m.flowExpanded = false
 				m.flowOffset = 0
 				m.flowPulse = nil
 				m.flowSeen = nil

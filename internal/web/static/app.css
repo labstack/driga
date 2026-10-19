@@ -761,8 +761,8 @@ meter::-moz-meter-bar {
 .flow-kv dt { color:var(--faint); }
 .flow-kv dd { margin:0; overflow-wrap:anywhere; }
 .flow-kv + a { display:block; margin-top:12px; color:var(--faint); }
-.flow-mixrow { display:grid; grid-template-columns:9ch minmax(0,1fr) 10ch; gap:6px; align-items:center; }
-.flow-mixrow>span:last-child { overflow-wrap:anywhere; }
+.flow-mixrow { display:grid; grid-template-columns:9ch minmax(2ch,1fr) minmax(12ch,1.2fr); gap:6px; align-items:center; }
+.flow-value { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .flow-bars { font-size:12px; letter-spacing:-1px; white-space:nowrap; }
 .flow-signal-age { padding-left:10ch; font-size:12px; min-height:18px; }
 .flow-verdict { border-top:1px dashed var(--line); margin-top:8px; padding-top:8px; display:flex; gap:6px; flex-wrap:wrap; }
@@ -782,10 +782,12 @@ meter::-moz-meter-bar {
 .flow-tail .tail { height:120px; }
 .flow-foot { margin-top:12px; display:flex; flex-wrap:wrap; gap:1ch; }
 .flow-foot>span { margin-left:auto; }
-@container (max-width:1100px) { .flow-stage { gap:28px; } .flow-mixrow { grid-template-columns:1fr; } .flow-mixrow>span:last-child { grid-column:1; } .flow-signal-age { padding-left:0; } }
-@container (max-width:900px) { .flow-stage { display:flex; flex-direction:column; min-height:0; gap:20px; } .flow-stage>section { width:100%; } .flow-wires { display:none; } .flow-mixrow { grid-template-columns:10ch minmax(0,1fr) 12ch; } .flow-mixrow>span:last-child { grid-column:auto; } .flow-signal-age { padding-left:10ch; } }
+@container (max-width:1100px) { .flow-stage { gap:28px; } .flow-mixrow { grid-template-columns:9ch minmax(0,1fr); } .flow-value { grid-column:1/-1; } .flow-signal-age { padding-left:0; } }
+@container (max-width:900px) { .flow-stage { display:flex; flex-direction:column; min-height:0; gap:20px; } .flow-stage>section { width:100%; } .flow-wires { display:none; } .flow-mixrow { grid-template-columns:10ch minmax(0,1fr) 12ch; } .flow-value { grid-column:auto; } .flow-signal-age { padding-left:10ch; } }
 
 .flow-center { min-width:0; }
 .flow-inspect { margin-top:18px; font-size:12px; line-height:18px; overflow-wrap:anywhere; }
 .flow-inspect p { margin:4px 0; }
 @container (max-width:900px) { .flow-center { width:100%; } }
+
+.flow-pulse-route { fill:none; stroke:none; }

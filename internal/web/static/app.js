@@ -48,7 +48,18 @@
   function familyEvent(event, machine, sessions, seen) {
     return event.machine_id === machine && sessions.includes(event.adapter + ":" + event.external_id) && !seen.has(event.key);
   }
-  globalThis.DrigaConsole = Object.freeze({parseCommand, familyEvent});
+  // Coordinates are relative to the stage. One shared trunk, short branches.
+  function flowWireGeometry(lead, mixer, workers) {
+    const branches=[],routes={};
+    const x=workers.length ? (mixer.right+Math.min(...workers.map(w=>w.left)))/2 : mixer.right;
+    const ys=[mixer.y,...workers.map(w=>w.y)];
+    for(const w of workers) {
+      branches.push({key:w.key,d:`M ${x} ${w.y} H ${w.left}`});
+      routes[w.key]=`M ${mixer.right} ${mixer.y} H ${x} V ${w.y} H ${w.left}`;
+    }
+    return {lead:`M ${lead.right} ${lead.y} L ${mixer.left} ${mixer.y}`,trunk:workers.length ? `M ${mixer.right} ${mixer.y} H ${x} M ${x} ${Math.min(...ys)} V ${Math.max(...ys)}` : "",branches,routes};
+  }
+  globalThis.DrigaConsole = Object.freeze({parseCommand, familyEvent, flowWireGeometry});
   if (typeof document === "undefined") return;
 
   const root = document.documentElement;
@@ -277,7 +288,7 @@
         const workers = Array.from(flow.querySelectorAll("[data-worker]"));
         let index = workers.findIndex(worker => worker.classList.contains("sel"));
         if (event.key === "Enter") {
-          const worker = workers[index], lead = flow.querySelector("[data-flow-open]");
+          const worker = event.target.closest("[data-worker]") || workers[index], lead = flow.querySelector("[data-flow-open]");
           if (worker) window.location.assign(worker.dataset.open);
           else if (lead) lead.click();
         } else if (workers.length) {
@@ -313,21 +324,28 @@
   }
   function drawFlowWires() {
     const stage=document.querySelector(".flow-stage"), svg=stage && stage.querySelector(".flow-wires"); if(!svg) return;
-    const lead=stage.querySelector(".flow-lead").getBoundingClientRect(), mixer=stage.querySelector(".flow-mixer").getBoundingClientRect(), bounds=stage.getBoundingClientRect();
-    const x1=lead.right-bounds.left,y1=lead.top-bounds.top+Math.min(150,lead.height/2),x2=mixer.left-bounds.left,y2=mixer.top-bounds.top+Math.min(150,mixer.height/2);
-    svg.querySelector("[data-wire-lead]").setAttribute("d",`M ${x1} ${y1} L ${x2} ${y2}`);
-    const right=mixer.right-bounds.left;
-    for(const path of svg.querySelectorAll("[data-wire]")){const node=Array.from(stage.querySelectorAll("[data-worker]")).find(w=>w.dataset.session===path.dataset.wire);if(!node)continue;const r=node.getBoundingClientRect(),x=r.left-bounds.left,y=r.top-bounds.top+r.height/2;path.setAttribute("d",`M ${right} ${y2} C ${(right+x)/2} ${y2} ${(right+x)/2} ${y} ${x} ${y}`);}
-    const last=stage.querySelector(".flow-workers").getBoundingClientRect();svg.querySelector("[data-wire-return]").setAttribute("d",`M ${last.left-bounds.left} ${last.bottom-bounds.top+10} C ${right} ${bounds.height} ${x1/2} ${bounds.height} ${x1/2} ${lead.bottom-bounds.top+6}`);
+    const bounds=stage.getBoundingClientRect();
+    const rect=el=>{const r=el.getBoundingClientRect();return {left:r.left-bounds.left,right:r.right-bounds.left,y:r.top-bounds.top+r.height/2};};
+    const workers=Array.from(stage.querySelectorAll("[data-worker]")).map(w=>({...rect(w),key:w.dataset.session||"quiet"}));
+    const g=flowWireGeometry(rect(stage.querySelector(".flow-lead")),rect(stage.querySelector(".flow-mixer")),workers);
+    svg.querySelector("[data-wire-lead]").setAttribute("d",g.lead);
+    svg.querySelector("[data-wire-trunk]").setAttribute("d",g.trunk);
+    for(const b of g.branches) {
+      const path=Array.from(svg.querySelectorAll("[data-wire], [data-wire-quiet]")).find(p=>(p.dataset.wire||"quiet")===b.key);
+      if(path) { path.setAttribute("d",b.d); path.setAttribute("data-pulse-route",g.routes[b.key]); }
+    }
   }
+
   function pulseFlow(session) {
     if(matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const svg=document.querySelector(".flow-wires");if(!svg)return;
-    const worker=Array.from(svg.querySelectorAll("[data-wire]")).find(p=>p.dataset.wire===session),path=worker||svg.querySelector("[data-wire-lead]");
+    const worker=Array.from(svg.querySelectorAll("[data-wire]")).find(p=>p.dataset.wire===session),path=worker||(document.querySelector(".flow-lead").dataset.session===session ? svg.querySelector("[data-wire-lead]") : null);
     if(!path || !path.getAttribute("d"))return;
     const dot=document.createElementNS("http://www.w3.org/2000/svg","circle");dot.setAttribute("r","4");dot.setAttribute("class","flow-pulse");svg.append(dot);
-    const start=performance.now(),length=path.getTotalLength();
-    function frame(now){if(!dot.isConnected)return;const progress=(now-start)/1000;if(progress>=1){dot.remove();return;}const p=path.getPointAtLength(length*progress);dot.setAttribute("cx",String(p.x));dot.setAttribute("cy",String(p.y));requestAnimationFrame(frame);}requestAnimationFrame(frame);
+    const route=document.createElementNS("http://www.w3.org/2000/svg","path");
+    route.setAttribute("d",path.getAttribute("data-pulse-route")||path.getAttribute("d"));route.setAttribute("class","flow-pulse-route");svg.append(route);
+    const start=performance.now(),length=route.getTotalLength();
+    function frame(now){if(!dot.isConnected)return;const progress=(now-start)/1000;if(progress>=1){dot.remove();route.remove();return;}const p=route.getPointAtLength(length*progress);dot.setAttribute("cx",String(p.x));dot.setAttribute("cy",String(p.y));requestAnimationFrame(frame);}requestAnimationFrame(frame);
   }
   function refreshUI() {
     applyTheme(); focusPane(focused, false);
@@ -344,7 +362,8 @@
     });
     const tail = document.querySelector("[data-tail]");
     if (tail && !tailStarted) { tail.querySelectorAll("[data-event-key]").forEach(el => tailNodes.set(el.dataset.eventKey, el)); tailStarted = true; }
-    const worker=document.querySelector("[data-worker].sel");if(worker)inspectWorker(worker);
+    const worker=document.querySelector("[data-worker].sel") || document.querySelector("[data-worker]");
+    if(worker) { worker.classList.add("sel");worker.setAttribute("aria-pressed","true");inspectWorker(worker); }
     renderTail(); charts.draw(); drawFlowWires();
   }
   let restorePane = false;

@@ -30,6 +30,8 @@ type projectCard struct {
 type pageData struct {
 	Flow                   view.FlowView
 	FlowPrevious, FlowNext string
+	FlowExpanded           bool
+	FlowToggle             string
 	LastEvents             string
 	AttentionOnly          bool
 	viewer.Snapshot
@@ -109,6 +111,9 @@ func (s *Server) loadPage(r *http.Request) (pageData, int, error) {
 			values.Set(key, q.Get(key))
 		}
 	}
+	if p.Page == "/flow" && q.Has("quiet") {
+		values.Set("quiet", q.Get("quiet"))
+	}
 	refresh.RawQuery = values.Encode()
 	p.RefreshURL = refresh.String()
 	if p.Page == "/projects" && q.Get("project") != "" {
@@ -186,6 +191,14 @@ func (s *Server) loadPage(r *http.Request) (pageData, int, error) {
 		}
 	}
 	if p.Page == "/flow" {
+		p.FlowExpanded = r.URL.Query().Get("quiet") == "1"
+		q := r.URL.Query()
+		if p.FlowExpanded {
+			q.Del("quiet")
+		} else {
+			q.Set("quiet", "1")
+		}
+		p.FlowToggle = "/flow?" + q.Encode()
 		id := int64(0)
 		if q.Has("id") {
 			id, err = strconv.ParseInt(q.Get("id"), 10, 64)
@@ -352,6 +365,10 @@ func templateFuncs() template.FuncMap {
 			return fmt.Sprintf("%.4f", *v)
 		},
 		"flowSpark": view.FlowSpark,
+		"flowJoin":  view.FlowJoin,
+		"flowWorkers": func(v view.FlowView, expanded bool, now time.Time) view.FlowWorkers {
+			return v.Workers(5, expanded, now)
+		},
 		"signalBars": func(strength float64) string {
 			n := max(0, min(18, int(strength*18+0.5)))
 			return strings.Repeat("▮", n) + strings.Repeat("▯", 18-n)

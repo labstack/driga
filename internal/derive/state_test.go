@@ -21,12 +21,17 @@ func TestLabel(t *testing.T) {
 		return StateInput{Obs: model.SessionObs{Adapter: "gemini", PID: 10, TurnOpen: open, LastActivityAt: ago(age)}, Proc: &model.Proc{}}
 	}
 	notification, stop := ago(time.Minute), ago(2*time.Minute)
+	recent := ago(time.Second)
 	tests := []struct {
 		name, label, evidence string
 		heuristic             bool
 		in                    StateInput
 	}{
 		{name: "claude notification", label: "waiting", in: claude("busy", 5*time.Minute)},
+		{name: "claude otlp activity", label: "working", in: claude("idle", time.Hour)},
+		{name: "claude api activity", label: "working", in: claude("idle", time.Hour)},
+		{name: "agy alive", label: "unknown", in: StateInput{Obs: model.SessionObs{Adapter: "agy", PID: 10}, Proc: &model.Proc{}}},
+		{name: "agy gone", label: "dead", in: StateInput{Obs: model.SessionObs{Adapter: "agy"}}},
 		{name: "claude busy recent", label: "working", in: claude("busy", time.Minute)},
 		{name: "claude busy quiet low cpu", label: "stalled", evidence: "CPU 0.2%", in: claude("busy", 14*time.Minute)},
 		{name: "claude busy threshold", label: "stalled", in: claude("busy", 10*time.Minute)},
@@ -68,6 +73,10 @@ func TestLabel(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			switch tt.name {
+			case "claude otlp activity":
+				tt.in.LastToolResult = &recent
+			case "claude api activity":
+				tt.in.LastAPIRequest = &recent
 			case "claude notification", "claude notification old":
 				tt.in.LastNotification = &notification
 			case "claude busy quiet high cpu":
@@ -110,6 +119,12 @@ func TestLabel(t *testing.T) {
 			if mixed.Agreement != agree {
 				t.Fatal(mixed)
 			}
+			if !heuristic && mixed.Agreement < 1 {
+				t.Errorf("non-heuristic rule has no support: %+v", mixed)
+			}
+			if !strings.HasPrefix(evidence, "because ") || !strings.Contains(evidence, ": ") {
+				t.Errorf("missing deciding signal: %q", evidence)
+			}
 
 			if label != tt.label || heuristic != tt.heuristic {
 				t.Fatalf("Label = (%q, %v), want (%q, %v); %s", label, heuristic, tt.label, tt.heuristic, evidence)
@@ -131,6 +146,18 @@ func TestLabel(t *testing.T) {
 				t.Fatalf("Display = %q, want %q", got, wantDisplay)
 			}
 		})
+	}
+}
+
+func TestMixerFinishedSupportsStopBehindLatestNotification(t *testing.T) {
+	now := time.Now()
+	stop, notification := now.Add(-2*time.Minute), now.Add(-time.Minute)
+	m := LabelWithEvidence(StateInput{Obs: model.SessionObs{Adapter: "claude", PID: 10, RegistryStatus: "shell", LastActivityAt: now}, Proc: &model.Proc{}, LastStop: &stop, LastNotification: &notification, LastUserPrompt: now.Add(-time.Hour), Unseen: true}, now, Thresholds{})
+	if m.Verdict != "finished" || !m.Rows[0].Supports || !m.Rows[1].Supports || !m.Rows[3].Supports || !strings.Contains(m.Evidence, "because hooks: unacknowledged Stop") {
+		t.Fatal(m)
+	}
+	if m.Rows[1].Reading != "Notification" {
+		t.Fatal("latest reading lost", m.Rows[1])
 	}
 }
 
@@ -184,7 +211,7 @@ func TestMixerMissingAndConflictingSignals(t *testing.T) {
 	now := time.Date(2026, 10, 19, 12, 0, 0, 0, time.UTC)
 	missing := LabelWithEvidence(StateInput{Obs: model.SessionObs{Adapter: "claude"}}, now, Thresholds{})
 	for _, r := range missing.Rows {
-		if r.Strength != 0 || r.Supports {
+		if r.Strength != 0 || r.Supports && r.Name != "registry" {
 			t.Fatal("missing signal gained support", r)
 		}
 	}
