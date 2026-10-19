@@ -11,10 +11,10 @@ import (
 func TestThemeCSSContainsEveryToken(t *testing.T) {
 	css := ThemeCSS()
 	sections := strings.Split(css, "}")
-	if len(ThemeTokens()) != 23 {
+	if len(ThemeTokens()) != 24 {
 		t.Fatalf("token count: %d", len(ThemeTokens()))
 	}
-	required := strings.Fields("ground surface sunk ink muted faint line strong on-strong working working-bg waiting waiting-bg waiting-bar stalled stalled-bg idle idle-bg finished finished-bg crit warn ok")
+	required := strings.Fields("ground surface sunk ink muted faint line strong on-strong working working-bg waiting waiting-bg waiting-bar stalled stalled-bg idle idle-bg finished finished-bg crit warn ok accent")
 	for _, name := range required {
 		if !strings.Contains(css, "--"+name+":") {
 			t.Errorf("missing required token %s", name)
@@ -72,6 +72,27 @@ func TestConsoleThemeTokenParity(t *testing.T) {
 	for _, selector := range []string{`[data-theme="mocha"]`, `[data-theme="latte"]`, `prefers-color-scheme: light`} {
 		if !strings.Contains(css, selector) {
 			t.Errorf("missing %s", selector)
+		}
+	}
+}
+
+// An unknown token must render plain text, never a nil color: rendering a
+// zero AdaptiveColor panics inside Lip Gloss and kills the TUI.
+func TestUnknownTokenRendersPlain(t *testing.T) {
+	if got := TokenStyle("no-such-token", false).Render("x"); got != "x" {
+		t.Fatalf("got %q", got)
+	}
+}
+
+// Every token the TUI asks for must exist in the shared palette.
+func TestTUITokensExist(t *testing.T) {
+	for _, name := range []string{"accent", "crit", "faint", "idle", "ink", "line", "muted", "working", "on-strong", "strong", "sunk"} {
+		found := false
+		for _, tok := range ThemeTokens() {
+			found = found || tok.Name == name
+		}
+		if !found {
+			t.Errorf("token %q missing", name)
 		}
 	}
 }

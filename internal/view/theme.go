@@ -39,6 +39,7 @@ var themeTokens = [...]ThemeToken{
 	{"crit", "#B50C30", "#F38BA8"},
 	{"warn", "#963F06", "#FAB387"},
 	{"ok", "#1A5AD8", "#89B4FA"},
+	{"accent", "#7629D6", "#CBA6F7"},
 }
 
 // consoleTokens maps the console's roles onto the same Catppuccin palettes.
@@ -90,10 +91,17 @@ func ThemeColor(name string) compat.AdaptiveColor {
 	return compat.AdaptiveColor{}
 }
 
+// TokenStyle colors text with a shared token. An unknown name renders plain:
+// a zero AdaptiveColor would panic inside Lip Gloss and take the TUI down.
 func TokenStyle(name string, noColor bool) lipgloss.Style {
 	s := lipgloss.NewStyle()
-	if !noColor {
-		s = s.Foreground(ThemeColor(name))
+	if noColor {
+		return s
+	}
+	for _, t := range themeTokens {
+		if t.Name == name {
+			return s.Foreground(ThemeColor(name))
+		}
 	}
 	return s
 }
