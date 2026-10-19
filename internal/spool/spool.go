@@ -22,28 +22,47 @@ const maxAppendLine = 4 << 10
 
 // Append writes one bounded JSON line with a single O_APPEND write. The event's
 // UTC date determines its file, so delayed events retain their original day.
-func Append(dir string, ev model.HookEvent) error {
-	line, err := appendLine(ev)
-	if err != nil {
-		return err
+func Append(dir string, ev model.HookEvent) error { return AppendAll(dir, []model.HookEvent{ev}) }
+
+// AppendAll encodes every event before writing any, then gives each day file
+// its lines in one O_APPEND write, so an encoding error leaves no partial batch.
+func AppendAll(dir string, evs []model.HookEvent) error {
+	files := map[string][]byte{}
+	var order []string
+	for _, ev := range evs {
+		line, err := appendLine(ev)
+		if err != nil {
+			return err
+		}
+		path := filepath.Join(dir, ev.TS.UTC().Format("20060102")+".jsonl")
+		if _, ok := files[path]; !ok {
+			order = append(order, path)
+		}
+		files[path] = append(files[path], line...)
+	}
+	if len(order) == 0 {
+		return nil
 	}
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return err
 	}
-	path := filepath.Join(dir, ev.TS.UTC().Format("20060102")+".jsonl")
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0600)
-	if err != nil {
-		return err
+	for _, path := range order {
+		f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0600)
+		if err != nil {
+			return err
+		}
+		n, writeErr := f.Write(files[path])
+		if writeErr == nil && n != len(files[path]) {
+			writeErr = io.ErrShortWrite
+		}
+		if err := errors.Join(writeErr, f.Close()); err != nil {
+			return err
+		}
 	}
-	n, writeErr := f.Write(line)
-	if writeErr == nil && n != len(line) {
-		writeErr = io.ErrShortWrite
-	}
-	closeErr := f.Close()
 	// Appending leaves directory mtime unchanged; wake the collector with one
 	// directory stat even when writing an existing day file.
 	now := time.Now()
-	return errors.Join(writeErr, closeErr, os.Chtimes(dir, now, now))
+	return os.Chtimes(dir, now, now)
 }
 
 func appendLine(ev model.HookEvent) ([]byte, error) {

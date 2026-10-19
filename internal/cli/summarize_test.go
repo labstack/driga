@@ -256,3 +256,22 @@ func TestSummariesConfigShowRoundTrip(t *testing.T) {
 		t.Fatal(cfg, err)
 	}
 }
+
+// A worktree removed after collection has no commits to read; it is
+// summarized from its stored state instead of failing the project.
+func TestSummarizeSkipsMissingWorktree(t *testing.T) {
+	st, dir, repo := summaryFixture(t)
+	if err := st.Tx(context.Background(), func(tx *store.Tx) error {
+		_, err := tx.UpsertWorktree(model.Worktree{RepoID: repo, Path: dir + "-gone", Branch: "removed-branch"})
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	writeSummaryConfig(t, "titles")
+	record := fakeClaude(t, claudeHelp, `printf '%s\n' '{"type":"result","structured_output":{"summary":"Ready to review."}}'`)
+	readRun(t, "summarize", "fixture")
+	input, err := os.ReadFile(record + ".inputs")
+	if err != nil || !bytes.Contains(input, []byte("removed-branch")) || !bytes.Contains(input, []byte("second subject")) {
+		t.Fatalf("input: %s %v", input, err)
+	}
+}

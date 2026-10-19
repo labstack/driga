@@ -4,12 +4,16 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"slices"
 	"sort"
 	"time"
 
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/scrub"
 )
+
+// maxSummaryHandoffs bounds the handoff snippets in one summary prompt.
+const maxSummaryHandoffs = 5
 
 // SummaryInput is the complete allowlist of data sent to Claude. Paths,
 // transcript messages, prompt snippets and file contents have no field here.
@@ -60,8 +64,11 @@ func BuildSummaryInput(repo model.Repo, wts []model.Worktree, ss []model.Session
 	}
 	sort.Strings(in.Titles)
 	if snippets {
-		for _, h := range hs {
-			if h.Text != "" {
+		// Like titles, handoffs cover the last day; only the newest few are kept.
+		recent := slices.Clone(hs)
+		sort.SliceStable(recent, func(i, j int) bool { return recent[i].TS.After(recent[j].TS) })
+		for _, h := range recent {
+			if h.Text != "" && !h.TS.Before(now.Add(-24*time.Hour)) && len(in.Handoffs) < maxSummaryHandoffs {
 				in.Handoffs = append(in.Handoffs, scrub.Snippet(h.Text))
 			}
 		}

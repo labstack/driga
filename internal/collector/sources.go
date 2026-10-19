@@ -88,9 +88,13 @@ func collectSources(ctx context.Context, d Deps, st *store.Store, p Plan, state 
 			r.adapters = append(r.adapters, adapterResult{name: a.Name(), offsets: &sourceOffsets{prev: offsets, next: make(map[string]model.Offset)}})
 		}
 	}
-	storedProcs, err := st.Procs()
-	if err != nil {
-		return r, err
+	// Stored rows are only a fallback; rereading every row each pass is the
+	// collector's largest allocation, so read them only when no scan runs.
+	var storedProcs []model.Proc
+	if !p.Procs {
+		if storedProcs, err = state.storedProcs(st.Procs); err != nil {
+			return r, err
+		}
 	}
 	procReady := make(chan struct{})
 	var wg sync.WaitGroup
@@ -209,7 +213,8 @@ func collectSources(ctx context.Context, d Deps, st *store.Store, p Plan, state 
 		<-procReady
 		procs := r.procs
 		if r.procErr != nil {
-			procs = storedProcs
+			// The pass reports both the scan error and any stored-read error.
+			procs, _ = state.storedProcs(st.Procs)
 		}
 		reconcileSessions(r.sessions, procs, d.Plat, now)
 		// agy has no supported transcript schema yet. Its only session

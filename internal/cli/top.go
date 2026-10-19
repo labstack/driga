@@ -72,7 +72,7 @@ func (TopCmd) Run(g *Globals) error {
 	}
 	opts := tui.Options{Machine: g.Machine, Project: g.Project, NoColor: g.NoColor, OpenCmd: cfg.OpenCmd, DataDir: config.DataDir(), Context: ctx}
 	opts.CleanupList = func(ctx context.Context) ([]cleanup.Candidate, error) {
-		envelope, err := cleanupRead(ctx, g, "", false)
+		envelope, err := cleanupRead(ctx, g, "", false, false)
 		if err != nil {
 			return nil, err
 		}

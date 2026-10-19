@@ -1,6 +1,7 @@
 package collector
 
 import (
+	"slices"
 	"sync"
 	"time"
 
@@ -18,6 +19,9 @@ type State struct {
 	cwdNext   int
 	spawn     map[string]int64
 	gitFullAt time.Time
+	// procs is the process table this run last wrote, or nil before the first
+	// successful scan, when the stored rows are the only source.
+	procs []model.Proc
 }
 
 type cwdResult struct {
@@ -31,21 +35,26 @@ func NewState() *State {
 }
 
 // copy returns an independent working state; a failed transaction must not
-// advance CPU samples, cwd caches, or remembered process ownership.
+// advance CPU samples, cwd caches, or remembered process ownership. A pass
+// replaces prev, spawn and procs wholesale and never writes into them, so
+// they are shared; only the cwd cache is updated in place and is copied.
 func (s *State) copy() *State {
-	n := NewState()
+	n := &State{prev: s.prev, spawn: s.spawn, procs: s.procs, cwds: make(map[int32]cwdResult, len(s.cwds))}
 	n.prevAt, n.cwdsAt, n.gitFullAt = s.prevAt, s.cwdsAt, s.gitFullAt
 	n.cwdNext = s.cwdNext
-	for k, v := range s.prev {
-		n.prev[k] = v
-	}
 	for k, v := range s.cwds {
 		n.cwds[k] = v
 	}
-	for k, v := range s.spawn {
-		n.spawn[k] = v
-	}
 	return n
+}
+
+// storedProcs returns the last written process table, reading the store only
+// until this run has written one. Callers own the returned slice.
+func (s *State) storedProcs(read func() ([]model.Proc, error)) ([]model.Proc, error) {
+	if s.procs != nil {
+		return slices.Clone(s.procs), nil
+	}
+	return read()
 }
 
 func (s *State) applyCwds(procs []model.Proc) {

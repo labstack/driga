@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/labstack/driga/internal/config"
+	"github.com/labstack/driga/internal/logfile"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/store"
 )
@@ -629,5 +630,62 @@ func TestApplyWorktreeBranchKeptWhenGitRefuses(t *testing.T) {
 	}
 	if strings.Contains(git(t, repo, "worktree", "list", "--porcelain"), wt) {
 		t.Fatal("worktree prune did not run")
+	}
+}
+
+// The audit sink is checked before any removal. A later audit write failure
+// must not report a completed removal as failed; it becomes a warning.
+func TestApplyAuditWriteFailureIsWarning(t *testing.T) {
+	e, _, _, wt := fixture(t)
+	ageIndex(t, e, wt)
+	c := listed(t, e, wt)
+	// A full log needs rotation into a new .1 file, which a read-only data
+	// directory refuses, while the existing log itself still opens for append.
+	if err := os.MkdirAll(e.DataDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(e.DataDir, "cleanup.log"), make([]byte, logfile.MaxSize), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(e.DataDir, 0500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(e.DataDir, 0700) })
+	r, err := Apply(context.Background(), e, c, ApplyOpts{})
+	if err != nil {
+		t.Fatalf("removal succeeded but Apply failed: %v", err)
+	}
+	if _, err := os.Stat(wt); !os.IsNotExist(err) {
+		t.Fatal("worktree not removed", err)
+	}
+	if len(r.Warnings) != 1 || !strings.Contains(r.Warnings[0], "audit log") {
+		t.Fatalf("warnings: %q", r.Warnings)
+	}
+}
+
+// With Why, a worktree that does not qualify is listed with its refusal
+// reason, and it still cannot be applied.
+func TestWhyListsRefusalReason(t *testing.T) {
+	e, _, _, wt := fixture(t)
+	put(t, filepath.Join(wt, "tracked"), "change")
+	absent(t, e, wt)
+	e.Why = true
+	c := listed(t, e, wt)
+	if c.Status != "refused" || len(c.Evidence) != 1 || c.Evidence[0] != "worktree has tracked changes" {
+		t.Fatalf("refused candidate: %+v", c)
+	}
+	if _, err := Apply(context.Background(), e, c, ApplyOpts{}); err == nil || !strings.Contains(err.Error(), "tracked changes") {
+		t.Fatalf("refused candidate applied: %v", err)
+	}
+	if _, err := os.Stat(wt); err != nil {
+		t.Fatal("worktree touched", err)
+	}
+}
+
+// Claude Code names project dirs with replace(/[^a-zA-Z0-9]/g, "-"), which
+// turns underscores into dashes as well.
+func TestProjectSlugMatchesClaude(t *testing.T) {
+	if got := projectSlug("/Users/me/my_app.v2"); got != "-Users-me-my-app-v2" {
+		t.Fatal(got)
 	}
 }

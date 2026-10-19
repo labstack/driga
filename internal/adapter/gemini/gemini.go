@@ -3,7 +3,9 @@ package gemini
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -65,6 +67,11 @@ func (a *geminiAdapter) Collect(ctx context.Context, env adapter.Env) ([]model.S
 			return observations, warnings, err
 		}
 		info, err := os.Stat(path)
+		if errors.Is(err, fs.ErrNotExist) {
+			// Removed since the directory scan; its session is simply gone.
+			delete(a.cache, path)
+			continue
+		}
 		if err != nil {
 			return observations, warnings, err
 		}
@@ -107,6 +114,10 @@ func (a *geminiAdapter) Collect(ctx context.Context, env adapter.Env) ([]model.S
 			f, next, w, err = a.readJSONL(ctx, path, prev)
 		}
 		warnings = append(warnings, w...)
+		if errors.Is(err, fs.ErrNotExist) {
+			delete(a.cache, path)
+			continue
+		}
 		if err != nil {
 			return observations, warnings, err
 		}

@@ -130,6 +130,45 @@ func (tx *Tx) ReplaceProcs(procs []model.Proc) error {
 	return nil
 }
 
+// SyncProcs makes the table hold procs, given that it currently holds prev,
+// writing only rows whose stored columns differ. With prev nil it replaces
+// every row. Callers must pass the table as last committed, never a guess.
+func (tx *Tx) SyncProcs(prev, procs []model.Proc) error {
+	if prev == nil {
+		return tx.ReplaceProcs(procs)
+	}
+	old := make(map[int32]model.Proc, len(prev))
+	for _, p := range prev {
+		old[p.PID] = p
+	}
+	for _, p := range procs {
+		if o, ok := old[p.PID]; ok && sameStoredProc(o, p) {
+			delete(old, p.PID)
+			continue
+		}
+		delete(old, p.PID)
+		if err := tx.exec(`INSERT INTO procs (machine_id,pid,ppid,start_time,rss,cpu_seconds,cpu_percent,cmdline,exe,role,agent,session_id,cwd)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(machine_id,pid) DO UPDATE SET ppid=excluded.ppid,start_time=excluded.start_time,
+		rss=excluded.rss,cpu_seconds=excluded.cpu_seconds,cpu_percent=excluded.cpu_percent,cmdline=excluded.cmdline,exe=excluded.exe,
+		role=excluded.role,agent=excluded.agent,session_id=excluded.session_id,cwd=excluded.cwd`, tx.machineID, p.PID, p.PPID, unix(p.StartTime), p.RSS, p.CPUSeconds, p.CPUPercent, p.Cmdline, p.Exe, p.Role, p.Agent, p.SessionID, p.Cwd); err != nil {
+			return err
+		}
+	}
+	for pid := range old {
+		if err := tx.exec("DELETE FROM procs WHERE machine_id=? AND pid=?", tx.machineID, pid); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// sameStoredProc compares the columns ReplaceProcs writes.
+func sameStoredProc(a, b model.Proc) bool {
+	return a.PPID == b.PPID && unix(a.StartTime) == unix(b.StartTime) && a.RSS == b.RSS && a.CPUSeconds == b.CPUSeconds &&
+		a.CPUPercent == b.CPUPercent && a.Cmdline == b.Cmdline && a.Exe == b.Exe && a.Role == b.Role && a.Agent == b.Agent &&
+		a.SessionID == b.SessionID && a.Cwd == b.Cwd
+}
+
 // Procs returns the latest processes in PID order.
 func (q *querier) Procs() ([]model.Proc, error) {
 	return q.ProcsScoped(q.localScope())

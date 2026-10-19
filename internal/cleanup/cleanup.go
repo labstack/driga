@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -60,6 +61,8 @@ type Env struct {
 	Cfg           config.CleanupConfig
 	Git           func(context.Context, string, ...string) ([]byte, error)
 	Sizes         bool
+	// Why also lists worktrees that do not qualify, with their refusal reason.
+	Why bool
 	// TempRoots replaces OS temp roots in isolated tests; layout remains binding.
 	TempRoots []string
 	// Rename is an injectable same-filesystem rename, never a copy fallback.
@@ -180,12 +183,17 @@ func List(ctx context.Context, e Env) ([]Candidate, error) {
 		c, err := inspectWorktree(ctx, e, s, w, nil)
 		if err == nil {
 			cs = append(cs, c)
+		} else if e.Why {
+			cs = append(cs, Candidate{ID: wtID(w.Path), Kind: Worktree, Path: w.Path, Repo: c.Repo, Branch: c.Branch, Status: "refused", Evidence: []string{err.Error()}, Ignored: []IgnoredPath{}})
 		}
 	}
 	cs = append(cs, scratchCandidates(ctx, e, s)...)
 	cs = append(cs, historyCandidates(e)...)
 	if e.Sizes {
 		for i := range cs {
+			if cs[i].Status == "refused" {
+				continue
+			}
 			cs[i], err = Measure(ctx, cs[i], e.now())
 			if err != nil {
 				cs[i].Evidence = append(cs[i].Evidence, "size: "+err.Error())
@@ -199,6 +207,9 @@ func List(ctx context.Context, e Env) ([]Candidate, error) {
 func verify(ctx context.Context, e Env, c Candidate) (Candidate, error) {
 	if c.Kind == History {
 		return Candidate{}, fmt.Errorf("agent history is report-only; use the agent's retention setting")
+	}
+	if c.Status == "refused" {
+		return Candidate{}, fmt.Errorf("candidate was refused when listed (%s); list again", strings.Join(c.Evidence, "; "))
 	}
 	if c.identity == nil {
 		return Candidate{}, fmt.Errorf("candidate must be listed before applying")
@@ -268,11 +279,11 @@ func Apply(ctx context.Context, e Env, c Candidate, opts ApplyOpts) (r Result, e
 		if err != nil {
 			entry.Error = err.Error()
 		}
-		if logErr := json.NewEncoder(&logfile.Writer{Path: filepath.Join(e.DataDir, "cleanup.log")}).Encode(entry); err == nil {
-			err = logErr
-		}
-		if closeErr := log.Close(); err == nil {
-			err = closeErr
+		// The sink was checked before acting, so a failed write afterwards must
+		// not report a completed action as failed.
+		logErr := errors.Join(json.NewEncoder(&logfile.Writer{Path: filepath.Join(e.DataDir, "cleanup.log")}).Encode(entry), log.Close())
+		if logErr != nil && err == nil {
+			r.Warnings = append(r.Warnings, "audit log: "+logErr.Error())
 		}
 	}()
 	fresh, err := verify(ctx, e, c)

@@ -25,6 +25,7 @@ type CleanupCmd struct {
 	ID             string `arg:"" optional:"" help:"Candidate ID to clean after confirmation."`
 	Kind           string `help:"Filter by worktree, scratch, or history (required with --all)."`
 	Sizes          bool   `help:"Walk candidate sizes on demand (30s cap per walk)."`
+	Why            bool   `help:"Also list worktrees that do not qualify, with the reason."`
 	All            bool   `help:"Clean ready candidates of --kind; skip candidates that need review or change."`
 	DryRun         bool   `help:"Print exact commands after verification without removing anything."`
 	Yes            bool   `help:"Confirm the displayed action without prompting."`
@@ -82,13 +83,13 @@ func openCleanup(ctx context.Context, g *Globals) (cleanup.Env, view.Envelope, f
 	return env, envelope, closeFn, nil
 }
 
-func cleanupRead(ctx context.Context, g *Globals, kind string, sizes bool) (view.Envelope, error) {
+func cleanupRead(ctx context.Context, g *Globals, kind string, sizes, why bool) (view.Envelope, error) {
 	env, envelope, closeFn, err := openCleanup(ctx, g)
 	if err != nil {
 		return envelope, err
 	}
 	defer closeFn()
-	env.Sizes = sizes
+	env.Sizes, env.Why = sizes, why
 	cs, err := cleanup.List(ctx, env)
 	if err != nil {
 		return envelope, err
@@ -115,12 +116,15 @@ func (c CleanupCmd) Run(g *Globals) error {
 	if c.IncludeIgnored && (c.ID == "" || c.All) {
 		return fmt.Errorf("--include-ignored requires one explicit candidate ID")
 	}
+	if c.Why && (c.ID != "" || c.All) {
+		return fmt.Errorf("--why only applies to listing")
+	}
 	if c.ID == "" && !c.All && (c.Yes || c.DryRun || c.IncludeIgnored) {
 		return fmt.Errorf("action flags require an id or --all")
 	}
 	ctx := context.Background()
 	if c.ID == "" && !c.All {
-		envelope, err := cleanupRead(ctx, g, c.Kind, c.Sizes)
+		envelope, err := cleanupRead(ctx, g, c.Kind, c.Sizes, c.Why)
 		if err != nil {
 			return err
 		}

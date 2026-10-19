@@ -114,35 +114,47 @@ func FindOrphans(idx ProcIndex, sessions []model.Session, sigs *signatures.Set, 
 		if r.PPID != 1 && (options.subreaper <= 1 || r.PPID != options.subreaper) && !ownerDead {
 			continue
 		}
-		tree := append([]model.Proc{r}, idx.Descendants(pid)...)
 		idle := true
 		probed := true
 		var matched string
-		for _, p := range tree {
+		// visit applies the idle checks to one tree member; false stops the walk.
+		visit := func(p model.Proc) bool {
 			if p.Role == string(signatures.RoleInternal) {
 				idle = false
-				break
+				return false
 			}
 			if p.CPUPercent != 0 || options.externalPeers[p.PID] {
 				idle = false
-				break
+				return false
 			}
 			if _, ok := options.externalPeers[p.PID]; !ok {
 				probed = false
 			}
 			if _, ok := livePIDs[p.PID]; ok {
 				idle = false
-				break
+				return false
 			}
 			if bundle := orphanBundle(p); bundle != "" && apps[bundle] {
 				idle = false
-				break
+				return false
 			}
 			if sigs != nil && matched == "" {
 				if sig, ok := sigs.Match(p.Cmdline, p.Exe); ok && (sig.Role == signatures.RoleHelper || sig.Role == signatures.RoleHost || sig.Role == signatures.RoleHeadless) {
 					matched = sig.Name
 				}
 			}
+			return true
+		}
+		// A busy root settles the tree, so its descendants are walked only after it passes.
+		tree := []model.Proc{r}
+		if visit(r) {
+			desc := idx.Descendants(pid)
+			for _, p := range desc {
+				if !visit(p) {
+					break
+				}
+			}
+			tree = append(tree, desc...)
 		}
 		if !idle || (matched == "" && !spawned) {
 			continue

@@ -126,6 +126,15 @@ sample_wakeups() {
 	fi
 }
 
+# Physical footprint is what Activity Monitor shows. Unlike RSS it excludes
+# memory the Go runtime has already returned to macOS (MADV_FREE_REUSABLE),
+# which RSS keeps counting until the system reclaims it. Reported, not gated.
+sample_footprint() {
+	local pid=${2:-$collector_pid} lines
+	lines=$(vmmap -summary "$pid" 2>/dev/null | awk -F: '/^Physical footprint/ { gsub(/^ +/, "", $2); printf "%s=%s ", $1, $2 }') || lines=''
+	printf '%s pid=%s: %s\n' "$1" "$pid" "${lines:-physical footprint unavailable}"
+}
+
 while ((SECONDS - started < 600)); do
 	if ! kill -0 "$collector_pid" 2>/dev/null; then
 		printf '%s\n' 'Collector exited before measurement finished:' >&2
@@ -152,9 +161,11 @@ while ((SECONDS - started < 600)); do
 	# Report one wakeup sample near the end of each phase.
 	if [[ $phase == idle && $SECONDS -ge $((started + 290)) && ! -e $scratch/idle-wakeups ]]; then
 		sample_wakeups
+		sample_footprint idle
 		: >"$scratch/idle-wakeups"
 	elif [[ $phase == viewer && $SECONDS -ge $((started + 590)) && ! -e $scratch/viewer-wakeups ]]; then
 		sample_wakeups
+		sample_footprint viewer
 		: >"$scratch/viewer-wakeups"
 	fi
 	# Refresh twice between 5-second RSS samples: freshness requires age < 5s.
@@ -245,6 +256,9 @@ while ((SECONDS - started < 600)); do
 	fi
 	if ((SECONDS - started >= 590)) && [[ ! -e $scratch/fleet-wakeups ]]; then
 		sample_wakeups
+		for i in 0 1 2; do
+			sample_footprint fleet "${started_pids[$i]}"
+		done
 		: >"$scratch/fleet-wakeups"
 	fi
 	touch "$scratch/viewer1/data/viewer.heartbeat" "$scratch/viewer2/data/viewer.heartbeat"

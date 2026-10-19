@@ -313,3 +313,13 @@ func TestGeminiCacheHitWithStoredOffsets(t *testing.T) {
 		t.Fatalf("unchanged file re-read from byte 0 on the next pass: %+v", w)
 	}
 }
+
+// A chat file removed between the directory scan and the read is skipped,
+// not a failed pass. A dangling link reproduces the vanished file exactly.
+func TestGeminiVanishedFileSkipped(t *testing.T) {
+	env, path := setup(t, header+user1)
+	if err := os.Symlink(filepath.Join(filepath.Dir(path), "deleted.jsonl"), filepath.Join(filepath.Dir(path), "session-a-vanished.jsonl")); err != nil {
+		t.Fatal(err)
+	}
+	collect(t, New(), env)
+}

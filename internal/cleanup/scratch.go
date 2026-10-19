@@ -12,9 +12,12 @@ import (
 	"github.com/labstack/driga/internal/platform"
 )
 
+// projectSlug mirrors Claude Code: every non-alphanumeric rune becomes "-".
+// Claude shortens names over 200 characters with a hash suffix; such dirs are
+// not matched, so their scratch is never offered (fail closed).
 func projectSlug(cwd string) string {
 	return strings.Map(func(r rune) rune {
-		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-' || r == '_' {
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' {
 			return r
 		}
 		return '-'

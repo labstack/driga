@@ -122,3 +122,13 @@ func TestCleanupConfigShown(t *testing.T) {
 		t.Fatal(cfg.Cleanup, err)
 	}
 }
+func TestCleanupWhyListingOnly(t *testing.T) {
+	readEnv(t)
+	cleanupFake(t)
+	readDB(t, nil)
+	readRun(t, "cleanup", "--why")
+	var out, errout bytes.Buffer
+	if code := run([]string{"cleanup", "wt:test", "--why"}, "test", strings.NewReader(""), &out, &errout); code == 0 || !strings.Contains(errout.String(), "--why only applies to listing") {
+		t.Fatal(code, errout.String())
+	}
+}

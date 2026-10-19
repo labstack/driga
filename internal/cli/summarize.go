@@ -3,7 +3,9 @@ package cli
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -104,13 +106,20 @@ func (s SummarizeCmd) run(ctx context.Context, g *Globals) error {
 		}
 		commits := map[int64][]string{}
 		for _, w := range wts {
+			commits[w.ID] = []string{}
+			// A worktree removed since collection keeps its stored state but has
+			// no commits left to read.
+			if _, err := os.Stat(w.Path); errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			// Subject-only log output runs no hooks, diff or textconv drivers, and
+			// a non-terminal stdout disables the pager.
 			cmd := exec.CommandContext(ctx, "git", "-C", w.Path, "log", "-5", "--format=%s")
-			// Do not run repository-configured hooks, pagers or external diffs.
+			cmd.Env = append(os.Environ(), "GIT_OPTIONAL_LOCKS=0", "GIT_TERMINAL_PROMPT=0")
 			out, err := cmd.Output()
 			if err != nil {
 				return fmt.Errorf("git log for project %s: %w", repo.Name, err)
 			}
-			commits[w.ID] = []string{}
 			if text := strings.TrimSpace(string(out)); text != "" {
 				commits[w.ID] = strings.Split(text, "\n")
 			}
@@ -141,10 +150,8 @@ func (s SummarizeCmd) run(ctx context.Context, g *Globals) error {
 		}
 	}
 	// Validate all output before any spool write, including the shareable variant.
-	for _, ev := range pending {
-		if err := spool.Append(config.SpoolDir(), ev); err != nil {
-			return err
-		}
+	if err := spool.AppendAll(config.SpoolDir(), pending); err != nil {
+		return err
 	}
 	if g.JSON {
 		e, err := view.NewEnvelope(st, "daemon", now, collector.Cadence(0), results)

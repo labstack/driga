@@ -12,6 +12,7 @@ import (
 	"reflect"
 	"regexp"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -127,10 +128,7 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 				}
 			}
 		}
-		procs, err := tx.Procs()
-		if err != nil {
-			return err
-		}
+		var procs []model.Proc
 		procsOK := false
 		if p.Procs {
 			fresh, err := collected.procs, collected.procErr
@@ -149,6 +147,13 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 				}
 				work.prevAt = collected.procAt
 			}
+		}
+		if !procsOK {
+			stored, err := work.storedProcs(tx.Procs)
+			if err != nil {
+				return err
+			}
+			procs = stored
 		}
 		if collected.cwdRan {
 			if err := source("cwds", collected.cwdErr); err != nil {
@@ -395,9 +400,12 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 				return err
 			}
 			r.Orphans = len(orphans)
-			if err := tx.ReplaceProcs(procs); err != nil {
+			// work.procs is the table this run last committed (nil after a
+			// restart), so only changed rows need writing.
+			if err := tx.SyncProcs(work.procs, procs); err != nil {
 				return err
 			}
+			work.procs = slices.Clone(procs)
 		}
 		for _, s := range ss {
 			before := original[s.ID]
@@ -436,6 +444,7 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 		state.cwds, state.cwdsAt = work.cwds, work.cwdsAt
 		state.cwdNext = work.cwdNext
 		state.spawn, state.gitFullAt = work.spawn, work.gitFullAt
+		state.procs = work.procs
 	}
 	return r, err
 }

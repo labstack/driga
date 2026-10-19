@@ -91,6 +91,6 @@ func NewMCPServer(g *Globals) *sdk.Server {
 	}
 	// Neither the SDK logger nor snapshot hints may write to protocol stdout.
 	return drigamcp.NewServer(drigamcp.Options{Version: base.Version, Logger: slog.New(slog.NewTextHandler(stderr, nil)), Read: read, Doctor: doctor, Cleanup: func(ctx context.Context, kind string, sizes bool) (view.Envelope, error) {
-		return cleanupRead(ctx, &base, kind, sizes)
+		return cleanupRead(ctx, &base, kind, sizes, false)
 	}})
 }

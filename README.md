@@ -325,6 +325,7 @@ automatically, and nothing is removed on another machine.
 ```sh
 driga cleanup                       # candidates with evidence
 driga cleanup --sizes               # walk sizes on demand (30 s cap per walk)
+driga cleanup --why                 # also list worktrees that don't qualify, and why
 driga cleanup <id> --dry-run        # print the exact commands
 driga cleanup <id>                  # re-verify, then ask y/N
 driga cleanup --kind worktree --all # every ready worktree; skips anything changed
@@ -333,8 +334,8 @@ driga cleanup --kind worktree --all # every ready worktree; skips anything chang
 - **Worktrees**: a linked worktree (never the main or a locked one) with no live
   session or process inside, no tracked or untracked changes, commits merged
   into the default branch or pushed, and idle for `cleanup.worktree_idle`. The
-  action is `git worktree remove`, `git branch -d` only when merged (never `-D`),
-  and `git worktree prune`. Ignored build output (`cleanup.regenerable`) leaves
+  action is `git worktree remove`, `git worktree prune`, then `git branch -d`
+  only when merged (never `-D`). Ignored build output (`cleanup.regenerable`) leaves
   with the worktree; any other ignored file (`.env`, local databases) makes the
   candidate `needs-review`, and acting on it needs `--include-ignored`.
 - **Scratch**: a Claude Code per-session temp directory whose session is dead or
@@ -345,7 +346,8 @@ driga cleanup --kind worktree --all # every ready worktree; skips anything chang
 
 Every check runs again just before acting; if anything changed, the action is
 refused with the reason. Each attempt is appended to `cleanup.log` in the data
-directory. The TUI has a Cleanup tab, and `driga_cleanup_candidates` is a
+directory; if that write fails after the action succeeded, the action reports a
+warning instead of an error. The TUI has a Cleanup tab, and `driga_cleanup_candidates` is a
 read-only MCP tool.
 
 ## Summaries and ask
@@ -549,3 +551,15 @@ Binary measurement (2026-10-18, macOS/arm64, Go 1.27.2, `CGO_ENABLED=0`,
 **20,227,090 bytes**. Growth: **6,903,360 bytes (6.584 MiB)**, within 8 MiB.
 Footprint measurements and real Linux contributions remain maintainer release
 gates.
+
+The script also prints each collector's physical footprint (what Activity
+Monitor shows) once per phase. It is reported, not gated: RSS on macOS keeps
+counting memory the Go runtime has already returned, so RSS tracks the heap's
+high-water mark while physical footprint tracks current use.
+
+Footprint measurement (2026-10-19, macOS/arm64, ~1,700 processes, real
+histories, unstripped `go build`): idle peak 43.2 MB and watched peak 45.9 MB
+pass. Serving two viewers, the collector holds a median 48.0 MB with a peak of
+49.8 MB, about 1 MB over the 50,000,000-byte budget (**open**). Its physical
+footprint while serving is 30.2 MB (peak 33.6 MB). Results depend on process
+count, history size and memory pressure, so this machine is one sample.

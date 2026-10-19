@@ -145,3 +145,25 @@ func TestDrainPartialAndRotatedFile(t *testing.T) {
 		t.Fatal(got, err)
 	}
 }
+
+// AppendAll encodes every event before writing, so one unencodable event
+// leaves none of the batch in the spool.
+func TestAppendAllWritesNothingOnEncodeError(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "events")
+	now := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
+	good := model.HookEvent{TS: now, Event: "summary", Summary: &model.Summary{Text: "fine"}}
+	huge := model.HookEvent{TS: now, Event: "summary", Summary: &model.Summary{Text: strings.Repeat("x", 5000)}}
+	if err := AppendAll(dir, []model.HookEvent{good, huge}); err == nil {
+		t.Fatal("oversized event accepted")
+	}
+	events, _, err := Drain(dir, nil)
+	if err != nil || len(events) != 0 {
+		t.Fatalf("partial batch: %+v %v", events, err)
+	}
+	if err := AppendAll(dir, []model.HookEvent{good, good}); err != nil {
+		t.Fatal(err)
+	}
+	if events, _, err = Drain(dir, nil); err != nil || len(events) != 2 {
+		t.Fatalf("batch: %+v %v", events, err)
+	}
+}
