@@ -481,8 +481,9 @@
   function connection(connected) { document.querySelectorAll(".connection").forEach(el => { el.textContent = connected ? "● live" : "○ reconnecting…"; el.classList.toggle("working", connected); el.classList.toggle("waiting", !connected); }); }
   const stream = new EventSource("/events" + window.location.search);
   stream.addEventListener("open", () => connection(true)); stream.addEventListener("error", () => connection(false));
-  const refresh = () => { const main = document.getElementById("main"); if (window.htmx) htmx.trigger(main, "console:refresh"); };
-  stream.addEventListener("ready", refresh); stream.addEventListener("change", refresh);
+  const refresh = () => { if(document.querySelector("[data-flow-map]")){document.dispatchEvent(new Event("driga:flow-refresh"));return;} const main = document.getElementById("main"); if (window.htmx) htmx.trigger(main, "console:refresh"); };
+  stream.addEventListener("refresh", () => {if(document.querySelector("[data-flow-map]")) document.dispatchEvent(new Event("driga:flow-refresh"));});
+  stream.addEventListener("ready", refresh); stream.addEventListener("change", () => {if(!document.querySelector("[data-flow-map]"))refresh();});
   stream.addEventListener("tail", event => { try { ingestTail(JSON.parse(event.data)); } catch (_) { /* A reconnect will refresh the tail. */ } });
   const flowObserver = new ResizeObserver(drawFlowWires); flowObserver.observe(document.getElementById("main"));
   const clock = setInterval(() => { document.querySelectorAll("[data-clock]").forEach(el => { el.textContent = new Date().toLocaleTimeString([], {hour12: false}); }); }, 1000);

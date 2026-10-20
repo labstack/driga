@@ -169,3 +169,18 @@ func (s *SwitchingSource) Close() error {
 	}
 	return nil
 }
+
+func (s *SwitchingSource) LoadFlowWindow(ctx context.Context, scope store.Scope, id int64, minutes int) (view.FlowView, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.recheck(); err != nil {
+		return view.FlowView{}, err
+	}
+	if f, ok := s.source.(FlowWindowSource); ok {
+		return f.LoadFlowWindow(ctx, scope, id, minutes)
+	}
+	if f, ok := s.source.(FlowSource); ok {
+		return f.LoadFlow(ctx, scope, id)
+	}
+	return view.FlowView{}, fmt.Errorf("flow is not available from this source")
+}

@@ -213,7 +213,18 @@ func (s *Server) loadPage(r *http.Request) (pageData, int, error) {
 			if p.Scope != "all" {
 				scope.Machines = []string{p.Scope}
 			}
-			p.Flow, err = source.LoadFlow(r.Context(), scope, id)
+			minutes := 60
+			if q.Has("minutes") {
+				minutes, err = strconv.Atoi(q.Get("minutes"))
+				if err != nil || minutes != 15 && minutes != 60 && minutes != 240 {
+					return p, 400, fmt.Errorf("minutes must be 15, 60 or 240")
+				}
+			}
+			if window, ok := s.source.(viewer.FlowWindowSource); ok {
+				p.Flow, err = window.LoadFlowWindow(r.Context(), scope, id, minutes)
+			} else {
+				p.Flow, err = source.LoadFlow(r.Context(), scope, id)
+			}
 			if err != nil {
 				return p, 404, err
 			}

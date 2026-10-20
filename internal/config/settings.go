@@ -28,6 +28,7 @@ type Setting struct {
 }
 
 var settings = []Setting{
+	{"motion", "Motion", "string", "on", "Event-bound motion in the terminal Flow map.", "on or off"},
 	{"roots", "Roots", "list", []string{}, "Additional repository discovery roots; ~ expands to HOME.", "file-only; empty = session working directories only"},
 	{"root_depth", "RootDepth", "int", int64(3), "Repository discovery depth.", "0..max int; zero = roots only"},
 	{"exclude", "Exclude", "list", []string{"**/node_modules", "**/.tmp/**"}, "Repository discovery exclusions.", "file-only; empty = no exclusions"},
@@ -176,6 +177,10 @@ func (s Setting) assign(c *Config, raw any) error {
 			return fmt.Errorf("expected string")
 		}
 		switch s.Key {
+		case "motion":
+			if text != "on" && text != "off" {
+				return fmt.Errorf("allowed values: %s", s.Range)
+			}
 		case "inbox.alerts":
 			if text != "waiting" && text != "all" && text != "off" {
 				return fmt.Errorf("allowed values: %s", s.Range)

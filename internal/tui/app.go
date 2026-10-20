@@ -17,6 +17,7 @@ import (
 	"github.com/labstack/driga/internal/config"
 	"github.com/labstack/driga/internal/derive"
 	"github.com/labstack/driga/internal/fleet"
+	"github.com/labstack/driga/internal/inbox"
 	"github.com/labstack/driga/internal/kill"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/platform"
@@ -26,6 +27,7 @@ import (
 
 // Options configures scope, appearance, and injectable action dependencies.
 type Options struct {
+	MotionOff    bool
 	Tmux         string
 	JumpTerminal bool
 	Machine      string
@@ -49,9 +51,14 @@ type Options struct {
 type app struct {
 	flow             view.FlowView
 	flowID           int64
+	flowMinutes      int
+	flowAttention    bool
+	flowAskCursor    int
+	flowSelectID     int64
 	flowOffset       int
 	flowExpanded     bool
 	flowPulse        map[string]time.Time
+	flowBranchPulse  map[string]time.Time
 	flowSeen         map[string]bool
 	flowGrowthSeen   map[string]time.Time
 	flowGrowthPulse  map[string]flowGrowthPulse
@@ -235,7 +242,21 @@ func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if i := m.cursors[flowTab]; i >= 0 && i < len(m.flowWorkers().Nodes) {
 			selectedID = m.flowWorkers().Nodes[i].ID
 		}
+		if m.flowSelectID != 0 {
+			selectedID = m.flowSelectID
+			m.flowSelectID = 0
+		}
 		m.recordFlowObservations(msg.flow)
+		if m.flow.Lead != nil && msg.flow.Lead != nil && m.flow.Lead.ID == msg.flow.Lead.ID {
+			for _, n := range msg.flow.Children {
+				if n.ParentID != nil && n.StartedAt.After(m.flow.ObservedAt) && !n.StartedAt.After(m.opts.Now()) {
+					if m.flowBranchPulse == nil {
+						m.flowBranchPulse = map[string]time.Time{}
+					}
+					m.flowBranchPulse[growthKey(n)] = m.opts.Now().Add(time.Second)
+				}
+			}
+		}
 		m.flow = msg.flow
 		if m.flowSeen == nil {
 			m.flowSeen = map[string]bool{}
@@ -442,6 +463,28 @@ func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if m.tab == flowTab && !m.detail {
+			if k == "tab" && len(m.flow.Attention.Waits) > 0 {
+				m.flowAttention = !m.flowAttention
+				return m, nil
+			}
+			if m.flowAttention && len(m.flow.Attention.Waits) > 0 {
+				count := len(m.flow.Attention.Waits)
+				m.flowAskCursor = min(m.flowAskCursor, count-1)
+				w := m.flow.Attention.Waits[m.flowAskCursor]
+				switch k {
+				case "j", "down":
+					m.flowAskCursor = (m.flowAskCursor + 1) % count
+					return m, nil
+				case "k", "up":
+					m.flowAskCursor = (m.flowAskCursor + count - 1) % count
+					return m, nil
+				case "c":
+					m.status = inbox.JumpCommand(w.Jump)
+					return m, nil
+				case "enter":
+					return m, m.jumpFlowAttention(w)
+				}
+			}
 			switch k {
 			case "[", "]":
 				delta := 1
@@ -450,6 +493,26 @@ func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.flowSession(delta)
 				return m, m.loadFlow()
+			case "-", "+", "=":
+				zooms := []int{15, 60, 240}
+				i := 0
+				for j, z := range zooms {
+					if z == m.flowZoom() {
+						i = j
+					}
+				}
+				if k == "-" {
+					i = min(2, i+1)
+				} else {
+					i = max(0, i-1)
+				}
+				m.flowMinutes = zooms[i]
+				return m, m.loadFlow()
+			case "c":
+				if n := m.flowSelected(); n != nil {
+					m.status = inbox.JumpCommand(n.Jump)
+				}
+				return m, nil
 			case "enter":
 				w := m.flowWorkers()
 				if w.Quiet > 0 && m.cursors[flowTab] == len(w.Nodes) {
@@ -458,6 +521,7 @@ func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.flowEnsureVisible()
 					return m, nil
 				}
+				return m, m.jumpFlow()
 			case "j", "down", "k", "up":
 				w := m.flowWorkers()
 				count := len(w.Nodes)

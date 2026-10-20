@@ -951,3 +951,14 @@ func (tx *Tx) PruneSnapshot(now time.Time) error {
 	// A disposable viewer does not publish a resumable fleet feed.
 	return tx.exec("DELETE FROM feed")
 }
+
+// SessionHandoffs reads completion marks for one session, never a repo tail.
+func (q *querier) SessionHandoffs(id int64, from, to time.Time) ([]model.CompletionEvent, error) {
+	return readMany(q, `SELECT machine_id,id,ts,text FROM handoffs WHERE machine_id=? AND session_id=? AND ts>=? AND ts<=? ORDER BY ts,id`, []any{q.machineID, id, unix(from), unix(to)}, func(s scanner) (model.CompletionEvent, error) {
+		var e model.CompletionEvent
+		var id, ts int64
+		err := s.Scan(&e.MachineID, &id, &ts, &e.Text)
+		e.ID, e.TS = strconv.FormatInt(id, 10), fromUnix(ts)
+		return e, err
+	})
+}

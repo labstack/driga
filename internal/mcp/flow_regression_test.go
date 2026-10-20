@@ -78,7 +78,7 @@ func TestFlowSnapshotMatchesAllSurfaces(t *testing.T) {
 		t.Fatalf("web: %d %s", response.Code, response.Body)
 	}
 	page := response.Body.String()
-	if !strings.Contains(page, fmt.Sprintf("%d of 4 agree", expected.Agreement)) || !strings.Contains(page, "+13 quiet threads") {
+	if !strings.Contains(page, expected.Evidence) {
 		t.Error("web agreement/hidden count differs from fixture")
 	}
 	for _, row := range expected.Rows {

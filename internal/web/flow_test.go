@@ -9,10 +9,8 @@ import (
 	"github.com/labstack/driga/internal/view"
 	"net/http/httptest"
 	"regexp"
-	"strconv"
 	"strings"
 	"testing"
-	"time"
 )
 
 func TestFlowSharedDefault(t *testing.T) {
@@ -29,32 +27,16 @@ func TestFlowSharedDefault(t *testing.T) {
 	}
 }
 
-func TestFlowTailWholeRowsAndSharedPane(t *testing.T) {
+func TestFlowMapLayoutParts(t *testing.T) {
 	s, _, id, _ := fixture(t)
 	body := request(s, "GET", fmt.Sprint("/flow?id=", id), s.token).Body.String()
-	if !regexp.MustCompile(`<section class="[^"]*tail-pane[^"]*flow-tail`).MatchString(body) {
-		t.Error("flow must reuse the shared tail pane spacing")
-	}
-	css := request(s, "GET", "/static/app.css", s.token).Body.String()
-	property := func(selector, name string) int {
-		t.Helper()
-		rule := regexp.MustCompile(`(?s)` + regexp.QuoteMeta(selector) + `\s*\{([^}]+)\}`).FindString(css)
-		match := regexp.MustCompile(name + `:\s*(\d+)px`).FindStringSubmatch(rule)
-		if len(match) != 2 {
-			t.Fatalf("missing %s in %s", name, rule)
+	for _, part := range []string{"Needs you · machine-wide", "Session map · measured activity", "Session detail · signal mixer", "data-flow-svg", "data-flow-zoom", "data-flow-quiet", "/static/flow-map.js", "/static/flow-map.css"} {
+		if !strings.Contains(body, part) {
+			t.Error("missing", part)
 		}
-		n, _ := strconv.Atoi(match[1])
-		return n
 	}
-	height, row := property(".flow-tail .tail", "height"), property(".tail div", "line-height")
-	if height%row != 0 {
-		t.Errorf("flow tail clips oldest row at scroll bottom: %dpx / %dpx", height, row)
-	}
-	for selector, want := range map[string]string{".tail": "justify-content:flex-start", ".tail div": "flex-shrink:0", ".tail>div:first-child": "margin-top:auto"} {
-		rule := regexp.MustCompile(`(?s)` + regexp.QuoteMeta(selector) + `\s*\{([^}]+)\}`).FindString(css)
-		if !strings.Contains(rule, want) {
-			t.Errorf("shared tail rule missing %s: %s", want, rule)
-		}
+	if strings.Index(body, "metro-needs") > strings.Index(body, "metro-main") {
+		t.Fatal("attention must come first")
 	}
 }
 
@@ -79,7 +61,7 @@ func TestFlowPageCSP(t *testing.T) {
 		t.Fatalf("%d %s", w.Code, w.Body.String())
 	}
 	body := w.Body.String()
-	for _, want := range []string{"signal mixer", "this session family", "data-flow", "data-window=\"7\"", "&lt;script&gt;alert(1)&lt;/script&gt;"} {
+	for _, want := range []string{"signal mixer", "Session map", "data-flow-map", "data-window=\"7\"", "&lt;script&gt;alert(1)&lt;/script&gt;"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("missing %s", want)
 		}
@@ -107,59 +89,16 @@ func TestFlowEmptyAndBadID(t *testing.T) {
 
 func TestFlowRenderingPolish(t *testing.T) {
 	s, _, _, _ := fixture(t)
-	p := pageData{Flow: view.FlowView{Lead: &view.FlowNode{Adapter: "claude", Label: "finished"}, Mixer: model.StateMixer{Verdict: "finished", Evidence: "because hooks: unacknowledged Stop", Rows: []model.StateSignal{{Name: "hooks", Reading: "Notification"}}}}}
-	for i := 0; i < 11; i++ {
-		p.Flow.Children = append(p.Flow.Children, view.FlowNode{ID: int64(i + 1), Adapter: "codex", ExternalID: fmt.Sprint(i), Label: "idle", LastActivityAt: time.Now()})
-	}
+	p := pageData{Flow: view.FlowView{Lead: &view.FlowNode{Title: "<script>alert(1)</script>", Adapter: "claude", Mixer: model.StateMixer{Verdict: "finished", Evidence: "stored", Rows: []model.StateSignal{{Name: "hooks", Reading: "Notification"}}}}}}
 	var out strings.Builder
 	if err := s.templates.ExecuteTemplate(&out, "flow", p); err != nil {
 		t.Fatal(err)
 	}
 	body := out.String()
-	if strings.Contains(body, "Session ") || !strings.Contains(body, "codex thread") {
-		t.Error("bare ID/empty title fallback")
+	if !strings.Contains(body, `title="Notification"`) || strings.Contains(body, "<script>") {
+		t.Fatal("unescaped title or missing signal tooltip", body)
 	}
-	if strings.Count(body, "data-flow-member") != 11 {
-		t.Error("collapsed threads lost live family membership")
-	}
-	if strings.Count(body, "data-worker data-flow-node") != 5 || !strings.Contains(body, "+6 quiet threads") {
-		t.Error("workers not capped")
-	}
-	if !strings.Contains(body, `class="flow-value" title="Notification"`) {
-		t.Error("mixer value missing tooltip")
-	}
-	if strings.Contains(body, " ·  · ") {
-		t.Error("empty worker detail adds doubled separator")
-	}
-	if !strings.Contains(body, "data-wire-trunk") || strings.Contains(body, "data-wire-return") {
-		t.Error("missing shared trunk")
-	}
-	p.FlowExpanded = true
-	out.Reset()
-	if err := s.templates.ExecuteTemplate(&out, "flow", p); err != nil {
-		t.Fatal(err)
-	}
-	if strings.Count(out.String(), "data-worker data-flow-node") != 11 || strings.Contains(out.String(), "+6 quiet threads") {
-		t.Error("expanded workers remain capped")
-	}
-	p.FlowExpanded = false
-	p.ObservedAt = time.Now()
-	for i := range p.Flow.Children {
-		p.Flow.Children[i].Kind = "hosted"
-		p.Flow.Children[i].LastActivityAt = p.ObservedAt.Add(-2 * time.Hour)
-	}
-	out.Reset()
-	if err := s.templates.ExecuteTemplate(&out, "flow", p); err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(out.String(), `flow-quiet sel`) {
-		t.Error("only quiet threads: Enter has no selected summary")
-	}
-	css := request(s, "GET", "/static/app.css", s.token).Body.String()
-	rule := regexp.MustCompile(`(?s)\.flow-value\s*\{([^}]+)\}`).FindString(css)
-	for _, want := range []string{"white-space:nowrap", "text-overflow:ellipsis", "min-width:0"} {
-		if !strings.Contains(rule, want) {
-			t.Error("value wrapping:", want)
-		}
+	if strings.Contains(body, "data-wire-return") {
+		t.Fatal("return line cannot prove delivery")
 	}
 }

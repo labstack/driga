@@ -472,6 +472,15 @@ type FlowSource interface {
 }
 
 func (s *StoreSource) LoadFlow(ctx context.Context, scope store.Scope, id int64) (view.FlowView, error) {
+	return s.LoadFlowWindow(ctx, scope, id, 60)
+}
+
+// FlowWindowSource selects the same contract at a supported zoom.
+type FlowWindowSource interface {
+	LoadFlowWindow(context.Context, store.Scope, int64, int) (view.FlowView, error)
+}
+
+func (s *StoreSource) LoadFlowWindow(ctx context.Context, scope store.Scope, id int64, minutes int) (view.FlowView, error) {
 	var result view.FlowView
 	err := s.st.Tx(ctx, func(tx *store.Tx) error {
 		f := s.Filter
@@ -499,6 +508,7 @@ func (s *StoreSource) LoadFlow(ctx context.Context, scope store.Scope, id int64)
 			}
 			f.Scope = store.Scope{Machines: allowed}
 		}
+		f.FlowMinutes = minutes
 		result, err = view.Flow(tx, f, id, s.Now())
 		return err
 	})
@@ -508,4 +518,10 @@ func (s *LiveSnapshotSource) LoadFlow(ctx context.Context, scope store.Scope, id
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.StoreSource.LoadFlow(ctx, scope, id)
+}
+
+func (s *LiveSnapshotSource) LoadFlowWindow(ctx context.Context, scope store.Scope, id int64, minutes int) (view.FlowView, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.StoreSource.LoadFlowWindow(ctx, scope, id, minutes)
 }

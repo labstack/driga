@@ -198,6 +198,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.static.ServeHTTP(w, r)
 		return
 	}
+	if r.URL.Path == "/flow.json" {
+		s.flowJSON(w, r)
+		return
+	}
 	if r.URL.Path == "/events" {
 		s.events(w, r)
 		return
@@ -292,6 +296,9 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 		case <-r.Context().Done():
 			return
 		case <-ch:
+			if err := writeEvent("refresh"); err != nil {
+				return
+			}
 			if err := writeEvent("change"); err != nil {
 				return
 			}
@@ -348,4 +355,30 @@ func (w *headerWriter) Write(b []byte) (int, error) {
 		w.WriteHeader(http.StatusOK)
 	}
 	return w.ResponseWriter.Write(b)
+}
+
+// flowJSON shares page scope validation and the exact CLI/MCP FlowView contract.
+func (s *Server) flowJSON(w http.ResponseWriter, r *http.Request) {
+	clone := r.Clone(r.Context())
+	u := *r.URL
+	u.Path = "/flow"
+	clone.URL = &u
+	p, status, err := s.loadPage(clone)
+	if err != nil {
+		http.Error(w, err.Error(), status)
+		return
+	}
+	e := p.Snapshot.Envelope
+	e.Schema = 2
+	e.ObservedAt = p.Flow.ObservedAt
+	e.Data = p.Flow
+	raw, err := json.Marshal(e)
+	if err != nil {
+		http.Error(w, "could not encode flow", 500)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	if r.Method != http.MethodHead {
+		_, _ = w.Write(raw)
+	}
 }

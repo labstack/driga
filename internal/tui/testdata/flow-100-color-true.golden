@@ -1,0 +1,37 @@
+╭─ Needs you · machine-wide ───────────────────────────────────────────────────────────────────────╮
+│ ◆ Permission check · 5m0s · permission · Bash · enter jump · c resume                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Session map ────────────────────────────────────────────────────────────────────────────────────╮
+│ 48m · 11:12–now · head = last observed verdict                                                   │
+│ 192m earlier · 0 asks                                                                            │
+│ ›Driga flow map     ▶ working   [38;2;166;227;161m▆▇█▂▃▄▅▆▇█▂▃▄▅▆▇█▂▃▄▅▆▇┿┿┿┿┿┿┿┿┿┿┿┿┿┿┿┿┿┿┿┿┿┿┿╼▶[m as of 5s ago    │
+│                                 [38;2;148;226;213m───────── ────────── ─────────╱╱╱───────── ─────[m                 │
+│  Implement geometry ▶ working   [38;2;166;227;161m                       ╰╱╱╱╱╱╱╱╱╱╱╱╱◆▒▒▒▒╱╱╱┿╱╼▶[m as of 5s ago    │
+│                                 [38;2;148;226;213m                       ╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱  [m                 │
+│  Review CSP         ● finished  [38;2;166;173;200m                        ╰╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱●·━●[m as of 5s ago    │
+│                                 [38;2;148;226;213m                        ╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱   [m                 │
+│  Permission check   ◆ needs you [38;2;249;226;175m                         ╰╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱◆▒▒▒◆[m as of 5s ago    │
+│                                 [38;2;148;226;213m                         ╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱   [m                 │
+│  Quiet remote anal… ? unknown                             ╰╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱·┈? as of 5s ago    │
+│                                 [38;2;148;226;213m                          ╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱   [m                 │
+│ +12 quiet threads · enter to expand                                                              │
+│ ▁ log growth · ─ CPU · ┿ tool · ◆ wait · ○ prompt · ● end · ╱ no data                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Session detail · signal mixer ──────────────────────────────────────────────────────────────────╮
+│ Driga flow map · claude                                                                          │
+│ ▶ working · as of 5s ago                                                                         │
+│ why: stored hooks and process verdict                                                            │
+│ running 8h0m0s                                                                                   │
+│ tool calls 100 · retained window                                                                 │
+│ verdict working · 3 of 4 agree                                                                   │
+│ hooks: tool result                                                                               │
+│ process: alive · CPU 2.5%                                                                        │
+│ Copy resume: claude --resume 'eight-hour-lead'                                                   │
+│ last growth 3.9 KB · 0s ago                                                                      │
+│ Recent events · this session family                                                              │
+│ 11:59:00 otlp:tool_result                                                                        │
+│ 11:59:01 otlp:tool_result                                                                        │
+│ 11:59:02 otlp:tool_result                                                                        │
+│ 11:59:03 otlp:tool_result                                                                        │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+j/k session · enter jump · [/] family · -/+ zoom · tab needs · c resume

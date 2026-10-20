@@ -53,7 +53,7 @@ func TestUnknownSessionAgeIsDash(t *testing.T) {
 	if got := sessionAge(model.Session{}, time.Now()); got != 0 {
 		t.Fatalf("age: %v", got)
 	}
-	if got := sessionAgeText(0); got != "—" {
+	if got := SessionDuration(0); got != "—" {
 		t.Fatalf("text: %q", got)
 	}
 }
