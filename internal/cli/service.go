@@ -47,7 +47,7 @@ func (c ServiceCmd) Run(g *Globals) error {
 	if err != nil {
 		return err
 	}
-	s, err := service.New(bin)
+	s, err := service.New(stablePath(bin))
 	if err != nil {
 		return err
 	}

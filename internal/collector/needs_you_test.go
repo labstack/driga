@@ -278,3 +278,30 @@ func TestNeedsYouPassLifecycle(t *testing.T) {
 		}
 	}
 }
+
+// A registry may be written seconds after exec, so the recorded start can be
+// later than the kernel's. SameStart takes (kernel, recorded); swapped, such a
+// session lost its tmux jump.
+func TestNeedsYouJumpWhenRegistryWrittenAfterExec(t *testing.T) {
+	d, st, p, a := setup(t)
+	p.procs[0].TTY = "/dev/ttys009"
+	a.obs[0].ProcStart = p.procs[0].StartTime.Add(5 * time.Second)
+	d.InboxRunner = inboxRunnerFunc(func(_ context.Context, n string, _ ...string) ([]byte, error) {
+		if n == "tmux" {
+			return []byte("/dev/ttys009 work:1.1 /tmp/tmux-test/default\n"), nil
+		}
+		return nil, exec.ErrNotFound
+	})
+	at := d.now()
+	d.Now = func() time.Time { return at }
+	pass(t, d, st, Plan{Procs: true})
+	if err := spool.Append(d.SpoolDir, model.HookEvent{TS: at.Add(time.Second), Adapter: "claude", SessionID: "one", Event: "Notification", NotificationType: "permission_prompt"}); err != nil {
+		t.Fatal(err)
+	}
+	at = at.Add(2 * time.Second)
+	pass(t, d, st, Plan{Procs: true})
+	rows, _ := st.Inbox(time.Time{}, false)
+	if len(rows) != 1 || rows[0].Jump == nil || rows[0].Jump.Kind != "tmux" || rows[0].Jump.Target != "work:1.1" {
+		t.Fatalf("jump = %+v %+v", rows, rows[0].Jump)
+	}
+}

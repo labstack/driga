@@ -75,3 +75,19 @@ func TestServiceCarriesConfigurationEnvironment(t *testing.T) {
 		}
 	}
 }
+
+// The collector runs tmux and agent CLIs (tmux list-panes, claude agents
+// --json). launchd and systemd start services with a bare PATH, so the
+// service must carry the installing shell's PATH or those lookups fail
+// silently and every jump falls back to a resume command.
+func TestServiceCarriesPath(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("PATH", "/opt/tools/bin:/usr/bin:/bin")
+	t.Setenv("TMUX_TMPDIR", "/run/user/tmux")
+	for _, goos := range []string{"darwin", "linux"} {
+		c := configForOS("/opt/tools/bin/driga", goos)
+		if c.EnvVars["PATH"] != "/opt/tools/bin:/usr/bin:/bin" || c.EnvVars["TMUX_TMPDIR"] != "/run/user/tmux" {
+			t.Fatalf("%s env = %v", goos, c.EnvVars)
+		}
+	}
+}

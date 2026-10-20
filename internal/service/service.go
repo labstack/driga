@@ -35,7 +35,9 @@ func configForOS(binPath, goos string) *ks.Config {
 	escape := strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;", "'", "&apos;", "{", "&#123;")
 	template := strings.ReplaceAll(launchdConfig, "LOG_PATH", escape.Replace(logPathForOS(goos)))
 	env := map[string]string{"HOME": config.ExpandHome("~")}
-	keys := []string{"DRIGA_CONFIG", "DRIGA_DATA_DIR", "DRIGA_SPOOL_DIR", "CODEX_HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS"}
+	// PATH and TMUX_TMPDIR come from the installing shell: launchd and systemd
+	// start services with a bare PATH, so tmux and agent CLIs would not be found.
+	keys := []string{"PATH", "TMUX_TMPDIR", "DRIGA_CONFIG", "DRIGA_DATA_DIR", "DRIGA_SPOOL_DIR", "CODEX_HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS"}
 	for _, setting := range config.Settings() {
 		if name := setting.EnvName(); name != "" {
 			keys = append(keys, name)

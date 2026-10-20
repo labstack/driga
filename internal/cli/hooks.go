@@ -147,18 +147,7 @@ func (c HooksOptions) change(g *Globals, install bool) error {
 		if err != nil {
 			return err
 		}
-		// Keep a stable PATH symlink (for example a package manager's bin
-		// entry) when it identifies this executable. Resolving it would bake
-		// an upgrade-specific target into the agent's settings.
-		if path, lookupErr := exec.LookPath("driga"); lookupErr == nil {
-			current, currentErr := os.Stat(driga)
-			candidate, candidateErr := os.Stat(path)
-			if currentErr == nil && candidateErr == nil && os.SameFile(current, candidate) {
-				if absolute, absErr := filepath.Abs(path); absErr == nil {
-					driga = absolute
-				}
-			}
-		}
+		driga = stablePath(driga)
 	}
 	endpoint := ""
 	if c.OTLP {
@@ -279,4 +268,25 @@ func (c HooksOptions) otlpStatus(g *Globals) error {
 		}
 	}
 	return nil
+}
+
+// stablePath prefers the PATH entry (for example a package manager's bin
+// symlink) when it is this same executable. Resolving it instead would bake an
+// upgrade-specific path (Homebrew's Cellar/<version>) into agent settings and
+// the service definition, and the next upgrade would leave them pointing at a
+// deleted file.
+func stablePath(exe string) string {
+	path, err := exec.LookPath("driga")
+	if err != nil {
+		return exe
+	}
+	current, currentErr := os.Stat(exe)
+	candidate, candidateErr := os.Stat(path)
+	if currentErr != nil || candidateErr != nil || !os.SameFile(current, candidate) {
+		return exe
+	}
+	if absolute, err := filepath.Abs(path); err == nil {
+		return absolute
+	}
+	return exe
 }

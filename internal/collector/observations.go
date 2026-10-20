@@ -45,7 +45,7 @@ func observeSessions(tx *store.Tx, work *State, ss []model.Session, procs []mode
 		// cannot honestly supply per-session CPU measurements.
 		cur, ok := byPID[s.PID]
 		prev, had := previous[s.PID]
-		if fresh && ok && had && owners[s.PID] == 1 && (s.ProcStart.IsZero() || derive.SameStart(s.ProcStart, cur.StartTime)) && prev.StartTime.Equal(cur.StartTime) {
+		if fresh && ok && had && owners[s.PID] == 1 && (s.ProcStart.IsZero() || derive.SameStart(cur.StartTime, s.ProcStart)) && prev.StartTime.Equal(cur.StartTime) {
 			// Quantize cumulative counters before subtraction. Rounding each
 			// small delta independently would lose or manufacture CPU over time.
 			ms := math.Round(cur.CPUSeconds*1000) - math.Round(prev.CPUSeconds*1000)

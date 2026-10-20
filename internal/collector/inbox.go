@@ -127,7 +127,7 @@ func resolveInboxJumps(ctx context.Context, tx *store.Tx, d Deps, ss []model.Ses
 		}
 		p := procs[s.PID]
 		tty := ""
-		if s.ProcStart.IsZero() || derive.SameStart(s.ProcStart, p.StartTime) {
+		if s.ProcStart.IsZero() || derive.SameStart(p.StartTime, s.ProcStart) {
 			tty = p.TTY
 		}
 		j := attention.ResolveJump(s, tty, panes)

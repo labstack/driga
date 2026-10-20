@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"slices"
 	"strings"
 	"syscall"
@@ -38,6 +39,28 @@ func TestNeedsYouHookMetadataAndCodexReportOnly(t *testing.T) {
 		}
 		if h.Adapter == "claude" && v["notification_type"] != "permission_prompt" {
 			t.Fatalf("notification_type lost: %s", b)
+		}
+	}
+}
+
+// Claude's permission Notification names the tool only in its message
+// ("Claude needs your permission to use Bash"). Driga keeps just the tool
+// name, which the titles policy allows, and never the rest of the message.
+func TestClaudePermissionToolFromMessage(t *testing.T) {
+	for _, tc := range []struct{ message, want string }{
+		{"Claude needs your permission to use Bash", "Bash"},
+		{"Claude needs your permission to use mcp__github__create_issue", "mcp__github__create_issue"},
+		{"Claude is waiting for your input", ""},
+		{"needs your permission to use", ""},
+	} {
+		dir := hookTestEnv(t)
+		payload, _ := json.Marshal(map[string]string{"session_id": "s", "notification_type": "permission_prompt", "message": tc.message})
+		if err := (HookCmd{Adapter: "claude", Event: "Notification"}).Run(&Globals{Stdin: bytes.NewReader(payload), Stdout: io.Discard}); err != nil {
+			t.Fatal(err)
+		}
+		got, _, err := spool.Drain(dir, nil)
+		if err != nil || len(got) != 1 || got[0].Tool != tc.want || got[0].Message != "" {
+			t.Fatalf("%q: %+v %v", tc.message, got, err)
 		}
 	}
 }

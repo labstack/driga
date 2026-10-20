@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/labstack/driga/internal/config"
@@ -91,6 +92,9 @@ func (h HookCmd) append(g *Globals) error {
 	}
 	ev := model.HookEvent{TS: time.Now().UTC(), Adapter: h.Adapter, SessionID: payload.SessionID, Cwd: payload.Cwd, Event: h.Event}
 	ev.NotificationType, ev.Tool = payload.NotificationType, scrub.Snippet(payload.Tool)
+	if ev.Tool == "" && ev.NotificationType == "permission_prompt" {
+		ev.Tool = scrub.Snippet(permissionTool(payload.Message))
+	}
 	message := payload.Message
 	if message == "" {
 		message = payload.AssistantMessage
@@ -174,4 +178,20 @@ func hookReadInput(input io.Reader) ([]byte, error) {
 func hookLogError(err error) {
 	w := &logfile.Writer{Path: filepath.Join(config.SpoolDir(), "hook-errors.log")}
 	slog.New(logfile.TextHandler(w)).Error("hook capture failed", "event", "hook_failed", "err", scrub.Snippet(err.Error()))
+}
+
+// permissionTool reads the tool name from Claude's permission message
+// ("Claude needs your permission to use Bash"); the Notification payload has
+// no tool_name. Anything else yields no tool, never a guess.
+func permissionTool(message string) string {
+	const marker = "needs your permission to use "
+	i := strings.Index(message, marker)
+	if i < 0 {
+		return ""
+	}
+	name, _, _ := strings.Cut(strings.TrimSpace(message[i+len(marker):]), " ")
+	if name == "" || strings.ContainsAny(name, "/\\\"'`$") {
+		return ""
+	}
+	return name
 }

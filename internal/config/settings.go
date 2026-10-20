@@ -52,7 +52,7 @@ var settings = []Setting{
 	{"fleet.enroll_window", "Fleet.EnrollWindow", "duration", "10m", "Fleet enrollment duration.", "1ns..10m; zero rejected"},
 	{"fleet.allow_any_address", "Fleet.AllowAnyAddress", "bool", false, "Permit explicit non-loopback fleet listener.", "true or false"},
 	{"inbox.alerts", "Inbox.Alerts", "string", "waiting", "Desktop alerts for attention and optionally completions.", "waiting, all or off"},
-	{"inbox.alert_after", "Inbox.AlertAfter", "duration", "0s", "Suppress alerts when same-session activity preceded the wait within this interval.", "0..2562047h47m16.854775807s; zero = alert immediately"},
+	{"inbox.alert_after", "Inbox.AlertAfter", "duration", "0s", "Alert only when a wait is still open this long after it began.", "0..2562047h47m16.854775807s; zero = alert immediately"},
 	{"inbox.alert_repeat", "Inbox.AlertRepeat", "duration", "5m", "Minimum interval between alerts for one session.", "0..2562047h47m16.854775807s; zero = no throttle"},
 	{"inbox.jump_terminal", "Inbox.JumpTerminal", "bool", false, "Opt in to bringing a proven macOS terminal window to front.", "true or false"},
 	{"intake.otlp", "Intake.OTLP", "bool", false, "Enable optional loopback OTLP/HTTP JSON intake.", "true or false"},

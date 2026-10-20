@@ -240,6 +240,13 @@ func Waited(i model.InboxItem, now time.Time) time.Duration {
 	return max(0, end.Sub(start))
 }
 
+func waitStart(i model.InboxItem) time.Time {
+	if !i.WaitingSinceAt.IsZero() {
+		return i.WaitingSinceAt
+	}
+	return i.TS
+}
+
 type Notification struct{ Kind, Title, Body, Sound string }
 type Notifier interface {
 	Notify(context.Context, Notification) error
@@ -307,18 +314,18 @@ func PlanAlerts(items []model.InboxItem, activity map[int64]time.Time, c config.
 		if _, ok := seen[key]; ok {
 			continue
 		}
+		// alert_after delays a wait's alert until it has lasted that long, so a
+		// prompt answered at the terminal never pings. Until then it stays unseen.
+		open := i.AckedAt == nil && i.EndedAt == nil
+		if open && i.Kind == "waiting" && c.AlertAfter > 0 && now.Sub(waitStart(i)) < c.AlertAfter && c.Alerts != "off" && c.Alerts != "" {
+			continue
+		}
 		seen[key] = now
-		if c.Alerts == "off" || c.Alerts == "" || i.AckedAt != nil || i.EndedAt != nil {
+		if c.Alerts == "off" || c.Alerts == "" || !open {
 			continue
 		}
 		if i.Kind != "waiting" && !(i.Kind == "finished" && c.Alerts == "all") {
 			continue
-		}
-		if i.Kind == "waiting" && c.AlertAfter > 0 {
-			a := activity[i.SessionID]
-			if !a.IsZero() && !a.After(i.TS) && i.TS.Sub(a) <= c.AlertAfter {
-				continue
-			}
 		}
 		sk := i.MachineID + ":" + strconv.FormatInt(i.SessionID, 10)
 		if prev, ok := last[sk]; ok && now.Sub(prev) < c.AlertRepeat {

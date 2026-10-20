@@ -129,9 +129,32 @@ func TestAlertPolicyThrottleSummaryAndKinds(t *testing.T) {
 	if len(notes) != 1 || notes[0].Kind != "finished" || notes[0].Title == "Needs input" {
 		t.Fatal(notes)
 	}
-	cfg.Inbox.AlertAfter = time.Minute
-	if notes = PlanAlerts([]model.InboxItem{{ID: "quiet", SessionID: 4, Kind: "waiting", TS: at, WaitingSinceAt: at}}, map[int64]time.Time{4: at.Add(-time.Second)}, cfg.Inbox, "titles", at, seen, sessions); len(notes) != 0 {
-		t.Fatal(notes)
+}
+
+// alert_after is a delay: a wait alerts only while it is still open that long
+// after it began, so a prompt answered at the terminal never pings. Earlier
+// passes must not mark it seen, or the later alert would be lost.
+func TestAlertAfterDelaysUntilWaitLasts(t *testing.T) {
+	c := config.Default().Inbox
+	c.Alerts, c.AlertAfter = "waiting", 2*time.Minute
+	at := time.Unix(100, 0).UTC()
+	seen, last := map[string]time.Time{}, map[string]time.Time{}
+	wait := []model.InboxItem{{ID: "w", SessionID: 1, Kind: "waiting", TS: at, WaitingSinceAt: at, Reason: "permission"}}
+	for _, d := range []time.Duration{0, time.Minute, 119 * time.Second} {
+		if notes := PlanAlerts(wait, nil, c, "titles", at.Add(d), seen, last); len(notes) != 0 {
+			t.Fatalf("alerted after %v: %v", d, notes)
+		}
+	}
+	if notes := PlanAlerts(wait, nil, c, "titles", at.Add(2*time.Minute), seen, last); len(notes) != 1 || notes[0].Body != "permission" {
+		t.Fatalf("no alert once the wait lasted: %v", notes)
+	}
+	if notes := PlanAlerts(wait, nil, c, "titles", at.Add(10*time.Minute), seen, last); len(notes) != 0 {
+		t.Fatal("alerted twice", notes)
+	}
+	end := at.Add(30 * time.Second)
+	answered := []model.InboxItem{{ID: "a", SessionID: 2, Kind: "waiting", TS: at, WaitingSinceAt: at, EndedAt: &end}}
+	if notes := PlanAlerts(answered, nil, c, "titles", at.Add(5*time.Minute), seen, last); len(notes) != 0 {
+		t.Fatal("alerted an answered wait", notes)
 	}
 }
 

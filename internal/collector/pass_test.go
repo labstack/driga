@@ -14,6 +14,7 @@ import (
 	"github.com/labstack/driga/internal/config"
 	"github.com/labstack/driga/internal/gitscan"
 	"github.com/labstack/driga/internal/model"
+	"github.com/labstack/driga/internal/platform"
 	"github.com/labstack/driga/internal/signatures"
 	"github.com/labstack/driga/internal/spool"
 	"github.com/labstack/driga/internal/store"
@@ -50,7 +51,7 @@ func (f *fakePlatform) Alive(pid int32, start time.Time) bool {
 		return false
 	}
 	for _, p := range f.procs {
-		if p.PID == pid && p.StartTime.Equal(start) {
+		if p.PID == pid && platform.SameStart(p.StartTime, start) { // like the real platform: registry lag allowed
 			return true
 		}
 	}
