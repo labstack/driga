@@ -110,6 +110,14 @@ Remote orphans cannot be killed here; run the kill command on their machine.
 Remote inbox acknowledgments require the peer's `--ack` grant; unreachable peers
 show `ack pending` and retry on reconnect.
 
+Desktop alerts show the session title or project and why it needs you, within
+your capture policy. On macOS, `brew install terminal-notifier` enables clickable
+alerts that run `driga jump <item-id>` without acknowledging the item; otherwise
+alerts use Script Editor via osascript. Jumps select a proven tmux pane, focus a
+proven Terminal/iTerm window with `inbox.jump_terminal = true`, or print a resume
+command. Batch summaries and remote alerts have no click action. Notifier
+detection is cached until collector restart; `driga doctor` reports the backend.
+
 ## Privacy and configuration
 
 The default `capture_text = "titles"` stores generated titles and file paths,

@@ -4,7 +4,31 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/labstack/driga/internal/config"
+	"github.com/labstack/driga/internal/inbox"
 )
+
+func TestNotifierUsesStablePath(t *testing.T) {
+	readEnv(t)
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(t.TempDir(), "driga")
+	if err := os.Symlink(exe, link); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", filepath.Dir(link))
+	d, err := NewDeps(config.Default())
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := d.Notifier.(inbox.DesktopNotifier)
+	if n.DrigaPath != link {
+		t.Fatalf("notifier path = %q, want %q", n.DrigaPath, link)
+	}
+}
 
 // Homebrew links bin/driga to Cellar/driga/<version>/bin/driga. The service and
 // hooks must record the link, or brew upgrade leaves them on a deleted file.

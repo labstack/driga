@@ -3,7 +3,6 @@ package tui
 import (
 	"context"
 	"os/exec"
-	"runtime"
 	"strings"
 	"time"
 
@@ -13,38 +12,39 @@ import (
 
 func (m *app) jumpInbox(r tabRow) tea.Cmd {
 	j := r.inbox.Jump
-	m.status = j.Command
-	if j.Cwd != "" {
-		m.status = j.Cwd + " · " + m.status
-	}
+	m.status = inbox.JumpCommand(j)
 	if m.remote(r.machine) {
 		m.status = m.machineName(r.machine) + ": " + m.status
 		return nil
 	}
-	server, _, _ := strings.Cut(m.opts.Tmux, ",")
-	var args []string
-	if j.Kind == "tmux" && j.Server != "" && server == j.Server {
-		args = []string{"tmux", "-S", j.Server, "switch-client", "-t", j.Target}
+	commands, err := inbox.JumpCommands(j, inbox.JumpOptions{Tmux: m.opts.Tmux, Terminal: m.opts.JumpTerminal})
+	if err != nil {
+		m.status = err.Error()
+		return nil
 	}
-	if j.Kind == "terminal" && m.opts.JumpTerminal && runtime.GOOS == "darwin" {
-		if script := inbox.TerminalActivateScript(j.App); script != "" {
-			args = []string{"osascript", "-e", script, j.Target}
-		}
-	}
-	if len(args) == 0 {
+	if len(commands) == 0 {
 		return nil
 	}
 	run, ctx := m.opts.Exec, m.opts.Context
-	status := strings.Join(args, " ")
+	var display []string
+	for _, args := range commands {
+		display = append(display, strings.Join(args, " "))
+	}
+	status := strings.Join(display, " && ")
 	m.busy = true
 	return func() tea.Msg {
 		var err error
-		if run != nil {
-			err = run(args)
-		} else {
-			ctx, cancel := context.WithTimeout(ctx, time.Second)
-			defer cancel()
-			err = exec.CommandContext(ctx, args[0], args[1:]...).Run()
+		ctx, cancel := context.WithTimeout(ctx, time.Second)
+		defer cancel()
+		for _, args := range commands {
+			if run != nil {
+				err = run(args)
+			} else {
+				err = exec.CommandContext(ctx, args[0], args[1:]...).Run()
+			}
+			if err != nil {
+				break
+			}
 		}
 		return actionMsg{status: status, err: err}
 	}

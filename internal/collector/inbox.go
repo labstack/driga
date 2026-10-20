@@ -205,13 +205,9 @@ func alertInbox(ctx context.Context, d Deps, st *store.Store) error {
 			return err
 		}
 		seen, last := map[string]time.Time{}, map[string]time.Time{}
-		activity := map[int64]time.Time{}
 		sessions, err := tx.SessionsScoped(store.SessionFilter{IncludeEnded: true}, scope)
 		if err != nil {
 			return err
-		}
-		for _, s := range sessions {
-			activity[s.ID] = s.LastActivityAt
 		}
 		load := func(prefix, k string, m map[string]time.Time) error {
 			raw, e := tx.Meta(prefix + k)
@@ -236,7 +232,13 @@ func alertInbox(ctx context.Context, d Deps, st *store.Store) error {
 			}
 		}
 		previousSeen, previousLast := maps.Clone(seen), maps.Clone(last)
-		notes = attention.PlanAlerts(rows, activity, d.Cfg.Inbox, d.Cfg.CaptureText, d.now(), seen, last)
+		notes = attention.PlanAlerts(rows, sessions, d.Cfg.Inbox, d.Cfg.CaptureText, d.now(), seen, last)
+		// Remote IDs can collide with local IDs and cannot be jumped to here.
+		for k := range notes {
+			if notes[k].MachineID != st.MachineID() {
+				notes[k].ItemID = ""
+			}
+		}
 		for k, v := range seen {
 			if previousSeen[k].Equal(v) {
 				continue

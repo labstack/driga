@@ -15,7 +15,12 @@ func TestNeedsYouInboxJumpAndHeader(t *testing.T) {
 	f.snap.Inbox.Rows[0].WaitingSinceAt = f.snap.ObservedAt.Add(-time.Minute)
 	f.snap.Inbox.Rows[0].TS = f.snap.Inbox.Rows[0].WaitingSinceAt
 	f.snap.Inbox.Rows[0].Jump = &model.InboxJump{Kind: "tmux", Target: "dev:1.2", Server: "/tmp/fake", Command: "tmux attach -t 'dev:1.2'"}
-	m := setup(t, f, Options{Exec: func([]string) error { t.Fatal("outside tmux should print command"); return nil }}).(*app)
+	m := setup(t, f, Options{Exec: func(args []string) error {
+		if strings.Join(args, " ") != "tmux -S /tmp/fake select-pane -t dev:1.2" {
+			t.Fatal(args)
+		}
+		return nil
+	}}).(*app)
 	m.tab = homeTab
 	if !strings.Contains(m.header(), "1 waiting") || !strings.Contains(m.header(), "oldest 1m") {
 		t.Fatal(m.header())
@@ -47,7 +52,11 @@ func TestNeedsYouJumpSwitchesOnlySameLocalServer(t *testing.T) {
 		calls := 0
 		m := setup(t, f, Options{Tmux: "/tmp/fake-socket,123,0", Exec: func(args []string) error {
 			calls++
-			if strings.Join(args, " ") != "tmux -S /tmp/fake-socket switch-client -t dev:1.2" {
+			action := "switch-client"
+			if calls == 2 {
+				action = "select-pane"
+			}
+			if strings.Join(args, " ") != "tmux -S /tmp/fake-socket "+action+" -t dev:1.2" {
 				t.Fatal(args)
 			}
 			return nil
@@ -57,7 +66,7 @@ func TestNeedsYouJumpSwitchesOnlySameLocalServer(t *testing.T) {
 		if cmd := m.openSelected(false); cmd != nil {
 			cmd()
 		}
-		if remote && calls != 0 || !remote && calls != 1 {
+		if remote && calls != 0 || !remote && calls != 2 {
 			t.Fatal(remote, calls, m.status)
 		}
 	}

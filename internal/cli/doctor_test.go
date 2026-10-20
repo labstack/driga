@@ -59,6 +59,29 @@ func TestDoctorNoDaemon(t *testing.T) {
 	requireCheck(t, Doctor(context.Background(), d), "collector", "warn", "driga service install")
 }
 
+func TestDoctorMacNotifier(t *testing.T) {
+	for _, path := range []string{"", "/opt/tool bin/terminal-notifier"} {
+		d, _ := doctorFixture(t)
+		d.OS = "darwin"
+		d.NotifierLookup = func() string { return path }
+		status, detail, fix := "ok", "terminal-notifier (clickable)", ""
+		if path == "" {
+			status, detail, fix = "info", "osascript (Script Editor)", "brew install terminal-notifier"
+		}
+		c := requireCheck(t, Doctor(context.Background(), d), "notifications", status, fix)
+		if c.Detail != detail || c.Fix != fix {
+			t.Fatal(c)
+		}
+		d.OS = "linux"
+		d.NotifierLookup = func() string { t.Fatal("macOS lookup on Linux"); return "" }
+		for _, c := range Doctor(context.Background(), d) {
+			if c.Name == "notifications" {
+				t.Fatal(c)
+			}
+		}
+	}
+}
+
 func TestDoctorIntake(t *testing.T) {
 	d, st := doctorFixture(t)
 	c := requireCheck(t, Doctor(context.Background(), d), "otlp intake", "info", "")

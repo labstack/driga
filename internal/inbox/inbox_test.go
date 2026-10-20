@@ -88,7 +88,7 @@ func TestNotifierUsesArgvAndDistinctLinuxSounds(t *testing.T) {
 			calls = append(calls, append([]string{n}, a...))
 			return nil, nil
 		})
-		d := DesktopNotifier{Runner: r, OS: goos}
+		d := DesktopNotifier{Runner: r, OS: goos, Lookup: func() string { return "" }}
 		for _, n := range []Notification{{Kind: "waiting", Title: "Needs input", Body: `quoted " message`, Sound: "Glass"}, {Kind: "finished", Title: "Done", Body: "done", Sound: "Pop"}} {
 			if err := d.Notify(context.Background(), n); err != nil {
 				t.Fatal(err)
@@ -145,7 +145,7 @@ func TestAlertAfterDelaysUntilWaitLasts(t *testing.T) {
 			t.Fatalf("alerted after %v: %v", d, notes)
 		}
 	}
-	if notes := PlanAlerts(wait, nil, c, "titles", at.Add(2*time.Minute), seen, last); len(notes) != 1 || notes[0].Body != "permission" {
+	if notes := PlanAlerts(wait, nil, c, "titles", at.Add(2*time.Minute), seen, last); len(notes) != 1 || notes[0].Body != "Session · permission" {
 		t.Fatalf("no alert once the wait lasted: %v", notes)
 	}
 	if notes := PlanAlerts(wait, nil, c, "titles", at.Add(10*time.Minute), seen, last); len(notes) != 0 {
