@@ -237,27 +237,24 @@ func alertInbox(ctx context.Context, d Deps, st *store.Store) error {
 		if err != nil {
 			return err
 		}
-		load := func(prefix, k string, m map[string]time.Time) error {
-			raw, e := tx.Meta(prefix + k)
-			if errors.Is(e, store.ErrNotFound) {
-				return nil
-			}
-			if e != nil {
-				return e
-			}
-			if at, e := time.Parse(time.RFC3339Nano, raw); e == nil {
+		// Two range reads instead of two point reads per inbox item: thousands
+		// of unacknowledged items made this the collector's largest cost.
+		alerted, err := tx.MetaPrefix("inbox_alert:")
+		if err != nil {
+			return err
+		}
+		repeated, err := tx.MetaPrefix("inbox_alert_session:")
+		if err != nil {
+			return err
+		}
+		load := func(stored map[string]string, k string, m map[string]time.Time) {
+			if at, e := time.Parse(time.RFC3339Nano, stored[k]); e == nil {
 				m[k] = at
 			}
-			return nil
 		}
 		for _, i := range rows {
-			if err := load("inbox_alert:", i.MachineID+":"+i.ID, seen); err != nil {
-				return err
-			}
-			sk := attention.AlertRepeatKey(i)
-			if err := load("inbox_alert_session:", sk, last); err != nil {
-				return err
-			}
+			load(alerted, i.MachineID+":"+i.ID, seen)
+			load(repeated, attention.AlertRepeatKey(i), last)
 		}
 		previousSeen, previousLast := maps.Clone(seen), maps.Clone(last)
 		notes = attention.PlanAlerts(rows, sessions, d.Cfg.Inbox, d.Cfg.CaptureText, d.now(), seen, last)
