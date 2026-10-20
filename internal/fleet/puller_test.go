@@ -5,9 +5,11 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -72,8 +74,9 @@ func runPull(t *testing.T, p *Puller) context.CancelFunc {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() { defer close(done); p.Run(ctx) }()
-	t.Cleanup(func() { cancel(); <-done })
-	return cancel
+	stop := func() { cancel(); <-done }
+	t.Cleanup(stop)
+	return stop
 }
 func TestRestartResumesWithoutResnapshot(t *testing.T) {
 	p, out, st, count, _ := pullFixture(t)
@@ -90,7 +93,8 @@ func TestRestartResumesWithoutResnapshot(t *testing.T) {
 	}
 	p2 := NewPuller(p.peer, p.id, p.out)
 	p2.Resume(Cursor{Epoch: machines[0].FeedEpoch, Seq: machines[0].FeedSeq})
-	runPull(t, p2)
+	// Commit while the collector is stopped, so this exercises replay from
+	// disk rather than depending on whether the live stream has subscribed.
 	if e := st.Tx(context.Background(), func(tx *store.Tx) error {
 		k, v := feed.Encode(feed.Event, model.Event{Adapter: "claude", ExternalID: "one", Kind: "Stop", TS: time.Now()}, feed.Titles)
 		_, e := tx.AppendFeed("event", k, v, time.Now())
@@ -98,6 +102,7 @@ func TestRestartResumesWithoutResnapshot(t *testing.T) {
 	}); e != nil {
 		t.Fatal(e)
 	}
+	runPull(t, p2)
 	b := nextBatch(t, out, func(b Batch) bool { return len(b.Rows) > 0 })
 	if b.Cursor.Seq != snap.Cursor.Seq+1 || count.Load() != 1 {
 		t.Fatalf("cursor=%+v snapshots=%d", b.Cursor, count.Load())
@@ -202,6 +207,29 @@ func TestViewerMismatchMessageNamesRekey(t *testing.T) {
 	}
 }
 
+type testRoundTripper func(*http.Request) (*http.Response, error)
+
+func (f testRoundTripper) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+type burstBody struct {
+	io.ReadCloser
+	buffered chan struct{}
+	once     sync.Once
+}
+
+func (b *burstBody) Read(p []byte) (int, error) {
+	n, err := b.ReadCloser.Read(p)
+	if err == io.EOF {
+		// Let the scanner parse the final bytes before signalling that every
+		// frame has been queued independently of the writer's acknowledgment.
+		if n > 0 {
+			return n, nil
+		}
+		b.once.Do(func() { close(b.buffered) })
+	}
+	return n, err
+}
+
 func TestPullerBatchesBurst(t *testing.T) {
 	var peerID, epoch string
 	p, out, st, snapshots, _ := pullFixture(t, func(w http.ResponseWriter, r *http.Request) {
@@ -223,6 +251,14 @@ func TestPullerBatchesBurst(t *testing.T) {
 	peerID = p.peer.MachineID
 	epoch, _, _, _ = st.FeedBounds()
 	p.Resume(Cursor{Epoch: epoch})
+	buffered := make(chan struct{})
+	p.client.Transport = testRoundTripper(func(r *http.Request) (*http.Response, error) {
+		resp, err := p.transport.RoundTrip(r)
+		if err == nil && r.URL.Path == "/v1/events" {
+			resp.Body = &burstBody{ReadCloser: resp.Body, buffered: buffered}
+		}
+		return resp, err
+	})
 	viewer := remoteStore(t)
 	if err := viewer.Tx(context.Background(), func(tx *store.Tx) error { return tx.ForMachine(peerID).UpsertMachine(model.Machine{FeedEpoch: epoch}) }); err != nil {
 		t.Fatal(err)
@@ -230,6 +266,8 @@ func TestPullerBatchesBurst(t *testing.T) {
 	cancel := runPull(t, p)
 	defer cancel()
 	rows, transactions := 0, 0
+	limit := time.NewTimer(5 * time.Second)
+	defer limit.Stop()
 	for rows < 1000 {
 		select {
 		case b := <-out:
@@ -242,15 +280,21 @@ func TestPullerBatchesBurst(t *testing.T) {
 				b.Complete(context.Canceled)
 				t.Fatalf("1000-row burst required more than 4 transactions (%d rows so far)", rows)
 			}
-			// A collector wake commits while the stream reader buffers the burst.
-			time.Sleep(10 * time.Millisecond)
+			if transactions == 1 {
+				select {
+				case <-buffered:
+				case <-limit.C:
+					b.Complete(context.Canceled)
+					t.Fatal("stream reader did not buffer the burst before acknowledgment")
+				}
+			}
 			err := viewer.Tx(context.Background(), func(tx *store.Tx) error { return ApplyBatch(tx, b, time.Now()) })
 			b.Complete(err)
 			if err != nil {
 				t.Fatal(err)
 			}
 			rows += len(b.Rows)
-		case <-time.After(5 * time.Second):
+		case <-limit.C:
 			t.Fatal("burst did not apply")
 		}
 	}

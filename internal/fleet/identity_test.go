@@ -10,6 +10,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -179,14 +180,29 @@ func TestPinnedTLSRejectsUnknownCert(t *testing.T) {
 			s := tls.Server(a, sc)
 			c := tls.Client(b, fleet.PinnedTLS(tc.id, tc.accept))
 			done := make(chan error, 1)
-			go func() { done <- s.Handshake() }()
+			go func() {
+				err := s.Handshake()
+				a.Close()
+				done <- err
+			}()
 			ce := c.Handshake()
+			if ce == nil {
+				// TLS 1.3 can finish on the client before the server rejects its
+				// certificate. Drain the alert so net.Pipe does not await a deadline.
+				_, _ = c.Read(make([]byte, 1))
+			}
 			se := <-done
 			if tc.want && (ce != nil || se != nil) {
 				t.Fatalf("client %v; server %v", ce, se)
 			}
-			if !tc.want && ce == nil && se == nil {
-				t.Fatal("unknown certificate accepted")
+			if !tc.want {
+				err := ce
+				if tc.name == "unknown_client" {
+					err = se
+				}
+				if err == nil || !strings.Contains(err.Error(), "untrusted fleet peer certificate") {
+					t.Fatalf("missing certificate rejection: client %v; server %v", ce, se)
+				}
 			}
 		})
 	}
