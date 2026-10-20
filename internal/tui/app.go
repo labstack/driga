@@ -32,6 +32,7 @@ import (
 type Options struct {
 	Chat          chat.Client
 	ChatEphemeral bool
+	InitialTab    string
 	MotionOff     bool
 	Tmux          string
 	JumpTerminal  bool
@@ -174,6 +175,9 @@ func New(src Source, opts Options) tea.Model {
 	input.Placeholder = "filter"
 	input.SetStyles(textinput.Styles{})
 	m := &app{chatInput: newChatInput(), chatEphemeral: opts.ChatEphemeral, tab: homeTab, machineScope: opts.Machine, src: src, opts: opts, width: 80, height: 24, expanded: map[string]bool{}, filter: input, table: table.New(table.WithFocused(true)), viewport: viewport.New()}
+	if opts.InitialTab == "machine" {
+		m.tab = 4
+	}
 	m.rebuild()
 	return m
 }

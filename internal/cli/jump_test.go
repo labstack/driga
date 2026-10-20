@@ -156,3 +156,30 @@ func TestJumpDoesNotExecuteRemoteItem(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestMachineNotificationClickUsesInstalledExecutable(t *testing.T) {
+	readEnv(t)
+	t.Setenv("PATH", t.TempDir())
+	st := readDB(t, func(tx *store.Tx) error {
+		return tx.UpsertInboxItem(model.InboxItem{ID: "low_disk:1", Kind: "low_disk", TS: time.Now(), Jump: &model.InboxJump{Kind: "machine", Command: "driga top --tab machine"}})
+	})
+	bin, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var calls int
+	err = (JumpCmd{ID: "low_disk:1"}).run(&Globals{Stdout: &bytes.Buffer{}}, jumpRunner(func(_ context.Context, name string, args ...string) ([]byte, error) {
+		calls++
+		if name != "osascript" || len(args) != 3 || args[2] != inbox.Quote(bin)+" top --tab machine" {
+			t.Fatalf("%s %q", name, args)
+		}
+		return nil, nil
+	}), "darwin")
+	if err != nil || calls != 1 {
+		t.Fatalf("%d %v", calls, err)
+	}
+	rows, err := st.Inbox(time.Time{}, false)
+	if err != nil || len(rows) != 1 || rows[0].AckedAt != nil {
+		t.Fatalf("jump mutated inbox: %+v %v", rows, err)
+	}
+}

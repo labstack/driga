@@ -1,6 +1,7 @@
 package store
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -29,4 +30,25 @@ func (q *querier) PendingAcks(scope Scope) ([]model.InboxItem, error) {
 		}
 	}
 	return pending, nil
+}
+
+// EndMachineWarning retains warning history while preventing alerts on recovery.
+func (tx *Tx) EndMachineWarning(kind string, at time.Time) error {
+	if kind != "low_disk" && kind != "memory_pressure" {
+		return fmt.Errorf("invalid machine warning %q", kind)
+	}
+	return tx.exec("UPDATE inbox_items SET ended_at=? WHERE machine_id=? AND session_id=0 AND kind=? AND ended_at IS NULL", unix(at), tx.machineID, kind)
+}
+
+// RefreshMachineWarning upgrades an existing episode's text and click target,
+// preserving its identity, acknowledgement, and notification repeat history.
+func (tx *Tx) RefreshMachineWarning(kind, summary string, jump *model.InboxJump) error {
+	if kind != "low_disk" && kind != "memory_pressure" {
+		return fmt.Errorf("invalid machine warning %q", kind)
+	}
+	b, err := json.Marshal(jump)
+	if err != nil {
+		return err
+	}
+	return tx.exec("UPDATE inbox_items SET summary=?,jump=? WHERE machine_id=? AND session_id=0 AND kind=? AND ended_at IS NULL AND acked_at IS NULL", summary, string(b), tx.machineID, kind)
 }

@@ -84,17 +84,21 @@ func (d darwinPlatform) Procs(ctx context.Context) ([]model.Proc, error) {
 			return cmdline, exe, err
 		})
 		if err != nil {
-			// argv is briefly unreadable while a new child execs. Keep our own
-			// processes so kill re-verification still sees a changed tree; other
-			// users' argv is never readable and stays out, as before.
-			if k.Eproc.Pcred.P_ruid != uid {
-				continue
+			// argv may be unreadable during exec or for other users. Keep the
+			// sampled resources for the machine view; expose only the sysctl
+			// command name when another user's executable is inaccessible.
+			cmdline, exe = "", unix.ByteSliceToString(k.Proc.P_comm[:])
+			if k.Eproc.Pcred.P_ruid == uid {
+				exe = ""
 			}
-			cmdline, exe = "", ""
 		}
 		seen[pid] = struct{}{}
 		sample.RSS, sample.CPUSeconds = rss.RSS, times.User+times.System
 		sample.Cmdline, sample.Exe = cmdline, exe
+		sample.MemoryMeasure = "rss"
+		if footprint, err := physicalFootprint(pid); err == nil {
+			sample.Footprint, sample.MemoryMeasure = footprint, "physical_footprint"
+		}
 		out = append(out, sample)
 	}
 	d.idents.retain(seen)
@@ -111,7 +115,17 @@ func (darwinPlatform) Machine(ctx context.Context) (model.MachineSample, error) 
 		return sample, fmt.Errorf("virtual memory: %w", err)
 	}
 	sample.MemUsed, sample.MemTotal = vm.Used, vm.Total
-	// gopsutil's Darwin VirtualMemoryStat does not expose compressed memory.
+	// gopsutil does not expose compressed memory. vm_stat reports actual
+	// compressor pages and the host page size (including Apple Silicon).
+	sample.PressureLevel = "unknown"
+	if level, err := unix.SysctlUint32("kern.memorystatus_vm_pressure_level"); err == nil {
+		sample.PressureLevel = pressureLevelDarwin(level)
+	}
+	vmCtx, vmCancel := context.WithTimeout(ctx, 2*time.Second)
+	if out, err := exec.CommandContext(vmCtx, "vm_stat").Output(); err == nil {
+		sample.MemCompressed, _ = ParseCompressed(out)
+	}
+	vmCancel()
 	swap, err := mem.SwapMemoryWithContext(ctx)
 	if err != nil {
 		return sample, fmt.Errorf("swap memory: %w", err)

@@ -170,6 +170,11 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 			if e := source("machine", err); e != nil {
 				return e
 			}
+			if err != nil {
+				if err := memoryPressureInbox(tx, model.MachineSample{}, now); err != nil {
+					return err
+				}
+			}
 			if err == nil {
 				if sample.TS.IsZero() {
 					sample.TS = now
@@ -177,7 +182,10 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 				if err := tx.InsertSample(sample); err != nil {
 					return err
 				}
-				if err := lowDiskInbox(tx, d.Cfg.Cleanup, sample, now); err != nil {
+				if err := lowDiskInbox(tx, d.Cfg.Machine, sample, now); err != nil {
+					return err
+				}
+				if err := memoryPressureInbox(tx, sample, now); err != nil {
 					return err
 				}
 				sample.MachineID = tx.MachineID()
@@ -790,7 +798,7 @@ func passFeedRows(tx *store.Tx, now time.Time, share feed.ShareText) (map[string
 	for _, i := range items {
 		// Cleanup's machine-level attention stays local. The v1.5 feed
 		// requires session keys; never publish an empty session reference.
-		if i.Kind == "low_disk" && i.SessionID == 0 {
+		if (i.Kind == "low_disk" || i.Kind == "memory_pressure") && i.SessionID == 0 {
 			continue
 		}
 		add(feed.Inbox, feed.InboxRow{InboxItem: i, Session: keys[i.SessionID]})

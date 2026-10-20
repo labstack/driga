@@ -29,20 +29,23 @@ type Machine struct {
 
 // Proc is one process in a snapshot.
 type Proc struct {
-	TTY        string    `json:"tty,omitempty"`
-	MachineID  string    `json:"machine_id"`
-	PID        int32     `json:"pid"`
-	PPID       int32     `json:"ppid"`
-	StartTime  time.Time `json:"started_at"`
-	RSS        uint64    `json:"rss_bytes"`
-	CPUSeconds float64   `json:"cpu_ms"`
-	CPUPercent float64   `json:"cpu_percent"`
-	Cmdline    string    `json:"cmdline"`
-	Exe        string    `json:"exe"`
-	Cwd        string    `json:"cwd"`
-	Role       string    `json:"role,omitempty"`
-	Agent      string    `json:"agent,omitempty"`
-	SessionID  int64     `json:"session_id,omitempty"`
+	TTY           string    `json:"tty,omitempty"`
+	MachineID     string    `json:"machine_id"`
+	PID           int32     `json:"pid"`
+	PPID          int32     `json:"ppid"`
+	StartTime     time.Time `json:"started_at"`
+	Footprint     uint64    `json:"footprint_bytes"`
+	Swap          uint64    `json:"swap_bytes"`
+	MemoryMeasure string    `json:"memory_measure"`
+	RSS           uint64    `json:"rss_bytes"`
+	CPUSeconds    float64   `json:"cpu_ms"`
+	CPUPercent    float64   `json:"cpu_percent"`
+	Cmdline       string    `json:"cmdline"`
+	Exe           string    `json:"exe"`
+	Cwd           string    `json:"cwd"`
+	Role          string    `json:"role,omitempty"`
+	Agent         string    `json:"agent,omitempty"`
+	SessionID     int64     `json:"session_id,omitempty"`
 	// Zombie is live inspection data; cleanup never uses stored process state.
 	Zombie bool `json:"-"`
 	// OwnerUID is the real uid when OwnerKnown; live inspection only, never
@@ -64,6 +67,7 @@ type MachineSample struct {
 	SwapUsed      uint64    `json:"swap_used_bytes"`
 	SwapTotal     uint64    `json:"swap_total_bytes"`
 	DiskFree      uint64    `json:"disk_free_bytes"`
+	PressureLevel string    `json:"pressure_level"`
 	PressureFree  float64   `json:"pressure_free"`
 	Load1         float64   `json:"load1"`
 	Load5         float64   `json:"load5"`

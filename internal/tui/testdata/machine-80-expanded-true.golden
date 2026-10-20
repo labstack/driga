@@ -1,0 +1,49 @@
+ driga   test-host · ● live · daemon   05:00:00   mem ███░░░ 50%
+swap ███░░░ 50%   load 0.0/4   disk 12.0G
+0 Home   1 Agents 1   2 Projects 0   3 Inbox 1   4 Orphans 1   [5 Machine]
+6 Cleanup 0   7 Flow   8 Chat
+────────────────────────────────────────────────────────────────────────────────
+  METRIC / APP / PROCESS  CPU    MEASURE / ATTRIBUTION             MEM          
+  memory                         4.0G/8.0G                                      
+  compressed                     1.0G                                           
+  swap                           1.0G/2.0G                                      
+  pressure level                 critical                                       
+  pressure free                  0.0%                                           
+  load (1/5/15)                  0.0 / 0.0 / 0.0                                
+  cores                          4                                              
+  disk free                      12.0G                                          
+  Top 10 apps by memory          → expand · enter details                       
+› ▾ Browser               70.0%  physical_footprint                2.0G         
+    42 worker             70.0%  ← fixture · session #251          2.0G         
+  Top 10 apps by CPU             → expand · enter details                       
+  ▸ Browser               70.0%  physical_footprint                2.0G         
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+
+0 Home · m machine · enter detail · / filter · s sort · g group by project
+o open terminal · esc back · ? help · q quit

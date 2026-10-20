@@ -462,7 +462,7 @@ func orphansLocal(r Reader, f Filter, now time.Time) (OrphansView, error) {
 	return v, nil
 }
 
-// Machine reads the latest health sample and aggregates agent RSS by role.
+// machineLocal reads existing snapshots; app ranking never triggers a host scan.
 func machineLocal(r Reader, f Filter, now time.Time) (MachineView, error) {
 	v := MachineView{MachineID: r.MachineID(), Memory: []MemoryRow{}}
 	sample, err := r.LatestSample()
@@ -470,10 +470,26 @@ func machineLocal(r Reader, f Filter, now time.Time) (MachineView, error) {
 		return v, err
 	}
 	v.Sample = sample
+	if v.Sample.PressureLevel == "" {
+		v.Sample.PressureLevel = "unknown"
+	}
 	procs, err := r.Procs()
 	if err != nil {
 		return v, err
 	}
+	ss, err := r.Sessions(store.SessionFilter{IncludeEnded: true})
+	if err != nil {
+		return v, err
+	}
+	repos, err := r.Repos()
+	if err != nil {
+		return v, err
+	}
+	worktrees, err := r.Worktrees(0)
+	if err != nil {
+		return v, err
+	}
+	v.TopMemory, v.TopCPU = machineApps(procs, machineProjectSessions(ss, repos, worktrees))
 	allowed := map[int32]bool{}
 	if f.Project != "" {
 		ss, err := sessions(r, f, now)

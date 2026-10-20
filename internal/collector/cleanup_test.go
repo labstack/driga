@@ -2,11 +2,12 @@ package collector
 
 import (
 	"context"
+	"testing"
+	"time"
+
 	"github.com/labstack/driga/internal/feed"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/store"
-	"testing"
-	"time"
 )
 
 type diskPlatform struct {
@@ -22,8 +23,7 @@ func TestLowDiskInboxOnce(t *testing.T) {
 	disk := &diskPlatform{fakePlatform: p, total: 1000}
 	d.Plat = disk
 	d.Adapters = nil
-	d.Cfg.Cleanup.LowDiskBytes = 200
-	d.Cfg.Cleanup.LowDiskPercent = 10
+	d.Cfg.Machine.DiskFreeMin = 100
 	for i, free := range []uint64{50, 50, 200, 50} {
 		disk.free = free
 		now := d.now().Add(time.Duration(i) * time.Second)
@@ -56,7 +56,9 @@ func TestLowDiskInboxOnce(t *testing.T) {
 			count++
 		}
 	}
-	if count != 1 {
+	// The recovered episode is history; acknowledging the current episode
+	// leaves no active warning, without creating a replacement until recovery.
+	if count != 0 {
 		t.Fatal(items)
 	}
 }

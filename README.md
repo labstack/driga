@@ -106,6 +106,13 @@ queries never acknowledges inbox items. Use `x`/Space in Inbox or `driga inbox a
 acknowledgments are queued for the next collection. Orphan kills recheck process
 identity and the descendant set immediately before signaling; young candidates
 are refused. `--force` requires a second confirmation before SIGKILL.
+The Machine tab and web Machine page show the top ten apps by memory and CPU,
+with expandable processes and proven session attribution. `driga machine --json`
+and MCP `get_machine` return the same data. Low-disk and sustained critical-memory
+warnings use the existing inbox and desktop notifier; notification clicks open
+`driga top --tab machine`. See [machine health](docs/machine-health.md) for memory
+measures, thresholds, attribution proofs, and platform limits.
+
 Remote orphans cannot be killed here; run the kill command on their machine.
 Remote inbox acknowledgments require the peer's `--ack` grant; unreachable peers
 show `ack pending` and retry on reconnect.
@@ -153,7 +160,8 @@ Defaults and their purpose:
 | `summaries.enabled` | `false` | `driga summarize` runs only after this opt-in. |
 | `summaries.model` | `haiku` | Model passed to `claude -p` for summaries. |
 | `cleanup.worktree_idle` | `168h` | Minimum idle time before a worktree is a candidate. |
-| `cleanup.low_disk_percent` / `cleanup.low_disk_bytes` | `10` / `10GiB` | Inbox `low-disk` item below the smaller of the two. |
+| `machine.disk_free_min` | `"0"` (automatic) | Inbox `low_disk` warning below the smaller of 10% of the volume or decimal 20 GB; override with a byte string or KiB/MiB/GiB. Env: `DRIGA_MACHINE_DISK_FREE_MIN`. |
+| `cleanup.low_disk_percent` / `cleanup.low_disk_bytes` | `10` / `10GiB` | Legacy keys accepted for compatibility; warnings now use `machine.disk_free_min`. |
 | `cleanup.regenerable` | `node_modules/`, `target/`, `.venv/`, … | Ignored directories that may leave with a worktree; extends the defaults. |
 
 The Claude, Codex, Copilot and Gemini adapters are enabled by default. Override them with
