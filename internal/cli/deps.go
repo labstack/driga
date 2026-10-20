@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"os"
 	"time"
 
 	"github.com/labstack/driga/internal/adapter"
@@ -24,5 +25,9 @@ func NewDeps(cfg config.Config) (collector.Deps, error) {
 		return collector.Deps{}, err
 	}
 	runner := newInboxRunner()
-	return collector.Deps{Cfg: cfg, Plat: platform.New(), Adapters: []adapter.Adapter{claude.New(), codex.New(), gemini.New()}, Sigs: sigs, Git: gitscan.NewScanner(4), SpoolDir: config.SpoolDir(), Now: time.Now, State: collector.NewState(), InboxRunner: runner, Notifier: inbox.DesktopNotifier{Runner: runner}}, nil
+	exe, err := os.Executable()
+	if err != nil {
+		return collector.Deps{}, err
+	}
+	return collector.Deps{Cfg: cfg, Plat: platform.New(), Adapters: []adapter.Adapter{claude.New(), codex.New(), gemini.New()}, Sigs: sigs, Git: gitscan.NewScanner(4), SpoolDir: config.SpoolDir(), Now: time.Now, State: collector.NewState(), InboxRunner: runner, Notifier: inbox.DesktopNotifier{Runner: runner, DrigaPath: stablePath(exe)}}, nil
 }

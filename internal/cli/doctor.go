@@ -19,6 +19,7 @@ import (
 	"github.com/labstack/driga/internal/collector"
 	"github.com/labstack/driga/internal/config"
 	"github.com/labstack/driga/internal/hooks"
+	"github.com/labstack/driga/internal/inbox"
 	"github.com/labstack/driga/internal/intake"
 	"github.com/labstack/driga/internal/logfile"
 	"github.com/labstack/driga/internal/model"
@@ -45,18 +46,19 @@ type DoctorReader interface {
 
 // DoctorDeps supplies all environment and collection state for diagnostics.
 type DoctorDeps struct {
-	OS        string // Optional OS override for offline diagnostics.
-	ProcRoot  string // Optional procfs root; defaults to /proc.
-	LingerDir string // Optional linger marker directory.
-	UID       int
-	Username  string
-	DataDir   string
-	Store     DoctorReader
-	Config    config.Config
-	Home      string
-	CodexHome string // Optional override; defaults to Home/.codex.
-	Now       time.Time
-	LockProbe func(dataDir string) (held bool, err error)
+	OS             string // Optional OS override for offline diagnostics.
+	ProcRoot       string // Optional procfs root; defaults to /proc.
+	LingerDir      string // Optional linger marker directory.
+	UID            int
+	Username       string
+	DataDir        string
+	Store          DoctorReader
+	Config         config.Config
+	Home           string
+	CodexHome      string // Optional override; defaults to Home/.codex.
+	Now            time.Time
+	LockProbe      func(dataDir string) (held bool, err error)
+	NotifierLookup func() string // Optional cached notifier lookup for fixtures.
 }
 
 // Doctor checks stored evidence without collecting, writing, or controlling launchd.
@@ -269,6 +271,17 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 	}
 	if goos == "linux" {
 		checks = append(checks, doctorLinuxChecks(d)...)
+	}
+	if goos == "darwin" {
+		lookup := d.NotifierLookup
+		if lookup == nil {
+			lookup = inbox.TerminalNotifierPath
+		}
+		if lookup() != "" {
+			add("notifications", "ok", "terminal-notifier (clickable)", "")
+		} else {
+			add("notifications", "info", "osascript (Script Editor)", "brew install terminal-notifier")
+		}
 	}
 	checks = append(checks, doctorIntake(d, held))
 	return checks

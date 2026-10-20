@@ -8,10 +8,12 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/labstack/driga/internal/config"
@@ -247,13 +249,31 @@ func waitStart(i model.InboxItem) time.Time {
 	return i.TS
 }
 
-type Notification struct{ Kind, Title, Body, Sound string }
+type Notification struct{ Kind, Title, Body, Sound, ItemID, MachineID string }
 type Notifier interface {
 	Notify(context.Context, Notification) error
 }
 type DesktopNotifier struct {
-	Runner Runner
-	OS     string
+	Runner    Runner
+	OS        string
+	DrigaPath string
+	Lookup    func() string // Optional cached lookup override for fixtures.
+}
+
+// TerminalNotifierPath uses the inherited PATH, including the service's saved
+// installing-shell PATH. Cache both presence and absence for the process lifetime.
+func TerminalNotifierPath() string { return terminalNotifierPath() }
+
+var terminalNotifierPath = cachedNotifierLookup(exec.LookPath)
+
+func cachedNotifierLookup(lookup func(string) (string, error)) func() string {
+	return sync.OnceValue(func() string {
+		path, err := lookup("terminal-notifier")
+		if err != nil {
+			return ""
+		}
+		return path
+	})
 }
 
 func (d DesktopNotifier) Notify(ctx context.Context, n Notification) error {
@@ -269,6 +289,23 @@ func (d DesktopNotifier) Notify(ctx context.Context, n Notification) error {
 	var err error
 	switch goos {
 	case "darwin":
+		lookup := d.Lookup
+		if lookup == nil {
+			lookup = TerminalNotifierPath
+		}
+		if path := lookup(); path != "" {
+			group := n.Kind
+			if n.ItemID != "" {
+				group = n.ItemID
+			}
+			args := []string{"-title", "driga", "-subtitle", n.Title, "-message", n.Body, "-group", "driga-" + group, "-sound", n.Sound}
+			// Summaries have no single destination. Remote items also omit ItemID.
+			if n.ItemID != "" && d.DrigaPath != "" {
+				args = append(args, "-execute", Quote(d.DrigaPath)+" jump "+Quote(n.ItemID))
+			}
+			_, err = d.Runner.Run(ctx, path, args...)
+			break
+		}
 		_, err = d.Runner.Run(ctx, "osascript", "-e", "on run argv\ndisplay notification (item 1 of argv) with title (item 2 of argv) sound name (item 3 of argv)\nend run", n.Body, n.Title, n.Sound)
 	case "linux":
 		sound := "message-new-instant"
@@ -282,7 +319,45 @@ func (d DesktopNotifier) Notify(ctx context.Context, n Notification) error {
 
 // PlanAlerts marks suppressed items too: changing detail must not re-alert a wait.
 // Consecutive starts within three seconds in a committed batch form one summary.
-func PlanAlerts(items []model.InboxItem, activity map[int64]time.Time, c config.InboxConfig, policy string, now time.Time, seen, last map[string]time.Time) []Notification {
+func PlanAlerts(items []model.InboxItem, sessions []model.Session, c config.InboxConfig, policy string, now time.Time, seen, last map[string]time.Time) []Notification {
+	type sessionKey struct {
+		machine string
+		id      int64
+	}
+	labels := map[sessionKey]string{}
+	for _, s := range sessions {
+		label := ""
+		if policy != "none" {
+			label = strings.TrimSpace(s.Title)
+		}
+		if label == "" && s.Cwd != "" {
+			label = filepath.Base(s.Cwd)
+		}
+		labels[sessionKey{s.MachineID, s.ID}] = scrub.Snippet(label)
+	}
+	text := func(i model.InboxItem) string {
+		i = Policy(i, policy)
+		label := labels[sessionKey{i.MachineID, i.SessionID}]
+		if label == "" {
+			label = "Session"
+		}
+		reason := strings.ReplaceAll(i.Reason, "_", " ")
+		if i.Kind == "finished" {
+			reason = "turn finished"
+		} else if reason == "" || reason == "unknown" {
+			reason = "waiting for input"
+		}
+		body := label + " · " + reason
+		if i.Tool != "" {
+			body += " (" + i.Tool + ")"
+		}
+		if i.Detail != "" {
+			body += " · " + i.Detail
+		} else if policy == "snippets" && i.Kind == "finished" && i.Summary != "" && i.Summary != reason {
+			body += " · " + i.Summary
+		}
+		return body
+	}
 	sort.SliceStable(items, func(i, j int) bool { return items[i].TS.Before(items[j].TS) })
 	var waiting []model.InboxItem
 	var notes []Notification
@@ -290,21 +365,12 @@ func PlanAlerts(items []model.InboxItem, activity map[int64]time.Time, c config.
 		if len(waiting) == 0 {
 			return
 		}
-		n := Notification{Kind: "waiting", Title: "Needs input", Sound: "Glass"}
+		n := Notification{Kind: "waiting", Title: "Needs you", Sound: "Glass"}
 		if len(waiting) > 1 {
 			n.Body = fmt.Sprintf("%d sessions waiting", len(waiting))
 		} else {
-			i := Policy(waiting[0], policy)
-			n.Body = i.Reason
-			if n.Body == "" {
-				n.Body = "unknown"
-			}
-			if i.Tool != "" {
-				n.Body += " · " + i.Tool
-			}
-			if i.Detail != "" {
-				n.Body += " · " + i.Detail
-			}
+			n.Body, n.ItemID = text(waiting[0]), waiting[0].ID
+			n.MachineID = waiting[0].MachineID
 		}
 		notes = append(notes, n)
 		waiting = nil
@@ -333,8 +399,7 @@ func PlanAlerts(items []model.InboxItem, activity map[int64]time.Time, c config.
 		}
 		last[sk] = now
 		if i.Kind == "finished" {
-			i = Policy(i, policy)
-			notes = append(notes, Notification{Kind: "finished", Title: "Done", Body: i.Summary, Sound: "Pop"})
+			notes = append(notes, Notification{Kind: "finished", Title: "Finished", Body: text(i), Sound: "Pop", ItemID: i.ID, MachineID: i.MachineID})
 			continue
 		}
 		if len(waiting) > 0 && i.TS.Sub(waiting[0].TS) > 3*time.Second {

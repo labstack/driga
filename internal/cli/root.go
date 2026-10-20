@@ -52,6 +52,7 @@ type Root struct {
 	Cleanup   CleanupCmd   `cmd:"" help:"Inspect and explicitly clean local agent disk candidates."`
 	Where     WhereCmd     `cmd:"" help:"Show where a project stands."`
 	Inbox     InboxCmd     `cmd:"" help:"List attention and completion events."`
+	Jump      JumpCmd      `cmd:"" help:"Jump to a local inbox item without acknowledging it."`
 	Conflicts ConflictsCmd `cmd:"" help:"Show current and recent overlaps."`
 	Orphans   OrphansCmd   `cmd:"" help:"List orphan process trees."`
 	Machines  MachinesCmd  `cmd:"" help:"List known machines and their connection health."`
