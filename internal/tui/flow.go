@@ -120,6 +120,7 @@ func (m *app) flowPanel(title string, lines []string, width int, selected bool) 
 	header += strings.Repeat("─", max(0, width-lipgloss.Width(header)-1)) + "╮"
 	out := []string{header}
 	for _, line := range lines {
+		line = strings.ReplaceAll(line, "\t", " ")
 		line = truncate(line, inner)
 		out = append(out, "│ "+line+strings.Repeat(" ", max(0, inner-lipgloss.Width(line)))+" │")
 	}

@@ -6,10 +6,40 @@ import (
 	"github.com/labstack/driga/internal/view"
 	"net/http/httptest"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestFlowTailWholeRowsAndSharedPane(t *testing.T) {
+	s, _, id, _ := fixture(t)
+	body := request(s, "GET", fmt.Sprint("/flow?id=", id), s.token).Body.String()
+	if !regexp.MustCompile(`<section class="[^"]*tail-pane[^"]*flow-tail`).MatchString(body) {
+		t.Error("flow must reuse the shared tail pane spacing")
+	}
+	css := request(s, "GET", "/static/app.css", s.token).Body.String()
+	property := func(selector, name string) int {
+		t.Helper()
+		rule := regexp.MustCompile(`(?s)` + regexp.QuoteMeta(selector) + `\s*\{([^}]+)\}`).FindString(css)
+		match := regexp.MustCompile(name + `:\s*(\d+)px`).FindStringSubmatch(rule)
+		if len(match) != 2 {
+			t.Fatalf("missing %s in %s", name, rule)
+		}
+		n, _ := strconv.Atoi(match[1])
+		return n
+	}
+	height, row := property(".flow-tail .tail", "height"), property(".tail div", "line-height")
+	if height%row != 0 {
+		t.Errorf("flow tail clips oldest row at scroll bottom: %dpx / %dpx", height, row)
+	}
+	for selector, want := range map[string]string{".tail": "justify-content:flex-start", ".tail div": "flex-shrink:0", ".tail>div:first-child": "margin-top:auto"} {
+		rule := regexp.MustCompile(`(?s)` + regexp.QuoteMeta(selector) + `\s*\{([^}]+)\}`).FindString(css)
+		if !strings.Contains(rule, want) {
+			t.Errorf("shared tail rule missing %s: %s", want, rule)
+		}
+	}
+}
 
 func TestFlowExpansionSurvivesRefresh(t *testing.T) {
 	s, _, id, _ := fixture(t)

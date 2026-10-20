@@ -3,12 +3,74 @@ package view
 import (
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"testing"
 	"time"
 
+	"github.com/labstack/driga/internal/flowtest"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/store"
 )
+
+func TestFlowUsesLabelPassInputs(t *testing.T) {
+	var id int64
+	st := fixture(t, func(tx *store.Tx) (err error) { id, err = flowtest.Seed(tx); return err })
+	for _, now := range []time.Time{flowtest.Now, flowtest.Now.Add(5 * time.Second)} {
+		v, err := Flow(st, Filter{}, id, now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want, _ := json.Marshal(flowtest.Expected())
+		got, _ := json.Marshal(v.Mixer)
+		if string(got) != string(want) || v.Lead.Label != "finished" {
+			t.Errorf("flow replaced label-pass evidence at %s: got %s, want %s", now, got, want)
+		}
+	}
+}
+
+func TestFlowLegacyMixerPreservesStoredEvidence(t *testing.T) {
+	mixed := flowtest.Expected()
+	// A legacy record has no retained inputs, only the original explanation.
+	raw, _ := json.Marshal(mixed)
+	var fields map[string]json.RawMessage
+	json.Unmarshal(raw, &fields)
+	delete(fields, "input")
+	raw, _ = json.Marshal(fields)
+	json.Unmarshal(raw, &mixed)
+	var id int64
+	st := fixture(t, func(tx *store.Tx) (err error) {
+		id, err = tx.UpsertSession(model.Session{SessionObs: flowtest.Input().Obs, Label: mixed.Verdict, Mixer: &mixed})
+		return err
+	})
+	v, err := Flow(st, Filter{}, id, flowtest.Now.Add(time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(v.Mixer, mixed) {
+		t.Fatalf("legacy evidence changed: got %+v, want %+v", v.Mixer, mixed)
+	}
+}
+
+func TestFlowQuietSplitUsesSnapshotTime(t *testing.T) {
+	var id int64
+	st := fixture(t, func(tx *store.Tx) (err error) { id, err = flowtest.Seed(tx); return err })
+	for _, now := range []time.Time{flowtest.Now, flowtest.Now.Add(5 * time.Second)} {
+		v, err := Flow(st, Filter{}, id, now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, cap := range []int{1, 4, 5, 20} {
+			w := v.Workers(cap, false, now)
+			if len(w.Nodes) != min(cap, 5) || w.Quiet != 18-len(w.Nodes) {
+				t.Errorf("cap %d at %s: visible=%d hidden=%d", cap, now, len(w.Nodes), w.Quiet)
+			}
+		}
+		w := v.Workers(1, true, now)
+		if len(w.Nodes) != 18 || w.Quiet != 0 {
+			t.Fatal(w)
+		}
+	}
+}
 
 func TestFlowTitlesAndRelevance(t *testing.T) {
 	var lead int64

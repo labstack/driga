@@ -15,17 +15,7 @@ type Thresholds struct {
 }
 
 // StateInput combines adapter, process, hook, and acknowledgment observations.
-type StateInput struct {
-	LastHook                                     string
-	LastHookAt                                   time.Time
-	Obs                                          model.SessionObs
-	Proc                                         *model.Proc
-	LastNotification, LastStop                   *time.Time
-	LastUserPrompt                               time.Time
-	Unseen                                       bool
-	LastDecision, LastAPIRequest, LastToolResult *time.Time
-	LastAPIError                                 string
-}
+type StateInput = model.StateInput
 
 // Display adds the display marker to a heuristic label.
 func Display(label string, heuristic bool) string {

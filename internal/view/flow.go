@@ -60,6 +60,11 @@ type FlowWorkers struct {
 }
 
 func (v FlowView) Workers(limit int, expanded bool, now time.Time) FlowWorkers {
+	// Every surface partitions the same snapshot. A viewer's clock must not
+	// move a hosted thread into the quiet summary between renders.
+	if !v.Mixer.ObservedAt.IsZero() {
+		now = v.Mixer.ObservedAt
+	}
 	nodes := append([]FlowNode(nil), v.Children...)
 	sortFlowWorkers(nodes)
 	w := FlowWorkers{Nodes: []FlowNode{}}
@@ -189,10 +194,6 @@ func Flow(r Reader, f Filter, sessionID int64, now time.Time) (FlowView, error) 
 	if err != nil {
 		return v, err
 	}
-	items, err := selectedReader.Inbox(time.Time{}, false)
-	if err != nil {
-		return v, err
-	}
 	var leadEvents []model.Event
 	for _, s := range all {
 		if !family[s.ID] {
@@ -286,81 +287,16 @@ func Flow(r Reader, f Filter, sessionID int64, now time.Time) (FlowView, error) 
 		}
 	}
 	sortFlowWorkers(v.Children)
-	if lead.Mixer != nil {
-		v.Mixer = *lead.Mixer
-		v.Mixer.Rows = append([]model.StateSignal(nil), lead.Mixer.Rows...)
-	} else {
-		in := derive.StateInput{Obs: lead.SessionObs, LastUserPrompt: lead.LastPromptAt}
-		if reader, ok := selectedReader.(interface {
-			IntakeState(int64) (store.IntakeState, error)
-		}); ok {
-			state, err := reader.IntakeState(lead.ID)
-			if err != nil {
-				return v, err
-			}
-			if !state.LastDecision.IsZero() {
-				in.LastDecision = &state.LastDecision
-			}
-			if !state.LastAPIRequest.IsZero() {
-				in.LastAPIRequest = &state.LastAPIRequest
-			}
-			in.LastAPIError = state.LastAPIError
-		}
-		if p, ok := idx.Get(lead.PID); ok && (lead.ProcStart.IsZero() || derive.SameStart(p.StartTime, lead.ProcStart)) {
-			in.Proc = &p
-		}
-		for _, it := range items {
-			if it.SessionID == lead.ID && it.Kind == "finished" {
-				in.Unseen = true
-			}
-		}
-		for _, e := range leadEvents {
-			ts := e.TS
-			if !strings.HasPrefix(e.Kind, "otlp:") {
-				in.LastHook = e.Kind
-				in.LastHookAt = e.TS
-			}
-			switch e.Kind {
-			case "Stop":
-				in.LastStop = &ts
-			case "Notification", "PermissionRequest":
-				in.LastNotification = &ts
-			case "otlp:api_request":
-				in.LastAPIRequest = &ts
-			case "otlp:tool_result", "otlp:assistant_response", "otlp:user_prompt":
-				in.LastToolResult = &ts
-			}
-		}
-		v.Mixer = derive.LabelWithEvidence(in, now, derive.Thresholds{})
-		v.Lead.Label = v.Mixer.Verdict
-		v.Lead.Heuristic = v.Mixer.Heuristic
-	}
-	var lastTelemetry time.Time
+	v.Mixer = derive.SessionMixer(lead)
 	telemetryCount := 0
 	for _, e := range leadEvents {
 		if strings.HasPrefix(e.Kind, "otlp:") && !e.TS.After(now) {
-			if e.TS.After(lastTelemetry) {
-				lastTelemetry = e.TS
-			}
 			if !e.TS.Before(now.Add(-5 * time.Minute)) {
 				telemetryCount++
 			}
 		}
 	}
 	v.EventsPerMinute = float64(telemetryCount) / 5
-	for i := range v.Mixer.Rows {
-		row := &v.Mixer.Rows[i]
-		if !row.At.IsZero() {
-			row.Age = max(time.Duration(0), now.Sub(row.At))
-		}
-		if row.Name == "telemetry" {
-			row.Reading = fmt.Sprintf("%.1f / min", v.EventsPerMinute)
-			if !lastTelemetry.IsZero() {
-				row.At = lastTelemetry
-				row.Age = max(time.Duration(0), now.Sub(lastTelemetry))
-			}
-		}
-	}
 	sort.SliceStable(v.Tail, func(i, j int) bool {
 		if v.Tail[i].TS.Equal(v.Tail[j].TS) {
 			return v.Tail[i].Key < v.Tail[j].Key

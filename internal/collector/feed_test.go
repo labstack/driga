@@ -66,6 +66,27 @@ func TestPassAppendsOnlyChangedRows(t *testing.T) {
 	}
 }
 
+func TestMixerInputAgesDoNotRepublishSession(t *testing.T) {
+	d, st, _, _ := setup(t)
+	d.Cfg.Fleet.Serve = true
+	pass(t, d, st, Plan{Procs: true})
+	if err := st.Tx(context.Background(), func(tx *store.Tx) error {
+		return tx.InsertEvent(model.Event{Adapter: "claude", ExternalID: "one", Kind: "otlp:api_error", TS: d.Now(), Summary: "API unavailable"})
+	}); err != nil {
+		t.Fatal(err)
+	}
+	pass(t, d, st, Plan{})
+	first := feedRows(t, st, 0)
+	at := d.Now().Add(time.Second)
+	d.Now = func() time.Time { return at }
+	pass(t, d, st, Plan{})
+	for _, row := range feedRows(t, st, first[len(first)-1].Seq) {
+		if row.Kind == "session" {
+			t.Fatal("retained input age alone republished session")
+		}
+	}
+}
+
 func TestFeedSeqMonotonicAcrossRestart(t *testing.T) {
 	_, _, _, _ = setup(t)
 	path := filepath.Join(t.TempDir(), "driga.db")

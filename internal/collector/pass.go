@@ -639,6 +639,11 @@ func passFeedRows(tx *store.Tx, now time.Time, share feed.ShareText) (map[string
 				mixed := *v.Mixer
 				mixed.ObservedAt = time.Time{}
 				mixed.Evidence = evidenceDuration.ReplaceAllString(mixed.Evidence, "<age>")
+				if mixed.Input != nil {
+					input := *mixed.Input
+					input.LastAPIError = evidenceDuration.ReplaceAllString(input.LastAPIError, "<age>")
+					mixed.Input = &input
+				}
 				mixed.Rows = append([]model.StateSignal(nil), mixed.Rows...)
 				for i := range mixed.Rows {
 					mixed.Rows[i].Age = 0

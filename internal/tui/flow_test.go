@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -10,6 +11,43 @@ import (
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/view"
 )
+
+func TestRenderedFramesNeverContainTabs(t *testing.T) {
+	for _, color := range []bool{false, true} {
+		m := setup(t, fixture(), Options{}).(*app)
+		m.opts.NoColor = !color
+		m.flow = flowFixture()
+		m.flow.Mixer.Rows[0].Name = "registry\t"
+		if strings.ContainsRune(m.flowPanel("+18 quiet threads", []string{"Enter / click to expand\t\t\t"}, 60, false), '\t') {
+			t.Error("quiet panel emits literal tabs")
+		}
+		for i := 0; i < 18; i++ {
+			m.flow.Children = append(m.flow.Children, view.FlowNode{ID: int64(100 + i), Kind: "hosted", Label: "idle", Title: "quiet worker"})
+		}
+		for _, width := range []int{80, 120, 160} {
+			for tab := 0; tab <= flowTab; tab++ {
+				t.Run(fmt.Sprintf("color=%t/width=%d/tab=%d", color, width, tab), func(t *testing.T) {
+					m.tab = tab
+					m.Update(tea.WindowSizeMsg{Width: width, Height: 60})
+					m.rebuild()
+					if text := m.View().Content; strings.ContainsRune(text, '\t') {
+						t.Errorf("frame contains literal tab: %q", text)
+					}
+					if tab == flowTab && strings.ContainsRune(m.flowView(), '\t') {
+						t.Error("flow layout contains literal tabs")
+					}
+					// Details can include tabwriter output and retained text.
+					m.detail = true
+					m.viewport.SetContent("Enter / click to expand\t\t\t│")
+					if strings.ContainsRune(m.View().Content, '\t') {
+						t.Error("detail frame contains literal tabs")
+					}
+					m.detail = false
+				})
+			}
+		}
+	}
+}
 
 func flowFixture() view.FlowView {
 	return view.FlowView{Lead: &view.FlowNode{ID: 1, MachineID: "local", ExternalID: "lead", Adapter: "claude", Title: "Lead", Label: "working"}, Mixer: model.StateMixer{Verdict: "working", Rows: []model.StateSignal{{Name: "registry", Reading: "busy", Strength: 1}, {Name: "hooks", Reading: "Stop", Strength: .3}, {Name: "telemetry", Reading: "1 / min", Strength: .5}, {Name: "process", Reading: "alive", Strength: 1}}}, Children: []view.FlowNode{{ID: 2, MachineID: "local", ExternalID: "worker", Adapter: "codex", Title: strings.Repeat("worker ", 40), Label: "working", Activity: []int{0, 1, 2, 3, 4, 5, 0, 0, 1, 0}}, {ID: 3, ExternalID: "hosted", Kind: "hosted", Title: "Hosted", Label: "idle", LastActivityAt: time.Now()}, {ID: 4, Title: "Finished", Label: "finished"}}, Tail: []view.TailEvent{{Key: "old", MachineID: "local", Adapter: "claude", ExternalID: "lead", Summary: "family only"}}}

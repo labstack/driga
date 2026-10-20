@@ -1,12 +1,34 @@
 package derive
 
 import (
+	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/labstack/driga/internal/model"
 )
+
+func TestMixerRetainsLabelInputs(t *testing.T) {
+	now := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
+	in := StateInput{Obs: model.SessionObs{Adapter: "claude", PID: 42, RegistryStatus: "busy", LastActivityAt: now.Add(-15 * time.Minute)}, Proc: &model.Proc{PID: 42, CPUPercent: 8.4}}
+	m := LabelWithEvidence(in, now, Thresholds{StalledAfter: 20 * time.Minute})
+	raw, err := json.Marshal(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var saved struct {
+		Input          *StateInput `json:"input"`
+		StalledAfterMS int64       `json:"stalled_after_ms"`
+	}
+	if err := json.Unmarshal(raw, &saved); err != nil {
+		t.Fatal(err)
+	}
+	if saved.Input == nil || !reflect.DeepEqual(*saved.Input, in) || saved.StalledAfterMS != (20*time.Minute).Milliseconds() {
+		t.Fatalf("label inputs/threshold not retained: %s", raw)
+	}
+}
 
 func TestLabel(t *testing.T) {
 	now := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)

@@ -301,7 +301,9 @@ func (m *app) View() tea.View {
 	content := m.header() + "\n" + m.tabBar() + "\n" + strings.Repeat("─", m.width) + "\n" + body + "\n" + truncate(clean(status), m.width) + "\n" + m.footer()
 	lines = strings.Split(content, "\n")
 	for i, line := range lines {
-		lines[i] = truncate(line, m.width)
+		// Normalize before measuring so tabs cannot shift borders or escape in
+		// frames assembled from table/viewport output or retained text.
+		lines[i] = truncate(strings.ReplaceAll(line, "\t", " "), m.width)
 	}
 	v := tea.NewView(strings.Join(lines, "\n"))
 	v.AltScreen = true

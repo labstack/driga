@@ -779,7 +779,8 @@ meter::-moz-meter-bar {
 .flow-wire { fill:none; stroke:var(--line); stroke-width:1.5; stroke-dasharray:4 4; }
 .flow-pulse { fill:var(--accent); }
 .flow-tail { margin-top:20px; }
-.flow-tail .tail { height:120px; }
+/* Whole 18px rows keep the oldest visible line intact at scroll bottom. */
+.flow-tail .tail { height:126px; }
 .flow-foot { margin-top:12px; display:flex; flex-wrap:wrap; gap:1ch; }
 .flow-foot>span { margin-left:auto; }
 @container (max-width:1100px) { .flow-stage { gap:28px; } .flow-mixrow { grid-template-columns:9ch minmax(0,1fr); } .flow-value { grid-column:1/-1; } .flow-signal-age { padding-left:0; } }

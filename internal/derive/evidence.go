@@ -12,11 +12,23 @@ import (
 // LabelWithEvidence runs the state table once and explains its four inputs.
 // Rows may disagree: a recent Stop does not override newer busy/tool activity.
 func LabelWithEvidence(in StateInput, now time.Time, th Thresholds) model.StateMixer {
-	verdict, heuristic, evidence := label(in, now, th)
-	m := model.StateMixer{Verdict: verdict, Heuristic: heuristic, Evidence: evidence, ObservedAt: now}
 	if th.StalledAfter <= 0 {
 		th.StalledAfter = 10 * time.Minute
 	}
+	// Retain only inputs the label table consumes: no prompt text, paths or
+	// process command lines. These travel with the verdict, including in feeds.
+	in.Obs = model.SessionObs{Adapter: in.Obs.Adapter, PID: in.Obs.PID, RegistryStatus: in.Obs.RegistryStatus, LastActivityAt: in.Obs.LastActivityAt, Hosted: in.Obs.Hosted, TurnOpen: in.Obs.TurnOpen}
+	if in.Proc != nil {
+		in.Proc = &model.Proc{PID: in.Proc.PID, CPUPercent: in.Proc.CPUPercent}
+	}
+	for _, ts := range []**time.Time{&in.LastNotification, &in.LastStop, &in.LastDecision, &in.LastAPIRequest, &in.LastToolResult} {
+		if *ts != nil {
+			at := **ts
+			*ts = &at
+		}
+	}
+	verdict, heuristic, evidence := label(in, now, th)
+	m := model.StateMixer{Verdict: verdict, Heuristic: heuristic, Evidence: evidence, ObservedAt: now, Input: &in, StalledAfterMS: th.StalledAfter.Milliseconds()}
 	add := func(name, reading string, at time.Time, available bool) {
 		row := model.StateSignal{Name: name, Reading: reading, At: at}
 		if available {
@@ -160,5 +172,26 @@ func LabelWithEvidence(in StateInput, now time.Time, th Thresholds) model.StateM
 		}
 	}
 	m.Evidence = "because " + deciding + ": " + evidence
+	return m
+}
+
+// SessionMixer is the flow source of truth for web, TUI, CLI JSON and MCP.
+// Recompute from the same inputs, CPU sample, time and threshold used by the
+// last label pass, never today's procs/events/clock: the mixer explains the
+// stored label. Legacy rows without inputs retain their stored explanation;
+// rows predating mixers expose unavailable signals until the next label pass.
+func SessionMixer(s model.Session) model.StateMixer {
+	if s.Mixer != nil {
+		if s.Mixer.Input != nil {
+			return LabelWithEvidence(*s.Mixer.Input, s.Mixer.ObservedAt, Thresholds{StalledAfter: time.Duration(s.Mixer.StalledAfterMS) * time.Millisecond})
+		}
+		m := *s.Mixer
+		m.Rows = append([]model.StateSignal(nil), m.Rows...)
+		return m
+	}
+	m := model.StateMixer{Verdict: s.Label, Heuristic: s.Heuristic, Evidence: s.Evidence}
+	for _, name := range []string{"registry", "hooks", "telemetry", "process"} {
+		m.Rows = append(m.Rows, model.StateSignal{Name: name, Reading: "unavailable"})
+	}
 	return m
 }

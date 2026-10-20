@@ -30,14 +30,32 @@ type StateSignal struct {
 	CPUPercent *float64      `json:"cpu_percent,omitempty"`
 }
 
-// StateMixer is saved atomically with its verdict, preserving custom thresholds.
+// StateInput contains the observations consumed by the label table.
+type StateInput struct {
+	LastHook         string     `json:"last_hook"`
+	LastHookAt       time.Time  `json:"last_hook_at"`
+	Obs              SessionObs `json:"obs"`
+	Proc             *Proc      `json:"proc"`
+	LastNotification *time.Time `json:"last_notification"`
+	LastStop         *time.Time `json:"last_stop"`
+	LastUserPrompt   time.Time  `json:"last_user_prompt"`
+	Unseen           bool       `json:"unseen"`
+	LastDecision     *time.Time `json:"last_decision"`
+	LastAPIRequest   *time.Time `json:"last_api_request"`
+	LastToolResult   *time.Time `json:"last_tool_result"`
+	LastAPIError     string     `json:"last_api_error"`
+}
+
+// StateMixer is saved atomically with its verdict and the label-pass inputs.
 type StateMixer struct {
-	Verdict    string        `json:"verdict"`
-	Heuristic  bool          `json:"heuristic"`
-	Evidence   string        `json:"evidence"`
-	Agreement  int           `json:"agreement"`
-	ObservedAt time.Time     `json:"observed_at"`
-	Rows       []StateSignal `json:"rows"`
+	Input          *StateInput   `json:"input,omitempty"`
+	StalledAfterMS int64         `json:"stalled_after_ms,omitempty"`
+	Verdict        string        `json:"verdict"`
+	Heuristic      bool          `json:"heuristic"`
+	Evidence       string        `json:"evidence"`
+	Agreement      int           `json:"agreement"`
+	ObservedAt     time.Time     `json:"observed_at"`
+	Rows           []StateSignal `json:"rows"`
 }
 
 func (v StateMixer) MarshalJSON() ([]byte, error)  { return jsonwire.Marshal(v) }
