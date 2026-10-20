@@ -2,7 +2,6 @@ package hooks_test
 
 import (
 	"bytes"
-	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -49,22 +48,25 @@ func TestCodexInstallWhenUnset(t *testing.T) {
 	}
 }
 
-func TestCodexInstallRefusesWhenSet(t *testing.T) {
+// Another tool's notify (for example Codex Computer Use) must not block the
+// permission hook: the hook is a separate table, so install appends it and
+// leaves the foreign notify bytes alone, and uninstall restores the original.
+func TestCodexInstallKeepsForeignNotify(t *testing.T) {
 	for _, value := range []string{`["x", "y"]`, `[]`, `"custom"`, `["/opt/driga", "hook", "codex", "different"]`} {
 		t.Run(value, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "config.toml")
 			before := "# preserve me\nnotify = " + value + "\n"
 			writeFixture(t, path, before)
 			d, err := hooks.CodexInstall(path, "/opt/driga", false, testNow)
-			if !errors.Is(err, hooks.ErrNotifyInUse) || d.Changed || d.Before != before || d.After != before || readFixture(t, path) != before {
-				t.Fatalf("refusal = %+v, %v", d, err)
+			if err != nil || !d.Changed || !strings.HasPrefix(d.After, before) || !strings.Contains(d.After, "[[hooks.PermissionRequest]]") || readFixture(t, path) != d.After {
+				t.Fatalf("install = %+v, %v", d, err)
 			}
-			if !strings.Contains(err.Error(), "notify") {
-				t.Fatalf("error lacks existing notify: %v", err)
+			if strings.Contains(d.After, "# driga notify added") {
+				t.Fatal("foreign notify claimed as ours")
 			}
-			backups, _ := filepath.Glob(path + ".driga-bak-*")
-			if len(backups) != 0 {
-				t.Fatal("refusal wrote backup")
+			u, err := hooks.CodexUninstall(path, false)
+			if err != nil || !u.Changed || readFixture(t, path) != before {
+				t.Fatalf("uninstall = %+v, %v; file %q", u, err, readFixture(t, path))
 			}
 		})
 	}
@@ -181,7 +183,7 @@ func TestHooksCLIConfirmationAndStatus(t *testing.T) {
 	}
 }
 
-func TestHooksCLICodexNotifyRefusal(t *testing.T) {
+func TestHooksCLICodexForeignNotify(t *testing.T) {
 	home, codexHome := t.TempDir(), t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("CODEX_HOME", codexHome)
@@ -189,8 +191,9 @@ func TestHooksCLICodexNotifyRefusal(t *testing.T) {
 	before := "notify = ['another-tool']\n"
 	writeFixture(t, path, before)
 	out := runHooksCLI(t, "yes\n", "install", "--agent", "codex")
-	if !strings.Contains(out, "leaves notify alone") || !strings.Contains(out, "rollout tailing") || strings.Contains(out, "Apply?") || readFixture(t, path) != before {
-		t.Fatalf("notify refusal = %q", out)
+	got := readFixture(t, path)
+	if !strings.Contains(out, "Apply?") || !strings.HasPrefix(got, before) || !strings.Contains(got, "hook codex PermissionRequest") {
+		t.Fatalf("install = %q; file %q", out, got)
 	}
 	if _, err := os.Stat(filepath.Join(home, ".claude")); !os.IsNotExist(err) {
 		t.Fatal("Codex-only install touched Claude")

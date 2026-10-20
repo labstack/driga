@@ -1,7 +1,6 @@
 package hooks
 
 import (
-	"errors"
 	"fmt"
 	"path/filepath"
 	"reflect"
@@ -11,9 +10,6 @@ import (
 
 	"github.com/pelletier/go-toml/v2"
 )
-
-// ErrNotifyInUse means another program already owns Codex's notify setting.
-var ErrNotifyInUse = errors.New("Codex notify is already in use")
 
 func codexOTLP(endpoints ...string) map[string]any {
 	return map[string]any{
@@ -59,20 +55,15 @@ func CodexInstall(configPath, driga string, dryRun bool, now time.Time) (Diff, e
 	if !filepath.IsAbs(driga) {
 		return d, fmt.Errorf("driga binary path must be absolute: %q", driga)
 	}
-	if value, exists := settings["notify"]; exists {
-		if codexNotifyOurs(value, driga) {
-			if strings.Contains(d.Before, "# driga needs-you begin") {
-				return d, nil
-			}
-		} else {
-			return d, fmt.Errorf("%w: existing notify = %#v", ErrNotifyInUse, value)
-		}
+	if strings.Contains(d.Before, "# driga needs-you begin") {
+		return d, nil
 	}
+	// The permission hook is its own table, so any existing notify (ours or
+	// another tool's, such as Codex Computer Use) is left untouched. Only an
+	// unset notify gets Driga's, owned by a prefix so uninstall restores every
+	// original byte.
 	_, hadNotify := settings["notify"]
-	settings["notify"] = []string{driga, "hook", "codex", "notify"}
-	// Append an owned table without serializing unrelated TOML. A prefix owns
-	// the legacy notify entry, so install/uninstall restores every original byte.
-	notify, _ := toml.Marshal(map[string]any{"notify": settings["notify"]})
+	notify, _ := toml.Marshal(map[string]any{"notify": []string{driga, "hook", "codex", "notify"}})
 	block := "\n# driga needs-you begin\n[[hooks.PermissionRequest]]\n[[hooks.PermissionRequest.hooks]]\ntype = 'command'\ncommand = " + strconv.Quote(shellQuote(driga)+" hook codex PermissionRequest") + "\ntimeout = 3\n# driga needs-you end\n"
 	prefix := string(notify)
 	if hadNotify {

@@ -202,12 +202,6 @@ func (c HooksOptions) change(g *Globals, install bool) error {
 	out := hooksOutput(g)
 	for _, operation := range operations {
 		d, err := operation(true)
-		if errors.Is(err, hooks.ErrNotifyInUse) {
-			if _, err := fmt.Fprintln(out, "Codex notify is already configured; Driga leaves notify alone and relies on rollout tailing."); err != nil {
-				return err
-			}
-			continue
-		}
 		if err != nil {
 			return err
 		}
