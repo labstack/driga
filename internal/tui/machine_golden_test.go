@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -14,6 +15,10 @@ import (
 )
 
 func TestMachineGoldenFrames(t *testing.T) {
+	// The header clock renders local time; pin the zone so CI in UTC matches.
+	original := time.Local
+	time.Local = time.FixedZone("fixture local", -7*60*60)
+	t.Cleanup(func() { time.Local = original })
 	for _, width := range []int{80, 140} {
 		for _, expanded := range []bool{false, true} {
 			t.Run(fmt.Sprintf("%d-expanded-%t", width, expanded), func(t *testing.T) {
