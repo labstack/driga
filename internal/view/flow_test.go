@@ -12,6 +12,65 @@ import (
 	"github.com/labstack/driga/internal/store"
 )
 
+func TestFlowSharedDefault(t *testing.T) {
+	var want int64
+	st := fixture(t, func(tx *store.Tx) (err error) { want, err = flowtest.SeedDefault(tx); return err })
+	v, err := Flow(st, Filter{}, 0, flowtest.Now)
+	if err != nil || v.Lead == nil || v.Lead.ID != want {
+		t.Fatalf("default lead = %+v, %v; want %d", v.Lead, err, want)
+	}
+}
+
+func TestFlowDefaultAttentionOrder(t *testing.T) {
+	for _, labels := range [][2]string{{"waiting", "stalled"}, {"stalled", "working"}, {"working", "finished"}} {
+		t.Run(labels[0]+"_before_"+labels[1], func(t *testing.T) {
+			var want int64
+			st := fixture(t, func(tx *store.Tx) error {
+				for i, label := range labels {
+					id, err := tx.UpsertSession(model.Session{SessionObs: model.SessionObs{Adapter: "claude", ExternalID: label, PID: int32(i + 1), LastActivityAt: testNow.Add(time.Duration(i) * time.Minute)}, Label: label})
+					if err != nil {
+						return err
+					}
+					if i == 0 {
+						want = id
+					}
+					if _, err := tx.UpsertSession(model.Session{ParentID: &id, SessionObs: model.SessionObs{Adapter: "codex", ExternalID: label + "-worker"}}); err != nil {
+						return err
+					}
+				}
+				return nil
+			})
+			v, err := Flow(st, Filter{}, 0, testNow)
+			if err != nil || v.Lead == nil || v.Lead.ID != want {
+				t.Fatalf("lead = %+v, %v; want %d", v.Lead, err, want)
+			}
+		})
+	}
+}
+
+func TestFlowDefaultExcludesHeadlessRoot(t *testing.T) {
+	var want int64
+	st := fixture(t, func(tx *store.Tx) error {
+		for i, origin := range []string{"interactive", "headless"} {
+			id, err := tx.UpsertSession(model.Session{SessionObs: model.SessionObs{Adapter: "claude", ExternalID: origin, Origin: origin, PID: int32(i + 1), LastActivityAt: testNow.Add(time.Duration(i) * time.Minute)}, Label: "waiting"})
+			if err != nil {
+				return err
+			}
+			if i == 0 {
+				want = id
+			}
+			if _, err := tx.UpsertSession(model.Session{ParentID: &id, SessionObs: model.SessionObs{Adapter: "codex", ExternalID: origin + "-worker"}}); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	v, err := Flow(st, Filter{}, 0, testNow)
+	if err != nil || v.Lead == nil || v.Lead.ID != want {
+		t.Fatalf("lead = %+v, %v; want %d", v.Lead, err, want)
+	}
+}
+
 func TestFlowUsesLabelPassInputs(t *testing.T) {
 	var id int64
 	st := fixture(t, func(tx *store.Tx) (err error) { id, err = flowtest.Seed(tx); return err })

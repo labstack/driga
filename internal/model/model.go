@@ -42,6 +42,8 @@ type Proc struct {
 	Role       string    `json:"role,omitempty"`
 	Agent      string    `json:"agent,omitempty"`
 	SessionID  int64     `json:"session_id,omitempty"`
+	// Zombie is live inspection data; cleanup never uses stored process state.
+	Zombie bool `json:"-"`
 	// OwnerUID is the real uid when OwnerKnown; live inspection only, never
 	// stored or shared.
 	OwnerUID   uint32 `json:"-"`

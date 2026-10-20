@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
@@ -8,8 +9,11 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/labstack/driga/internal/flowtest"
 	"github.com/labstack/driga/internal/model"
+	"github.com/labstack/driga/internal/store"
 	"github.com/labstack/driga/internal/view"
+	"github.com/labstack/driga/internal/viewer"
 )
 
 func TestRenderedFramesNeverContainTabs(t *testing.T) {
@@ -160,14 +164,14 @@ func TestFlowRefreshKeepsSelectionAndOnlyNewEventsPulse(t *testing.T) {
 	}
 }
 
-func TestFlowEntryUsesSelectedAgentAndSessionKeys(t *testing.T) {
+func TestFlowEntryUsesDefaultAndSessionKeys(t *testing.T) {
 	m := setup(t, fixture(), Options{}).(*app)
 	m.tab = 0
 	m.rows = []tabRow{{agent: 42, cells: []string{"", "working", "selected"}}}
 	m.cursors[0] = 0
 	m.Update(tea.KeyPressMsg{Code: '7', Text: "7"})
-	if m.tab != flowTab || m.flowID != 42 {
-		t.Fatal("Flow ignored selected agent")
+	if m.tab != flowTab || m.flowID != 0 {
+		t.Fatal("plain 7 must request the shared default, not the highlighted row")
 	}
 	m.flow = flowFixture()
 	m.snap.Agents.Rows = []view.AgentRow{{ID: 1}, {ID: 9}}
@@ -179,6 +183,94 @@ func TestFlowEntryUsesSelectedAgentAndSessionKeys(t *testing.T) {
 	m.Update(tea.KeyPressMsg{Code: '[', Text: "["})
 	if m.flowID != 1 {
 		t.Fatal("previous session did not switch")
+	}
+}
+
+func TestFlowSharedDefault(t *testing.T) {
+	st, err := store.Open("", store.Memory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { st.Close() })
+	var want int64
+	if err := st.Tx(context.Background(), func(tx *store.Tx) (err error) { want, err = flowtest.SeedDefault(tx); return err }); err != nil {
+		t.Fatal(err)
+	}
+	src := viewer.NewStoreSource(st, t.TempDir(), view.Filter{})
+	src.Now = func() time.Time { return flowtest.Now }
+	m := New(src, Options{DataDir: t.TempDir(), NoColor: true, Now: src.Now}).(*app)
+	execute(t, m, m.Init())
+	m.tab = 0
+	m.rebuild()
+	_, cmd := press(m, '7')
+	execute(t, m, cmd)
+	if m.flow.Lead == nil || m.flow.Lead.ID != want || m.flowID != 0 {
+		t.Fatalf("default lead = %+v, requested id %d; want %d via id 0", m.flow.Lead, m.flowID, want)
+	}
+	// Refresh must keep requesting a default, rather than pinning the first lead.
+	execute(t, m, m.loadFlow())
+	if m.flowID != 0 {
+		t.Fatal("default became an explicit selection")
+	}
+	// Explicit session cycling remains pinned until plain 7 is pressed again.
+	m.flowSession(1)
+	explicit := m.flowID
+	execute(t, m, m.loadFlow())
+	if explicit == 0 || m.flowID != explicit {
+		t.Fatal("explicit selection lost")
+	}
+	_, cmd = press(m, '7')
+	execute(t, m, cmd)
+	if m.flowID != 0 || m.flow.Lead == nil || m.flow.Lead.ID != want {
+		t.Fatal("plain 7 did not restore the default")
+	}
+}
+
+func TestFlowConnectorBranchCounts(t *testing.T) {
+	for _, width := range []int{80, 120, 150, 160} {
+		for _, count := range []int{1, 2, 6} {
+			t.Run(fmt.Sprintf("width=%d/workers=%d", width, count), func(t *testing.T) {
+				m := setup(t, fixture(), Options{}).(*app)
+				m.tab, m.width, m.height, m.loaded = flowTab, width, 100, true
+				m.flow = flowFixture()
+				m.flow.Children = nil
+				for i := 0; i < count; i++ {
+					m.flow.Children = append(m.flow.Children, view.FlowNode{ID: int64(i + 2), Adapter: "codex", Label: "working"})
+				}
+				text, hits := m.flowLayout()
+				if len(hits) != count {
+					t.Fatalf("visible workers = %d; want %d", len(hits), count)
+				}
+				lines := strings.Split(text, "\n")
+				for i, h := range hits {
+					line := lines[h.y+2]
+					if count == 1 {
+						if strings.ContainsAny(text, "┬├└") {
+							t.Errorf("single worker has branching glyph:\n%s", text)
+						}
+						if !strings.Contains(line, "─────▶") {
+							t.Errorf("missing straight connector: %s", line)
+						}
+					} else {
+						want := "├"
+						if i == 0 && width >= 150 {
+							want = "┬"
+						}
+						if i == count-1 {
+							want = "└"
+						}
+						if !strings.Contains(line, want) {
+							t.Errorf("branch %d missing %s: %s", i, want, line)
+						}
+					}
+				}
+				for _, line := range lines {
+					if lipgloss.Width(line) > width {
+						t.Errorf("line overflows %d: %s", width, line)
+					}
+				}
+			})
+		}
 	}
 }
 

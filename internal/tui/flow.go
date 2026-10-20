@@ -229,7 +229,7 @@ func (m *app) flowWorkers() view.FlowWorkers {
 // flowLayout produces both the view and hit regions from the same geometry.
 func (m *app) flowLayout() (string, []flowHit) {
 	if m.flow.Lead == nil {
-		return truncate("No live interactive session. Select an agent, then press 7.", max(0, m.width)), nil
+		return truncate("No live interactive session.", max(0, m.width)), nil
 	}
 	if m.width < 12 {
 		return truncate("Widen terminal for flow", max(0, m.width)), nil
@@ -267,6 +267,9 @@ func (m *app) flowLayout() (string, []flowHit) {
 					}
 					if wide && i == 0 {
 						joint = "┬"
+					}
+					if len(panels) == 1 {
+						joint = "─"
 					}
 					wire = "  " + joint + strings.Repeat("─", prefixWidth-4) + "▶"
 					if wide && i == 0 {

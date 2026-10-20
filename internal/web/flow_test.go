@@ -1,8 +1,11 @@
 package web
 
 import (
+	"context"
 	"fmt"
+	"github.com/labstack/driga/internal/flowtest"
 	"github.com/labstack/driga/internal/model"
+	"github.com/labstack/driga/internal/store"
 	"github.com/labstack/driga/internal/view"
 	"net/http/httptest"
 	"regexp"
@@ -11,6 +14,20 @@ import (
 	"testing"
 	"time"
 )
+
+func TestFlowSharedDefault(t *testing.T) {
+	s, st, _, _ := fixture(t)
+	var want int64
+	if err := st.Tx(context.Background(), func(tx *store.Tx) (err error) { want, err = flowtest.SeedDefault(tx); return err }); err != nil {
+		t.Fatal(err)
+	}
+	for _, scope := range []string{"", "?machine=all", "?machine=local"} {
+		p, code, err := s.loadPage(httptest.NewRequest("GET", "/flow"+scope, nil))
+		if err != nil || code != 200 || p.Flow.Lead == nil || p.Flow.Lead.ID != want {
+			t.Errorf("scope %q: lead = %+v, code %d, %v; want %d", scope, p.Flow.Lead, code, err, want)
+		}
+	}
+}
 
 func TestFlowTailWholeRowsAndSharedPane(t *testing.T) {
 	s, _, id, _ := fixture(t)

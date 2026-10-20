@@ -167,7 +167,8 @@ func read(ctx context.Context, e Env) (snapshot, error) {
 	own := procs[:0:0]
 	pids := make([]int32, 0, len(procs))
 	for _, p := range procs {
-		if p.OwnerKnown && p.OwnerUID != uid {
+		// An unreaped process has exited and cannot hold a cwd or open files.
+		if p.Zombie || p.OwnerKnown && p.OwnerUID != uid {
 			continue
 		}
 		own = append(own, p)

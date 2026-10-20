@@ -635,6 +635,30 @@ func TestListUnreadableCwd(t *testing.T) {
 	}
 }
 
+func TestListZombieDoesNotBlockCleanup(t *testing.T) {
+	for _, cmd := range []string{"", "claude"} {
+		t.Run(cmd, func(t *testing.T) {
+			e, p, _, wt := fixture(t)
+			// PID/start checks can still find an unreaped zombie in the kernel.
+			p.alive = true
+			p.procs = []model.Proc{{PID: 9441, PPID: 9000, Cmdline: cmd, Zombie: true, OwnerUID: uint32(os.Getuid()), OwnerKnown: true}}
+			cs, err := List(context.Background(), e)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(p.pids) != 0 {
+				t.Fatalf("zombie included in cwd inspection: %v", p.pids)
+			}
+			for _, c := range cs {
+				if c.Path == wt {
+					return
+				}
+			}
+			t.Fatalf("worktree candidate missing: %+v", cs)
+		})
+	}
+}
+
 // Driga judges "merged" against the default branch; git branch -d judges the
 // upstream. When they disagree the worktree is already gone, so the branch is
 // kept with a warning rather than reporting the whole action as failed.

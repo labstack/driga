@@ -6,6 +6,8 @@ import (
 	"context"
 	"encoding/binary"
 	"os"
+	"path/filepath"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -54,6 +56,11 @@ func (p linuxPlatform) Procs(ctx context.Context) ([]model.Proc, error) {
 		}
 		start, err := proc.CreateTimeWithContext(ctx)
 		if err != nil {
+			continue
+		}
+		stat, _ := os.ReadFile(filepath.Join(p.root, strconv.FormatInt(int64(proc.Pid), 10), "stat"))
+		if procStatZombie(stat) {
+			out = append(out, model.Proc{PID: proc.Pid, PPID: ppid, StartTime: time.UnixMilli(start), Zombie: true})
 			continue
 		}
 		rss, err := proc.MemoryInfoWithContext(ctx)

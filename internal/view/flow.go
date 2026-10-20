@@ -117,7 +117,62 @@ func (n FlowNode) DisplayTitle() string {
 	return agent + " thread"
 }
 
-// Flow selects an explicit session's root, or the newest live interactive root.
+// defaultFlowLead is the no-id selection policy for every flow surface.
+// Families come first, then attention state, activity and a stable identity tie.
+func defaultFlowLead(sessions []model.Session, since time.Time) *model.Session {
+	type key struct {
+		machine string
+		id      int64
+	}
+	families := map[key]bool{}
+	for _, s := range sessions {
+		if s.ParentID != nil {
+			families[key{s.MachineID, *s.ParentID}] = true
+		}
+	}
+	attention := func(s model.Session) int {
+		switch s.Label {
+		case "waiting":
+			return 3
+		case "stalled":
+			return 2
+		case "working":
+			return 1
+		}
+		return 0
+	}
+	var best *model.Session
+	for i := range sessions {
+		s := &sessions[i]
+		// Empty origin is a legacy interactive session. Known headless and
+		// hosted origins are never default leads, but remain explicitly openable.
+		if s.ParentID != nil || s.Hosted || s.Origin != "" && !strings.HasPrefix(s.Origin, "interactive") || s.PID == 0 || s.EndedAt != nil || s.Label == "dead" || !since.IsZero() && s.LastActivityAt.Before(since) {
+			continue
+		}
+		if best != nil {
+			family, bestFamily := families[key{s.MachineID, s.ID}], families[key{best.MachineID, best.ID}]
+			if family != bestFamily {
+				if !family {
+					continue
+				}
+			} else if attention(*s) != attention(*best) {
+				if attention(*s) < attention(*best) {
+					continue
+				}
+			} else if !s.LastActivityAt.Equal(best.LastActivityAt) {
+				if s.LastActivityAt.Before(best.LastActivityAt) {
+					continue
+				}
+			} else if s.MachineID > best.MachineID || s.MachineID == best.MachineID && s.ID >= best.ID {
+				continue
+			}
+		}
+		best = s
+	}
+	return best
+}
+
+// Flow selects an explicit session's root, or the shared default interactive lead.
 // Machine and project scopes apply before selection; ancestry never crosses machines.
 func Flow(r Reader, f Filter, sessionID int64, now time.Time) (FlowView, error) {
 	v := FlowView{Children: []FlowNode{}, Tail: []TailEvent{}, UsageWindow: "retained api_request events"}
@@ -125,36 +180,44 @@ func Flow(r Reader, f Filter, sessionID int64, now time.Time) (FlowView, error) 
 	var selectedMachine model.Machine
 	var all []model.Session
 	var lead model.Session
+	type machineFlow struct {
+		reader   Reader
+		machine  model.Machine
+		sessions []model.Session
+	}
+	byMachine := map[string]machineFlow{}
+	var defaults []model.Session
 	err := machineReaders(r, f.Scope, func(mr Reader, m model.Machine) error {
 		ss, err := mr.Sessions(store.SessionFilter{IncludeEnded: true, RepoPath: f.Project})
 		if err != nil {
 			return err
 		}
+		if sessionID == 0 {
+			byMachine[mr.MachineID()] = machineFlow{mr, m, ss}
+			defaults = append(defaults, ss...)
+			return nil
+		}
 		for _, s := range ss {
-			if sessionID != 0 {
-				if s.ID != sessionID {
-					continue
-				}
-			} else {
-				if s.ParentID != nil || s.Hosted || strings.HasPrefix(s.Origin, "hosted") || s.PID == 0 || s.EndedAt != nil || s.Label == "dead" || !f.Since.IsZero() && s.LastActivityAt.Before(f.Since) {
-					continue
-				}
-				if selectedReader != nil && !s.LastActivityAt.After(lead.LastActivityAt) {
-					continue
-				}
+			if s.ID != sessionID {
+				continue
 			}
 			lead = s
 			all = ss
 			selectedReader = mr
 			selectedMachine = m
-			if sessionID != 0 {
-				return nil
-			}
+			return nil
 		}
 		return nil
 	})
 	if err != nil {
 		return v, err
+	}
+	if sessionID == 0 {
+		if chosen := defaultFlowLead(defaults, f.Since); chosen != nil {
+			lead = *chosen
+			selected := byMachine[lead.MachineID]
+			selectedReader, selectedMachine, all = selected.reader, selected.machine, selected.sessions
+		}
 	}
 	if selectedReader == nil {
 		if sessionID != 0 {

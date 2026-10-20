@@ -13,6 +13,33 @@ import (
 
 var Now = time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
 
+// SeedDefault supplies the same competing leads to CLI, TUI and web tests.
+// The finished fanout is newest; the waiting family needs attention first.
+func SeedDefault(tx *store.Tx) (int64, error) {
+	var want int64
+	for i, label := range []string{"working", "waiting", "waiting", "stalled", "finished"} {
+		id, err := tx.UpsertSession(model.Session{SessionObs: model.SessionObs{
+			Adapter: "claude", ExternalID: fmt.Sprintf("default-%d", i), Origin: "interactive",
+			PID: int32(100 + i), Title: "default " + label, LastActivityAt: Now.Add(time.Duration(i-5) * time.Minute),
+		}, Label: label})
+		if err != nil {
+			return 0, err
+		}
+		if i == 2 {
+			want = id
+		}
+		if _, err := tx.UpsertSession(model.Session{ParentID: &id, SessionObs: model.SessionObs{
+			Adapter: "codex", ExternalID: fmt.Sprintf("default-worker-%d", i), Hosted: true, LastActivityAt: Now,
+		}, Label: "waiting"}); err != nil {
+			return 0, err
+		}
+	}
+	_, err := tx.UpsertSession(model.Session{SessionObs: model.SessionObs{
+		Adapter: "claude", ExternalID: "solitary", Origin: "interactive", PID: 200, LastActivityAt: Now,
+	}, Label: "waiting"})
+	return want, err
+}
+
 func Input() derive.StateInput {
 	stop := Now.Add(-time.Minute)
 	tool := Now.Add(-2 * time.Minute)

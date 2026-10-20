@@ -27,6 +27,17 @@ var _ SocketProber = darwinPlatform{}
 // New returns the macOS host collector.
 func New() Platform { return darwinPlatform{idents: &identCache{}} }
 
+// procFromKinfo decodes the identity and state from the existing sysctl sample.
+func procFromKinfo(k *unix.KinfoProc) model.Proc {
+	const szomb = 5 // XNU sys/proc.h: exited, awaiting parent wait(2).
+	return model.Proc{
+		PID: k.Proc.P_pid, PPID: k.Eproc.Ppid,
+		StartTime: time.UnixMilli(k.Proc.P_starttime.Sec*1000 + int64(k.Proc.P_starttime.Usec)/1000),
+		Zombie:    k.Proc.P_stat == szomb,
+		OwnerUID:  k.Eproc.Ucred.Uid, OwnerKnown: true,
+	}
+}
+
 func (d darwinPlatform) Procs(ctx context.Context) ([]model.Proc, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -44,8 +55,14 @@ func (d darwinPlatform) Procs(ctx context.Context) ([]model.Proc, error) {
 			return out, err
 		}
 		k := &kprocs[i]
-		pid := k.Proc.P_pid
-		start := k.Proc.P_starttime.Sec*1000 + int64(k.Proc.P_starttime.Usec)/1000
+		sample := procFromKinfo(k)
+		// Zombies have no task resources or argv to inspect. Keep their state
+		// even when the per-process APIs would fail for an exited task.
+		if sample.Zombie {
+			out = append(out, sample)
+			continue
+		}
+		pid, start := sample.PID, sample.StartTime.UnixMilli()
 		p := &process.Process{Pid: pid}
 		rss, err := p.MemoryInfoWithContext(ctx)
 		if err != nil {
@@ -74,12 +91,9 @@ func (d darwinPlatform) Procs(ctx context.Context) ([]model.Proc, error) {
 			cmdline, exe = "", ""
 		}
 		seen[pid] = struct{}{}
-		out = append(out, model.Proc{
-			PID: pid, PPID: k.Eproc.Ppid, StartTime: time.UnixMilli(start),
-			RSS: rss.RSS, CPUSeconds: times.User + times.System,
-			Cmdline: cmdline, Exe: exe,
-			OwnerUID: k.Eproc.Ucred.Uid, OwnerKnown: true, // effective uid: setuid helpers such as login are not inspectable
-		})
+		sample.RSS, sample.CPUSeconds = rss.RSS, times.User+times.System
+		sample.Cmdline, sample.Exe = cmdline, exe
+		out = append(out, sample)
 	}
 	d.idents.retain(seen)
 	return out, nil

@@ -21,6 +21,18 @@ import (
 	"github.com/shirou/gopsutil/v4/load"
 )
 
+// procStatZombie reads field 3 after the parenthesized comm, which may itself
+// contain spaces and parentheses. Only a positive Z observation exempts a proc.
+func procStatZombie(data []byte) bool {
+	stat := string(data)
+	end := strings.LastIndexByte(stat, ')')
+	if strings.IndexByte(stat, '(') < 0 || end < 0 {
+		return false
+	}
+	fields := strings.Fields(stat[end+1:])
+	return len(fields) > 0 && fields[0] == "Z"
+}
+
 // ParseMeminfo returns memory and swap sizes in bytes; missing/invalid fields are zero.
 func ParseMeminfo(data []byte) (total, avail, swapTotal, swapFree uint64) {
 	for _, line := range strings.Split(string(data), "\n") {

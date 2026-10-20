@@ -225,9 +225,6 @@ func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		for _, e := range m.flow.Tail {
 			m.flowSeen[e.Key] = true
 		}
-		if m.flowID == 0 && m.flow.Lead != nil {
-			m.flowID = m.flow.Lead.ID
-		}
 		for i, n := range m.flowWorkers().Nodes {
 			if n.ID == selectedID {
 				m.cursors[flowTab] = i
@@ -402,10 +399,14 @@ func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				tab = flowTab
 			}
 			if m.tabVisible(tab) {
-				if tab == flowTab && m.tab != flowTab {
-					if r, ok := m.selected(); ok && r.agent != 0 {
-						m.flowID = r.agent
-					}
+				if tab == flowTab {
+					// A tab key requests the shared default. Only explicit session
+					// navigation pins an ID across refreshes.
+					m.flowID = 0
+					m.flowExpanded = false
+					m.flowOffset = 0
+					m.cursors[flowTab] = 0
+					m.flowPulse, m.flowSeen = nil, nil
 				}
 				m.tab = tab
 				m.homeOffset = 0
