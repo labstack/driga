@@ -49,6 +49,9 @@ func value(v reflect.Value) any {
 					continue
 				}
 				field := v.Field(i)
+				if len(parts) > 1 && parts[1] == "omitzero" && field.IsZero() {
+					continue
+				}
 				if len(parts) > 1 && parts[1] == "omitempty" && empty(field) {
 					continue
 				}

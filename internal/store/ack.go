@@ -18,13 +18,13 @@ func (tx *Tx) MarkAckPending(id string, at time.Time) error {
 
 // PendingAcks returns durable requests awaiting authoritative peer receipts.
 func (q *querier) PendingAcks(scope Scope) ([]model.InboxItem, error) {
-	items, err := q.InboxScoped(time.Time{}, false, scope)
+	items, err := q.InboxScoped(time.Time{}, true, scope)
 	if err != nil {
 		return nil, err
 	}
 	var pending []model.InboxItem
 	for _, item := range items {
-		if item.AckPendingAt != nil {
+		if item.AckPendingAt != nil && item.AckedAt == nil {
 			pending = append(pending, item)
 		}
 	}

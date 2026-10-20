@@ -102,12 +102,13 @@ func newEnvelopeLocal(r Reader, mode string, now time.Time, intervals Intervals,
 
 // Filter scopes a view to a canonical repo path and an optional time window.
 type Filter struct {
-	Scope   store.Scope
-	Project string
-	Since   time.Time
-	All     bool
-	AtRisk  bool
-	Active  bool
+	CaptureText string
+	Scope       store.Scope
+	Project     string
+	Since       time.Time
+	All         bool
+	AtRisk      bool
+	Active      bool
 }
 
 // AgentFilter selects live sessions, or also those ended in the last day.
@@ -234,6 +235,7 @@ type InboxRow struct {
 	MachineID string `json:"machine_id"`
 	model.InboxItem
 	Age     time.Duration `json:"age_ms"`
+	Waited  time.Duration `json:"waited_ms"`
 	Project string        `json:"project"`
 	Adapter string        `json:"adapter"`
 	Title   string        `json:"title"`

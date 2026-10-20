@@ -26,6 +26,8 @@ import (
 
 // Options configures scope, appearance, and injectable action dependencies.
 type Options struct {
+	Tmux         string
+	JumpTerminal bool
 	Machine      string
 	Project      string
 	NoColor      bool

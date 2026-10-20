@@ -10,6 +10,7 @@ import (
 	"charm.land/bubbles/v2/table"
 	"charm.land/lipgloss/v2"
 	"github.com/labstack/driga/internal/cleanup"
+	"github.com/labstack/driga/internal/inbox"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/view"
 )
@@ -282,11 +283,29 @@ func (m *app) rebuild() {
 			}
 		}
 	case 2:
-		titles = []string{"", "ID", "KIND", "AGE", "PROJECT", "SUMMARY"}
-		weights = []int{2, 16, 9, 6, 12, 35}
+		titles = []string{"", "REASON", "TOOL", "WAIT / AGE", "PROJECT · BRANCH", "TITLE / DETAIL"}
+		weights = []int{2, 18, 8, 10, 18, 32}
 		for _, r := range m.snap.Inbox.Rows {
 			item := r.InboxItem
-			add(tabRow{machine: r.MachineID, key: "inbox:" + r.MachineID + ":" + r.ID, agent: r.SessionID, inbox: &item, cells: []string{"", r.ID, view.FriendlyEnum(r.Kind), duration(r.Age), r.Project, r.Summary}})
+			reason := r.Reason
+			if reason == "" {
+				reason = r.Kind
+			}
+			if r.Kind == "waiting" {
+				reason = "[" + reason + "]"
+			}
+			age := r.Age
+			if r.Kind == "waiting" {
+				age = inbox.Waited(item, m.opts.Now())
+			}
+			title := r.Title
+			if title == "" {
+				title = r.Summary
+			}
+			if r.Detail != "" {
+				title += " · " + r.Detail
+			}
+			add(tabRow{machine: r.MachineID, key: "inbox:" + r.MachineID + ":" + r.ID, agent: r.SessionID, inbox: &item, cells: []string{"", reason, r.Tool, duration(age), view.FlowJoin(r.Project, r.Branch), title}})
 		}
 	case 3:
 		titles = []string{"", "ID", "AGE", "SIGNATURE", "PROCS", "~RECLAIM", "CWD", "VERIFIED", "EVIDENCE"}
@@ -367,6 +386,9 @@ func (m *app) rebuild() {
 			cells[i][j] = truncate(clean(c), widths[j])
 			if titles[j] == "STATE" || titles[j] == "KIND" {
 				cells[i][j] = view.StateStyle(c, m.opts.NoColor).Render(cells[i][j])
+			}
+			if titles[j] == "REASON" && r.inbox != nil {
+				cells[i][j] = view.StateStyle(r.inbox.Kind, m.opts.NoColor).Render(cells[i][j])
 			}
 			if r.stale && !m.opts.NoColor {
 				cells[i][j] = lipgloss.NewStyle().Faint(true).Render(cells[i][j])

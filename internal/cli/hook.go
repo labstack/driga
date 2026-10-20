@@ -49,6 +49,13 @@ func (h HookCmd) append(g *Globals) error {
 		}
 		data, err = hookReadInput(g.Stdin)
 	case "codex":
+		if h.Event != "notify" {
+			if g == nil || g.Stdin == nil {
+				return nil
+			}
+			data, err = hookReadInput(g.Stdin)
+			break
+		}
 		if len(h.Payload) == 0 {
 			return errors.New("codex hook has no notify payload")
 		}
@@ -67,24 +74,28 @@ func (h HookCmd) append(g *Globals) error {
 		return nil
 	}
 	var payload struct {
-		SessionID        string `json:"session_id"`
-		ThreadID         string `json:"thread-id"`
-		Cwd              string `json:"cwd"`
-		Event            string `json:"hook_event_name"`
-		Message          string `json:"message"`
-		AssistantMessage string `json:"last_assistant_message"`
-		CodexMessage     string `json:"last-assistant-message"`
-		Type             string `json:"type"`
+		SessionID        string          `json:"session_id"`
+		ThreadID         string          `json:"thread-id"`
+		Cwd              string          `json:"cwd"`
+		Event            string          `json:"hook_event_name"`
+		Message          string          `json:"message"`
+		AssistantMessage string          `json:"last_assistant_message"`
+		CodexMessage     string          `json:"last-assistant-message"`
+		Type             string          `json:"type"`
+		NotificationType string          `json:"notification_type"`
+		Tool             string          `json:"tool_name"`
+		ToolInput        json.RawMessage `json:"tool_input"`
 	}
 	if err := json.Unmarshal(data, &payload); err != nil {
 		return fmt.Errorf("decode hook payload: %w", err)
 	}
 	ev := model.HookEvent{TS: time.Now().UTC(), Adapter: h.Adapter, SessionID: payload.SessionID, Cwd: payload.Cwd, Event: h.Event}
+	ev.NotificationType, ev.Tool = payload.NotificationType, scrub.Snippet(payload.Tool)
 	message := payload.Message
 	if message == "" {
 		message = payload.AssistantMessage
 	}
-	if h.Adapter == "codex" {
+	if h.Adapter == "codex" && h.Event == "notify" {
 		ev.SessionID = payload.ThreadID
 		message = payload.CodexMessage
 	}
@@ -101,6 +112,25 @@ func (h HookCmd) append(g *Globals) error {
 	}
 	if cfg.CaptureSnippets() {
 		ev.Message = scrub.Snippet(message)
+		var input struct {
+			Command     string `json:"command"`
+			Question    string `json:"question"`
+			Description string `json:"description"`
+		}
+		// MCP tools may send any JSON value. Opaque input cannot suppress the
+		// metadata-only permission event or manufacture an approval decision.
+		_ = json.Unmarshal(payload.ToolInput, &input)
+		detail := input.Command
+		if detail == "" {
+			detail = input.Question
+		}
+		if detail == "" {
+			detail = input.Description
+		}
+		if detail == "" {
+			detail = message
+		}
+		ev.Detail = scrub.Snippet(detail)
 	}
 	return spool.Append(config.SpoolDir(), ev)
 }

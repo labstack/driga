@@ -48,6 +48,7 @@ func (d darwinPlatform) Procs(ctx context.Context) ([]model.Proc, error) {
 		return nil, err
 	}
 	uid := uint32(os.Getuid())
+	ttys := ttyDevices()
 	out := make([]model.Proc, 0, len(kprocs))
 	seen := make(map[int32]struct{}, len(kprocs))
 	for i := range kprocs {
@@ -56,6 +57,7 @@ func (d darwinPlatform) Procs(ctx context.Context) ([]model.Proc, error) {
 		}
 		k := &kprocs[i]
 		sample := procFromKinfo(k)
+		sample.TTY = ttys[uint64(uint32(k.Eproc.Tdev))]
 		// Zombies have no task resources or argv to inspect. Keep their state
 		// even when the per-process APIs would fail for an exited task.
 		if sample.Zombie {

@@ -13,7 +13,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/labstack/driga/internal/derive"
 	"github.com/labstack/driga/internal/feed"
 	"github.com/labstack/driga/internal/fleet"
 	"github.com/labstack/driga/internal/model"
@@ -316,6 +315,9 @@ func Run(ctx context.Context, d Deps, dataDir string) error {
 				server.Notify()
 			}
 		}
+		if err := alertInbox(ctx, d, st); err != nil {
+			return err
+		}
 		if clock.Now().Sub(lastPrune) >= time.Hour {
 			if err := st.Tx(ctx, func(tx *store.Tx) error { return tx.Prune(d.now()) }); err != nil {
 				if ctx.Err() != nil {
@@ -433,7 +435,7 @@ func startFleetServer(ctx context.Context, d Deps, dataDir string, failures chan
 func drainOnly(ctx context.Context, d Deps, st *store.Store) error {
 	now := d.now()
 	share := feed.EffectiveShare(feed.ShareText(d.Cfg.Fleet.ShareText), d.Cfg.CaptureText)
-	return st.Tx(ctx, func(tx *store.Tx) error {
+	err := st.Tx(ctx, func(tx *store.Tx) error {
 		before, err := passFeedRows(tx, now, share)
 		if err != nil {
 			return err
@@ -477,10 +479,24 @@ func drainOnly(ctx context.Context, d Deps, st *store.Store) error {
 		if err != nil {
 			return err
 		}
-		for _, item := range derive.InboxItems(ss, parents, hooks, baseline) {
-			if err := tx.UpsertInboxItem(item); err != nil {
-				return err
+		ss = hookSessions(ss, hooks)
+		for i := range ss {
+			if ss[i].ID == 0 {
+				id, e := tx.UpsertSession(ss[i])
+				if e != nil {
+					return e
+				}
+				ss[i].ID = id
 			}
+		}
+		if err := syncInbox(tx, d, ss, parents, hooks, baseline); err != nil {
+			return err
+		}
+		if err := tx.CloseAttentionGrowth(now); err != nil {
+			return err
+		}
+		if err := resolveInboxJumps(ctx, tx, d, ss, nil); err != nil {
+			return err
 		}
 		for _, h := range hooks {
 			if id, ok := byKey[sessionKey(h.Adapter, h.SessionID)]; ok && h.Event == "Stop" && h.Message != "" {
@@ -494,4 +510,8 @@ func drainOnly(ctx context.Context, d Deps, st *store.Store) error {
 		}
 		return publish()
 	})
+	if err != nil {
+		return err
+	}
+	return alertInbox(ctx, d, st)
 }

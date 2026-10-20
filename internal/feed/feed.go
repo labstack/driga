@@ -10,6 +10,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/labstack/driga/internal/inbox"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/scrub"
 )
@@ -307,6 +308,7 @@ func Encode(kind Kind, row any, share ShareText) (key string, payload []byte) {
 			return "", nil
 		}
 		key = i.ID
+		i.InboxItem = inbox.Policy(i.InboxItem, string(share))
 		if share != Snippets {
 			i.Summary = "turn finished"
 			if i.Kind == "waiting" {

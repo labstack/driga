@@ -148,6 +148,9 @@ func (m *app) openSelected(mouse bool) tea.Cmd {
 	if !ok {
 		return nil
 	}
+	if r.inbox != nil && r.inbox.Jump != nil {
+		return m.jumpInbox(r)
+	}
 	m.openDetail(r)
 	if r.cleanup == nil || m.busy {
 		return nil

@@ -26,6 +26,14 @@ type Config struct {
 	Intake          IntakeConfig
 	Summaries       SummariesConfig
 	Cleanup         CleanupConfig
+	Inbox           InboxConfig
+}
+
+type InboxConfig struct {
+	Alerts       string
+	AlertAfter   time.Duration
+	AlertRepeat  time.Duration
+	JumpTerminal bool
 }
 
 // CleanupConfig bounds eligibility and regenerable ignored directories.

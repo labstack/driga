@@ -88,14 +88,24 @@ func (m *app) header() string {
 		status = "snapshot · no history"
 	}
 	identity := badge.Render(" driga ") + "  " + clean(host) + m.fleetHeader() + " · " + status
+	identityParts := []string{identity}
+	if m.tab == homeTab || m.tab == flowTab {
+		var rows []view.InboxRow
+		for _, i := range m.snap.Inbox.Rows {
+			if m.machineVisible(i.MachineID) {
+				rows = append(rows, i)
+			}
+		}
+		identityParts = append(identityParts, view.WaitingHeader(rows, m.opts.Now()))
+	}
 	if state, _ := m.intake(); state != "" {
-		identity += " · intake · " + view.TokenStyle(map[string]string{"receiving": "working", "waiting": "muted", "attention": "warn"}[state], m.opts.NoColor).Render(state)
+		identityParts = append(identityParts, "intake · "+view.TokenStyle(map[string]string{"receiving": "working", "waiting": "muted", "attention": "warn"}[state], m.opts.NoColor).Render(state))
 	}
 	if !m.snap.ObservedAt.IsZero() {
-		identity += " · " + m.snap.ObservedAt.Local().Format("15:04:05")
+		identityParts = append(identityParts, m.snap.ObservedAt.Local().Format("15:04:05"))
 	}
 	if sample.TS.IsZero() {
-		return styledPack([]string{identity, "health unavailable"}, m.width, "   ")
+		return styledPack(append(identityParts, "health unavailable"), m.width, " · ")
 	}
 	loadToken := "ok"
 	switch view.LoadLevel(sample.Load1, sample.Cores) {
@@ -106,10 +116,11 @@ func (m *app) header() string {
 	}
 	health := []string{headerGauge("mem", sample.MemUsed, sample.MemTotal, m.opts.NoColor), headerGauge("swap", sample.SwapUsed, sample.SwapTotal, m.opts.NoColor), "load " + view.TokenStyle(loadToken, m.opts.NoColor).Render(fmt.Sprintf("%.1f", sample.Load1)) + fmt.Sprintf("/%d", sample.Cores), "disk " + humanBytes(sample.DiskFree)}
 	right := strings.Join(health, "   ")
+	identity = strings.Join(identityParts, " · ")
 	if lipgloss.Width(identity)+lipgloss.Width(right)+2 <= m.width {
 		return identity + strings.Repeat(" ", m.width-lipgloss.Width(identity)-lipgloss.Width(right)) + right
 	}
-	return styledPack(append([]string{identity}, health...), m.width, "   ")
+	return styledPack(append(identityParts, health...), m.width, "   ")
 }
 func (m *app) footer() string {
 	hints := []string{"0 Home", "m machine", "enter detail", "/ filter", "s sort", "g group by project", "o open terminal"}

@@ -35,8 +35,56 @@
       }
     },
     "data": {
-      "if": {"type": "object", "required": ["lead", "children"]},
-      "then": {"$ref": "#/$defs/flow"}
+      "allOf": [
+        {
+          "if": {
+            "type": "object",
+            "required": [
+              "lead",
+              "children"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/flow"
+          }
+        },
+        {
+          "if": {
+            "type": "object",
+            "required": [
+              "rows"
+            ]
+          },
+          "then": {
+            "properties": {
+              "rows": {
+                "type": "array",
+                "items": {
+                  "if": {
+                    "type": "object",
+                    "required": [
+                      "kind",
+                      "session_id"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "enum": [
+                          "waiting",
+                          "finished",
+                          "worker_finished"
+                        ]
+                      }
+                    }
+                  },
+                  "then": {
+                    "$ref": "#/$defs/inbox_item"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
     },
     "truncated": {"type": "boolean", "description": "Always present for MCP; true when the limit omits entries."},
     "error": {"$ref": "#/$defs/error"}
@@ -53,7 +101,7 @@
     "flow_node": {
       "type": "object",
       "required": ["observed"],
-      "properties": {"observed": {"anyOf": [{"type": "null"}, {"$ref": "#/$defs/flow_observed"}]}}
+      "properties": {"reason": {"enum": ["permission", "question", "idle", "elicitation", "unknown"]}, "observed": {"anyOf": [{"type": "null"}, {"$ref": "#/$defs/flow_observed"}]}}
     },
     "flow_observed": {
       "type": "object",
@@ -66,6 +114,45 @@
         "last_growth_bytes": {"$ref": "#/$defs/size_bytes"}
       },
       "description": "Collector metadata only; oldest first, current minute plus preceding 59. Null observed means no retained positive measurements. Zero last_growth_at means CPU-only observations."
+    },
+    "inbox_jump": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": {"enum": ["tmux", "resume", "terminal", "vendor"]},
+        "command": {"type": "string"},
+        "target": {"type": "string"},
+        "cwd": {"type": "string"},
+        "server": {"type": "string"},
+        "app": {"type": "string"},
+        "url": {"type": "string", "format": "uri", "pattern": "^https://"}
+      }
+    },
+    "inbox_item": {
+      "type": "object",
+      "required": ["id", "session_id", "kind", "occurred_at", "summary"],
+      "properties": {
+        "id": {"type": "string"},
+        "session_id": {"type": "integer"},
+        "machine_id": {"type": "string"},
+        "kind": {"enum": ["waiting", "finished", "worker_finished"]},
+        "occurred_at": {"$ref": "#/$defs/utc_instant"},
+        "reason": {"enum": ["permission", "question", "idle", "elicitation", "unknown"]},
+        "source": {"enum": ["hook", "agents_cli", "both"]},
+        "tool": {"type": "string", "maxLength": 200},
+        "detail": {"type": "string", "maxLength": 200},
+        "summary": {"type": "string"},
+        "waiting_since_at": {"$ref": "#/$defs/utc_instant"},
+        "waited_ms": {"$ref": "#/$defs/duration_ms"},
+        "ended_at": {"$ref": "#/$defs/utc_instant"},
+        "acked_at": {"$ref": "#/$defs/utc_instant"},
+        "ack_pending_at": {"$ref": "#/$defs/utc_instant"},
+        "jump": {"$ref": "#/$defs/inbox_jump"}
+      },
+      "if": {"properties": {"kind": {"const": "waiting"}}},
+      "then": {"required": ["reason", "source", "waiting_since_at"]},
+      "description": "One wait per machine/session/start. Automatic ended_at is independent of human acked_at; only acks synchronize as remote acknowledgements. waited_ms is computed by read surfaces and stops at the earlier end/ack."
     },
     "utc_instant": {"type": "string", "format": "date-time", "pattern": "Z$"},
     "duration_ms": {"type": "integer", "minimum": 0},

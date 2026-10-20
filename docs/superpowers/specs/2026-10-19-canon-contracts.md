@@ -140,6 +140,38 @@ target does not discard earlier outcomes. A dry-run does not remove or move a ta
 
 ## Persisted data and migration
 
+Needs-you step 1 adds the schema-2 inbox fields `reason`, `tool`, `detail`,
+`waiting_since_at`, `source`, `ended_at`, and `jump`. Read rows additionally
+compute integer `waited_ms`, stopping at the earlier automatic end or human
+acknowledgement. `reason` is `permission`, `question`, `idle`, `elicitation`, or
+`unknown`; `source` is `hook`, `agents_cli`, or `both`. `idle_prompt` never creates
+a wait. Missing or unrecognized notification types retain `unknown`.
+
+One wait keeps its initial session/start identity as later notifications update
+its reason and detail. Hook reasons win over CLI reasons when known; the CLI
+fills an unknown hook reason and can create background waits independently.
+Worker waits retain the worker session; completion grouping is unchanged.
+Automatic `ended_at` never sets `acked_at` or queues a remote acknowledgement.
+Default reads omit ended/acknowledged rows; `inbox list --all` and
+`list_inbox(all:true)` include their history. All read surfaces sort current
+unacknowledged waits oldest first, then completions/history newest first.
+
+Local `titles` permits tool names and reasons, while detail requires `snippets`
+and the existing scrubber/200-character cap. Fleet `none` also removes tool
+names; effective sharing never exceeds local capture. Alerts use the same
+policy. Jump objects contain a proved tmux pane/server, an opt-in proved terminal
+TTY, or a copyable resume command and working directory. No vendor URL is
+constructed without agent-owned evidence.
+
+Additive SQL migration **11**, `0011_needs_you.sql`, stores these fields and
+process TTYs. Separate internal hook/CLI reasons preserve merge precedence;
+notification aliases prevent a repeated CLI poll from reopening a resolved
+generation. Legacy worker waits recover their session from their natural key.
+Repeated active local legacy notifications retain the earliest item as the
+current wait and preserve redundant rows as ended history, without creating
+acks. Alert and alias metadata follow inbox retention. New hook metadata lives
+in the existing JSONL spool, so it needs no separate event-table migration.
+
 Goose migration **8**, `internal/store/migration_canon.go`, runs transactionally
 on writable store opens. Earlier SQL migrations remain immutable. It rewrites
 stored session states/heuristics, inbox/event/machine enum values, owned warning

@@ -122,6 +122,7 @@ func openViewer(ctx context.Context, g *Globals, cfg config.Config, f view.Filte
 		return nil, "", nil, err
 	}
 	f.Project, f.Since = g.Project, since
+	f.CaptureText = cfg.CaptureText
 	resolve := func(r view.Reader, f view.Filter) (view.Filter, error) {
 		resolved, err := resolveViewFilter(g, r, f, g.Project)
 		if g.Project == "" {

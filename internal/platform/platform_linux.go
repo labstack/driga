@@ -46,6 +46,7 @@ func (p linuxPlatform) Procs(ctx context.Context) ([]model.Proc, error) {
 		return nil, err
 	}
 	out := make([]model.Proc, 0, len(procs))
+	ttys := ttyDevices()
 	for _, proc := range procs {
 		if err := ctx.Err(); err != nil {
 			return out, err
@@ -80,6 +81,7 @@ func (p linuxPlatform) Procs(ctx context.Context) ([]model.Proc, error) {
 			continue
 		}
 		out = append(out, model.Proc{
+			TTY: ttys[controllingTTYDevice(stat)],
 			PID: proc.Pid, PPID: ppid, StartTime: time.UnixMilli(start),
 			RSS: rss.RSS, CPUSeconds: times.User + times.System,
 			Cmdline: cmdline, Exe: exe,

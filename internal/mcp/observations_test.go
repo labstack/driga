@@ -12,6 +12,11 @@ import (
 
 func TestFlowObservedCLIAndMCP(t *testing.T) {
 	st, id := fixture(t)
+	// The 60 buckets end at the reader's current minute, so CLI and MCP reads
+	// must fall in the same minute; start well clear of a minute boundary.
+	if now := time.Now(); now.Second() >= 45 {
+		time.Sleep(time.Until(now.Truncate(time.Minute).Add(time.Minute)))
+	}
 	at := time.Now().UTC().Truncate(time.Millisecond)
 	if err := st.Tx(context.Background(), func(tx *store.Tx) error { return tx.Observe(id, at, 12288, 250) }); err != nil {
 		t.Fatal(err)

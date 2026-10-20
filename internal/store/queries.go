@@ -122,8 +122,8 @@ func (tx *Tx) ReplaceProcs(procs []model.Proc) error {
 		return err
 	}
 	for _, p := range procs {
-		if err := tx.exec(`INSERT INTO procs (machine_id,pid,ppid,start_time,rss,cpu_seconds,cpu_percent,cmdline,exe,role,agent,session_id,cwd)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`, tx.machineID, p.PID, p.PPID, unix(p.StartTime), p.RSS, p.CPUSeconds, p.CPUPercent, p.Cmdline, p.Exe, p.Role, p.Agent, p.SessionID, p.Cwd); err != nil {
+		if err := tx.exec(`INSERT INTO procs (machine_id,pid,ppid,start_time,rss,cpu_seconds,cpu_percent,cmdline,exe,role,agent,session_id,cwd,tty)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, tx.machineID, p.PID, p.PPID, unix(p.StartTime), p.RSS, p.CPUSeconds, p.CPUPercent, p.Cmdline, p.Exe, p.Role, p.Agent, p.SessionID, p.Cwd, p.TTY); err != nil {
 			return err
 		}
 	}
@@ -147,10 +147,10 @@ func (tx *Tx) SyncProcs(prev, procs []model.Proc) error {
 			continue
 		}
 		delete(old, p.PID)
-		if err := tx.exec(`INSERT INTO procs (machine_id,pid,ppid,start_time,rss,cpu_seconds,cpu_percent,cmdline,exe,role,agent,session_id,cwd)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(machine_id,pid) DO UPDATE SET ppid=excluded.ppid,start_time=excluded.start_time,
+		if err := tx.exec(`INSERT INTO procs (machine_id,pid,ppid,start_time,rss,cpu_seconds,cpu_percent,cmdline,exe,role,agent,session_id,cwd,tty)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(machine_id,pid) DO UPDATE SET ppid=excluded.ppid,start_time=excluded.start_time,
 		rss=excluded.rss,cpu_seconds=excluded.cpu_seconds,cpu_percent=excluded.cpu_percent,cmdline=excluded.cmdline,exe=excluded.exe,
-		role=excluded.role,agent=excluded.agent,session_id=excluded.session_id,cwd=excluded.cwd`, tx.machineID, p.PID, p.PPID, unix(p.StartTime), p.RSS, p.CPUSeconds, p.CPUPercent, p.Cmdline, p.Exe, p.Role, p.Agent, p.SessionID, p.Cwd); err != nil {
+		role=excluded.role,agent=excluded.agent,session_id=excluded.session_id,cwd=excluded.cwd,tty=excluded.tty`, tx.machineID, p.PID, p.PPID, unix(p.StartTime), p.RSS, p.CPUSeconds, p.CPUPercent, p.Cmdline, p.Exe, p.Role, p.Agent, p.SessionID, p.Cwd, p.TTY); err != nil {
 			return err
 		}
 	}
@@ -166,7 +166,7 @@ func (tx *Tx) SyncProcs(prev, procs []model.Proc) error {
 func sameStoredProc(a, b model.Proc) bool {
 	return a.PPID == b.PPID && unix(a.StartTime) == unix(b.StartTime) && a.RSS == b.RSS && a.CPUSeconds == b.CPUSeconds &&
 		a.CPUPercent == b.CPUPercent && a.Cmdline == b.Cmdline && a.Exe == b.Exe && a.Role == b.Role && a.Agent == b.Agent &&
-		a.SessionID == b.SessionID && a.Cwd == b.Cwd
+		a.SessionID == b.SessionID && a.Cwd == b.Cwd && a.TTY == b.TTY
 }
 
 // Procs returns the latest processes in PID order.
@@ -177,10 +177,10 @@ func (q *querier) Procs() ([]model.Proc, error) {
 // ProcsScoped returns selected machines' processes in PID and machine order.
 func (q *querier) ProcsScoped(scope Scope) ([]model.Proc, error) {
 	where, args := scope.where("machine_id")
-	return readMany(q, "SELECT machine_id,pid,ppid,start_time,rss,cpu_seconds,cpu_percent,cmdline,exe,role,agent,session_id,cwd FROM procs WHERE "+where+" ORDER BY pid,machine_id", args, func(s scanner) (model.Proc, error) {
+	return readMany(q, "SELECT machine_id,pid,ppid,start_time,rss,cpu_seconds,cpu_percent,cmdline,exe,role,agent,session_id,cwd,tty FROM procs WHERE "+where+" ORDER BY pid,machine_id", args, func(s scanner) (model.Proc, error) {
 		var p model.Proc
 		var start int64
-		err := s.Scan(&p.MachineID, &p.PID, &p.PPID, &start, &p.RSS, &p.CPUSeconds, &p.CPUPercent, &p.Cmdline, &p.Exe, &p.Role, &p.Agent, &p.SessionID, &p.Cwd)
+		err := s.Scan(&p.MachineID, &p.PID, &p.PPID, &start, &p.RSS, &p.CPUSeconds, &p.CPUPercent, &p.Cmdline, &p.Exe, &p.Role, &p.Agent, &p.SessionID, &p.Cwd, &p.TTY)
 		p.StartTime = fromUnix(start)
 		return p, err
 	})
@@ -344,9 +344,103 @@ func (q *querier) SessionFiles(since time.Time) (map[int64][]model.FileTouch, er
 	return result, rows.Err()
 }
 
-// UpsertInboxItem inserts an item once. Duplicates never change its text or ack.
+// UpsertInboxItem keeps one active wait per session. Completion IDs stay insert-only.
 func (tx *Tx) UpsertInboxItem(i model.InboxItem) error {
-	return tx.exec("INSERT OR IGNORE INTO inbox_items (machine_id,id,session_id,kind,ts,summary,acked_at,ack_pending_at) VALUES (?,?,?,?,?,?,?,?)", tx.machineID, i.ID, i.SessionID, i.Kind, unix(i.TS), i.Summary, nullableTime(i.AckedAt), nullableTime(i.AckPendingAt))
+	if i.Kind == "waiting" {
+		// Notification timestamps are aliases of the active wait's natural ID.
+		// Persist aliases so replayed CLI generations cannot undo an ack/end.
+		if tx.machineID == tx.localID {
+			alias, err := tx.Meta("inbox_alias:" + i.ID)
+			if err == nil {
+				i.ID = alias
+			} else if !errors.Is(err, ErrNotFound) {
+				return err
+			}
+		}
+		if i.WaitingSinceAt.IsZero() {
+			i.WaitingSinceAt = i.TS
+		}
+		if i.Reason == "" {
+			i.Reason = "unknown"
+		}
+		if i.Source == "" {
+			i.Source = "hook"
+		}
+		// Replay must never re-open an acknowledged or ended generation.
+		var exists bool
+		if err := tx.conn.QueryRowContext(tx.ctx, "SELECT EXISTS(SELECT 1 FROM inbox_items WHERE machine_id=? AND id=?)", tx.machineID, i.ID).Scan(&exists); err != nil {
+			return err
+		}
+		if exists {
+			var resolved bool
+			if err := tx.conn.QueryRowContext(tx.ctx, "SELECT acked_at IS NOT NULL OR ended_at IS NOT NULL FROM inbox_items WHERE machine_id=? AND id=?", tx.machineID, i.ID).Scan(&resolved); err != nil {
+				return err
+			}
+			if resolved {
+				return nil
+			}
+		}
+		active, err := tx.Inbox(time.Time{}, false)
+		if err != nil {
+			return err
+		}
+		for _, old := range active {
+			if old.Kind != "waiting" || old.SessionID != i.SessionID {
+				continue
+			}
+			if i.TS.Before(old.TS) {
+				return nil
+			}
+			fromCLI := i.Source == "agents_cli"
+			var hookReason, agentsReason string
+			if err := tx.conn.QueryRowContext(tx.ctx, "SELECT hook_reason,agents_reason FROM inbox_items WHERE machine_id=? AND id=?", tx.machineID, old.ID).Scan(&hookReason, &agentsReason); err != nil {
+				return err
+			}
+			if fromCLI {
+				agentsReason = i.Reason
+			} else {
+				hookReason = i.Reason
+			}
+			i.Reason = hookReason
+			if i.Reason == "" || i.Reason == "unknown" {
+				i.Reason = agentsReason
+			}
+			if i.Reason == "" {
+				i.Reason = "unknown"
+			}
+			if fromCLI && (old.Source == "hook" || old.Source == "both") {
+				i.Tool, i.Detail, i.Summary = old.Tool, old.Detail, old.Summary
+			}
+			if old.Source != i.Source {
+				i.Source = "both"
+			}
+			if i.ID != old.ID && tx.machineID == tx.localID {
+				if err := tx.SetMeta("inbox_alias:"+i.ID, old.ID); err != nil {
+					return err
+				}
+			}
+			if i.Jump == nil {
+				i.Jump = old.Jump
+			}
+			jump, err := json.Marshal(i.Jump)
+			if err != nil {
+				return err
+			}
+			return tx.exec("UPDATE inbox_items SET reason=?,tool=?,detail=?,summary=?,source=?,jump=?,hook_reason=?,agents_reason=? WHERE machine_id=? AND id=?", i.Reason, i.Tool, i.Detail, i.Summary, i.Source, string(jump), hookReason, agentsReason, tx.machineID, old.ID)
+		}
+	}
+	jump, err := json.Marshal(i.Jump)
+	if err != nil {
+		return err
+	}
+	hookReason, agentsReason := "", ""
+	if i.Source == "hook" || i.Source == "both" {
+		hookReason = i.Reason
+	}
+	if i.Source == "agents_cli" || i.Source == "both" {
+		agentsReason = i.Reason
+	}
+	return tx.exec("INSERT OR IGNORE INTO inbox_items (machine_id,id,session_id,kind,ts,summary,acked_at,ack_pending_at,reason,tool,detail,waiting_since_at,source,ended_at,jump,hook_reason,agents_reason) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", tx.machineID, i.ID, i.SessionID, i.Kind, unix(i.TS), i.Summary, nullableTime(i.AckedAt), nullableTime(i.AckPendingAt), i.Reason, i.Tool, i.Detail, unix(i.WaitingSinceAt), i.Source, nullableTime(i.EndedAt), string(jump), hookReason, agentsReason)
 }
 
 // AckInbox acknowledges an existing unacknowledged item, returning whether it changed.
@@ -359,21 +453,27 @@ func (tx *Tx) AckInbox(id string, at time.Time) (bool, error) {
 	return n > 0, err
 }
 
-// Inbox returns items at or after since, newest first, optionally including acks.
+// Inbox returns active waits oldest first, then completions newest first.
+// includeAcked also includes automatically ended history.
 func (q *querier) Inbox(since time.Time, includeAcked bool) ([]model.InboxItem, error) {
 	return q.InboxScoped(since, includeAcked, q.localScope())
 }
 
-// InboxScoped returns selected machines' attention items, newest first.
+// InboxScoped applies the same attention ordering across selected machines.
 func (q *querier) InboxScoped(since time.Time, includeAcked bool, scope Scope) ([]model.InboxItem, error) {
 	where, args := scope.where("machine_id")
 	args = append(args, unix(since), includeAcked)
-	return readMany(q, "SELECT machine_id,id,session_id,kind,ts,summary,acked_at,ack_pending_at FROM inbox_items WHERE "+where+" AND ts>=? AND (? OR acked_at IS NULL) ORDER BY ts DESC,id,machine_id", args, func(s scanner) (model.InboxItem, error) {
+	return readMany(q, "SELECT machine_id,id,session_id,kind,ts,summary,acked_at,ack_pending_at,reason,tool,detail,waiting_since_at,source,ended_at,jump FROM inbox_items WHERE "+where+" AND ts>=? AND (? OR (acked_at IS NULL AND ended_at IS NULL)) ORDER BY CASE WHEN kind='waiting' AND acked_at IS NULL AND ended_at IS NULL THEN 0 ELSE 1 END, CASE WHEN kind='waiting' AND acked_at IS NULL AND ended_at IS NULL THEN ts END ASC,ts DESC,id,machine_id", args, func(s scanner) (model.InboxItem, error) {
 		var i model.InboxItem
-		var ts int64
-		var ack, pending sql.NullInt64
-		err := s.Scan(&i.MachineID, &i.ID, &i.SessionID, &i.Kind, &ts, &i.Summary, &ack, &pending)
+		var ts, wait int64
+		var ack, pending, ended sql.NullInt64
+		var jump string
+		err := s.Scan(&i.MachineID, &i.ID, &i.SessionID, &i.Kind, &ts, &i.Summary, &ack, &pending, &i.Reason, &i.Tool, &i.Detail, &wait, &i.Source, &ended, &jump)
 		i.TS, i.AckedAt, i.AckPendingAt = fromUnix(ts), timePointer(ack), timePointer(pending)
+		i.WaitingSinceAt, i.EndedAt = fromUnix(wait), timePointer(ended)
+		if err == nil {
+			err = json.Unmarshal([]byte(jump), &i.Jump)
+		}
 		return i, err
 	})
 }
@@ -660,6 +760,13 @@ func (tx *Tx) Prune(now time.Time) error {
 		// min(seq)-1 remains a sufficient guard against skipping deleted rows.
 		if err := tx.exec(`DELETE FROM feed WHERE seq<=(SELECT MAX(seq) FROM feed WHERE ts<?) OR seq IN
 		(SELECT seq FROM feed ORDER BY seq DESC LIMIT -1 OFFSET 200000)`, month); err != nil {
+			return err
+		}
+		if err := tx.exec(`DELETE FROM meta WHERE machine_id=? AND key LIKE 'inbox_alias:%'
+ AND NOT EXISTS(SELECT 1 FROM inbox_items i WHERE i.machine_id=? AND i.id=meta.value)`, tx.machineID, tx.machineID); err != nil {
+			return err
+		}
+		if err := tx.exec(`DELETE FROM meta WHERE machine_id=? AND (key LIKE 'inbox_alert:%' OR key LIKE 'inbox_alert_session:%') AND value<?`, tx.machineID, now.Add(-30*24*time.Hour).UTC().Format(time.RFC3339Nano)); err != nil {
 			return err
 		}
 		return tx.PruneRemote(now)

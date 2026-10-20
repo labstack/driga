@@ -33,6 +33,8 @@ func (TopCmd) Run(g *Globals) error {
 	}
 	defer closeSource()
 	opts := tui.Options{Machine: g.Machine, Project: g.Project, NoColor: g.NoColor, OpenCmd: cfg.OpenCmd, DataDir: config.DataDir(), Context: ctx}
+	opts.Tmux = os.Getenv("TMUX")
+	opts.JumpTerminal = cfg.Inbox.JumpTerminal
 	opts.CleanupList = func(ctx context.Context) ([]cleanup.Candidate, error) {
 		envelope, err := cleanupRead(ctx, g, "", false, true)
 		if err != nil {

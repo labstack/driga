@@ -15,6 +15,7 @@ import (
 
 // FlowNode contains a session and only usage measurements actually retained.
 type FlowNode struct {
+	Reason         string        `json:"reason,omitempty"`
 	MachineID      string        `json:"machine_id"`
 	ID             int64         `json:"id"`
 	ExternalID     string        `json:"external_id"`
@@ -291,6 +292,16 @@ func Flow(r Reader, f Filter, sessionID int64, now time.Time) (FlowView, error) 
 		return v, err
 	}
 	var leadEvents []model.Event
+	waits, err := selectedReader.Inbox(time.Time{}, false)
+	if err != nil {
+		return v, err
+	}
+	reasons := map[int64]string{}
+	for _, i := range waits {
+		if i.Kind == "waiting" && i.EndedAt == nil {
+			reasons[i.SessionID] = i.Reason
+		}
+	}
 	for _, s := range all {
 		if !family[s.ID] {
 			continue
@@ -303,6 +314,7 @@ func Flow(r Reader, f Filter, sessionID int64, now time.Time) (FlowView, error) 
 			return v, err
 		}
 		n := FlowNode{MachineID: selectedReader.MachineID(), ID: s.ID, ExternalID: s.ExternalID, Adapter: s.Adapter, Kind: "worker", Title: s.Title, Project: projectName(s, repos), Branch: s.Branch, Label: s.Label, Heuristic: s.Heuristic, Age: sessionAge(s, now), LastActivityAt: s.LastActivityAt, Activity: make([]int, 10)}
+		n.Reason = reasons[s.ID]
 		n.Observed, err = flowObserved(selectedReader, s.ID, now)
 		if err != nil {
 			return v, err

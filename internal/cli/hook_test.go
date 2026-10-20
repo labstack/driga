@@ -22,6 +22,7 @@ func hookTestEnv(t *testing.T) string {
 	home := t.TempDir()
 	dir := filepath.Join(home, "spool")
 	t.Setenv("HOME", home)
+	t.Setenv("DRIGA_DATA_DIR", filepath.Join(home, "data"))
 	t.Setenv("DRIGA_SPOOL_DIR", dir)
 	t.Setenv("DRIGA_CONFIG", filepath.Join(home, "config.toml"))
 	return dir

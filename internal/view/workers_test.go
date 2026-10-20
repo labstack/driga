@@ -87,6 +87,10 @@ func TestChildFinishedStoredAsWorkerItem(t *testing.T) {
 			if item.AckedAt == nil {
 				unseen++
 			}
+		} else if item.Kind == "waiting" {
+			if item.SessionID == parent {
+				t.Fatalf("worker wait must retain the worker: %+v", item)
+			}
 		} else if item.SessionID != parent {
 			t.Fatalf("attention or parent completion must attach to root: %+v", item)
 		}

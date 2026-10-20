@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/labstack/driga/internal/derive"
+	"github.com/labstack/driga/internal/inbox"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/store"
 )
@@ -90,6 +91,9 @@ func agentsLocal(r Reader, f AgentFilter, now time.Time) (AgentsView, error) {
 		}
 	}
 	for _, item := range items {
+		if f.CaptureText != "" {
+			item = inbox.Policy(item, f.CaptureText)
+		}
 		if item.Kind == "worker_finished" {
 			counts[item.SessionID]++
 		} else if item.Kind == "finished" {
@@ -345,11 +349,14 @@ func inboxLocal(r Reader, f Filter, now time.Time) (InboxView, error) {
 		if item.Kind == "worker_finished" {
 			continue
 		}
+		if f.CaptureText != "" {
+			item = inbox.Policy(item, f.CaptureText)
+		}
 		s := byID[item.SessionID]
 		if f.Project != "" && !sessionProject(s, repos, f.Project) {
 			continue
 		}
-		v.Rows = append(v.Rows, InboxRow{MachineID: r.MachineID(), InboxItem: item, Age: max(0, now.Sub(item.TS)), Project: projectName(s, repos), Adapter: s.Adapter, Title: s.Title, Branch: s.Branch})
+		v.Rows = append(v.Rows, InboxRow{MachineID: r.MachineID(), InboxItem: item, Age: max(0, now.Sub(item.TS)), Waited: inbox.Waited(item, now), Project: projectName(s, repos), Adapter: s.Adapter, Title: s.Title, Branch: s.Branch})
 	}
 	return v, nil
 }

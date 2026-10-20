@@ -91,7 +91,7 @@ func TestHooksInstallUsesUnresolvedExecutable(t *testing.T) {
 			if err := cmd.Run(&Globals{Stdin: strings.NewReader(""), Stdout: &out}); err != nil {
 				t.Fatal(err)
 			}
-			if strings.Count(out.String(), want) != 5 {
+			if strings.Count(out.String(), want) != 6 {
 				t.Fatalf("both installers must use %q for all hooks, got:\n%s", want, out.String())
 			}
 			for _, path := range []string{filepath.Join(home, ".claude", "settings.json"), filepath.Join(home, ".codex", "config.toml")} {

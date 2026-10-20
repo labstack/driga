@@ -29,6 +29,7 @@ type Machine struct {
 
 // Proc is one process in a snapshot.
 type Proc struct {
+	TTY        string    `json:"tty,omitempty"`
 	MachineID  string    `json:"machine_id"`
 	PID        int32     `json:"pid"`
 	PPID       int32     `json:"ppid"`
@@ -142,14 +143,17 @@ type FileTouch struct {
 // Stop|Notification|SessionStart|SessionEnd|notify|ack|summary; for ack, Message
 // is the inbox item id. A summary event carries Summary instead of hook text.
 type HookEvent struct {
-	Summary   *Summary  `json:"summary,omitempty"`
-	MachineID string    `json:"machine_id,omitempty"`
-	TS        time.Time `json:"occurred_at"`
-	Adapter   string    `json:"adapter"`
-	SessionID string    `json:"session_id"`
-	Cwd       string    `json:"cwd,omitempty"`
-	Event     string    `json:"event"`
-	Message   string    `json:"message,omitempty"`
+	NotificationType string    `json:"notification_type,omitempty"`
+	Tool             string    `json:"tool,omitempty"`
+	Detail           string    `json:"detail,omitempty"`
+	Summary          *Summary  `json:"summary,omitempty"`
+	MachineID        string    `json:"machine_id,omitempty"`
+	TS               time.Time `json:"occurred_at"`
+	Adapter          string    `json:"adapter"`
+	SessionID        string    `json:"session_id"`
+	Cwd              string    `json:"cwd,omitempty"`
+	Event            string    `json:"event"`
+	Message          string    `json:"message,omitempty"`
 }
 
 // Summary records the inputs' digest and provenance, never the input text.
@@ -181,14 +185,32 @@ type Session struct {
 
 // InboxItem is one event needing the user's attention.
 type InboxItem struct {
-	AckPendingAt *time.Time `json:"ack_pending_at,omitempty"`
-	MachineID    string     `json:"machine_id"`
-	ID           string     `json:"id"`
-	SessionID    int64      `json:"session_id"`
-	Kind         string     `json:"kind"` // finished|waiting
-	TS           time.Time  `json:"occurred_at"`
-	Summary      string     `json:"summary"`
-	AckedAt      *time.Time `json:"acked_at,omitempty"`
+	Reason         string     `json:"reason,omitempty"`
+	Tool           string     `json:"tool,omitempty"`
+	Detail         string     `json:"detail,omitempty"`
+	WaitingSinceAt time.Time  `json:"waiting_since_at,omitzero"`
+	Source         string     `json:"source,omitempty"`
+	EndedAt        *time.Time `json:"ended_at,omitempty"`
+	Jump           *InboxJump `json:"jump,omitempty"`
+	AckPendingAt   *time.Time `json:"ack_pending_at,omitempty"`
+	MachineID      string     `json:"machine_id"`
+	ID             string     `json:"id"`
+	SessionID      int64      `json:"session_id"`
+	Kind           string     `json:"kind"` // finished|waiting
+	TS             time.Time  `json:"occurred_at"`
+	Summary        string     `json:"summary"`
+	AckedAt        *time.Time `json:"acked_at,omitempty"`
+}
+
+// InboxJump contains only a proven destination or a copyable resume command.
+type InboxJump struct {
+	App     string `json:"app,omitempty"`
+	Kind    string `json:"kind"`
+	Command string `json:"command,omitempty"`
+	Target  string `json:"target,omitempty"`
+	URL     string `json:"url,omitempty"`
+	Cwd     string `json:"cwd,omitempty"`
+	Server  string `json:"server,omitempty"`
 }
 
 // Orphan is a process tree left behind by a dead agent session.

@@ -9,9 +9,9 @@ import (
 	"github.com/labstack/driga/internal/model"
 )
 
-// InboxItems returns deduplicated events, acknowledging imports at or before
-// baseline. Workers' completions are worker_finished records on the top-level
-// parent, as are their attention requests. Event IDs retain the worker identity.
+// InboxItems returns deduplicated signal facts. Old completions use the import
+// baseline; a waiting signal never becomes an acknowledgement just by being read.
+// Worker completions group on the lead; waits retain their own session identity.
 // Codex notify hooks are deliberately ignored: rollouts already emit completions.
 func InboxItems(sessions []model.Session, parents map[int64]int64, hooks []model.HookEvent, baseline time.Time) []model.InboxItem {
 	var result []model.InboxItem
@@ -20,7 +20,9 @@ func InboxItems(sessions []model.Session, parents map[int64]int64, hooks []model
 		if root != item.SessionID && item.Kind == "finished" {
 			item.Kind = "worker_finished"
 		}
-		item.SessionID = root
+		if item.Kind != "waiting" {
+			item.SessionID = root
+		}
 		result = append(result, item)
 	}
 	return result
@@ -58,7 +60,12 @@ func inboxEvents(sessions []model.Session, hooks []model.HookEvent, baseline tim
 			id = suffix
 		}
 		item := model.InboxItem{ID: id, SessionID: session, Kind: kind, TS: ts, Summary: text}
-		if !ts.After(baseline) {
+		if kind == "waiting" {
+			item.Reason = "unknown"
+			item.Source = "hook"
+			item.WaitingSinceAt = ts
+		}
+		if kind != "waiting" && !ts.After(baseline) {
 			at := baseline
 			item.AckedAt = &at
 		}
@@ -86,11 +93,24 @@ func inboxEvents(sessions []model.Session, hooks []model.HookEvent, baseline tim
 		case "Stop":
 			kind = "finished"
 		case "Notification":
+			if h.NotificationType == "idle_prompt" {
+				continue
+			}
+			kind = "waiting"
+		case "PermissionRequest":
 			kind = "waiting"
 		default:
 			continue
 		}
 		add(h.Adapter, h.SessionID, fmt.Sprint(h.TS.UnixNano()), id, kind, h.TS, h.Message)
+		if kind == "waiting" {
+			i := &items[len(items)-1]
+			i.Reason = NotificationReason(h.NotificationType)
+			if h.Event == "PermissionRequest" {
+				i.Reason = "permission"
+			}
+			i.Tool, i.Detail = h.Tool, h.Detail
+		}
 	}
 	sort.Slice(items, func(i, j int) bool {
 		a, b := items[i], items[j]
@@ -117,6 +137,20 @@ func inboxEvents(sessions []model.Session, hooks []model.HookEvent, baseline tim
 		}
 	}
 	return result
+}
+
+// NotificationReason maps protocol metadata, never message text, to a reason.
+func NotificationReason(typ string) string {
+	switch typ {
+	case "permission_prompt":
+		return "permission"
+	case "agent_needs_input":
+		return "question"
+	case "elicitation_dialog", "elicitation_url_dialog":
+		return "elicitation"
+	default:
+		return "unknown"
+	}
 }
 
 func inboxRoot(id int64, parents map[int64]int64) int64 {

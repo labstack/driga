@@ -261,7 +261,7 @@ func flatten(rows []view.AgentRow) []view.AgentRow {
 func (p *pageData) prepare() {
 	visibleInbox := []view.InboxRow{}
 	for _, i := range p.Inbox.Rows {
-		if i.AckedAt == nil {
+		if i.AckedAt == nil && i.EndedAt == nil {
 			visibleInbox = append(visibleInbox, i)
 		}
 	}
@@ -358,6 +358,7 @@ func (p *pageData) prepare() {
 
 func templateFuncs() template.FuncMap {
 	return template.FuncMap{
+		"waitingHeader": view.WaitingHeader,
 		"dollars": func(v *float64) string {
 			if v == nil {
 				return ""

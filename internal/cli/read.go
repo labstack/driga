@@ -56,9 +56,9 @@ type InboxCmd struct {
 	Ack  InboxAckCmd  `cmd:"" help:"Explicitly acknowledge inbox events."`
 }
 
-// InboxListCmd lists unacknowledged events, optionally including acknowledged ones.
+// InboxListCmd lists active attention and completions, optionally including history.
 type InboxListCmd struct {
-	All bool `help:"Include acknowledged events."`
+	All bool `help:"Include acknowledged and automatically ended events."`
 }
 
 // ConflictsCmd shows current collisions separately from recent overlap.
@@ -188,6 +188,11 @@ func runRead(g *Globals, base view.Filter, project string, build readBuilder) er
 }
 
 func readOnce(ctx context.Context, g *Globals, base view.Filter, project string, build readBuilder) error {
+	cfg, err := config.Load(config.Path())
+	if err != nil {
+		return err
+	}
+	base.CaptureText = cfg.CaptureText
 	st, mode, closeFn, err := OpenReader(ctx, g)
 	if err != nil {
 		return err

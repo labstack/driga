@@ -140,6 +140,9 @@ func (m *app) flowLeadLines() []string {
 		return []string{"No live interactive session."}
 	}
 	state := n.Label
+	if n.Reason != "" {
+		state += " [" + n.Reason + "]"
+	}
 	if n.Heuristic {
 		state = "~" + state
 	}
@@ -204,6 +207,9 @@ func (m *app) flowWorkerPanel(n view.FlowNode, i, width int) string {
 		activity = view.FlowJoin(clean(n.LastTool), activity)
 	}
 	state := view.StateStyle(n.Label, m.opts.NoColor).Render(derive.Display(n.Label, n.Heuristic))
+	if n.Reason != "" {
+		state += " " + view.StateStyle("waiting", m.opts.NoColor).Render("["+n.Reason+"]")
+	}
 	titleText := truncate(clean(n.DisplayTitle()), max(0, width-7-lipgloss.Width(state)))
 	spark := view.FlowSpark(n.Activity)
 	elapsed := agentAge(n.Elapsed)

@@ -6,6 +6,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/labstack/driga/internal/inbox"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/store"
 )
@@ -234,7 +235,7 @@ func Inbox(r Reader, f Filter, now time.Time, scopes ...store.Scope) (InboxView,
 		v.Rows = append(v.Rows, a.Rows...)
 		return e
 	})
-	sort.SliceStable(v.Rows, func(i, j int) bool { return v.Rows[i].TS.After(v.Rows[j].TS) })
+	sort.SliceStable(v.Rows, func(i, j int) bool { return inbox.Less(v.Rows[i].InboxItem, v.Rows[j].InboxItem) })
 	return v, e
 }
 

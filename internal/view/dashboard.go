@@ -1,6 +1,8 @@
 package view
 
 import (
+	"fmt"
+	attention "github.com/labstack/driga/internal/inbox"
 	"sort"
 	"strings"
 	"time"
@@ -35,11 +37,11 @@ func NeedsYou(inbox []InboxRow, agents []AgentRow, details map[int64]AgentView) 
 	}
 	walk(agents)
 	for _, i := range inbox {
-		if i.AckedAt != nil || i.Kind != "waiting" && i.Kind != "finished" && i.Kind != "worker_finished" {
+		if i.AckedAt != nil || i.EndedAt != nil || i.Kind != "waiting" && i.Kind != "finished" && i.Kind != "worker_finished" {
 			continue
 		}
 		key := sessionKey{i.MachineID, i.SessionID}
-		if previous, ok := items[key]; ok && (!i.TS.After(previous.At)) {
+		if previous, ok := items[key]; ok && previous.Inbox != nil && !attention.Less(i.InboxItem, previous.Inbox.InboxItem) {
 			continue
 		}
 		item := i
@@ -107,6 +109,9 @@ func NeedsYou(inbox []InboxRow, agents []AgentRow, details map[int64]AgentView) 
 	}
 	sort.SliceStable(result, func(i, j int) bool {
 		a, b := result[i], result[j]
+		if a.Inbox != nil && b.Inbox != nil {
+			return attention.Less(a.Inbox.InboxItem, b.Inbox.InboxItem)
+		}
 		if !a.At.Equal(b.At) {
 			return a.At.After(b.At)
 		}
@@ -116,6 +121,22 @@ func NeedsYou(inbox []InboxRow, agents []AgentRow, details map[int64]AgentView) 
 		return a.ID < b.ID
 	})
 	return result
+}
+
+// WaitingHeader uses inbox generations, not inferred process states.
+func WaitingHeader(rows []InboxRow, now time.Time) string {
+	count := 0
+	var oldest time.Duration
+	for _, i := range rows {
+		if attention.Active(i.InboxItem) {
+			count++
+			oldest = max(oldest, attention.Waited(i.InboxItem, now))
+		}
+	}
+	if count == 0 {
+		return "0 waiting"
+	}
+	return fmt.Sprintf("%d waiting · oldest %s", count, oldest.Round(time.Second))
 }
 
 // StateCount aggregates heuristic and confirmed labels in a fixed display order.

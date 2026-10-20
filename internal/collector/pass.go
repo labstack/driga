@@ -22,6 +22,7 @@ import (
 	"github.com/labstack/driga/internal/feed"
 	"github.com/labstack/driga/internal/fleet"
 	"github.com/labstack/driga/internal/gitscan"
+	attention "github.com/labstack/driga/internal/inbox"
 	"github.com/labstack/driga/internal/jsonwire"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/platform"
@@ -33,17 +34,19 @@ import (
 
 // Deps supplies collection sources, configuration, and optional shared state.
 type Deps struct {
-	Cfg        config.Config
-	Plat       platform.Platform
-	Adapters   []adapter.Adapter
-	Sigs       *signatures.Set
-	Git        *gitscan.Scanner
-	SpoolDir   string
-	Now        func() time.Time
-	State      *State
-	spoolSince time.Time
-	snapshot   bool
-	clock      daemonClock
+	InboxRunner attention.Runner
+	Notifier    attention.Notifier
+	Cfg         config.Config
+	Plat        platform.Platform
+	Adapters    []adapter.Adapter
+	Sigs        *signatures.Set
+	Git         *gitscan.Scanner
+	SpoolDir    string
+	Now         func() time.Time
+	State       *State
+	spoolSince  time.Time
+	snapshot    bool
+	clock       daemonClock
 }
 
 func (d Deps) now() time.Time {
@@ -205,6 +208,8 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 			}
 		}
 		ss := collected.sessions
+		// Hook-only background sessions still need a stable local session identity.
+		ss = hookSessions(ss, hooks)
 		original := collected.original
 		byKey := make(map[string]int, len(ss))
 		for i, s := range ss {
@@ -274,11 +279,17 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 		if err := explicitParents(tx, ss, parents); err != nil {
 			return err
 		}
-		for _, item := range derive.InboxItems(ss, parents, hooks, baseline) {
-			if err := tx.UpsertInboxItem(item); err != nil {
-				return err
-			}
-			r.Inbox++
+		if err := syncInbox(tx, d, ss, parents, hooks, baseline); err != nil {
+			return err
+		}
+		if err := mergeAgents(tx, collected.agents, ss, now); err != nil {
+			return err
+		}
+		if err := tx.CloseAttentionGrowth(now); err != nil {
+			return err
+		}
+		if err := resolveInboxJumps(ctx, tx, d, ss, procs); err != nil {
+			return err
 		}
 		items, err := tx.Inbox(time.Time{}, false)
 		if err != nil {
@@ -453,6 +464,9 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 		state.procs = work.procs
 		state.logs = work.logs
 	}
+	if err == nil {
+		err = alertInbox(ctx, d, st)
+	}
 	return r, err
 }
 
@@ -590,8 +604,15 @@ func drainSpool(d Deps, tx *store.Tx, now time.Time, source func(string, error) 
 		}
 		if d.Cfg.CaptureSnippets() {
 			ev.Message = scrub.Snippet(ev.Message)
+			ev.Detail = scrub.Snippet(ev.Detail)
 		} else {
 			ev.Message = ""
+			ev.Detail = ""
+		}
+		ev.Tool = scrub.Snippet(ev.Tool)
+		// idle notifications are not evidence of a blocked session.
+		if ev.Event == "Notification" && ev.NotificationType == "idle_prompt" {
+			continue
 		}
 		event := model.Event{MachineID: tx.MachineID(), Adapter: ev.Adapter, ExternalID: ev.SessionID, TS: ev.TS, Kind: ev.Event, Summary: ev.Message}
 		if err := tx.InsertEvent(event); err != nil {

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"path/filepath"
 	"reflect"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/pelletier/go-toml/v2"
@@ -47,7 +49,8 @@ func CodexUninstallOTLP(path string, dryRun bool, endpoints ...string) (Diff, er
 	return finishCodex(d, settings, dryRun, time.Now())
 }
 
-// CodexInstall sets notify only when no command is configured.
+// CodexInstall appends a report-only permission hook, preserving unrelated TOML.
+// It retains the legacy notify registration and refuses an existing foreign notify.
 func CodexInstall(configPath, driga string, dryRun bool, now time.Time) (Diff, error) {
 	d, settings, err := readCodex(configPath)
 	if err != nil {
@@ -58,19 +61,71 @@ func CodexInstall(configPath, driga string, dryRun bool, now time.Time) (Diff, e
 	}
 	if value, exists := settings["notify"]; exists {
 		if codexNotifyOurs(value, driga) {
-			return d, nil
+			if strings.Contains(d.Before, "# driga needs-you begin") {
+				return d, nil
+			}
+		} else {
+			return d, fmt.Errorf("%w: existing notify = %#v", ErrNotifyInUse, value)
 		}
-		return d, fmt.Errorf("%w: existing notify = %#v", ErrNotifyInUse, value)
 	}
+	_, hadNotify := settings["notify"]
 	settings["notify"] = []string{driga, "hook", "codex", "notify"}
-	return finishCodex(d, settings, dryRun, now)
+	// Append an owned table without serializing unrelated TOML. A prefix owns
+	// the legacy notify entry, so install/uninstall restores every original byte.
+	notify, _ := toml.Marshal(map[string]any{"notify": settings["notify"]})
+	block := "\n# driga needs-you begin\n[[hooks.PermissionRequest]]\n[[hooks.PermissionRequest.hooks]]\ntype = 'command'\ncommand = " + strconv.Quote(shellQuote(driga)+" hook codex PermissionRequest") + "\ntimeout = 3\n# driga needs-you end\n"
+	prefix := string(notify)
+	if hadNotify {
+		prefix = ""
+	} else {
+		block = strings.Replace(block, "# driga needs-you begin\n", "# driga needs-you begin\n# driga notify added\n", 1)
+	}
+	d.After = prefix + d.Before + block
+	var check map[string]any
+	if err := toml.Unmarshal([]byte(d.After), &check); err != nil {
+		return d, fmt.Errorf("Codex inline hooks cannot be safely appended: %w", err)
+	}
+	d.Changed = true
+	return d, writeDiff(d, dryRun, now)
 }
 
-// CodexUninstall removes notify only when it invokes Driga's Codex hook.
+// CodexUninstall round-trips the owned permission block and its optional notify
+// prefix. Changed blocks are refused; legacy notify-only settings retain removal.
 func CodexUninstall(configPath string, dryRun bool) (Diff, error) {
 	d, settings, err := readCodex(configPath)
 	if err != nil {
 		return d, err
+	}
+	const start = "\n# driga needs-you begin\n"
+	const end = "# driga needs-you end\n"
+	if pos := strings.Index(d.Before, start); pos >= 0 && strings.HasSuffix(d.Before, end) {
+		// Remove only our exact, unmodified report-only registration.
+		var owned map[string]any
+		if toml.Unmarshal([]byte(d.Before[pos:]), &owned) == nil {
+			hooks, _ := owned["hooks"].(map[string]any)
+			groups, _ := hooks["PermissionRequest"].([]any)
+			if len(groups) == 1 {
+				g, _ := groups[0].(map[string]any)
+				hs, _ := g["hooks"].([]any)
+				if len(hs) == 1 {
+					h, _ := hs[0].(map[string]any)
+					cmd, _ := h["command"].(string)
+					p, rest, ok := shellProgram(cmd)
+					if ok && ours(p, currentBinary()) && rest == " hook codex PermissionRequest" && h["type"] == "command" && h["timeout"] == int64(3) && len(h) == 3 && len(g) == 1 {
+						after := d.Before[:pos]
+						if strings.Contains(d.Before[pos:], "# driga notify added\n") && codexNotifyOurs(settings["notify"], currentBinary()) {
+							line, _ := toml.Marshal(map[string]any{"notify": settings["notify"]})
+							after = strings.TrimPrefix(after, string(line))
+						}
+						d.After, d.Changed = after, true
+						return d, writeDiff(d, dryRun, time.Now())
+					}
+				}
+			}
+		}
+	}
+	if strings.Contains(d.Before, "# driga needs-you begin") {
+		return d, fmt.Errorf("Driga permission hook changed; refusing to rewrite Codex config")
 	}
 	if !codexNotifyOurs(settings["notify"], currentBinary()) {
 		return d, nil

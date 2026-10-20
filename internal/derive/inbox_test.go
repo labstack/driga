@@ -53,6 +53,12 @@ func TestInboxBaseline(t *testing.T) {
 		t.Fatal(got)
 	}
 	for _, item := range got {
+		if item.Kind == "waiting" {
+			if item.AckedAt != nil {
+				t.Fatal(item)
+			}
+			continue
+		}
 		if item.TS.After(baseline) {
 			if item.AckedAt != nil {
 				t.Fatal(item)
@@ -87,7 +93,7 @@ func TestChildFinishedCounted(t *testing.T) {
 	}
 }
 
-func TestChildWaitingSurfacesOnParent(t *testing.T) {
+func TestChildWaitingStaysOnWorker(t *testing.T) {
 	ts := time.Unix(100, 0).UTC()
 	sessions := []model.Session{inboxSession(1, "claude", "parent", ts), inboxSession(2, "claude", "child", ts), inboxSession(3, "claude", "grandchild", ts)}
 	for i := range sessions {
@@ -95,7 +101,7 @@ func TestChildWaitingSurfacesOnParent(t *testing.T) {
 	}
 	hooks := []model.HookEvent{{TS: ts, Adapter: "claude", SessionID: "grandchild", Event: "Notification", Message: "approval needed"}}
 	got := InboxItems(sessions, map[int64]int64{2: 1, 3: 2}, hooks, time.Time{})
-	if len(got) != 1 || got[0].SessionID != 1 || got[0].Kind != "waiting" || got[0].Summary != "approval needed" || got[0].ID != "claude:grandchild:100000000000" {
+	if len(got) != 1 || got[0].SessionID != 3 || got[0].Kind != "waiting" || got[0].Summary != "approval needed" || got[0].ID != "claude:grandchild:100000000000" {
 		t.Fatal(got)
 	}
 }

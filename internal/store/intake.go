@@ -1,6 +1,9 @@
 package store
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 // IntakeState stores optional OTLP evidence separately from adapter observations.
 type IntakeState struct {
@@ -24,10 +27,35 @@ func (tx *Tx) SetIntakeState(id int64, s IntakeState) error {
 
 // CloseAttentionBefore closes older waiting requests after an explicit user signal.
 func (tx *Tx) CloseAttentionBefore(sessionID int64, at time.Time) error {
-	// A worker's attention item can live on its parent. Its natural item ID
-	// retains the worker's adapter/external ID, so close that request as well.
-	return tx.exec(`UPDATE inbox_items SET acked_at=? WHERE machine_id=? AND
-	(session_id=? OR substr(id,1,length((SELECT adapter||':'||external_id||':' FROM sessions WHERE id=? AND machine_id=?)))=
-	(SELECT adapter||':'||external_id||':' FROM sessions WHERE id=? AND machine_id=?))
-	AND kind='waiting' AND ts<? AND acked_at IS NULL`, unix(at), tx.machineID, sessionID, sessionID, tx.machineID, sessionID, tx.machineID, unix(at))
+	return tx.exec(`UPDATE inbox_items SET ended_at=? WHERE machine_id=? AND session_id=?
+	AND kind='waiting' AND waiting_since_at<? AND acked_at IS NULL AND ended_at IS NULL`, unix(at), tx.machineID, sessionID, unix(at))
+}
+
+// CloseAttentionActivity ends only waits that require a person's answer to progress.
+func (tx *Tx) CloseAttentionActivity(sessionID int64, at time.Time) error {
+	return tx.exec(`UPDATE inbox_items SET ended_at=? WHERE machine_id=? AND session_id=?
+	AND kind='waiting' AND reason IN ('permission','question','elicitation')
+	AND waiting_since_at<? AND acked_at IS NULL AND ended_at IS NULL`, unix(at), tx.machineID, sessionID, unix(at))
+}
+
+// CloseAttentionGrowth also covers a late hook drained in the same pass that
+// measured growth. CPU counters and another session's log never close a wait.
+func (tx *Tx) CloseAttentionGrowth(at time.Time) error {
+	return tx.exec(`UPDATE inbox_items SET ended_at=(
+ SELECT MIN(o.last_growth_at)*1000000 FROM observation_minutes o
+ WHERE o.machine_id=inbox_items.machine_id AND o.session_id=inbox_items.session_id
+ AND o.last_growth_at*1000000>inbox_items.waiting_since_at AND o.last_growth_at<=?)
+ WHERE machine_id=? AND kind='waiting' AND reason IN ('permission','question','elicitation')
+ AND acked_at IS NULL AND ended_at IS NULL AND EXISTS(
+ SELECT 1 FROM observation_minutes o WHERE o.machine_id=inbox_items.machine_id
+ AND o.session_id=inbox_items.session_id AND o.last_growth_at*1000000>inbox_items.waiting_since_at
+ AND o.last_growth_at<=?)`, at.UnixMilli(), tx.machineID, at.UnixMilli())
+}
+
+func (tx *Tx) SetInboxJump(id string, jump any) error {
+	b, err := json.Marshal(jump)
+	if err != nil {
+		return err
+	}
+	return tx.exec("UPDATE inbox_items SET jump=? WHERE machine_id=? AND id=?", string(b), tx.machineID, id)
 }

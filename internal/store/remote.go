@@ -74,9 +74,14 @@ func (tx *Tx) SessionByKey(adapter, external string) (model.Session, error) {
 // ApplyInbox replaces authoritative peer fields while retaining a pending ack
 // until the peer confirms it. Local inbox insertion remains insert-only.
 func (tx *Tx) ApplyInbox(i model.InboxItem) error {
-	return tx.exec(`INSERT INTO inbox_items(machine_id,id,session_id,kind,ts,summary,acked_at,ack_pending_at) VALUES(?,?,?,?,?,?,?,NULL)
+	jump, err := json.Marshal(i.Jump)
+	if err != nil {
+		return err
+	}
+	return tx.exec(`INSERT INTO inbox_items(machine_id,id,session_id,kind,ts,summary,acked_at,ack_pending_at,reason,tool,detail,waiting_since_at,source,ended_at,jump) VALUES(?,?,?,?,?,?,?,NULL,?,?,?,?,?,?,?)
  ON CONFLICT(machine_id,id) DO UPDATE SET session_id=excluded.session_id,kind=excluded.kind,ts=excluded.ts,summary=excluded.summary,
- acked_at=excluded.acked_at,ack_pending_at=CASE WHEN excluded.acked_at IS NULL THEN inbox_items.ack_pending_at ELSE NULL END`, tx.machineID, i.ID, i.SessionID, i.Kind, unix(i.TS), i.Summary, nullableTime(i.AckedAt))
+ reason=excluded.reason,tool=excluded.tool,detail=excluded.detail,waiting_since_at=excluded.waiting_since_at,source=excluded.source,ended_at=excluded.ended_at,jump=excluded.jump,
+ acked_at=excluded.acked_at,ack_pending_at=CASE WHEN excluded.acked_at IS NULL THEN inbox_items.ack_pending_at ELSE NULL END`, tx.machineID, i.ID, i.SessionID, i.Kind, unix(i.TS), i.Summary, nullableTime(i.AckedAt), i.Reason, i.Tool, i.Detail, unix(i.WaitingSinceAt), i.Source, nullableTime(i.EndedAt), string(jump))
 }
 
 // ApplyEvent idempotently stores a natural-keyed peer event.

@@ -271,6 +271,10 @@ func applyIntake(ctx context.Context, d Deps, st *store.Store, b intake.Batch) (
 				if err := tx.CloseAttentionBefore(s.ID, f.TS); err != nil {
 					return err
 				}
+			case "tool_result", "assistant_response":
+				if err := tx.CloseAttentionActivity(s.ID, f.TS); err != nil {
+					return err
+				}
 			}
 			if err := tx.SetIntakeState(s.ID, state); err != nil {
 				return err

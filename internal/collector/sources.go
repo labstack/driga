@@ -13,6 +13,7 @@ import (
 
 	"github.com/labstack/driga/internal/adapter"
 	"github.com/labstack/driga/internal/gitscan"
+	attention "github.com/labstack/driga/internal/inbox"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/platform"
 	"github.com/labstack/driga/internal/store"
@@ -45,6 +46,7 @@ type repoResult struct {
 	worktrees []model.Worktree
 }
 type sourceResults struct {
+	agents       []attention.Agent
 	sessions     []model.Session
 	original     map[int64]model.Session
 	procs        []model.Proc
@@ -98,6 +100,11 @@ func collectSources(ctx context.Context, d Deps, st *store.Store, p Plan, state 
 	}
 	procReady := make(chan struct{})
 	var wg sync.WaitGroup
+	if d.InboxRunner != nil && d.Cfg.Adapters["claude"].Enabled {
+		// Optional CLI support varies by installation/release. Missing, slow or
+		// malformed results are skipped without turning intake health red.
+		wg.Go(func() { r.agents, _ = attention.PollAgents(ctx, d.InboxRunner, 200*time.Millisecond) })
+	}
 	if p.Machine {
 		wg.Go(func() { r.sample, r.machineErr = d.Plat.Machine(ctx) })
 	}
@@ -244,6 +251,21 @@ func collectSources(ctx context.Context, d Deps, st *store.Store, p Plan, state 
 		}
 	})
 	wg.Wait()
+	for _, a := range r.agents {
+		if a.State != "blocked" {
+			continue
+		}
+		found := false
+		for _, s := range r.sessions {
+			if s.Adapter == "claude" && s.ExternalID == a.ID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			r.sessions = append(r.sessions, model.Session{SessionObs: model.SessionObs{Adapter: "claude", ExternalID: a.ID, Cwd: a.Cwd, Origin: "background", Hosted: true, StartedAt: now}})
+		}
+	}
 	return r, ctx.Err()
 }
 

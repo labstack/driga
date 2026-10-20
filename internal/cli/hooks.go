@@ -24,6 +24,7 @@ type HooksCmd struct {
 
 // HooksOptions selects agents and controls preview-only operation.
 type HooksOptions struct {
+	Target string `arg:"" optional:"" help:"Agent name (claude, codex, or all); overrides --agent."`
 	DryRun bool   `help:"Print the diff without writing or prompting."`
 	Agent  string `enum:"claude,codex,all" default:"all" help:"Agent to configure: claude, codex, or all."`
 	OTLP   bool   `help:"Configure optional metadata-only loopback OTLP instead of hooks."`
@@ -93,6 +94,9 @@ func (c HooksStatusCmd) Run(g *Globals) error {
 }
 
 func (c HooksOptions) agent() (string, error) {
+	if c.Target != "" {
+		c.Agent = c.Target
+	}
 	switch c.Agent {
 	case "":
 		return "all", nil
