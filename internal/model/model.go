@@ -142,6 +142,7 @@ type FileTouch struct {
 // HookEvent is one line in the spool. Event retains the adapter's protocol name;
 // ack uses Message as the inbox item id, and summary carries Summary instead of text.
 type HookEvent struct {
+	Recoverable      bool      `json:"recoverable,omitempty"`
 	Origin           string    `json:"origin,omitempty"`
 	PID              int32     `json:"pid,omitempty"`
 	ProcStart        time.Time `json:"proc_started_at,omitzero"`

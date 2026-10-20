@@ -271,6 +271,10 @@ func (h HookCmd) appendCopilot(data []byte) error {
 		ToolArgs         json.RawMessage `json:"toolArgs"`
 		Message          string          `json:"message"`
 		NotificationType string          `json:"notification_type"`
+		Error            struct {
+			Name string `json:"name"`
+		} `json:"error"`
+		Recoverable bool `json:"recoverable"`
 	}
 	if err := json.Unmarshal(data, &p); err != nil {
 		return errors.New("decode Copilot hook payload")
@@ -317,6 +321,17 @@ func (h HookCmd) appendCopilot(data []byte) error {
 		if err != nil {
 			hookLogError(errors.New("Copilot parent start time unavailable"))
 		}
+	}
+	if h.Event == "errorOccurred" {
+		// Retain only protocol metadata and, under snippets, the error name.
+		// Messages, contexts, stacks and unrelated fields never reach disk.
+		ev.Source, ev.Reason, ev.NotificationType = "", "", ""
+		ev.Recoverable = p.Recoverable
+		if snippets && p.Error.Name != "" {
+			ev.Reason = scrub.Snippet("error: " + p.Error.Name)
+			ev.Message = ev.Reason
+		}
+		return spool.Append(config.SpoolDir(), ev)
 	}
 	ev.Tool = scrub.Snippet(p.Tool)
 	if h.Event == "notification" {

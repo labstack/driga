@@ -55,6 +55,8 @@ func label(in StateInput, now time.Time, th Thresholds) (label string, heuristic
 		switch in.Obs.RegistryStatus {
 		case "ended":
 			return "finished", false, "Copilot sessionEnd"
+		case "error", "error_recoverable":
+			return "finished", false, "Copilot errorOccurred"
 		case "started":
 			if live {
 				return "idle", false, "Copilot sessionStart"

@@ -52,7 +52,7 @@ func syncInbox(tx *store.Tx, d Deps, ss []model.Session, parents map[int64]int64
 	var changes []change
 	copilotActivity := func(event string, at time.Time, id int64) {
 		switch event {
-		case "postToolUse", "postToolUseFailure", "agentStop", "sessionEnd":
+		case "postToolUse", "postToolUseFailure", "agentStop", "errorOccurred", "sessionEnd":
 			changes = append(changes, change{at: at, session: id})
 		case "userPromptSubmitted":
 			changes = append(changes, change{at: at, session: id, explicit: true})

@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-var copilotEvents = []string{"sessionStart", "userPromptSubmitted", "postToolUse", "postToolUseFailure", "notification", "agentStop", "subagentStart", "subagentStop", "sessionEnd"}
+var copilotEvents = []string{"sessionStart", "userPromptSubmitted", "postToolUse", "postToolUseFailure", "notification", "agentStop", "errorOccurred", "subagentStart", "subagentStop", "sessionEnd"}
 
 type copilotCommand struct {
 	Type       string   `json:"type"`

@@ -60,7 +60,7 @@ func TestCopilotOwnedFile(t *testing.T) {
 	if err := json.Unmarshal(b, &cfg); err != nil {
 		t.Fatal(err)
 	}
-	events := []string{"sessionStart", "userPromptSubmitted", "postToolUse", "postToolUseFailure", "notification", "agentStop", "subagentStart", "subagentStop", "sessionEnd"}
+	events := []string{"sessionStart", "userPromptSubmitted", "postToolUse", "postToolUseFailure", "notification", "agentStop", "errorOccurred", "subagentStart", "subagentStop", "sessionEnd"}
 	if cfg.Version != 1 || len(cfg.Hooks) != len(events) {
 		t.Fatal(string(b))
 	}

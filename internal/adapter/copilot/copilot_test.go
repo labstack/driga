@@ -34,3 +34,39 @@ func TestNotificationsDoNotRefreshActivity(t *testing.T) {
 		}
 	}
 }
+
+func TestSessionStartPreservesTurnAndWait(t *testing.T) {
+	at := time.Unix(100, 0)
+	for _, state := range []string{"busy", "waiting", "idle", "error", "ended"} {
+		for _, offset := range []time.Duration{-time.Second, time.Second} {
+			s := model.SessionObs{Adapter: "copilot", ExternalID: "s", RegistryStatus: state, TurnOpen: state == "busy", LastActivityAt: at}
+			Fold(&s, model.HookEvent{TS: at.Add(offset), Event: "sessionStart", Source: "resume"})
+			if s.RegistryStatus != state || s.TurnOpen != (state == "busy") || s.Origin != "resume" || !s.StartedAt.Equal(at.Add(offset)) || !s.LastActivityAt.Equal(at) {
+				t.Fatal(state, offset, s)
+			}
+		}
+	}
+}
+
+func TestRecoverableErrorSameSessionActivity(t *testing.T) {
+	at := time.Unix(100, 0)
+	for _, event := range []string{"userPromptSubmitted", "postToolUse", "postToolUseFailure", "subagentStart", "subagentStop"} {
+		s := model.SessionObs{Adapter: "copilot", ExternalID: "s", RegistryStatus: "busy", TurnOpen: true, LastActivityAt: at}
+		Fold(&s, model.HookEvent{TS: at.Add(time.Second), Event: "errorOccurred", Recoverable: true})
+		if s.TurnOpen || s.RegistryStatus != "error_recoverable" {
+			t.Fatal(s)
+		}
+		Fold(&s, model.HookEvent{TS: at.Add(2 * time.Second), Event: "notification", NotificationType: "agent_idle"})
+		if s.TurnOpen || s.RegistryStatus != "error_recoverable" {
+			t.Fatal("passive notification revived turn", s)
+		}
+		Fold(&s, model.HookEvent{TS: at.Add(3 * time.Second), Event: event})
+		if !s.TurnOpen || s.RegistryStatus != "busy" {
+			t.Fatal(event, s)
+		}
+		Fold(&s, model.HookEvent{TS: at.Add(time.Second), Event: "errorOccurred"})
+		if !s.TurnOpen || s.RegistryStatus != "busy" {
+			t.Fatal("late error overrode activity", s)
+		}
+	}
+}

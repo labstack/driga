@@ -222,7 +222,7 @@ Driga entries. Hooks append events to the spool; the collector alone writes SQLi
 
 Copilot installation manages only `$COPILOT_HOME/hooks/driga.json`, falling back
 to `~/.copilot/hooks/driga.json`. It captures sessionStart, userPromptSubmitted,
-postToolUse, postToolUseFailure, notification, agentStop, subagentStart,
+postToolUse, postToolUseFailure, notification, agentStop, errorOccurred, subagentStart,
 subagentStop and sessionEnd. Each hook has a 3-second timeout; normal awaited
 capture targets a 50 ms warm-machine budget.
 Permission prompts and elicitation dialogs enter the needs-you inbox; other
@@ -234,7 +234,11 @@ Under `capture_text = "titles"`, Copilot uses the project name as its session ti
 and captures tool names. Only `snippets` allows bounded, scrubbed prompts, prompt
 titles, tool details and notification messages. Permission waits carry no tool name.
 Background notifications never update activity. Waits end on the same session's
-prompt, successful or failed tool result, agentStop or sessionEnd.
+prompt, successful or failed tool result, agentStop, errorOccurred or sessionEnd.
+Session start records lifecycle metadata without resetting an open turn or wait.
+Errors finish the turn; subsequent turn activity resumes a recoverable error.
+Only `snippets` stores a scrubbed `error: <name>` reason; error messages and stacks
+are never stored.
 
 Only a parent matching a native Copilot executable or its npm loader is linked.
 Other hook sessions stay live by hook activity for up to 24 hours. VS Code's

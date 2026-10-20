@@ -63,7 +63,9 @@ func (n node) cmd(ctx context.Context, args ...string) *exec.Cmd {
 		// Linux service logs and trash resolve through XDG; keep them isolated too.
 		"XDG_STATE_HOME="+filepath.Join(home, ".local", "state"), "XDG_DATA_HOME="+filepath.Join(home, ".local", "share"),
 		"XDG_CONFIG_HOME="+filepath.Join(home, ".config"),
-		"DRIGA_DATA_DIR="+n.path("data"), "DRIGA_SPOOL_DIR="+n.path("spool"), "DRIGA_CONFIG="+n.path("config.toml"))
+		"DRIGA_DATA_DIR="+n.path("data"), "DRIGA_SPOOL_DIR="+n.path("spool"), "DRIGA_CONFIG="+n.path("config.toml"),
+		// System tools only: the binary must never reach a real agent CLI, tmux or notifier.
+		"PATH=/usr/bin:/bin:/usr/sbin:/sbin")
 	return cmd
 }
 

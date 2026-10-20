@@ -2,6 +2,8 @@ package collector
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -9,6 +11,76 @@ import (
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/spool"
 )
+
+// The three lifecycle timestamps are the captured CLI 1.0.100 order. The error
+// is a synthetic documented event inserted before exit; it was not captured.
+func TestCopilotPromptBeforeStartAndError(t *testing.T) {
+	b, err := os.ReadFile("../../testdata/fixtures/copilot/1.0.100/tune/prompt-before-start.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixture []model.HookEvent
+	if err := json.Unmarshal(b, &fixture); err != nil {
+		t.Fatal(err)
+	}
+	for _, drain := range []bool{false, true} {
+		for _, recoverable := range []bool{false, true} {
+			t.Run(fmt.Sprintf("spool-wake=%t/recoverable=%t", drain, recoverable), func(t *testing.T) {
+				d, st, p, a := setup(t)
+				a.obs = nil
+				at := fixture[0].TS
+				d.Now = func() time.Time { return at }
+				start := at.Add(-time.Hour)
+				p.procs = []model.Proc{{PID: 42, StartTime: start, Cmdline: "copilot"}}
+				pass(t, d, st, Plan{Procs: true})
+				collect := func() {
+					t.Helper()
+					if drain {
+						if err := drainOnly(context.Background(), d, st); err != nil {
+							t.Fatal(err)
+						}
+					} else {
+						pass(t, d, st, Plan{})
+					}
+				}
+				for i, h := range fixture {
+					if h.TS.After(at) {
+						at = h.TS
+					}
+					h.Adapter, h.SessionID, h.PID, h.ProcStart = "copilot", "s", 42, start
+					h.Recoverable = recoverable
+					if err := spool.Append(d.SpoolDir, h); err != nil {
+						t.Fatal(err)
+					}
+					collect()
+					check := func() {
+						t.Helper()
+						for _, s := range sessions(t, st) {
+							if s.ExternalID != "s" {
+								continue
+							}
+							want := "working"
+							if i >= 2 {
+								want = "finished"
+							}
+							if s.Label != want || s.TurnOpen != (i < 2) || (s.EndedAt != nil) != (i == 3) {
+								t.Fatalf("%s: %+v", h.Event, s)
+							}
+							return
+						}
+						t.Fatal("missing session")
+					}
+					check()
+					if i == 2 {
+						at = at.Add(11 * time.Minute)
+						collect()
+						check() // A failed turn must never age into stalled.
+					}
+				}
+			})
+		}
+	}
+}
 
 func TestCopilotHooksStateAndInbox(t *testing.T) {
 	for _, drain := range []bool{false, true} {
@@ -42,6 +114,8 @@ func TestCopilotHooksStateAndInbox(t *testing.T) {
 				{"notification", "elicitation_dialog", "waiting", true}, {"userPromptSubmitted", "", "working", false},
 				{"subagentStart", "", "working", false}, {"subagentStop", "", "working", false},
 				{"notification", "permission_prompt", "waiting", true}, {"agentStop", "", "finished", false},
+				{"userPromptSubmitted", "", "working", false},
+				{"notification", "permission_prompt", "waiting", true}, {"errorOccurred", "", "finished", false},
 				{"notification", "elicitation_dialog", "waiting", true}, {"sessionEnd", "", "finished", false},
 			}
 			for _, tc := range events {
@@ -137,7 +211,7 @@ func TestCopilotWaitNotClearedByNotificationsOrSubagents(t *testing.T) {
 	at := d.now()
 	d.Now = func() time.Time { return at }
 	pass(t, d, st, Plan{Procs: true})
-	for _, tc := range []struct{ event, typ string }{{"notification", "permission_prompt"}, {"notification", "agent_idle"}, {"notification", "shell_completed"}, {"subagentStart", ""}, {"subagentStop", ""}} {
+	for _, tc := range []struct{ event, typ string }{{"notification", "permission_prompt"}, {"sessionStart", ""}, {"notification", "agent_idle"}, {"notification", "shell_completed"}, {"subagentStart", ""}, {"subagentStop", ""}} {
 		at = at.Add(time.Second)
 		h := model.HookEvent{Adapter: "copilot", SessionID: "s", Event: tc.event, NotificationType: tc.typ, TS: at, PID: 42, ProcStart: start}
 		if err := spool.Append(d.SpoolDir, h); err != nil {
@@ -153,6 +227,58 @@ func TestCopilotWaitNotClearedByNotificationsOrSubagents(t *testing.T) {
 				t.Fatal(tc, s)
 			}
 		}
+	}
+}
+
+func TestCopilotRecoverableErrorIsolationAndPersistence(t *testing.T) {
+	for _, policy := range []string{"titles", "snippets"} {
+		t.Run(policy, func(t *testing.T) {
+			d, st, _, a := setup(t)
+			a.obs = nil
+			d.Cfg.CaptureText = policy
+			at := d.now()
+			d.Now = func() time.Time { return at }
+			for i, h := range []model.HookEvent{
+				{SessionID: "s", Event: "userPromptSubmitted"},
+				{SessionID: "s", Event: "errorOccurred", Recoverable: true, Reason: "error: QuotaError", Message: "error: QuotaError"},
+				{SessionID: "other", Event: "postToolUse"},
+				{SessionID: "s", Event: "subagentStart"},
+			} {
+				at = at.Add(time.Second)
+				h.Adapter, h.TS = "copilot", at
+				if err := spool.Append(d.SpoolDir, h); err != nil {
+					t.Fatal(err)
+				}
+				pass(t, d, st, Plan{})
+				for _, s := range sessions(t, st) {
+					if s.ExternalID != "s" {
+						continue
+					}
+					want := "working"
+					if i == 1 || i == 2 {
+						want = "finished"
+					}
+					if s.Label != want || s.TurnOpen != (want == "working") {
+						t.Fatal(i, s)
+					}
+				}
+			}
+			rows, err := st.Events("copilot", "s", time.Time{})
+			if err != nil || len(rows) != 3 {
+				t.Fatal(rows, err)
+			}
+			for _, e := range rows {
+				if e.Kind == "errorOccurred" {
+					want := ""
+					if policy == "snippets" {
+						want = "error: QuotaError"
+					}
+					if e.Summary != want {
+						t.Fatal(e)
+					}
+				}
+			}
+		})
 	}
 }
 

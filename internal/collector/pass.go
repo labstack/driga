@@ -621,6 +621,9 @@ func drainSpool(d Deps, tx *store.Tx, now time.Time, source func(string, error) 
 			}
 			if !d.Cfg.CaptureSnippets() {
 				ev.Title = ""
+				if ev.Event == "errorOccurred" {
+					ev.Reason = ""
+				}
 			}
 		}
 		ev.Title = scrub.Snippet(ev.Title)

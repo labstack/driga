@@ -12,7 +12,7 @@ import (
 // Event reports whether an event belongs to the report-only integration.
 func Event(event string) bool {
 	switch event {
-	case "sessionStart", "userPromptSubmitted", "postToolUse", "postToolUseFailure", "notification", "agentStop", "subagentStart", "subagentStop", "sessionEnd":
+	case "sessionStart", "userPromptSubmitted", "postToolUse", "postToolUseFailure", "notification", "agentStop", "errorOccurred", "subagentStart", "subagentStop", "sessionEnd":
 		return true
 	}
 	return false
@@ -46,7 +46,7 @@ func Fold(s *model.SessionObs, h model.HookEvent) {
 		s.Origin = "hook"
 		s.StartedAt = h.TS
 	}
-	if h.TS.Before(s.LastActivityAt) {
+	if h.Event != "sessionStart" && h.TS.Before(s.LastActivityAt) {
 		return
 	}
 	if h.Cwd != "" {
@@ -60,13 +60,20 @@ func Fold(s *model.SessionObs, h model.HookEvent) {
 		s.Origin, s.PID, s.ProcStart = "vscode", 0, time.Time{}
 	}
 	s.Hosted = s.PID == 0 && s.ProcStart.IsZero()
-	if h.Event != "notification" {
+	if h.Event != "notification" && h.Event != "sessionStart" {
 		s.LastActivityAt = h.TS
 	}
 	switch h.Event {
 	case "sessionStart":
-		s.RegistryStatus = "started"
-		s.TurnOpen = false
+		// CLI -i can submit the prompt before this event. Session metadata
+		// must not reset a turn, wait, or completion (even on delayed delivery).
+		s.StartedAt = h.TS
+		if s.RegistryStatus == "" && !s.TurnOpen {
+			s.RegistryStatus = "started"
+		}
+		if s.LastActivityAt.IsZero() {
+			s.LastActivityAt = h.TS
+		}
 		if h.Source == "resume" && s.Origin != "vscode" {
 			s.Origin = "resume"
 		}
@@ -88,6 +95,19 @@ func Fold(s *model.SessionObs, h model.HookEvent) {
 	case "agentStop":
 		s.RegistryStatus = "idle"
 		s.TurnOpen = false
+	case "errorOccurred":
+		s.RegistryStatus = "error"
+		if h.Recoverable {
+			s.RegistryStatus = "error_recoverable"
+		}
+		s.TurnOpen = false
+	case "subagentStart", "subagentStop":
+		// A recoverable failure is terminal only while no further turn
+		// activity has arrived. Passive notifications never imply recovery.
+		if s.RegistryStatus == "error_recoverable" {
+			s.RegistryStatus = "busy"
+			s.TurnOpen = true
+		}
 	case "sessionEnd":
 		s.RegistryStatus = "ended"
 		s.TurnOpen = false

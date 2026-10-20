@@ -8,7 +8,7 @@ import (
 	"io"
 )
 
-// Large results are consumed without allocating their contents. Retained fields
+// Large results and error stacks are consumed without allocating their contents. Retained fields
 // still share the ordinary 1 MiB bound; total stdin is limited to 64 MiB and the
 // same read deadline as other adapters. Deeply nested input is rejected too.
 const copilotInputLimit = 64 << 20
@@ -162,12 +162,12 @@ func (p *copilotJSONFilter) value(keep bool, depth int) error {
 				if err := p.quoted(keep); err != nil {
 					return err
 				}
-				if keep && depth == 0 {
+				if keep {
 					var key string
 					if err := json.Unmarshal(p.out.Bytes()[start:], &key); err != nil {
 						return err
 					}
-					skip = key == "toolResult" || key == "tool_result"
+					skip = key == "stack" || depth == 0 && (key == "toolResult" || key == "tool_result")
 				}
 				if err := p.expect(':', keep); err != nil {
 					return err

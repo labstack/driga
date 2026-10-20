@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -96,6 +97,10 @@ func TestCopilotHooksCLIAndDoctor(t *testing.T) {
 	if err != nil || status != "installed" {
 		t.Fatal(status, err)
 	}
+	installed, err := os.ReadFile(path)
+	if err != nil || !bytes.Contains(installed, []byte(`"errorOccurred"`)) {
+		t.Fatal("missing error hook", string(installed), err)
+	}
 	d, _ := doctorFixture(t)
 	d.Home = home
 	d.CopilotHome = filepath.Dir(filepath.Dir(path))
@@ -157,6 +162,44 @@ func TestCopilotCaptureParentIdentityAndCLIExit(t *testing.T) {
 		code = run([]string{"hook", "copilot", "notification"}, "test", strings.NewReader(payload), &out, &stderr)
 		if code != 0 || out.Len() != 0 {
 			t.Fatal(code, out.String(), stderr.String())
+		}
+	}
+}
+
+func TestCopilotErrorCapturePolicies(t *testing.T) {
+	for _, policy := range []string{"titles", "snippets"} {
+		for _, recoverable := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/recoverable=%t", policy, recoverable), func(t *testing.T) {
+				dir := hookTestEnv(t)
+				if err := os.WriteFile(config.Path(), []byte("capture_text = \""+policy+"\"\n"), 0600); err != nil {
+					t.Fatal(err)
+				}
+				payload := fmt.Sprintf(`{"sessionId":"s","timestamp":1792512000123,"cwd":"/repo","error":{"name":"QuotaError ghp_abcdefghijklmnopqrstuvwxyz1234567890","message":"You have exceeded your monthly quota","stack":%q},"errorContext":"private context","recoverable":%t,"reason":"private reason","message":"private message","toolName":"private tool","toolArgs":{"command":"private command"}}`, strings.Repeat("private stack", 100000), recoverable)
+				var out, stderr bytes.Buffer
+				if code := run([]string{"hook", "copilot", "errorOccurred"}, "test", strings.NewReader(payload), &out, &stderr); code != 0 || out.Len() != 0 || stderr.Len() != 0 {
+					t.Fatal(code, out.String(), stderr.String())
+				}
+				hs, _, err := spool.Drain(dir, nil)
+				if err != nil || len(hs) != 1 {
+					t.Fatal(hs, err)
+				}
+				h := hs[0]
+				if h.Event != "errorOccurred" || h.Recoverable != recoverable {
+					t.Fatal(h)
+				}
+				if policy == "titles" && (h.Reason != "" || h.Message != "") {
+					t.Fatal("titles retained error text", h)
+				}
+				if policy == "snippets" && (!strings.HasPrefix(h.Reason, "error: QuotaError") || h.Message != h.Reason || strings.Contains(h.Reason, "ghp_abcdefghijklmnopqrstuvwxyz")) {
+					t.Fatal("missing scrubbed error name", h)
+				}
+				b, _ := json.Marshal(h)
+				for _, private := range []string{"private", "monthly quota", "stack", "errorContext"} {
+					if bytes.Contains(b, []byte(private)) {
+						t.Fatalf("retained %q: %s", private, b)
+					}
+				}
+			})
 		}
 	}
 }
