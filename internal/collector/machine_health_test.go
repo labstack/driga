@@ -3,12 +3,62 @@ package collector
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/store"
 )
+
+func TestPressureAlertNamesPileupHost(t *testing.T) {
+	d, st, _, _ := setup(t)
+	ps := []model.Proc{{PID: 10, Cmdline: "codex app-server", StartTime: d.now().Add(-31 * time.Hour)}, {PID: 11, PPID: 10, Cmdline: "java -cp /opt/maestro/lib/* maestro.cli.AppKt mcp", RSS: 2 << 30}, {PID: 12, PPID: 10, Cmdline: "java -cp /opt/maestro/lib/* maestro.cli.AppKt mcp", RSS: 2 << 30}}
+	for i := range 2 {
+		at := d.now().Add(time.Duration(i) * time.Minute)
+		if err := st.Tx(context.Background(), func(tx *store.Tx) error {
+			return memoryPressureInbox(tx, model.MachineSample{TS: at, PressureLevel: "critical"}, at, ps)
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	items := inbox(t, st)
+	if len(items) != 1 {
+		t.Fatal(items)
+	}
+	for _, want := range []string{"MCP pile-ups", "codex app-server", "PID 10", "Restart", "per project"} {
+		if !strings.Contains(items[0].Summary, want) {
+			t.Fatalf("missing %q: %s", want, items[0].Summary)
+		}
+	}
+}
+
+func TestPressureAlertRefreshesPileupsWithinEpisode(t *testing.T) {
+	d, st, _, _ := setup(t)
+	ps := []model.Proc{{PID: 10, Cmdline: "claude"}, {PID: 11, PPID: 10, Cmdline: "node /opt/codegraph/dist/index.js"}, {PID: 12, PPID: 10, Cmdline: "node /opt/codegraph/dist/index.js"}}
+	for i := range 4 {
+		at := d.now().Add(time.Duration(i) * time.Minute)
+		var sample []model.Proc
+		if i == 2 {
+			sample = ps
+		}
+		if err := st.Tx(context.Background(), func(tx *store.Tx) error {
+			return memoryPressureInbox(tx, model.MachineSample{TS: at, PressureLevel: "critical"}, at, sample)
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if i < 1 {
+			continue
+		}
+		items := inbox(t, st)
+		if len(items) != 1 || !items[0].TS.Equal(d.now().Add(time.Minute)) {
+			t.Fatal(items)
+		}
+		if strings.Contains(items[0].Summary, "MCP pile-ups") != (i == 2) {
+			t.Fatal(items[0].Summary)
+		}
+	}
+}
 
 func TestRecordedMachineWarnings(t *testing.T) {
 	d, st, _, _ := setup(t)

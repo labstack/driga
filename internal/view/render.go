@@ -198,6 +198,18 @@ func Render(w io.Writer, v any, opts RenderOpts) error {
 			fmt.Fprintf(tw, "%s/%s\t%s\t%s/%s\t%.1f/%.1f/%.1f\t%d\t%s\t%s / %.1f\n", humanBytes(s.MemUsed), humanBytes(s.MemTotal), humanBytes(s.MemCompressed), humanBytes(s.SwapUsed), humanBytes(s.SwapTotal), s.Load1, s.Load5, s.Load15, s.Cores, humanBytes(s.DiskFree), s.PressureLevel, s.PressureFree)
 		}
 		for _, h := range hosts {
+			fmt.Fprintln(tw, "MCP servers ·", cell(h.MachineName))
+			for _, c := range h.MCPServers.Commands {
+				fmt.Fprintln(tw, cell(MCPCommandSummary(c)))
+			}
+			if len(h.MCPServers.Pileups) == 0 {
+				fmt.Fprintln(tw, "No MCP pile-ups.")
+			}
+			for _, p := range h.MCPServers.Pileups {
+				for _, line := range strings.Split(MCPPileupText(p), "\n") {
+					fmt.Fprintln(tw, cell(line))
+				}
+			}
 			for _, rank := range []struct {
 				name string
 				apps []MachineApp

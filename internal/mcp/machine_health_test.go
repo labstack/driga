@@ -26,7 +26,7 @@ func TestMachineWholeHostCLIParity(t *testing.T) {
 		if err := tx.InsertSample(model.MachineSample{TS: at, MemUsed: 8 << 30, MemCompressed: 2 << 30, PressureLevel: "critical"}); err != nil {
 			return err
 		}
-		return tx.ReplaceProcs([]model.Proc{{PID: 42, Exe: "/bin/agent", StartTime: at, RSS: 10, Footprint: 30, MemoryMeasure: "physical_footprint", CPUPercent: 10}, {PID: 43, PPID: 42, StartTime: at.Add(time.Second), Exe: "/bin/worker", RSS: 20, Footprint: 50, MemoryMeasure: "physical_footprint", CPUPercent: 70}, {PID: 44, Exe: "/Applications/Browser.app/Contents/MacOS/Browser", RSS: 90, MemoryMeasure: "rss", CPUPercent: 5}})
+		return tx.ReplaceProcs([]model.Proc{{PID: 42, Exe: "/bin/claude", StartTime: at, RSS: 10, Footprint: 30, MemoryMeasure: "physical_footprint", CPUPercent: 10}, {PID: 43, PPID: 42, Cmdline: "node /opt/codegraph/dist/index.js", StartTime: at.Add(time.Second), Exe: "/bin/worker", RSS: 20, Footprint: 50, MemoryMeasure: "physical_footprint", CPUPercent: 70}, {PID: 45, PPID: 42, Cmdline: "node /opt/codegraph/dist/index.js", StartTime: at.Add(2 * time.Second), Exe: "/bin/worker", RSS: 20}, {PID: 44, Exe: "/Applications/Browser.app/Contents/MacOS/Browser", RSS: 90, MemoryMeasure: "rss", CPUPercent: 5}})
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -41,6 +41,18 @@ func TestMachineWholeHostCLIParity(t *testing.T) {
 		t.Fatalf("MCP differs from CLI: %+v %s", got.StructuredContent, cli)
 	}
 	data := wire["data"].(map[string]any)
+	servers, ok := data["mcp_servers"].(map[string]any)
+	if !ok {
+		t.Fatal("missing MCP servers", data)
+	}
+	pileups := servers["pileups"].([]any)
+	if len(pileups) != 1 || pileups[0].(map[string]any)["count"] != float64(2) {
+		t.Fatal(servers)
+	}
+	commands := servers["commands"].([]any)
+	if len(commands) != 1 || commands[0].(map[string]any)["host_count"] != float64(1) {
+		t.Fatal(servers)
+	}
 	cpu := data["top_cpu"].([]any)
 	if len(cpu) != 3 || cpu[0].(map[string]any)["name"] != "worker" {
 		t.Fatal(data)

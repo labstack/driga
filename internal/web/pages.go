@@ -391,6 +391,8 @@ func (p *pageData) prepare() {
 
 func templateFuncs() template.FuncMap {
 	return template.FuncMap{
+		"mcpSummary": view.MCPCommandSummary,
+		"mcpDetails": view.MCPCommandDetails,
 		"inboxKey": func(row view.InboxRow) string {
 			key, _ := json.Marshal([]string{row.MachineID, row.ID})
 			return string(key)

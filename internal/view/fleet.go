@@ -286,6 +286,7 @@ func Machine(r Reader, f Filter, now time.Time, scopes ...store.Scope) (MachineV
 		if len(v.Machines) == 0 || m.MachineID == r.MachineID() {
 			v.Sample = a.Sample
 			v.TopMemory, v.TopCPU = a.TopMemory, a.TopCPU
+			v.MCPServers = a.MCPServers
 			v.MachineID = a.MachineID
 			v.MachineFresh = a.MachineFresh
 		}

@@ -65,3 +65,43 @@ func TestMachineDisclosureSurvivesRefresh(t *testing.T) {
 		t.Fatalf("machine disclosures: %v\n%s", err, out)
 	}
 }
+
+func TestMachineMCPServers(t *testing.T) {
+	s, st, _, _ := fixture(t)
+	t.Setenv("PATH", t.TempDir())
+	at := time.Now().Add(-31 * time.Hour)
+	if err := st.Tx(context.Background(), func(tx *store.Tx) error {
+		return tx.ReplaceProcs([]model.Proc{
+			{PID: 10, Cmdline: "codex app-server", StartTime: at, Cwd: "/projects/<fixture>"},
+			{PID: 11, PPID: 10, Cmdline: "java -cp /opt/maestro/lib/* maestro.cli.AppKt mcp", RSS: 2 << 30, StartTime: at.Add(time.Hour)},
+			{PID: 12, PPID: 10, Cmdline: "java -cp /opt/maestro/lib/* maestro.cli.AppKt mcp", RSS: 2 << 30, StartTime: at.Add(30 * time.Hour)},
+		})
+	}); err != nil {
+		t.Fatal(err)
+	}
+	w := request(s, "GET", "/machines", s.token)
+	for _, want := range []string{"MCP servers", "maestro mcp", "2 processes", "1 hosts", "codex app-server", "PID 10", "31h", "oldest", "newest", "Restart", "per project", "/projects/&lt;fixture&gt;"} {
+		if !strings.Contains(w.Body.String(), want) {
+			t.Fatalf("missing %q: %s", want, w.Body)
+		}
+	}
+}
+
+func TestMachineMCPLauncherSummaryAndEvidence(t *testing.T) {
+	s, st, _, _ := fixture(t)
+	t.Setenv("PATH", t.TempDir())
+	if err := st.Tx(context.Background(), func(tx *store.Tx) error {
+		return tx.ReplaceProcs([]model.Proc{{PID: 1, Cmdline: "claude"}, {PID: 2, PPID: 1, Cmdline: "node exec firecrawl-mcp --project '<fixture>'", RSS: 10 << 20}, {PID: 3, PPID: 2, Cmdline: "node /cache/node_modules/.bin/firecrawl-mcp --project '<fixture>'", RSS: 20 << 20}})
+	}); err != nil {
+		t.Fatal(err)
+	}
+	w := request(s, "GET", "/machines", s.token)
+	for _, want := range []string{"firecrawl-mcp  1 servers · 30.0M · 1 hosts · 0 duplicates", "includes launcher", "Installs:", "node exec firecrawl-mcp", "/cache/node_modules/.bin/firecrawl-mcp", "&lt;fixture&gt;"} {
+		if !strings.Contains(w.Body.String(), want) {
+			t.Errorf("missing %q: %s", want, w.Body)
+		}
+	}
+	if strings.Contains(w.Body.String(), "<fixture>") {
+		t.Fatal("unescaped command")
+	}
+}

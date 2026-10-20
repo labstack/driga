@@ -268,6 +268,9 @@ func (m *app) confirmationText() string {
 }
 func (m *app) View() tea.View {
 	body := m.table.View()
+	if m.tab == 4 {
+		body = m.machineTable(body)
+	}
 	if len(m.rows) == 0 {
 		body = "No items"
 	}

@@ -5,7 +5,10 @@ import (
 	_ "embed"
 	"fmt"
 	"os"
+	"path"
 	"regexp"
+	"strings"
+	"sync"
 
 	"github.com/pelletier/go-toml/v2"
 )
@@ -30,6 +33,7 @@ type Signature struct {
 	Role      Role     `toml:"role"`
 	Match     []string `toml:"match"`
 	AppBundle bool     `toml:"app_bundle"`
+	HostName  string   `toml:"host_name"`
 }
 
 type compiledSignature struct {
@@ -40,7 +44,17 @@ type compiledSignature struct {
 // Set holds signatures in precedence order, with their compiled regexes.
 type Set struct {
 	entries []compiledSignature
+	mcp     []compiledSignature
 }
+
+// Builtin shares immutable embedded signatures across read-only derived views.
+var Builtin = sync.OnceValue(func() *Set {
+	s, err := Load(nil)
+	if err != nil {
+		panic(err)
+	} // Invalid embedded signatures are a build defect.
+	return s
+})
 
 //go:embed signatures.toml
 var embedded []byte
@@ -74,6 +88,7 @@ func LoadAgent(agent string) (*Set, error) {
 func (s *Set) appendFile(path string, data []byte, agent string) error {
 	var file struct {
 		Signatures []Signature `toml:"signature"`
+		MCPServers []Signature `toml:"mcp_server"`
 	}
 	if err := toml.Unmarshal(data, &file); err != nil {
 		return fmt.Errorf("signatures %s: %w", path, err)
@@ -92,6 +107,17 @@ func (s *Set) appendFile(path string, data []byte, agent string) error {
 		}
 		s.entries = append(s.entries, entry)
 	}
+	for _, signature := range file.MCPServers {
+		entry := compiledSignature{signature: signature}
+		for _, pattern := range signature.Match {
+			re, err := regexp.Compile(pattern)
+			if err != nil {
+				return fmt.Errorf("signatures %s: MCP server %q: %w", path, signature.Name, err)
+			}
+			entry.patterns = append(entry.patterns, re)
+		}
+		s.mcp = append(s.mcp, entry)
+	}
 	return nil
 }
 
@@ -107,7 +133,91 @@ func (s *Set) Match(cmdline, exe string) (Signature, bool) {
 			}
 		}
 	}
+	// Some agents execute a bare version filename. Canonicalize only the
+	// executable token; arguments retain the signature's usual precedence.
+	token, rest, hasArgs := strings.Cut(cmdline, " ")
+	name, version := versionedName(token)
+	if version == "" && bareVersion.MatchString(token) {
+		name, version = versionedName(exe)
+	}
+	if version == "" {
+		return Signature{}, false
+	}
+	cmdline = name
+	if hasArgs {
+		cmdline += " " + rest
+	}
+	for _, entry := range s.entries {
+		for _, pattern := range entry.patterns {
+			if pattern.MatchString(cmdline) {
+				return entry.signature, true
+			}
+		}
+	}
 	return Signature{}, false
+}
+
+var bareVersion = regexp.MustCompile(`^v?[0-9]+(?:\.[0-9]+)+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$`)
+
+func versionedName(exe string) (string, string) {
+	version := path.Base(exe)
+	if !bareVersion.MatchString(version) {
+		return "", ""
+	}
+	dir := path.Dir(exe)
+	for {
+		name := path.Base(dir)
+		switch name {
+		case "versions", "releases", "bin":
+			dir = path.Dir(dir)
+		case ".", "/":
+			return "", ""
+		default:
+			return name, version
+		}
+	}
+}
+
+// ProcessName labels an agent by signature and preserves a versioned executable's
+// version. Unclassified bare versions use the nearest meaningful directory.
+func (s *Set) ProcessName(cmdline, exe string) string {
+	name, version := versionedName(exe)
+	if exe == "" {
+		token, _, _ := strings.Cut(cmdline, " ")
+		name, version = versionedName(token)
+	}
+	if sig, ok := s.Match(cmdline, exe); ok && sig.Agent != "" {
+		name = sig.Agent
+		if sig.HostName != "" {
+			name = sig.HostName
+		}
+	}
+	if name == "" {
+		name = path.Base(exe)
+	}
+	if exe == "" && name == "." {
+		name = "unknown"
+	}
+	if version != "" {
+		name += " " + version
+	}
+	return name
+}
+
+// MCPName labels known report-only MCP commands. These patterns deliberately do
+// not add helper/orphan signatures or authorize any process action.
+func (s *Set) MCPName(cmdline, exe string) (string, bool) {
+	if cmdline == "" {
+		cmdline = exe
+	}
+	for _, entry := range s.mcp {
+		for _, pattern := range entry.patterns {
+			if pattern.MatchString(cmdline) {
+				return entry.signature.Name, true
+			}
+		}
+	}
+	return "", false
 }
 
 var bundlePathPattern = regexp.MustCompile(`^["']?((?:/(?:[^/[:space:]"']+/)*|~/)Applications/[^/]+\.app)/Contents/`)

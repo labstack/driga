@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/labstack/driga/internal/derive"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/store"
 )
@@ -16,7 +17,7 @@ func machineJump() *model.InboxJump {
 
 // Only successful, distinct OS readings count. Unknown readings and source
 // failures break the streak; the durable counter also works after a restart.
-func memoryPressureInbox(tx *store.Tx, s model.MachineSample, now time.Time) error {
+func memoryPressureInbox(tx *store.Tx, s model.MachineSample, now time.Time, processSamples ...[]model.Proc) error {
 	if !s.TS.IsZero() {
 		raw, err := tx.Meta("machine:pressure_sample_at")
 		if err != nil && !errors.Is(err, store.ErrNotFound) {
@@ -57,7 +58,7 @@ func memoryPressureInbox(tx *store.Tx, s model.MachineSample, now time.Time) err
 		return err
 	}
 	if active == "1" {
-		return nil
+		return tx.RefreshMachineWarning("memory_pressure", memoryPressureSummary(processSamples, now), machineJump())
 	}
 	raw, err = tx.Meta("machine:pressure_episode")
 	if err != nil && !errors.Is(err, store.ErrNotFound) {
@@ -65,7 +66,7 @@ func memoryPressureInbox(tx *store.Tx, s model.MachineSample, now time.Time) err
 	}
 	episode, _ := strconv.ParseUint(raw, 10, 64)
 	episode++
-	item := model.InboxItem{ID: fmt.Sprintf("memory_pressure:%d", episode), Kind: "memory_pressure", TS: now, Summary: "Critical memory pressure for two samples. Driga can show the largest apps by memory and CPU in Machine.", Jump: machineJump()}
+	item := model.InboxItem{ID: fmt.Sprintf("memory_pressure:%d", episode), Kind: "memory_pressure", TS: now, Summary: memoryPressureSummary(processSamples, now), Jump: machineJump()}
 	if err := tx.UpsertInboxItem(item); err != nil {
 		return err
 	}
@@ -73,4 +74,16 @@ func memoryPressureInbox(tx *store.Tx, s model.MachineSample, now time.Time) err
 		return err
 	}
 	return tx.SetMeta("machine:pressure_active", "1")
+}
+
+func memoryPressureSummary(samples [][]model.Proc, now time.Time) string {
+	summary := "Critical memory pressure for two samples. Driga can show the largest apps by memory and CPU in Machine."
+	if len(samples) > 0 {
+		servers := derive.MCPServers(samples[0], nil, now)
+		if len(servers.Pileups) > 0 {
+			p := servers.Pileups[0]
+			summary += fmt.Sprintf(" MCP pile-ups: %d groups; largest %s (%d processes, %.1f GiB). %s", len(servers.Pileups), p.Name, p.Count, float64(p.Memory)/(1<<30), p.Advice)
+		}
+	}
+	return summary
 }

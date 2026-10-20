@@ -10,24 +10,27 @@ import (
 	"charm.land/bubbles/v2/table"
 	"charm.land/lipgloss/v2"
 	"github.com/labstack/driga/internal/cleanup"
+	"github.com/labstack/driga/internal/derive"
 	"github.com/labstack/driga/internal/inbox"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/view"
 )
 
 type tabRow struct {
-	app       *view.MachineApp
-	attention *view.Attention
-	cleanup   *cleanup.Candidate
-	machine   string
-	stale     bool
-	key       string
-	cells     []string
-	agent     int64
-	project   int64
-	cwd       string
-	inbox     *model.InboxItem
-	orphan    *model.Orphan
+	mcpCommand *derive.MCPCommand
+	pileup     *derive.MCPPileup
+	app        *view.MachineApp
+	attention  *view.Attention
+	cleanup    *cleanup.Candidate
+	machine    string
+	stale      bool
+	key        string
+	cells      []string
+	agent      int64
+	project    int64
+	cwd        string
+	inbox      *model.InboxItem
+	orphan     *model.Orphan
 }
 
 func (m *app) tabVisible(tab int) bool {
@@ -46,7 +49,7 @@ func (m *app) tabVisible(tab int) bool {
 	case 3:
 		return len(m.snap.Orphans.Rows) > 0
 	case 4:
-		return !m.snap.Machine.Sample.TS.IsZero() || len(m.snap.Machine.Memory) > 0
+		return !m.snap.Machine.Sample.TS.IsZero() || len(m.snap.Machine.Memory) > 0 || len(m.snap.Machine.MCPServers.Commands) > 0
 	case 5:
 		return len(m.snap.Cleanup) > 0 || m.opts.CleanupList != nil
 	}
@@ -329,7 +332,7 @@ func (m *app) rebuild() {
 			add(tabRow{machine: r.MachineID, key: "orphan:" + r.MachineID + ":" + o.ID, cwd: o.Cwd, orphan: &o, cells: []string{"", o.ID, age, o.Signature, strconv.Itoa(o.ProcCount), "~" + humanBytes(o.RSSTotal), o.Cwd, strconv.FormatBool(o.Verified), strings.Join(o.Evidence, "; ")}})
 		}
 	case 4:
-		titles = []string{"", "METRIC / APP / PROCESS", "CPU", "MEASURE / ATTRIBUTION", "MEM"}
+		titles = []string{"", "METRIC / APP / PROCESS", "CPU/#", "MEASURE / HOST / ATTRIBUTION", "MEM"}
 		weights = []int{2, 28, 8, 40, 12}
 		m.machineRows(add)
 

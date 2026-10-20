@@ -10,6 +10,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/labstack/driga/internal/derive"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/view"
 )
@@ -26,6 +27,12 @@ func TestMachineGoldenFrames(t *testing.T) {
 				sampleApp := view.MachineApp{ID: "/Applications/Browser.app", Name: "Browser", Memory: 2 << 30, CPUPercent: 70, MemoryMeasure: "physical_footprint", Processes: []view.MachineProcess{{Proc: model.Proc{PID: 42, Exe: "/bin/worker", MemoryMeasure: "physical_footprint", CPUPercent: 70}, Memory: 2 << 30, Attribution: &view.MachineAttribution{SessionID: 251, Project: "fixture", Proof: "parent_chain"}}}}
 				src.snap.Machine = view.MachineView{Sample: model.MachineSample{PressureLevel: "critical", MemUsed: 4 << 30, MemCompressed: 1 << 30, MemTotal: 8 << 30, SwapUsed: 1 << 30, SwapTotal: 2 << 30, DiskFree: 12 << 30, Cores: 4}, TopMemory: []view.MachineApp{sampleApp}, TopCPU: []view.MachineApp{sampleApp}}
 				src.snap.Machine.Sample.TS = src.snap.ObservedAt
+				at := src.snap.ObservedAt
+				src.snap.Machine.MCPServers = derive.MCPServers([]model.Proc{
+					{PID: 10, Cmdline: "codex app-server", StartTime: at.Add(-31 * time.Hour)},
+					{PID: 11, PPID: 10, Cmdline: "node /opt/codegraph/dist/index.js", RSS: 100 << 20, StartTime: at.Add(-time.Hour)},
+					{PID: 12, PPID: 10, Cmdline: "node /opt/codegraph/dist/index.js", RSS: 100 << 20, StartTime: at},
+				}, nil, at)
 				src.snap.Summary.Sample = src.snap.Machine.Sample
 				m := setup(t, src, Options{InitialTab: "machine"}).(*app)
 				if m.tab != 4 {
