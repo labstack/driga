@@ -41,6 +41,7 @@ var themeTokens = [...]ThemeToken{
 	{"ok", "#1A5AD8", "#89B4FA"},
 	{"accent", "#7629D6", "#CBA6F7"},
 	{"observation", "#116762", "#94E2D5"},
+	{"tool", "#04778A", "#89DCEB"}, {"rail", "#A9AEBC", "#585B70"},
 }
 
 // consoleTokens maps the console's roles onto the same Catppuccin palettes.
@@ -48,12 +49,14 @@ var consoleTokens = [...]ThemeToken{
 	{"bg", "#EFF1F5", "#1E1E2E"}, {"pane", "#E6E9EF", "#181825"},
 	{"raise", "#CCD0DA", "#313244"}, {"line", "#BCC0CC", "#45475A"},
 	{"fg", "#4C4F69", "#CDD6F4"}, {"mid", "#5C5F77", "#BAC2DE"},
-	{"dim", "#5C5F77", "#A6ADC8"}, {"accent", "#7629D6", "#CBA6F7"},
+	{"dim", "#6C6F85", "#A6ADC8"}, {"accent", "#7629D6", "#CBA6F7"},
 	{"on-accent", "#EFF1F5", "#1E1E2E"}, {"working", "#256817", "#A6E3A1"},
 	{"waiting", "#7A4C07", "#F9E2AF"}, {"stalled", "#B50C30", "#F38BA8"},
 	{"idle", "#1A5AD8", "#89B4FA"}, {"finished", "#5C5F77", "#A6ADC8"},
 	{"crit", "#B50C30", "#F38BA8"}, {"warn", "#963F06", "#FAB387"},
 	{"observation", "#116762", "#94E2D5"},
+	{"waiting-bar", "#DF8E1D", "#F9E2AF"}, {"waiting-bg", "#F3E7D3", "#3A3530"},
+	{"tool", "#04778A", "#89DCEB"}, {"rail", "#A9AEBC", "#585B70"},
 }
 
 func consoleCSS() string {

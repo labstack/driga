@@ -176,7 +176,7 @@ func (m *app) jumpFlowAttention(w view.InboxRow) tea.Cmd {
 func (m *app) flowDetailLines() []string {
 	if m.flowAttention && len(m.flow.Attention.Waits) > 0 {
 		w := m.flow.Attention.Waits[min(m.flowAskCursor, len(m.flow.Attention.Waits)-1)]
-		return []string{clean(w.Title) + " · " + w.Adapter, "◆ needs you · " + duration(inbox.Waited(w.InboxItem, m.opts.Now())), clean(view.FlowJoin(w.Reason, w.Tool, w.Detail)), "Copy resume: " + clean(inbox.JumpCommand(w.Jump)), "enter Jump · c show resume command · tab map"}
+		return []string{clean(w.Title) + " · " + w.Adapter, "◆ needs you · " + duration(inbox.Waited(w.InboxItem, m.opts.Now())), clean(flowWaitReason(w)), "Copy resume: " + clean(inbox.JumpCommand(w.Jump)), ""}
 	}
 
 	n := m.flowSelected()
@@ -197,7 +197,17 @@ func (m *app) flowDetailLines() []string {
 	if n.Adapter != "claude" && n.Adapter != "copilot" {
 		lines = append(lines, "no tool events for "+n.Adapter, "no prompt events for "+n.Adapter)
 	} else {
-		lines = append(lines, fmt.Sprintf("tool calls %d · retained window", tools))
+		available := tools > 0
+		for _, r := range n.Mixer.Rows {
+			if (r.Name == "telemetry" || n.Adapter == "copilot" && r.Name == "hooks") && r.Strength > 0 {
+				available = true
+			}
+		}
+		if available {
+			lines = append(lines, fmt.Sprintf("tool calls %d · retained window", tools))
+		} else {
+			lines = append(lines, "tool calls — · telemetry unavailable")
+		}
 	}
 	if n.Adapter == "gemini" {
 		lines = append(lines, "no wait source for gemini")
@@ -230,6 +240,44 @@ func (m *app) flowDetailLines() []string {
 	}
 	return lines
 }
+func flowHeadCap(state string) string {
+	switch state {
+	case "working":
+		return "━━▶"
+	case "waiting":
+		return "══◆"
+	case "idle":
+		return "··○"
+	case "stalled":
+		return "┄┄‖"
+	case "finished", "dead":
+		return "──●"
+	default:
+		return "┈┈?"
+	}
+}
+func flowWaitAge(d time.Duration) string {
+	if d >= time.Hour {
+		return fmt.Sprintf("%dh", int(d/time.Hour))
+	}
+	if d >= time.Minute {
+		return fmt.Sprintf("%dm", int(d/time.Minute))
+	}
+	return fmt.Sprintf("%ds", int(max(0, d)/time.Second))
+}
+func flowWaitReason(w view.InboxRow) string {
+	if w.Reason == "permission" {
+		reason := "◆ Permission"
+		if w.Tool != "" {
+			reason += " · " + w.Tool
+		}
+		if w.Detail != "" {
+			reason += ": " + w.Detail
+		}
+		return reason
+	}
+	return "◆ Asked for input · what it asked wasn't captured"
+}
 func flowAge(at, now time.Time) string {
 	if at.IsZero() {
 		return "unknown"
@@ -240,15 +288,19 @@ func flowAge(at, now time.Time) string {
 // flowLayout lays out attention, a bounded map, and the selected session details.
 func (m *app) flowLayout() (string, []flowHit) {
 	width := max(4, m.width)
-	needs := []string{}
+	badge := fmt.Sprintf("NEEDS YOU %d", len(m.flow.Attention.Waits))
+	if !m.opts.NoColor {
+		badge = view.TokenStyle("waiting", false).Reverse(true).Bold(true).Render(badge)
+	}
+	needs := []string{badge}
 	for i, w := range m.flow.Attention.Waits {
 		prefix := ""
 		if m.flowAttention && i == m.flowAskCursor {
 			prefix = "› "
 		}
-		needs = append(needs, fmt.Sprintf(prefix+"◆ %s · %s · %s · enter jump · c resume", clean(w.Title), duration(inbox.Waited(w.InboxItem, m.opts.Now())), clean(view.FlowJoin(w.Reason, w.Tool, w.Detail))))
+		needs = append(needs, prefix+view.TokenStyle("waiting", m.opts.NoColor).Render("◆ "+flowWaitAge(inbox.Waited(w.InboxItem, m.opts.Now())))+"  "+clean(w.Title)+"  "+strings.TrimPrefix(strings.TrimPrefix(clean(flowWaitReason(w)), "◆ Asked for input · "), "◆ "))
 	}
-	if len(needs) == 0 {
+	if len(m.flow.Attention.Waits) == 0 {
 		needs = append(needs, fmt.Sprintf("Nothing needs you · %d working", m.flow.Attention.Working))
 	}
 	body := m.flowPanel("Needs you · machine-wide", needs, width, m.flowAttention) + "\n"
@@ -265,14 +317,14 @@ func (m *app) flowLayout() (string, []flowHit) {
 	f.ObservedAt = m.opts.Now()
 	f.WindowMinutes = m.flowZoom()
 	g := view.FlowGeometry(f, columns, m.flowExpanded)
-	lines := []string{fmt.Sprintf("%dm · %s–now · head = last observed verdict", g.Minutes, g.FromAt.Local().Format("15:04"))}
+	lines := []string{fmt.Sprintf("%dm · %s–now · head = verdict as of", g.Minutes, g.FromAt.Local().Format("15:04"))}
 	if g.EarlierMinutes > 0 {
 		lines = append(lines, fmt.Sprintf("%dm earlier · %d asks", g.EarlierMinutes, g.EarlierAsks))
 	}
 	hits := []flowHit{}
 	first := max(0, m.cursors[flowTab]-7)
 	first = min(first, max(0, len(g.Rows)-8))
-	rowY := lipgloss.Height(body) + 1 + len(lines)
+	rowY := strings.Count(body, "\n") + 1 + len(lines)
 	for i := first; i < min(len(g.Rows), first+8); i++ {
 		r := g.Rows[i]
 		n := r.Node
@@ -306,12 +358,11 @@ func (m *app) flowLayout() (string, []flowHit) {
 				last = max(r.Start, min(last, int(n.EndedAt.Sub(g.FromAt)/time.Minute)+1))
 			}
 			for c := r.Start; c < last; c++ {
-				track[c] = '·'
+				track[c] = '─'
 			}
 			for _, h := range r.Hatched {
 				for c := h.From; c < min(h.To, len(track)); c++ {
-					track[c] = '╱'
-					cpu[c] = '╱'
+					track[c] = '░'
 				}
 			}
 			var peak, cp int64
@@ -324,12 +375,12 @@ func (m *app) flowLayout() (string, []flowHit) {
 					track[c] = []rune("▁▂▃▄▅▆▇█")[min(7, int(float64(x)/float64(peak)*7))]
 				}
 				if r.CPU[c] > 0 && cp > 0 {
-					cpu[c] = '─'
+					cpu[c] = []rune("▁▂▃▄▅▆▇█")[min(7, int(float64(r.CPU[c])/float64(cp)*7))]
 				}
 			}
 			for _, w := range r.Waits {
 				for c := w.From; c < min(w.To, len(track)); c++ {
-					track[c] = '▒'
+					track[c] = '═'
 				}
 			}
 			for _, b := range r.Tools {
@@ -351,29 +402,72 @@ func (m *app) flowLayout() (string, []flowHit) {
 					track[r.Start] = '✦'
 				}
 			}
-			head := []rune(view.FlowGlyph(state))[0]
+			// Parent links run only through otherwise blank cells, including the
+			// selected CPU line, and end at the child's own stored start.
+			for childIndex, child := range g.Rows {
+				if child.Node.ParentID == nil || child.Node.StartedAt.Before(g.FromAt) || childIndex <= i {
+					continue
+				}
+				parentIndex := -1
+				for pi, p := range g.Rows {
+					if p.Node.ID == *child.Node.ParentID {
+						parentIndex = pi
+						break
+					}
+				}
+				if parentIndex < 0 || parentIndex > i {
+					continue
+				}
+				c := child.Start
+				if parentIndex < i && track[c] == ' ' {
+					track[c] = '│'
+				}
+				if cpu[c] == ' ' {
+					cpu[c] = '│'
+				}
+			}
+			cap := flowHeadCap(state)
 			if state == "waiting" && !m.opts.NoColor && !m.opts.MotionOff {
 				for _, w := range n.Waits {
 					age := m.opts.Now().Sub(w.StartedAt)
 					if w.EndedAt == nil && age >= 0 && age < 8*time.Second && m.opts.Now().Unix()%4 < 2 {
-						head = '◇'
+						cap = "══◇"
 					}
 				}
 			}
-			track[len(track)-1] = head
-			if len(track) > 1 {
-				track[len(track)-2] = view.FlowHeadPattern(state)
-			}
 			growth := m.flowGrowthPulse[growthKey(n)]
 			if !m.opts.NoColor && !m.opts.MotionOff && (m.opts.Now().Before(m.flowPulse[n.Adapter+":"+n.ExternalID]) || m.opts.Now().Before(growth.until)) {
-				head = '◉'
-				track[len(track)-1] = head
+				cap = string([]rune(cap)[:2]) + "◉"
 			}
-			line += view.StateStyle(state, m.opts.NoColor).Render(string(track)) + " as of " + flowAge(n.Mixer.ObservedAt, m.opts.Now())
+			capRunes := []rune(cap)
+			headStart := max(0, len(track)-len(capRunes))
+			// Each mark has its own semantic token; the verdict never colours history.
+			var rendered strings.Builder
+			for _, ch := range track[:headStart] {
+				token := "faint"
+				switch {
+				case strings.ContainsRune("▁▂▃▄▅▆▇█", ch):
+					token = "observation"
+				case ch == '═' || ch == '◆':
+					token = "waiting"
+				case ch == '┿':
+					token = "tool"
+				case ch == '○':
+					token = "accent"
+				case ch == '●':
+					token = "finished"
+				}
+				rendered.WriteString(view.TokenStyle(token, m.opts.NoColor).Render(string(ch)))
+			}
+			line += rendered.String() + view.StateStyle(state, m.opts.NoColor).Render(string(capRunes[len(capRunes)-min(len(track), len(capRunes)):])) + view.TokenStyle("faint", m.opts.NoColor).Render(" "+flowAge(n.Mixer.ObservedAt, m.opts.Now()))
 			lines = append(lines, line)
-			hits = append(hits, flowHit{x: 0, y: rowY, width: width, height: 2, index: i})
-			rowY += 2
-			lines = append(lines, strings.Repeat(" ", label+stateWidth)+view.TokenStyle("observation", m.opts.NoColor).Render(string(cpu)))
+			height := 1
+			if i == m.cursors[flowTab] {
+				height = 2
+				lines = append(lines, strings.Repeat(" ", label+stateWidth-4)+view.TokenStyle("faint", m.opts.NoColor).Render("cpu ")+view.TokenStyle("observation", m.opts.NoColor).Faint(!m.opts.NoColor).Render(string(cpu)))
+			}
+			hits = append(hits, flowHit{x: 0, y: rowY, width: width, height: height, index: i})
+			rowY += height
 			continue
 		}
 		lines = append(lines, line)
@@ -388,10 +482,13 @@ func (m *app) flowLayout() (string, []flowHit) {
 		lines = append(lines, fmt.Sprintf("rows %d–%d of %d · j/k scroll", first+1, min(first+8, len(g.Rows)), len(g.Rows)))
 	}
 	if width >= 60 {
-		lines = append(lines, "▁ log growth · ─ CPU · ┿ tool · ◆ wait · ○ prompt · ● end · ╱ no data")
+		legend := []string{}
+		for _, mark := range []struct{ glyph, token, label string }{{"▁", "observation", "growth / CPU"}, {"┿", "tool", "tool"}, {"◆", "waiting", "wait"}, {"○", "accent", "prompt"}, {"●", "finished", "end"}, {"░", "faint", "no data"}} {
+			legend = append(legend, view.TokenStyle(mark.token, m.opts.NoColor).Render(mark.glyph)+" "+mark.label)
+		}
+		lines = append(lines, strings.Join(legend, " · "))
 	}
 	body += m.flowPanel("Session map", lines, width, false) + "\n" + m.flowPanel("Session detail · signal mixer", m.flowDetailLines(), width, false)
-	body += "\n" + truncate("j/k session · enter jump · [/] family · -/+ zoom · tab needs · c resume", width)
 	return body, hits
 }
 func (m *app) flowView() string          { text, _ := m.flowLayout(); return text }

@@ -5,6 +5,7 @@ import (
 	"charm.land/lipgloss/v2/compat"
 	"context"
 	"fmt"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/labstack/driga/internal/flowtest"
 	"github.com/labstack/driga/internal/store"
 	"github.com/labstack/driga/internal/view"
@@ -61,6 +62,7 @@ func TestFlowGoldenFrames(t *testing.T) {
 				}
 				path := filepath.Join("testdata", name)
 				if os.Getenv("UPDATE_FLOW_GOLDEN") == "1" {
+					t.Logf("regenerating %s (ANSI retained in colour golden):\n%s", name, ansi.Strip(got))
 					if err := os.MkdirAll("testdata", 0755); err != nil {
 						t.Fatal(err)
 					}
