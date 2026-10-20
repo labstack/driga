@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/labstack/driga/internal/adapter/copilot"
 	"github.com/labstack/driga/internal/model"
 )
 
@@ -89,18 +90,29 @@ func inboxEvents(sessions []model.Session, hooks []model.HookEvent, baseline tim
 			continue
 		}
 		var kind string
-		switch h.Event {
-		case "Stop":
-			kind = "finished"
-		case "Notification":
-			if h.NotificationType == "idle_prompt" {
+		if h.Adapter == "copilot" {
+			if h.Event == "agentStop" {
+				kind = "finished"
+			} else if copilot.Wait(h) {
+				kind = "waiting"
+			} else {
 				continue
 			}
-			kind = "waiting"
-		case "PermissionRequest":
-			kind = "waiting"
-		default:
-			continue
+		}
+		if kind == "" {
+			switch h.Event {
+			case "Stop":
+				kind = "finished"
+			case "Notification":
+				if h.NotificationType == "idle_prompt" {
+					continue
+				}
+				kind = "waiting"
+			case "PermissionRequest":
+				kind = "waiting"
+			default:
+				continue
+			}
 		}
 		add(h.Adapter, h.SessionID, fmt.Sprint(h.TS.UnixNano()), id, kind, h.TS, h.Message)
 		if kind == "waiting" {

@@ -122,6 +122,9 @@ func TestCodexDryRunAndMissingFile(t *testing.T) {
 
 func runHooksCLI(t *testing.T, input string, args ...string) string {
 	t.Helper()
+	t.Setenv("COPILOT_HOME", filepath.Join(os.Getenv("HOME"), ".copilot"))
+	// Installers probe agent CLIs (copilot --version); never reach real ones.
+	t.Setenv("PATH", t.TempDir())
 	var root struct {
 		Hooks cli.HooksCmd `cmd:""`
 	}

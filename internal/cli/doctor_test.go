@@ -19,6 +19,7 @@ func doctorFixture(t *testing.T) (DoctorDeps, *store.Store) {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("COPILOT_HOME", filepath.Join(home, ".copilot"))
 	t.Setenv("DRIGA_SPOOL_DIR", filepath.Join(home, "spool"))
 	t.Setenv("XDG_STATE_HOME", filepath.Join(home, "state"))
 	t.Setenv("CODEX_HOME", filepath.Join(home, ".codex"))

@@ -7,7 +7,7 @@ import (
 	"github.com/labstack/driga/internal/jsonwire"
 )
 
-// EventMetadata is an allowlist of OTLP names and numeric usage, never content.
+// EventMetadata is an allowlist of protocol names and numeric usage, never content.
 // Pointers distinguish absent measurements from measured zero.
 type EventMetadata struct {
 	Model        string   `json:"model,omitempty"`

@@ -10,6 +10,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/labstack/driga/internal/adapter/copilot"
 	"github.com/labstack/driga/internal/config"
 	"github.com/labstack/driga/internal/derive"
 	"github.com/labstack/driga/internal/fleet"
@@ -19,20 +20,24 @@ import (
 )
 
 func hookSessions(ss []model.Session, hooks []model.HookEvent) []model.Session {
-	seen := map[string]bool{}
-	for _, s := range ss {
-		seen[sessionKey(s.Adapter, s.ExternalID)] = true
+	seen := map[string]int{}
+	for i, s := range ss {
+		seen[sessionKey(s.Adapter, s.ExternalID)] = i
 	}
 	for _, h := range hooks {
-		if h.Adapter != "claude" && h.Adapter != "codex" || h.SessionID == "" || h.Event == "notify" {
+		if h.Adapter != "claude" && h.Adapter != "codex" && h.Adapter != "copilot" || h.SessionID == "" || h.Event == "notify" {
 			continue
 		}
 		key := sessionKey(h.Adapter, h.SessionID)
-		if seen[key] {
-			continue
+		i, ok := seen[key]
+		if !ok {
+			i = len(ss)
+			seen[key] = i
+			ss = append(ss, model.Session{SessionObs: model.SessionObs{Adapter: h.Adapter, ExternalID: h.SessionID, Cwd: h.Cwd, Origin: "hook", StartedAt: h.TS, Hosted: h.Adapter != "copilot"}})
 		}
-		seen[key] = true
-		ss = append(ss, model.Session{SessionObs: model.SessionObs{Adapter: h.Adapter, ExternalID: h.SessionID, Cwd: h.Cwd, Origin: "hook", StartedAt: h.TS, Hosted: true}})
+		if h.Adapter == "copilot" {
+			copilot.Fold(&ss[i].SessionObs, h)
+		}
 	}
 	return ss
 }
@@ -45,6 +50,14 @@ func syncInbox(tx *store.Tx, d Deps, ss []model.Session, parents map[int64]int64
 		explicit bool
 	}
 	var changes []change
+	copilotActivity := func(event string, at time.Time, id int64) {
+		switch event {
+		case "postToolUse", "postToolUseFailure", "agentStop", "errorOccurred", "sessionEnd":
+			changes = append(changes, change{at: at, session: id})
+		case "userPromptSubmitted":
+			changes = append(changes, change{at: at, session: id, explicit: true})
+		}
+	}
 	for _, v := range derive.InboxItems(ss, parents, hooks, baseline) {
 		i := attention.Policy(v, d.Cfg.CaptureText)
 		changes = append(changes, change{at: i.TS, item: &i})
@@ -56,12 +69,27 @@ func syncInbox(tx *store.Tx, d Deps, ss []model.Session, parents map[int64]int64
 			changes = append(changes, change{at: s.LastPromptAt, session: s.ID, explicit: true})
 		}
 		// Adapter timestamps are scoped to this session, never folded from workers.
-		if !s.LastActivityAt.IsZero() {
+		if s.Adapter != "copilot" && !s.LastActivityAt.IsZero() {
 			changes = append(changes, change{at: s.LastActivityAt, session: s.ID})
 		}
 	}
 	for _, h := range hooks {
 		id := ids[sessionKey(h.Adapter, h.SessionID)]
+		if h.Adapter == "copilot" {
+			copilotActivity(h.Event, h.TS, id)
+			if copilot.Wait(h) {
+				// Hook processes can finish out of order. Reapply later stored
+				// activity for this session so a delayed wait cannot reopen it.
+				events, err := tx.Events("copilot", h.SessionID, h.TS)
+				if err != nil {
+					return err
+				}
+				for _, e := range events {
+					copilotActivity(e.Kind, e.TS, id)
+				}
+			}
+			continue
+		}
 		switch h.Event {
 		case "Stop", "PostToolUse":
 			changes = append(changes, change{at: h.TS, session: id})

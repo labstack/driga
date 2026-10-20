@@ -165,6 +165,10 @@ func ResolveJump(s model.Session, tty string, panes []Pane) *model.InboxJump {
 		command = "claude --resume " + Quote(s.ExternalID)
 	case "codex":
 		command = "codex resume " + Quote(s.ExternalID)
+	case "copilot":
+		if !strings.HasPrefix(s.ExternalID, "pid:") {
+			command = "copilot --resume=" + Quote(s.ExternalID)
+		}
 	}
 	if command == "" {
 		return nil

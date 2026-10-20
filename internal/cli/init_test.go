@@ -38,6 +38,7 @@ func initFixture(t *testing.T, input string) (*Globals, *bytes.Buffer) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("CODEX_HOME", filepath.Join(home, ".codex"))
+	t.Setenv("COPILOT_HOME", filepath.Join(home, ".copilot"))
 	t.Setenv("DRIGA_CONFIG", filepath.Join(home, ".config", "driga", "config.toml"))
 	t.Setenv("DRIGA_DATA_DIR", filepath.Join(home, "data"))
 	t.Setenv("DRIGA_SPOOL_DIR", filepath.Join(home, "spool"))

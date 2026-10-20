@@ -1,6 +1,6 @@
 # Driga
 
-Driga is a CLI and terminal UI for Claude Code, Codex, Gemini CLI and Antigravity
+Driga is a CLI and terminal UI for Claude Code, Codex, GitHub Copilot CLI, Gemini CLI and Antigravity
 (`agy`) sessions, project status, an attention inbox, file overlaps, orphaned
 helpers, disk cleanup, and machine health on macOS and Linux. It reads agent
 metadata and local Git state without an API key. Collection stays local unless you
@@ -156,9 +156,13 @@ Defaults and their purpose:
 | `cleanup.low_disk_percent` / `cleanup.low_disk_bytes` | `10` / `10GiB` | Inbox `low-disk` item below the smaller of the two. |
 | `cleanup.regenerable` | `node_modules/`, `target/`, `.venv/`, … | Ignored directories that may leave with a worktree; extends the defaults. |
 
-The Claude, Codex and Gemini adapters are enabled by default. Override them with
+The Claude, Codex, Copilot and Gemini adapters are enabled by default. Override them with
 `[adapters.<name>]` and `enabled = false`. Gemini CLI sessions are read from
-`~/.gemini/tmp/*/chats/` (or `$GEMINI_CLI_HOME`). Antigravity (`agy`) keeps a
+`~/.gemini/tmp/*/chats/` (or `$GEMINI_CLI_HOME`). Copilot uses hooks and process
+observations; without hooks it shows process-level sessions with unknown state.
+Install with `driga hooks install copilot`; `driga doctor` reports missing or
+stale hooks. Copilot hooks require CLI 1.0.98 or newer and are unsupported
+on Windows. Copilot session-state files are not read. Antigravity (`agy`) keeps a
 closed SQLite format, so v1.6 shows `agy` sessions from the process table only;
 `driga doctor` says so. `driga dev agy-schema` prints table and column names and
 row counts — never values — from your own `agy` databases, so support can be built
@@ -206,14 +210,42 @@ driga hooks uninstall --dry-run
 driga hooks uninstall
 ```
 
-`--agent claude|codex|all` selects the integration. Installation shows a diff and
-asks for confirmation. Existing files are backed up to `*.driga-bak-<timestamp>`.
+`--agent claude|codex|copilot|all` (or a positional agent name) selects the integration.
+Installation shows a diff and asks for confirmation. Existing Claude and Codex
+files are backed up to `*.driga-bak-<timestamp>`.
 Claude installation appends commands for Stop, Notification, SessionStart, and
 SessionEnd to `~/.claude/settings.json`, preserving existing hooks. Codex
 installation sets `notify` in its `config.toml` only when unset; an existing notify
 command stays untouched and rollout tailing continues. TOML comments may be lost
 when a change is written; the backup retains the original. Uninstall removes only
 Driga entries. Hooks append events to the spool; the collector alone writes SQLite.
+
+Copilot installation manages only `$COPILOT_HOME/hooks/driga.json`, falling back
+to `~/.copilot/hooks/driga.json`. It captures sessionStart, userPromptSubmitted,
+postToolUse, postToolUseFailure, notification, agentStop, errorOccurred, subagentStart,
+subagentStop and sessionEnd. Each hook has a 3-second timeout; normal awaited
+capture targets a 50 ms warm-machine budget.
+Permission prompts and elicitation dialogs enter the needs-you inbox; other
+notifications do not. Capture prints nothing and always exits successfully.
+Uninstall deletes only this file. Running Copilot sessions keep calling the
+removed hook until restarted; Copilot fails open. Copilot reloads hooks at CLI startup.
+Jumps use the linked process's TTY, with `copilot --resume=<sessionId>` as fallback.
+Under `capture_text = "titles"`, Copilot uses the project name as its session title
+and captures tool names. Only `snippets` allows bounded, scrubbed prompts, prompt
+titles, tool details and notification messages. Permission waits carry no tool name.
+Background notifications never update activity. Waits end on the same session's
+prompt, successful or failed tool result, agentStop, errorOccurred or sessionEnd.
+Session start records lifecycle metadata without resetting an open turn or wait.
+Errors finish the turn; subsequent turn activity resumes a recoverable error.
+Only `snippets` stores a scrubbed `error: <name>` reason; error messages and stacks
+are never stored.
+
+Only a parent matching a native Copilot executable or its npm loader is linked.
+Other hook sessions stay live by hook activity for up to 24 hours. VS Code's
+snake_case hook payloads are tagged `vscode` and never linked to a PID. Large
+`toolResult` fields are streamed and discarded, with 1 MiB retained metadata and
+64 MiB total stdin limits. Doctor warns about older CLI versions, enabled Copilot
+sandboxing and Copilot processes with no received hook events.
 
 The service is a per-user LaunchAgent on macOS and a systemd user service on
 Linux, named `run.driga.collector`:

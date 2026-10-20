@@ -169,7 +169,7 @@ func (InitCmd) Run(g *Globals) error {
 			return err
 		}
 	}
-	fmt.Fprintln(out, "Hooks merge event commands into ~/.claude/settings.json and an unused notify entry in the Codex config, backing up existing files. You will see a diff before applying. Undo: driga hooks uninstall.")
+	fmt.Fprintln(out, "Hooks update Claude settings and the Codex config with backups, and manage Copilot's hooks/driga.json under COPILOT_HOME or ~/.copilot. You will see a diff before applying. Undo: driga hooks uninstall.")
 	yes, err = ask("Preview hook installation?")
 	if err != nil {
 		return err

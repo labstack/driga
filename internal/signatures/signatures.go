@@ -54,17 +54,24 @@ func Load(extra []string) (*Set, error) {
 		if err != nil {
 			return nil, fmt.Errorf("signatures %s: %w", path, err)
 		}
-		if err := set.appendFile(path, data); err != nil {
+		if err := set.appendFile(path, data, ""); err != nil {
 			return nil, err
 		}
 	}
-	if err := set.appendFile("embedded signatures.toml", embedded); err != nil {
+	if err := set.appendFile("embedded signatures.toml", embedded, ""); err != nil {
 		return nil, err
 	}
 	return set, nil
 }
 
-func (s *Set) appendFile(path string, data []byte) error {
+// LoadAgent compiles only an agent's embedded signatures for a short-lived hook.
+func LoadAgent(agent string) (*Set, error) {
+	set := &Set{}
+	err := set.appendFile("embedded signatures.toml", embedded, agent)
+	return set, err
+}
+
+func (s *Set) appendFile(path string, data []byte, agent string) error {
 	var file struct {
 		Signatures []Signature `toml:"signature"`
 	}
@@ -72,6 +79,9 @@ func (s *Set) appendFile(path string, data []byte) error {
 		return fmt.Errorf("signatures %s: %w", path, err)
 	}
 	for _, signature := range file.Signatures {
+		if agent != "" && signature.Agent != agent {
+			continue
+		}
 		entry := compiledSignature{signature: signature}
 		for _, pattern := range signature.Match {
 			re, err := regexp.Compile(pattern)

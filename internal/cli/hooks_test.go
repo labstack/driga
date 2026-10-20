@@ -56,6 +56,7 @@ func TestHooksInstallUsesUnresolvedExecutable(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("CODEX_HOME", filepath.Join(home, ".codex"))
+	t.Setenv("COPILOT_HOME", filepath.Join(home, ".copilot"))
 	t.Setenv("DRIGA_DATA_DIR", filepath.Join(home, "data"))
 	t.Setenv("DRIGA_SPOOL_DIR", filepath.Join(home, "spool"))
 	t.Setenv("DRIGA_CONFIG", filepath.Join(home, "config.toml"))
@@ -91,10 +92,10 @@ func TestHooksInstallUsesUnresolvedExecutable(t *testing.T) {
 			if err := cmd.Run(&Globals{Stdin: strings.NewReader(""), Stdout: &out}); err != nil {
 				t.Fatal(err)
 			}
-			if strings.Count(out.String(), want) != 6 {
-				t.Fatalf("both installers must use %q for all hooks, got:\n%s", want, out.String())
+			if strings.Count(out.String(), want) != 16 {
+				t.Fatalf("all installers must use %q for all hooks, got:\n%s", want, out.String())
 			}
-			for _, path := range []string{filepath.Join(home, ".claude", "settings.json"), filepath.Join(home, ".codex", "config.toml")} {
+			for _, path := range []string{filepath.Join(home, ".claude", "settings.json"), filepath.Join(home, ".codex", "config.toml"), filepath.Join(home, ".copilot", "hooks", "driga.json")} {
 				if _, err := os.Stat(path); !os.IsNotExist(err) {
 					t.Fatalf("dry run wrote %s: %v", path, err)
 				}

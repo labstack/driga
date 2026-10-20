@@ -23,6 +23,7 @@ type Diff struct {
 	FullRewrite         bool
 	existed             bool
 	target              string
+	owned               bool // A standalone Driga file: no backups; empty After deletes it.
 }
 
 // Unified renders a simple line diff, omitting common leading and trailing lines.
@@ -448,6 +449,9 @@ func writeDiff(d Diff, dryRun bool, now time.Time) error {
 	}
 	if err := d.Check(); err != nil {
 		return err
+	}
+	if d.owned {
+		return writeOwnedDiff(d)
 	}
 	path := d.Path
 	if d.target != "" {

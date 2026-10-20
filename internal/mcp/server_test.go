@@ -54,10 +54,11 @@ func fixture(t *testing.T) (*store.Store, int64) {
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_STATE_HOME", filepath.Join(home, "state"))
 	t.Setenv("CODEX_HOME", filepath.Join(home, ".codex"))
+	t.Setenv("COPILOT_HOME", filepath.Join(home, ".copilot"))
 	t.Setenv("DRIGA_DATA_DIR", filepath.Join(home, "data"))
 	t.Setenv("DRIGA_SPOOL_DIR", filepath.Join(home, "spool"))
 	t.Setenv("DRIGA_CONFIG", filepath.Join(home, "config.toml"))
-	if err := os.WriteFile(filepath.Join(home, "config.toml"), []byte("no_service_hint = true\n[adapters.claude]\nenabled = false\n[adapters.codex]\nenabled = false\n"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(home, "config.toml"), []byte("no_service_hint = true\n[adapters.copilot]\nenabled = false\n[adapters.claude]\nenabled = false\n[adapters.codex]\nenabled = false\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	s, err := store.Open(filepath.Join(home, "data", "driga.db"), store.ReadWrite)

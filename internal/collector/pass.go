@@ -210,6 +210,8 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 		ss := collected.sessions
 		// Hook-only background sessions still need a stable local session identity.
 		ss = hookSessions(ss, hooks)
+		copilotCapturePolicy(ss, d.Cfg.CaptureText)
+		reconcileCopilot(ss, d.Plat, now)
 		original := collected.original
 		byKey := make(map[string]int, len(ss))
 		for i, s := range ss {
@@ -573,6 +575,9 @@ func drainSpool(d Deps, tx *store.Tx, now time.Time, source func(string, error) 
 	}
 	var hooks []model.HookEvent
 	for _, ev := range events {
+		if ev.Adapter == "copilot" && !d.Cfg.Adapters["copilot"].Enabled {
+			continue
+		}
 		if ev.Event == "summary" {
 			if ev.Summary == nil || ev.MachineID != tx.MachineID() {
 				continue
@@ -608,13 +613,30 @@ func drainSpool(d Deps, tx *store.Tx, now time.Time, source func(string, error) 
 		} else {
 			ev.Message = ""
 			ev.Detail = ""
+			ev.Prompt = ""
 		}
+		if ev.Adapter == "copilot" {
+			if err := tx.SetMeta("hooks:copilot:received", "1"); err != nil {
+				return nil, err
+			}
+			if !d.Cfg.CaptureSnippets() {
+				ev.Title = ""
+				if ev.Event == "errorOccurred" {
+					ev.Reason = ""
+				}
+			}
+		}
+		ev.Title = scrub.Snippet(ev.Title)
+		ev.Prompt = scrub.Snippet(ev.Prompt)
 		ev.Tool = scrub.Snippet(ev.Tool)
 		// idle notifications are not evidence of a blocked session.
 		if ev.Event == "Notification" && ev.NotificationType == "idle_prompt" {
 			continue
 		}
 		event := model.Event{MachineID: tx.MachineID(), Adapter: ev.Adapter, ExternalID: ev.SessionID, TS: ev.TS, Kind: ev.Event, Summary: ev.Message}
+		if ev.Adapter == "copilot" && ev.Tool != "" {
+			event.Metadata = &model.EventMetadata{Tool: ev.Tool}
+		}
 		if err := tx.InsertEvent(event); err != nil {
 			return nil, err
 		}

@@ -139,10 +139,17 @@ type FileTouch struct {
 	TS        time.Time `json:"occurred_at"`
 }
 
-// HookEvent is one line in the spool. Event is one of
-// Stop|Notification|SessionStart|SessionEnd|notify|ack|summary; for ack, Message
-// is the inbox item id. A summary event carries Summary instead of hook text.
+// HookEvent is one line in the spool. Event retains the adapter's protocol name;
+// ack uses Message as the inbox item id, and summary carries Summary instead of text.
 type HookEvent struct {
+	Recoverable      bool      `json:"recoverable,omitempty"`
+	Origin           string    `json:"origin,omitempty"`
+	PID              int32     `json:"pid,omitempty"`
+	ProcStart        time.Time `json:"proc_started_at,omitzero"`
+	Title            string    `json:"title,omitempty"`
+	Prompt           string    `json:"prompt,omitempty"`
+	Source           string    `json:"source,omitempty"`
+	Reason           string    `json:"reason,omitempty"`
 	NotificationType string    `json:"notification_type,omitempty"`
 	Tool             string    `json:"tool,omitempty"`
 	Detail           string    `json:"detail,omitempty"`
