@@ -21,7 +21,7 @@ import (
 
 type navItem struct{ Path, Name string }
 
-var navigation = []navItem{{"/", "Home"}, {"/agents", "Agents"}, {"/projects", "Projects"}, {"/inbox", "Inbox"}, {"/orphans", "Orphans"}, {"/machines", "Machines"}, {"/cleanup", "Cleanup"}, {"/flow", "Flow"}}
+var navigation = []navItem{{"/", "Home"}, {"/agents", "Agents"}, {"/projects", "Projects"}, {"/inbox", "Inbox"}, {"/orphans", "Orphans"}, {"/machines", "Machines"}, {"/cleanup", "Cleanup"}, {"/flow", "Flow"}, {"/chat", "Chat"}}
 
 type projectCard struct {
 	view.ProjectRow
@@ -29,6 +29,8 @@ type projectCard struct {
 	States        []view.StateCount
 }
 type pageData struct {
+	CSRF                   string
+	ChatEphemeral          bool
 	Flow                   view.FlowView
 	FlowPrevious, FlowNext string
 	FlowExpanded           bool
@@ -53,9 +55,9 @@ type pageData struct {
 }
 
 func (s *Server) loadPage(r *http.Request) (pageData, int, error) {
-	p := pageData{Nav: navigation, Page: r.URL.Path, Scope: r.URL.Query().Get("machine"), All: r.URL.Query().Get("all") == "1"}
+	p := pageData{CSRF: s.csrf, ChatEphemeral: s.opts.ChatEphemeral, Nav: navigation, Page: r.URL.Path, Scope: r.URL.Query().Get("machine"), All: r.URL.Query().Get("all") == "1"}
 	switch p.Page {
-	case "/", "/activity", "/agents", "/projects", "/inbox", "/orphans", "/machines", "/cleanup", "/flow":
+	case "/", "/activity", "/agents", "/projects", "/inbox", "/orphans", "/machines", "/cleanup", "/flow", "/chat":
 	default:
 		if !strings.HasPrefix(p.Page, "/agents/") && !strings.HasPrefix(p.Page, "/projects/") {
 			return p, 404, fmt.Errorf("page not found")

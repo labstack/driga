@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/labstack/driga/internal/chat"
 	"github.com/labstack/driga/internal/cleanup"
 	"github.com/labstack/driga/internal/store"
 	"github.com/labstack/driga/internal/view"
@@ -38,15 +39,19 @@ type Source interface {
 }
 
 type Options struct {
-	Host        string
-	Machine     string
-	CleanupList func(context.Context) ([]cleanup.Candidate, error)
+	Chat          chat.Client
+	ChatEphemeral bool
+	Host          string
+	Machine       string
+	CleanupList   func(context.Context) ([]cleanup.Candidate, error)
 }
 
 type Server struct {
 	source          Source
 	opts            Options
 	token           string
+	csrf            string
+	chatStreams     chan struct{}
 	templates       *template.Template
 	static          http.Handler
 	themeCSS        string
@@ -84,7 +89,7 @@ func New(source Source, opts Options) (*Server, error) {
 	if _, _, err := net.SplitHostPort(opts.Host); err != nil {
 		return nil, err
 	}
-	token := make([]byte, 32)
+	token := make([]byte, 64)
 	if _, err := rand.Read(token); err != nil {
 		return nil, err
 	}
@@ -97,7 +102,7 @@ func New(source Source, opts Options) (*Server, error) {
 		return nil, err
 	}
 	return &Server{
-		source: source, opts: opts, token: base64.RawURLEncoding.EncodeToString(token),
+		source: source, opts: opts, token: base64.RawURLEncoding.EncodeToString(token[:32]), csrf: base64.RawURLEncoding.EncodeToString(token[32:]), chatStreams: make(chan struct{}, 32),
 		themeCSS: view.ThemeCSS(), templates: t, static: http.StripPrefix("/static/", http.FileServer(http.FS(static))),
 		clients: map[chan struct{}]bool{}, ready: make(chan struct{}),
 		cache: map[snapshotKey]cachedSnapshot{}, cookieName: instanceCookie(opts.Host), sseWriteTimeout: 10 * time.Second, watchInterval: time.Second, refreshInterval: 15 * time.Second,
@@ -152,7 +157,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	w.Header().Set("Cache-Control", "no-store")
-	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead && !(r.Method == http.MethodPost && isChatPOST(r.URL.Path)) {
 		w.Header().Set("Allow", "GET, HEAD")
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -163,6 +168,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.URL.Query().Has("token") {
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			http.Error(w, "unauthorized", 401)
+			return
+		}
 		if !s.validToken(r.URL.Query().Get("token")) {
 			http.Error(w, "unauthorized", 401)
 			return
@@ -185,6 +194,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie(s.cookieName)
 	if err != nil || !s.validToken(cookie.Value) {
 		http.Error(w, "unauthorized", 401)
+		return
+	}
+	if strings.HasPrefix(r.URL.Path, "/chat/api/") {
+		s.chatAPI(w, r)
 		return
 	}
 	if r.URL.Path == "/static/theme.css" {

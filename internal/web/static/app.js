@@ -301,9 +301,13 @@
     return url.toString();
   }
   function runCommand() {
+    const text=input.value.trim(), verb=text.split(/\s+/)[0];
+    if (text && !["home","flow","agents","where","projects","inbox","orphans","machines","cleanup","activity","theme","ack","kill","hooks"].includes(verb) && window.drigaChat) {window.drigaChat.open(text);input.value="";closeMenu();return;}
     const scope = document.querySelector(".status").dataset.scope || "all";
     const result = parseCommand(input.value, scope);
-    if (result.error) { showError(result.error); return; }
+    if (result.error) {
+ if (result.error === "Unknown command · ? for help" && window.drigaChat) { window.drigaChat.open(input.value); input.value=""; closeMenu(); return; }
+ showError(result.error); return; }
     history.push(input.value); history = history.slice(-100); historyIndex = history.length;
     try { localStorage.setItem("driga-command-history", JSON.stringify(history)); } catch (_) { /* History is optional. */ }
     error.hidden = true; input.removeAttribute("aria-invalid"); closeMenu();
@@ -344,6 +348,13 @@
     const pane = event.target.closest("[data-pane]"); if (pane) focusPane(panes().indexOf(pane), false);
   });
   document.addEventListener("change", event => { if (event.target.id === "theme") setTheme(event.target.value); });
+  document.addEventListener("driga:select-session", event => {
+    const id=String(event.detail.id);
+    const worker=Array.from(document.querySelectorAll("[data-worker]")).find(n=>n.dataset.session===id);
+    if(worker){document.querySelectorAll("[data-worker]").forEach(n=>n.classList.toggle("sel",n===worker));selected=id;inspectWorker(worker);worker.scrollIntoView({block:"nearest"});return;}
+    const row=Array.from(document.querySelectorAll("[data-row]")).find(n=>(n.getAttribute("href")||"").split("?")[0]==="/agents/"+id);
+    if(row){const pane=row.closest("[data-pane]");if(pane){focusPane(panes().indexOf(pane),false);selectRow(pane,rows(pane).indexOf(row),false);}row.scrollIntoView({block:"nearest"});}
+  });
   document.addEventListener("keydown", event => {
     if (event.defaultPrevented || event.ctrlKey || event.altKey || event.metaKey || event.isComposing) return;
     if (help.open) { if (event.key === "?" || event.key === "Escape") { event.preventDefault(); closeHelp(); } return; }
@@ -377,7 +388,7 @@
       return;
     }
     const pane = panes()[focused];
-    if (/^[0-7]$/.test(event.key)) { event.preventDefault(); document.querySelector('[data-window="' + event.key + '"]').click(); }
+    if (/^[0-8]$/.test(event.key)) { event.preventDefault(); document.querySelector('[data-window="' + event.key + '"]').click(); }
     else if (event.key === ":") { event.preventDefault(); input.focus(); }
     else if (event.key === "?") { event.preventDefault(); help.showModal(); }
     else if (event.key === "p") { event.preventDefault(); pauseTail(); }

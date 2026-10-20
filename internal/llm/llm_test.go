@@ -68,3 +68,16 @@ func TestProbeMissingExecutable(t *testing.T) {
 		t.Fatal("missing claude accepted")
 	}
 }
+
+// Claude Code's Node CLI can exit before a piped stdout is flushed, so
+// `claude --help | …` loses most options while a file receives all of them.
+func TestProbeReadsHelpFromFileNotPipe(t *testing.T) {
+	fake(t, `case "$1" in --version) echo '2.1.304';; --help) if [ -p /dev/stdout ]; then echo 'Usage: claude'; else printf '  -p, --print   Print\n  --safe-mode   Safe\n'; fi;; esac`)
+	c, err := Probe(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Require("print", "safe-mode"); err != nil {
+		t.Fatal(err)
+	}
+}

@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/labstack/driga/internal/chat"
 	"github.com/labstack/driga/internal/feed"
 	"github.com/labstack/driga/internal/fleet"
 	"github.com/labstack/driga/internal/model"
@@ -184,6 +185,16 @@ func Run(ctx context.Context, d Deps, dataDir string) error {
 		}
 		return err
 	}
+	broker, err := chat.New(ctx, st, &chat.Claude{DataDir: dataDir}, chat.Options{Snippets: d.Cfg.CaptureSnippets(), DataDir: dataDir})
+	if err != nil {
+		return err
+	}
+	defer broker.Close()
+	stopChat, err := chat.Listen(ctx, dataDir, broker)
+	if err != nil {
+		return fmt.Errorf("chat broker: %w", err)
+	}
+	defer stopChat()
 	intakeRequests := make(chan intakeRequest, 16)
 	stopIntake, err := startIntake(ctx, d, st, intakeRequests)
 	if err != nil {

@@ -740,6 +740,8 @@ func (tx *Tx) Prune(now time.Time) error {
 		query string
 		args  []any
 	}{
+		{"DELETE FROM messages WHERE machine_id=? AND created_at<?", []any{tx.machineID, month}},
+		{"DELETE FROM conversations WHERE machine_id=? AND updated_at<?", []any{tx.machineID, month}},
 		{"DELETE FROM events WHERE machine_id=? AND ts<?", []any{tx.machineID, month}},
 		{"DELETE FROM event_minutes WHERE machine_id=? AND minute<?", []any{tx.machineID, unix(now.Add(-30 * 24 * time.Hour).Truncate(time.Minute))}},
 		{"DELETE FROM observation_minutes WHERE machine_id=? AND minute<?", []any{tx.machineID, now.Add(-30 * 24 * time.Hour).Truncate(time.Minute).UnixMilli()}},

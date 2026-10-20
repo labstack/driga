@@ -400,7 +400,7 @@ directory; if that write fails after the action succeeded, the action reports a
 warning instead of an error. The TUI has a Cleanup tab, and `driga_cleanup_candidates` is a
 read-only MCP tool.
 
-## Summaries and ask
+## Summaries and Chat
 
 Both run your installed `claude` CLI, on demand only; Driga never calls a model in
 the background and has no API key.
@@ -417,9 +417,49 @@ contents or paths. It runs `claude -p --safe-mode --no-session-persistence --too
 with a $0.05 budget cap. A summary built from handoff text is shared with fleet
 viewers only at `fleet.share_text = "snippets"`.
 
-`ask` runs `claude -p` with only the read-only `driga mcp` tools, no built-in
-tools, and no user, project or local settings. Both refuse to run if the
-installed `claude` lacks a required flag.
+`driga ask` is a one-shot Chat broker client. Chat uses your installed Claude CLI
+and login; Codex and Copilot are listed as coming. Required flags are probed on
+the first turn, and an unsupported CLI fails with the missing flag and version.
+No real agent CLI is run by tests.
+
+Open **8:chat** or press **c** on any web console page to dock Chat on the right.
+Non-command text in the command bar opens the composer. Send with ⌘Enter (or
+Ctrl+Enter), use Stop / Escape to cancel the current turn and queued messages,
+and use History to reopen a conversation. Context chips describe the current
+page, selected session/project and machine; remove a chip to leave it out.
+Session references in answers select the session on the current page. Tool calls
+appear in a collapsed **Tools used** list. Agent output is rendered as text.
+
+In `driga top`, press **8** or **c** for Chat with the current selection. Enter
+adds a line; Ctrl+Enter or Alt+Enter sends; Escape stops. PgUp/PgDown scroll,
+Alt+Up recalls the last draft, Ctrl+H cycles history, Ctrl+N starts a conversation,
+Ctrl+X clears context and Ctrl+0 returns Home. Flow's copy-resume key is **C**.
+
+Phase 1 understands collected state only. Native shell/file tools are disabled
+with `--tools ""`; each run injects driga's read-only MCP server using a private
+config and `--strict-mcp-config`. `--safe-mode` disables hooks, plugins, skills
+and other customizations while retaining Claude's authentication/model/permission
+settings. Only the explicit driga read-tool list is approved. Trust controls are
+disabled: **actions arrive in the next release**. There is no dispatch.
+
+The collector owns the broker and `chat.sock` in the data directory (0700 directory,
+0600 socket). Web, TUI and ask connect locally. Without a service, the opening
+client runs a private in-process broker and labels it **conversations end with it**.
+No driga conversation history survives that client. With the service, conversation
+IDs, vendor resume IDs and capture-filtered messages persist in SQLite for 30 days;
+interrupted work is marked interrupted after restart and is never replayed to the
+agent automatically. SSE cursors replay bounded ordered events; an expired cursor
+or service restart sends a replacement snapshot.
+
+Your explicitly submitted question is scrubbed and sent to Claude. Context and
+MCP evidence pass the capture policy before reaching the agent. Driga retains no
+chat message bodies under `capture_text = "titles"`; `snippets` retains scrubbed
+200-character snippets. Live conversation text and drafts are bounded in memory,
+and browser history stores no chat text on disk. Tool names are retained as
+metadata. Downgrading to titles erases retained bodies when the broker starts.
+Claude's own session history is vendor-managed and enables `--resume`; driga's
+capture policy does not control that vendor history. Chat makes no new network
+connection except the selected CLI's existing vendor connection.
 
 ## Web dashboard
 
@@ -434,7 +474,7 @@ It listens on loopback only (`--listen` refuses other addresses), runs as its ow
 process so the collector's footprint is unchanged, and updates live as the collector
 writes. The token in the printed URL sets a cookie for that browser; restarting
 `driga web` issues a new token. Pages: Home, Agents, Projects, Inbox, Orphans,
-Machines and Cleanup (listing only). Nothing in the browser can kill, acknowledge or
+Machines, Cleanup (listing only), Flow and Chat. Nothing in the browser can kill, acknowledge or
 clean up in this version.
 
 ## MCP registration

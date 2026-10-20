@@ -18,7 +18,9 @@ import (
 )
 
 // MCPCmd serves read-only tools over stdio.
-type MCPCmd struct{}
+type MCPCmd struct {
+	Chat bool `hidden:"" help:"Apply Chat capture policy to every response."`
+}
 
 // Help documents client registration without changing client configuration.
 func (MCPCmd) Help() string {
@@ -28,10 +30,18 @@ func (MCPCmd) Help() string {
 }
 
 // Run reserves stdout for the MCP transport and sends diagnostics to stderr.
-func (MCPCmd) Run(g *Globals) error {
+func (c MCPCmd) Run(g *Globals) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	err := NewMCPServer(g).Run(ctx, &sdk.StdioTransport{MaxLineLength: drigamcp.MaxLineLength})
+	policy := ""
+	if c.Chat {
+		cfg, err := config.Load(config.Path())
+		if err != nil {
+			return err
+		}
+		policy = cfg.CaptureText
+	}
+	err := NewMCPServer(g, policy).Run(ctx, &sdk.StdioTransport{MaxLineLength: drigamcp.MaxLineLength})
 	if ctx.Err() != nil {
 		return nil
 	}
@@ -39,7 +49,7 @@ func (MCPCmd) Run(g *Globals) error {
 }
 
 // NewMCPServer shares the CLI read path with transport-independent tool handlers.
-func NewMCPServer(g *Globals) *sdk.Server {
+func NewMCPServer(g *Globals, capture ...string) *sdk.Server {
 	base := *g
 	stderr := base.Stderr
 	if stderr == nil {
@@ -91,7 +101,11 @@ func NewMCPServer(g *Globals) *sdk.Server {
 		})
 	}
 	// Neither the SDK logger nor snapshot hints may write to protocol stdout.
-	return drigamcp.NewServer(drigamcp.Options{Version: base.Version, Logger: slog.New(slog.NewTextHandler(stderr, nil)), Read: read, Doctor: doctor, Cleanup: func(ctx context.Context, kind string, sizes bool) (view.Envelope, error) {
+	policy := ""
+	if len(capture) > 0 {
+		policy = capture[0]
+	}
+	return drigamcp.NewServer(drigamcp.Options{CaptureText: policy, Version: base.Version, Logger: slog.New(slog.NewTextHandler(stderr, nil)), Read: read, Doctor: doctor, Cleanup: func(ctx context.Context, kind string, sizes bool) (view.Envelope, error) {
 		return cleanupRead(ctx, &base, kind, sizes, false)
 	}})
 }

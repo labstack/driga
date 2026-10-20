@@ -125,10 +125,10 @@ func (m *app) header() string {
 func (m *app) footer() string {
 	hints := []string{"0 Home", "m machine", "enter detail", "/ filter", "s sort", "g group by project", "o open terminal"}
 	if m.tab == flowTab {
-		hints = []string{"7 flow", "j/k session", "enter jump", "[/] family", "-/+ zoom", "tab needs", "c resume"}
+		hints = []string{"7 flow", "j/k session", "enter jump", "[/] family", "-/+ zoom", "tab needs", "C resume", "c Chat"}
 	}
 	if m.tab == homeTab {
-		hints = []string{"0-7 tabs", "↑↓ move", "enter open", "/ filter", "m machine"}
+		hints = []string{"0-8 tabs · c Chat", "↑↓ move", "enter open", "/ filter", "m machine"}
 	}
 	if m.tmuxTarget() != "" {
 		hints = append(hints, "a attach tmux")
@@ -151,7 +151,14 @@ func (m *app) footer() string {
 			hints = append(hints, "unverified (snapshot)")
 		}
 	}
-	hints = append(hints, "esc back", "? help", "q quit")
+	if m.tab == chatTab {
+		hints = []string{"ctrl+0 Home", "ctrl+n new", "ctrl+h history", "pgup/pgdown scroll", "esc Stop"}
+	}
+	if m.tab == chatTab {
+		hints = append(hints, "ctrl+c quit")
+	} else {
+		hints = append(hints, "esc back", "? help", "q quit")
+	}
 	if m.tab == 5 {
 		hints = append([]string{"x clean (confirm)", "r refresh candidates"}, hints...)
 	}
@@ -281,11 +288,14 @@ func (m *app) View() tea.View {
 			body = "Collecting a snapshot (no collector running)…"
 		}
 	}
+	if m.tab == chatTab {
+		body = m.chatView()
+	}
 	if m.detail {
 		body = m.viewport.View()
 	}
 	if m.help {
-		body = wrapText("0 Home · 1–7 tabs · ↑/↓ or j/k move · enter detail · esc back\n7 Flow · j/k session · enter jump · [/] family · -/+ zoom · tab needs · c resume\nm cycle machine scope · / filter · enter apply · esc clear · s sort: state, age, mem, project · S summarize selected project\ng group by project · →/← expand/collapse families and worktrees\nx/space acknowledge Needs you / Inbox · X acknowledge all Inbox (confirm)\nclick select · click selected row to open · wheel scroll\npgup/pgdown scroll Home · k kill orphan (confirm) · K force (two confirmations)\no open terminal · ? close help · q / ctrl+c quit", m.width)
+		body = wrapText("0 Home · 1–7 tabs · ↑/↓ or j/k move · enter detail · esc back\n7 Flow · j/k session · enter jump · [/] family · -/+ zoom · tab needs · C resume · c Chat\nm cycle machine scope · / filter · enter apply · esc clear · s sort: state, age, mem, project · S summarize selected project\ng group by project · →/← expand/collapse families and worktrees\nx/space acknowledge Needs you / Inbox · X acknowledge all Inbox (confirm)\nclick select · click selected row to open · wheel scroll\npgup/pgdown scroll Home · k kill orphan (confirm) · K force (two confirmations)\no open terminal · ? close help · q / ctrl+c quit", m.width)
 		if m.tmuxTarget() != "" {
 			body += "\na attach tmux"
 		}
@@ -306,7 +316,10 @@ func (m *app) View() tea.View {
 	}
 	body = strings.Join(lines, "\n")
 	status := m.status
-	if m.busy {
+	if m.tab == chatTab {
+		status = m.chatStatus
+	}
+	if m.busy && m.tab != chatTab {
 		status = "working… · " + status
 	}
 	content := m.header() + "\n" + m.tabBar() + "\n" + strings.Repeat("─", m.width) + "\n" + body + "\n" + truncate(clean(status), m.width) + "\n" + m.footer()

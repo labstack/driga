@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/labstack/driga/internal/chat"
 	"github.com/labstack/driga/internal/cleanup"
 	"github.com/labstack/driga/internal/config"
 	"github.com/labstack/driga/internal/view"
@@ -53,7 +54,15 @@ func (c WebCmd) run(ctx context.Context, g *Globals) error {
 	}
 	local := *g
 	local.Machine = "local"
-	dashboard, err := web.New(source, web.Options{Host: listener.Addr().String(), Machine: g.Machine, CleanupList: func(ctx context.Context) ([]cleanup.Candidate, error) {
+	chatClient, ephemeral, closeChat, err := chat.Open(ctx, config.DataDir(), cfg.CaptureSnippets())
+	if err != nil {
+		return err
+	}
+	defer closeChat()
+	if ephemeral && g.Stderr != nil {
+		fmt.Fprintln(g.Stderr, "Chat runs in-process; conversations end with it.")
+	}
+	dashboard, err := web.New(source, web.Options{Chat: chatClient, ChatEphemeral: ephemeral, Host: listener.Addr().String(), Machine: g.Machine, CleanupList: func(ctx context.Context) ([]cleanup.Candidate, error) {
 		envelope, err := cleanupRead(ctx, &local, "", false, true)
 		if err != nil {
 			return nil, err

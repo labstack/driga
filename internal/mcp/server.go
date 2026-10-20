@@ -31,11 +31,12 @@ type Query struct {
 
 // Options connects tool handlers to the shared CLI read path and diagnostics.
 type Options struct {
-	Version string
-	Logger  *slog.Logger
-	Read    func(context.Context, Query, Builder) (view.Envelope, error)
-	Doctor  func(context.Context) (view.Envelope, error)
-	Cleanup func(context.Context, string, bool) (view.Envelope, error)
+	CaptureText string // Nonempty only for Chat's final privacy boundary.
+	Version     string
+	Logger      *slog.Logger
+	Read        func(context.Context, Query, Builder) (view.Envelope, error)
+	Doctor      func(context.Context) (view.Envelope, error)
+	Cleanup     func(context.Context, string, bool) (view.Envelope, error)
 }
 
 type machineInput struct {
@@ -81,7 +82,7 @@ const readDescription = ` Use this to inspect collected state without changing i
 func NewServer(o Options) *sdk.Server {
 	s := sdk.NewServer(&sdk.Implementation{Name: "driga", Version: o.Version}, &sdk.ServerOptions{Logger: o.Logger})
 	s.AddReceivingMiddleware(preserveEnvelope)
-	register(s, "get_flow", "Inspect one session family map: per-node stored mixer, events, inbox wait spans, observations, retention, gaps and machine-wide waiting attention. Optional id from list_agents selects its lead; omit for the newest live interactive session. Missing telemetry measurements are omitted; usage covers retained api_request events only.", func(ctx context.Context, in struct {
+	register(s, o.CaptureText, "get_flow", "Inspect one session family map: per-node stored mixer, events, inbox wait spans, observations, retention, gaps and machine-wide waiting attention. Optional id from list_agents selects its lead; omit for the newest live interactive session. Missing telemetry measurements are omitted; usage covers retained api_request events only.", func(ctx context.Context, in struct {
 		ID      int64  `json:"id,omitempty"`
 		Minutes int    `json:"minutes,omitempty" jsonschema:"Time window: 15, 60 or 240 minutes; default 60."`
 		Machine string `json:"machine,omitempty"`
@@ -95,16 +96,16 @@ func NewServer(o Options) *sdk.Server {
 			return view.Flow(r, f, in.ID, now)
 		})
 	})
-	register(s, "get_activity", "Read the last sixty minutes of machine samples and event counts.", func(ctx context.Context, in machineInput) (view.Envelope, error) {
+	register(s, o.CaptureText, "get_activity", "Read the last sixty minutes of machine samples and event counts.", func(ctx context.Context, in machineInput) (view.Envelope, error) {
 		return o.Read(ctx, Query{Machine: in.Machine}, func(r view.Reader, f view.Filter, now time.Time) (any, error) { return view.Activity(r, f, now) })
 	})
-	register(s, "get_summary", "Read agent counts, inbox counts, and machine health.", func(ctx context.Context, in machineInput) (view.Envelope, error) {
+	register(s, o.CaptureText, "get_summary", "Read agent counts, inbox counts, and machine health.", func(ctx context.Context, in machineInput) (view.Envelope, error) {
 		return o.Read(ctx, Query{Machine: in.Machine}, func(r view.Reader, f view.Filter, now time.Time) (any, error) { return view.Summary(r, f, now) })
 	})
-	register(s, "list_agents", "Read agent sessions and their families.", func(ctx context.Context, in agentsInput) (view.Envelope, error) {
+	register(s, o.CaptureText, "list_agents", "Read agent sessions and their families.", func(ctx context.Context, in agentsInput) (view.Envelope, error) {
 		return o.Read(ctx, Query{Machine: in.Machine, Project: in.Project, Filter: view.Filter{All: in.All}}, func(r view.Reader, f view.Filter, now time.Time) (any, error) { return view.Agents(r, f, now) })
 	})
-	register(s, "get_agent", "Read one session's detail and recent evidence; use required id from list_agents, e.g. id=1.", func(ctx context.Context, in agentInput) (view.Envelope, error) {
+	register(s, o.CaptureText, "get_agent", "Read one session's detail and recent evidence; use required id from list_agents, e.g. id=1.", func(ctx context.Context, in agentInput) (view.Envelope, error) {
 		return o.Read(ctx, Query{Machine: in.Machine}, func(r view.Reader, f view.Filter, now time.Time) (any, error) {
 			v, err := view.Agent(r, in.ID, now, f.Scope)
 			if err == nil && f.Project != "" {
@@ -122,10 +123,10 @@ func NewServer(o Options) *sdk.Server {
 			return v, err
 		})
 	})
-	register(s, "list_projects", "Read project activity and risk flags.", func(ctx context.Context, in projectsInput) (view.Envelope, error) {
+	register(s, o.CaptureText, "list_projects", "Read project activity and risk flags.", func(ctx context.Context, in projectsInput) (view.Envelope, error) {
 		return o.Read(ctx, Query{Machine: in.Machine, Filter: view.Filter{AtRisk: in.AtRisk, Active: in.Active}}, func(r view.Reader, f view.Filter, now time.Time) (any, error) { return view.Projects(r, f, now) })
 	})
-	register(s, "inspect_project", "Read a project's sourced status, worktrees, and handoffs; required project is a name or path, e.g. project=api.", func(ctx context.Context, in whereInput) (view.Envelope, error) {
+	register(s, o.CaptureText, "inspect_project", "Read a project's sourced status, worktrees, and handoffs; required project is a name or path, e.g. project=api.", func(ctx context.Context, in whereInput) (view.Envelope, error) {
 		if in.Project == "" {
 			return view.Envelope{}, fmt.Errorf("project is required")
 		}
@@ -133,25 +134,25 @@ func NewServer(o Options) *sdk.Server {
 			return view.Where(r, f.Project, now, f.Scope)
 		})
 	})
-	register(s, "list_inbox", "Read attention and completion events.", func(ctx context.Context, in inboxInput) (view.Envelope, error) {
+	register(s, o.CaptureText, "list_inbox", "Read attention and completion events.", func(ctx context.Context, in inboxInput) (view.Envelope, error) {
 		return o.Read(ctx, Query{Machine: in.Machine, Project: in.Project, Since: in.Since, Filter: view.Filter{All: in.All}}, func(r view.Reader, f view.Filter, now time.Time) (any, error) { return view.Inbox(r, f, now) })
 	})
-	register(s, "list_conflicts", "Read current and recent file overlaps.", func(ctx context.Context, in conflictsInput) (view.Envelope, error) {
+	register(s, o.CaptureText, "list_conflicts", "Read current and recent file overlaps.", func(ctx context.Context, in conflictsInput) (view.Envelope, error) {
 		return o.Read(ctx, Query{Machine: in.Machine, Project: in.Project}, func(r view.Reader, f view.Filter, now time.Time) (any, error) { return view.Conflicts(r, f, now) })
 	})
-	register(s, "list_orphans", "Read orphan process candidates without signaling processes.", func(ctx context.Context, in machineInput) (view.Envelope, error) {
+	register(s, o.CaptureText, "list_orphans", "Read orphan process candidates without signaling processes.", func(ctx context.Context, in machineInput) (view.Envelope, error) {
 		return o.Read(ctx, Query{Machine: in.Machine}, func(r view.Reader, f view.Filter, now time.Time) (any, error) { return view.Orphans(r, f, now) })
 	})
-	register(s, "get_machine", "Read machine health and agent memory use.", func(ctx context.Context, in machineInput) (view.Envelope, error) {
+	register(s, o.CaptureText, "get_machine", "Read machine health and agent memory use.", func(ctx context.Context, in machineInput) (view.Envelope, error) {
 		return o.Read(ctx, Query{Machine: in.Machine}, func(r view.Reader, f view.Filter, now time.Time) (any, error) { return view.Machine(r, f, now) })
 	})
-	register(s, "list_machines", "Read cached fleet connection health, even when collection has stopped.", func(ctx context.Context, _ struct{}) (view.Envelope, error) {
+	register(s, o.CaptureText, "list_machines", "Read cached fleet connection health, even when collection has stopped.", func(ctx context.Context, _ struct{}) (view.Envelope, error) {
 		return o.Read(ctx, Query{CachedMachines: true}, func(r view.Reader, f view.Filter, now time.Time) (any, error) { return view.Machines(r, now, f.Scope) })
 	})
-	register(s, "inspect_setup", "Read setup and collection diagnostics.", func(ctx context.Context, _ struct{}) (view.Envelope, error) {
+	register(s, o.CaptureText, "inspect_setup", "Read setup and collection diagnostics.", func(ctx context.Context, _ struct{}) (view.Envelope, error) {
 		return o.Doctor(ctx)
 	})
-	register(s, "list_cleanup_candidates", "Inspect local disk cleanup candidates read-only. Optional kind is worktree, scratch, or history (omit for all); sizes=true opts into bounded directory sizing. This tool never removes anything.", func(ctx context.Context, in struct {
+	register(s, o.CaptureText, "list_cleanup_candidates", "Inspect local disk cleanup candidates read-only. Optional kind is worktree, scratch, or history (omit for all); sizes=true opts into bounded directory sizing. This tool never removes anything.", func(ctx context.Context, in struct {
 		Kind  string `json:"kind,omitempty"`
 		Sizes bool   `json:"sizes,omitempty"`
 	}) (view.Envelope, error) {
@@ -166,7 +167,7 @@ func NewServer(o Options) *sdk.Server {
 	return s
 }
 
-func register[In any](s *sdk.Server, name, description string, read func(context.Context, In) (view.Envelope, error)) {
+func register[In any](s *sdk.Server, capture, name, description string, read func(context.Context, In) (view.Envelope, error)) {
 	schema, err := jsonschema.ForType(reflect.TypeFor[In](), nil)
 	if err != nil {
 		panic(err)
@@ -223,6 +224,9 @@ func register[In any](s *sdk.Server, name, description string, read func(context
 			return nil, e, err
 		}
 		truncated := false
+		if capture != "" {
+			e.Data = captureEvidence(e.Data, capture)
+		}
 		e.Data = bounded(e.Data, &limit, &truncated)
 		if len(e.CoverageGaps) > limit {
 			e.CoverageGaps = e.CoverageGaps[:limit]
