@@ -198,10 +198,17 @@ func TestPairAttemptCapAndWindowExpiry(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(s.dataDir, "fleet", "enroll.json")); !os.IsNotExist(err) {
 		t.Fatal("exhausted window persisted")
 	}
-	s.OpenEnrollment(time.Millisecond)
-	time.Sleep(5 * time.Millisecond)
+	if err := s.OpenEnrollment(time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	s.mu.Lock()
+	s.enrollUntil = s.now().Add(-time.Second)
+	s.mu.Unlock()
 	if s.Status().EnrollmentOpen {
 		t.Fatal("expired window open")
+	}
+	if _, err := os.Stat(filepath.Join(s.dataDir, "fleet", "enroll.json")); !os.IsNotExist(err) {
+		t.Fatal("expired window persisted")
 	}
 }
 
