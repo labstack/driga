@@ -11,7 +11,6 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-
 	"github.com/labstack/driga/internal/derive"
 	"github.com/labstack/driga/internal/view"
 )
@@ -31,6 +30,17 @@ func (m *app) openDetail(r tabRow) {
 		}
 	}
 	switch {
+	case r.app != nil:
+		a := r.app
+		fmt.Fprintf(&buf, "%s · %s · %.1f%% CPU · %s\n", clean(a.Name), humanBytes(a.Memory), a.CPUPercent, a.MemoryMeasure)
+		for _, p := range a.Processes {
+			fmt.Fprintf(&buf, "PID %d · %s · %s (%s) · %.1f%% CPU\n", p.PID, clean(p.Exe), humanBytes(p.Memory), p.MemoryMeasure, p.CPUPercent)
+			if p.Attribution != nil {
+				fmt.Fprintf(&buf, "  ← %s · session #%d · proof: %s\n", clean(p.Attribution.Project), p.Attribution.SessionID, p.Attribution.Proof)
+			} else {
+				fmt.Fprintln(&buf, "  unattributed")
+			}
+		}
 	case r.cleanup != nil:
 		fmt.Fprintln(&buf, cleanupDetail(*r.cleanup))
 	case r.inbox != nil:

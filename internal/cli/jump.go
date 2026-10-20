@@ -42,7 +42,11 @@ func (c JumpCmd) run(g *Globals, runner inbox.Runner, goos string) error {
 		if err != nil {
 			return err
 		}
-		opts := inbox.JumpOptions{Tmux: os.Getenv("TMUX"), Terminal: cfg.Inbox.JumpTerminal, OS: goos}
+		bin, err := os.Executable()
+		if err != nil {
+			return err
+		}
+		opts := inbox.JumpOptions{DrigaPath: bin, Tmux: os.Getenv("TMUX"), Terminal: cfg.Inbox.JumpTerminal, OS: goos}
 		_, err = inbox.JumpCommands(i.Jump, opts)
 		if err != nil {
 			return fmt.Errorf("inbox item %q has no jump", c.ID)

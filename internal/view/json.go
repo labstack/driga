@@ -33,3 +33,5 @@ func (v SummaryView) MarshalJSON() ([]byte, error)     { return jsonwire.Marshal
 func (v MachineFresh) MarshalJSON() ([]byte, error)    { return jsonwire.Marshal(v) }
 func (v MachineRow) MarshalJSON() ([]byte, error)      { return jsonwire.Marshal(v) }
 func (v MachinesView) MarshalJSON() ([]byte, error)    { return jsonwire.Marshal(v) }
+
+func (v MachineProcess) MarshalJSON() ([]byte, error) { return jsonwire.Marshal(v) }

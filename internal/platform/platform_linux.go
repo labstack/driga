@@ -80,7 +80,9 @@ func (p linuxPlatform) Procs(ctx context.Context) ([]model.Proc, error) {
 		if err != nil {
 			continue
 		}
+		status, _ := os.ReadFile(filepath.Join(p.root, strconv.FormatInt(int64(proc.Pid), 10), "status"))
 		out = append(out, model.Proc{
+			Swap: ParseVmSwap(status), MemoryMeasure: "rss_swap",
 			TTY: ttys[controllingTTYDevice(stat)],
 			PID: proc.Pid, PPID: ppid, StartTime: time.UnixMilli(start),
 			RSS: rss.RSS, CPUSeconds: times.User + times.System,

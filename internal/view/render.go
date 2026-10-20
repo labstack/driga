@@ -191,11 +191,23 @@ func Render(w io.Writer, v any, opts RenderOpts) error {
 		}
 		multi := multipleMachines(ids)
 		fmt.Fprint(tw, machineHeading(multi))
-		fmt.Fprintln(tw, "MEMORY\tCOMPRESSED\tSWAP\tLOAD (1/5/15)\tCORES\tDISK FREE\tPRESSURE FREE")
+		fmt.Fprintln(tw, "MEMORY\tCOMPRESSED\tSWAP\tLOAD (1/5/15)\tCORES\tDISK FREE\tPRESSURE LEVEL / FREE")
 		for _, h := range hosts {
 			s := h.Sample
 			fmt.Fprint(tw, machinePrefix(multi, h.MachineID, h.MachineFresh))
-			fmt.Fprintf(tw, "%s/%s\t%s\t%s/%s\t%.1f/%.1f/%.1f\t%d\t%s\t%.1f\n", humanBytes(s.MemUsed), humanBytes(s.MemTotal), humanBytes(s.MemCompressed), humanBytes(s.SwapUsed), humanBytes(s.SwapTotal), s.Load1, s.Load5, s.Load15, s.Cores, humanBytes(s.DiskFree), s.PressureFree)
+			fmt.Fprintf(tw, "%s/%s\t%s\t%s/%s\t%.1f/%.1f/%.1f\t%d\t%s\t%s / %.1f\n", humanBytes(s.MemUsed), humanBytes(s.MemTotal), humanBytes(s.MemCompressed), humanBytes(s.SwapUsed), humanBytes(s.SwapTotal), s.Load1, s.Load5, s.Load15, s.Cores, humanBytes(s.DiskFree), s.PressureLevel, s.PressureFree)
+		}
+		for _, h := range hosts {
+			for _, rank := range []struct {
+				name string
+				apps []MachineApp
+			}{{"Top 10 apps by memory", h.TopMemory}, {"Top 10 apps by CPU", h.TopCPU}} {
+				fmt.Fprintln(tw, rank.name)
+				fmt.Fprintln(tw, "APP\tMEM\tMEASURE\tCPU")
+				for _, app := range rank.apps {
+					fmt.Fprintf(tw, "%s\t%s\t%s\t%.1f%%\n", cell(app.Name), humanBytes(app.Memory), app.MemoryMeasure, app.CPUPercent)
+				}
+			}
 		}
 		fmt.Fprint(tw, machineHeading(multi))
 		fmt.Fprintln(tw, "AGENT\tROLE\tMEM")

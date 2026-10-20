@@ -26,9 +26,13 @@ type Config struct {
 	Fleet           FleetConfig
 	Intake          IntakeConfig
 	Summaries       SummariesConfig
+	Machine         MachineConfig
 	Cleanup         CleanupConfig
 	Inbox           InboxConfig
 }
+
+// MachineConfig controls machine warnings; zero selects the documented default.
+type MachineConfig struct{ DiskFreeMin uint64 }
 
 type InboxConfig struct {
 	Alerts       string

@@ -3,20 +3,21 @@ package inbox
 import (
 	"context"
 	"fmt"
-	"path"
 	"runtime"
 	"strconv"
 	"strings"
 
+	"github.com/labstack/driga/internal/derive"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/platform"
 )
 
 type JumpOptions struct {
-	Tmux     string
-	Terminal bool
-	OS       string
-	Procs    func(context.Context) ([]model.Proc, error) // Optional process snapshot override for fixtures.
+	DrigaPath string
+	Tmux      string
+	Terminal  bool
+	OS        string
+	Procs     func(context.Context) ([]model.Proc, error) // Optional process snapshot override for fixtures.
 }
 
 // RunJump follows a local destination. Callers must reject remote items first.
@@ -97,12 +98,8 @@ func terminalApp(procs []model.Proc, tty string) string {
 		seen := map[int32]bool{}
 		for p.PID > 0 && !seen[p.PID] && !p.Zombie {
 			seen[p.PID] = true
-			if path.IsAbs(p.Exe) {
-				for dir := path.Dir(p.Exe); dir != "/"; dir = path.Dir(dir) {
-					if strings.HasSuffix(dir, ".app") {
-						return dir
-					}
-				}
+			if bundle := derive.AppBundle(p.Exe); bundle != "" {
+				return bundle
 			}
 			p = byPID[p.PPID]
 		}
@@ -117,6 +114,23 @@ func JumpCommands(j *model.InboxJump, opts JumpOptions) ([][]string, error) {
 		return nil, fmt.Errorf("item has no jump")
 	}
 	switch j.Kind {
+	case "machine":
+		bin := opts.DrigaPath
+		if bin == "" {
+			bin = "driga"
+		}
+		goos := opts.OS
+		if goos == "" {
+			goos = runtime.GOOS
+		}
+		if goos == "darwin" {
+			const script = "on run argv\ntell application \"Terminal\"\nactivate\ndo script (item 1 of argv)\nend tell\nend run"
+			return [][]string{{"osascript", "-e", script, Quote(bin) + " top --tab machine"}}, nil
+		}
+		if goos == "linux" {
+			return [][]string{{"x-terminal-emulator", "-e", bin, "top", "--tab", "machine"}}, nil
+		}
+		return nil, fmt.Errorf("machine jump unsupported on %s", goos)
 	case "tmux":
 		if j.Target != "" && j.Server != "" {
 			prefix := []string{"tmux", "-S", j.Server}

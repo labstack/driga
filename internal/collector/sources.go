@@ -149,7 +149,7 @@ func collectSources(ctx context.Context, d Deps, st *store.Store, p Plan, state 
 		refresh := p.Cwds && (state.cwdsAt.IsZero() || now.Sub(state.cwdsAt) >= time.Minute)
 		var pids []int32
 		for _, proc := range r.procs {
-			if proc.Agent != "" && (refresh || proc.Cwd == "") {
+			if refresh || (proc.Agent != "" && proc.Cwd == "") {
 				pids = append(pids, proc.PID)
 			}
 		}

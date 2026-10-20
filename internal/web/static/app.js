@@ -76,6 +76,18 @@
     }
     return pulses;
   }
+  function createMachineController(doc) {
+    let expanded = new Set();
+    const rows = () => Array.from(doc.querySelectorAll("[data-machine-app]"));
+    const key = row => {
+      const rank = row.closest("[data-machine-rank]").dataset;
+      return JSON.stringify([rank.machineId, rank.machineRank, row.dataset.machineApp]);
+    };
+    return {
+      capture() { expanded = new Set(rows().filter(row => row.open).map(key)); },
+      restore() { for (const row of rows()) row.open = expanded.has(key(row)); }
+    };
+  }
   function createInboxController(doc, viewport) {
     let expanded = new Set(), limit = 50, position = null;
     const allRows = () => Array.from(doc.querySelectorAll("[data-inbox-key]"));
@@ -127,11 +139,12 @@
       }
     };
   }
-  globalThis.DrigaConsole = Object.freeze({parseCommand, familyEvent, flowWireGeometry, observationPulses, transcriptSize, createInboxController});
+  globalThis.DrigaConsole = Object.freeze({parseCommand, familyEvent, flowWireGeometry, observationPulses, transcriptSize, createInboxController, createMachineController});
   if (typeof document === "undefined") return;
 
   const root = document.documentElement;
   const inboxUI = createInboxController(document, window);
+  const machineUI = createMachineController(document);
   const system = matchMedia("(prefers-color-scheme: light)");
   const phone = matchMedia("(max-width: 900px)");
   const css = name => getComputedStyle(root).getPropertyValue("--" + name).trim();
@@ -482,8 +495,8 @@
     renderTail(); charts.draw(); drawFlowWires(); refreshFlowObservations();
   }
   let restorePane = false;
-  document.addEventListener("htmx:beforeSwap", () => { restorePane = !!document.activeElement.closest("[data-pane]"); inboxUI.capture(); charts.dispose(); });
-  document.addEventListener("htmx:afterSwap", () => { refreshUI(); inboxUI.restore(); if (restorePane) focusPane(focused); });
+  document.addEventListener("htmx:beforeSwap", () => { restorePane = !!document.activeElement.closest("[data-pane]"); inboxUI.capture(); machineUI.capture(); charts.dispose(); });
+  document.addEventListener("htmx:afterSwap", () => { refreshUI(); inboxUI.restore(); machineUI.restore(); if (restorePane) focusPane(focused); });
   refreshUI();
   inboxUI.restore();
   if (document.fonts) document.fonts.ready.then(() => charts.draw());

@@ -16,10 +16,12 @@ import (
 )
 
 // TopCmd opens the interactive viewer using daemon data or live snapshots.
-type TopCmd struct{}
+type TopCmd struct {
+	Tab string `enum:"home,machine" default:"home" help:"Open directly to the Machine tab."`
+}
 
 // Run keeps the viewer and its optional collector within the same lifetime.
-func (TopCmd) Run(g *Globals) error {
+func (c TopCmd) Run(g *Globals) error {
 	cfg, err := config.Load(config.Path())
 	if err != nil {
 		return err
@@ -38,7 +40,7 @@ func (TopCmd) Run(g *Globals) error {
 		return err
 	}
 	defer closeChat()
-	opts := tui.Options{Chat: chatClient, ChatEphemeral: ephemeral, Machine: g.Machine, Project: g.Project, NoColor: g.NoColor, OpenCmd: cfg.OpenCmd, DataDir: config.DataDir(), Context: ctx}
+	opts := tui.Options{InitialTab: c.Tab, Chat: chatClient, ChatEphemeral: ephemeral, Machine: g.Machine, Project: g.Project, NoColor: g.NoColor, OpenCmd: cfg.OpenCmd, DataDir: config.DataDir(), Context: ctx}
 	opts.Tmux = os.Getenv("TMUX")
 	opts.JumpTerminal = cfg.Inbox.JumpTerminal
 	opts.MotionOff = cfg.Motion == "off"

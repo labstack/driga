@@ -284,9 +284,11 @@ type MemoryRow struct {
 	RSS       uint64 `json:"rss_bytes"`
 }
 
-// MachineView contains the most recent sample and top agent memory users.
+// MachineView contains host totals, whole-machine app rankings, and agent role totals.
 type MachineView struct {
 	MachineFresh
+	TopMemory []MachineApp        `json:"top_memory"`
+	TopCPU    []MachineApp        `json:"top_cpu"`
 	Machines  []MachineView       `json:"machines,omitempty"`
 	MachineID string              `json:"machine_id"`
 	Sample    model.MachineSample `json:"sample"`

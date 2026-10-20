@@ -17,6 +17,12 @@ func (m *app) jumpInbox(r tabRow) tea.Cmd {
 		m.status = m.machineName(r.machine) + ": " + m.status
 		return nil
 	}
+	if j.Kind == "machine" {
+		m.tab = 4
+		m.detail = false
+		m.rebuild()
+		return nil
+	}
 	commands, err := inbox.JumpCommands(j, inbox.JumpOptions{Tmux: m.opts.Tmux, Terminal: m.opts.JumpTerminal})
 	if err != nil {
 		m.status = err.Error()

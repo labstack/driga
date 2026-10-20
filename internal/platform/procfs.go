@@ -251,7 +251,7 @@ func (p procFS) context(ctx context.Context) context.Context {
 }
 
 func (p procFS) Machine(ctx context.Context) (model.MachineSample, error) {
-	s := model.MachineSample{TS: time.Now(), Cores: runtime.NumCPU()}
+	s := model.MachineSample{PressureLevel: "unknown", TS: time.Now(), Cores: runtime.NumCPU()}
 	if err := ctx.Err(); err != nil {
 		return s, err
 	}

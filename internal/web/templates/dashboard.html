@@ -209,7 +209,7 @@
 {{$p := .}}{{range $i, $row := .Rows}}
 <details class="inbox-row" data-row data-inbox-key="{{inboxKey .}}"{{if $p.Recent}} data-inbox-recent{{if ge $i 50}} hidden{{end}}{{end}}>
 <summary class="inbox-columns" role="row">
-<span role="cell" class="inbox-reason {{stateClass .Kind}}">{{if eq .Kind "waiting"}}[{{if .Reason}}{{.Reason}}{{else}}waiting{{end}}]{{else}}finished{{end}}</span>
+<span role="cell" class="inbox-reason {{stateClass .Kind}}">{{if eq .Kind "waiting"}}[{{if .Reason}}{{.Reason}}{{else}}waiting{{end}}]{{else if or (eq .Kind "low_disk") (eq .Kind "memory_pressure")}}{{friendly .Kind}}{{else}}finished{{end}}</span>
 <span role="cell" class="inbox-tool">{{if .Tool}}{{.Tool}}{{else}}—{{end}}</span>
 <span role="cell" class="inbox-age d">{{if eq .Kind "waiting"}}{{duration .Waited}}{{else}}{{relative .TS $p.ObservedAt}}{{end}}</span>
 {{if eq $p.Scope "all"}}<span role="cell" class="inbox-machine m" data-inbox-machine>{{.MachineName}}</span>{{end}}
@@ -219,7 +219,7 @@
 </summary>
 <div class="inbox-detail">
 <p>{{if .Title}}{{.Title}} · {{end}}{{.Summary}}{{if .Detail}} · {{.Detail}}{{end}}{{if .Stale}} · stale{{end}}{{if .AckPendingAt}} · acknowledgement pending{{end}}</p>
-{{with .Jump}}{{if .Cwd}}<dl class="inbox-cwd"><dt>cwd</dt><dd>{{.Cwd}}</dd></dl>{{end}}{{if .Command}}<div class="inbox-jump"><div class="inbox-copy-bar"><span class="d">Jump command</span><button type="button" data-inbox-copy>Copy</button><span data-inbox-copy-status role="status" aria-live="polite"></span></div><pre data-inbox-command tabindex="0" aria-label="Jump command" aria-readonly="true">{{.Command}}</pre></div>{{end}}{{if .URL}}<a href="{{.URL}}" rel="noopener noreferrer">Open agent</a>{{end}}{{end}}
+{{with .Jump}}{{if eq .Kind "machine"}}<a href="{{link "/machines" $p.Scope $p.All}}">Open Machine</a>{{end}}{{if .Cwd}}<dl class="inbox-cwd"><dt>cwd</dt><dd>{{.Cwd}}</dd></dl>{{end}}{{if .Command}}<div class="inbox-jump"><div class="inbox-copy-bar"><span class="d">Jump command</span><button type="button" data-inbox-copy>Copy</button><span data-inbox-copy-status role="status" aria-live="polite"></span></div><pre data-inbox-command tabindex="0" aria-label="Jump command" aria-readonly="true">{{.Command}}</pre></div>{{end}}{{if .URL}}<a href="{{.URL}}" rel="noopener noreferrer">Open agent</a>{{end}}{{end}}
 {{if .SessionID}}<a href="{{link (agentPath .SessionID) $p.Scope $p.All}}">Agent detail</a>{{end}}
 </div>
 </details>{{end}}
@@ -271,6 +271,14 @@
 </section>
 <section data-pane tabindex="0" class="pane">
 <div class="pt"><b>resource readings</b><span>latest stored samples</span></div>{{template "gauges" .}}
+{{range .Machine.Machines}}
+<article aria-label="Whole machine apps">
+<h3>{{.MachineName}} · Machine</h3>
+<p class="muted">OS pressure: {{.Sample.PressureLevel}} · Memory measures are labelled per process.</p>
+<dl class="metrics"><div><dt>compressed</dt><dd>{{bytes .Sample.MemCompressed}}</dd></div></dl>
+<div data-machine-rank="memory" data-machine-id="{{.MachineID}}"><h4>Top 10 apps by memory</h4>{{range .TopMemory}}{{template "machine-app" .}}{{else}}<p class="empty">No process readings.</p>{{end}}</div>
+<div data-machine-rank="cpu" data-machine-id="{{.MachineID}}"><h4>Top 10 apps by CPU</h4>{{range .TopCPU}}{{template "machine-app" .}}{{else}}<p class="empty">No process readings.</p>{{end}}</div>
+</article>{{end}}
 <h3>Agent memory
 </h3>{{range .Machine.Memory}}
 <div data-row tabindex="-1" class="item item-top"><span>{{.MachineName}} · {{.Agent}} / {{.Role}}</span><strong>{{bytes .RSS}}</strong>
@@ -303,3 +311,10 @@
 <p class="empty">No cleanup candidates available in this scope.
 </p>{{end}}
 </section>{{end}}
+
+{{define "machine-app"}}
+<details class="item machine-app" data-machine-app="{{.ID}}"><summary>{{.Name}} · {{bytes .Memory}} ({{.MemoryMeasure}}) · {{printf "%.1f" .CPUPercent}}% CPU</summary>
+{{range .Processes}}<div class="item"><p>PID {{.PID}} · <code>{{.Exe}}</code> · {{bytes .Memory}} ({{.MemoryMeasure}}) · {{printf "%.1f" .CPUPercent}}% CPU</p>
+{{with .Attribution}}<p class="muted">← {{.Project}} · session #{{.SessionID}} · proof: {{.Proof}}</p>{{else}}<p class="muted">Unattributed</p>{{end}}
+</div>{{end}}</details>
+{{end}}

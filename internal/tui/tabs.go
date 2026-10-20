@@ -16,6 +16,7 @@ import (
 )
 
 type tabRow struct {
+	app       *view.MachineApp
 	attention *view.Attention
 	cleanup   *cleanup.Candidate
 	machine   string
@@ -328,24 +329,10 @@ func (m *app) rebuild() {
 			add(tabRow{machine: r.MachineID, key: "orphan:" + r.MachineID + ":" + o.ID, cwd: o.Cwd, orphan: &o, cells: []string{"", o.ID, age, o.Signature, strconv.Itoa(o.ProcCount), "~" + humanBytes(o.RSSTotal), o.Cwd, strconv.FormatBool(o.Verified), strings.Join(o.Evidence, "; ")}})
 		}
 	case 4:
-		titles = []string{"", "METRIC / AGENT", "VALUE / ROLE", "MEM"}
-		weights = []int{2, 30, 28, 20}
-		for _, r := range m.snap.Machines.Rows {
-			add(tabRow{machine: r.MachineID, cells: []string{"", m.machineName(r.MachineID), r.State, m.machineAge(r.MachineID)}})
-		}
-		hosts := m.snap.Machine.Machines
-		if len(hosts) == 0 {
-			hosts = []view.MachineView{m.snap.Machine}
-		}
-		for _, host := range hosts {
-			s := host.Sample
-			for _, r := range [][3]string{{"memory", humanBytes(s.MemUsed) + "/" + humanBytes(s.MemTotal), ""}, {"compressed", humanBytes(s.MemCompressed), ""}, {"swap", humanBytes(s.SwapUsed) + "/" + humanBytes(s.SwapTotal), ""}, {"load (1/5/15)", fmt.Sprintf("%.1f / %.1f / %.1f", s.Load1, s.Load5, s.Load15), ""}, {"cores", strconv.Itoa(s.Cores), ""}, {"disk free", humanBytes(s.DiskFree), ""}, {"pressure free", fmt.Sprintf("%.1f", s.PressureFree), ""}} {
-				add(tabRow{machine: host.MachineID, cells: []string{"", r[0], r[1], r[2]}})
-			}
-		}
-		for _, r := range m.snap.Machine.Memory {
-			add(tabRow{machine: r.MachineID, cells: []string{"", r.Agent, r.Role, humanBytes(r.RSS)}})
-		}
+		titles = []string{"", "METRIC / APP / PROCESS", "CPU", "MEASURE / ATTRIBUTION", "MEM"}
+		weights = []int{2, 28, 8, 40, 12}
+		m.machineRows(add)
+
 	}
 	ids := map[string]bool{}
 	for _, r := range rows {

@@ -143,7 +143,7 @@ func NewServer(o Options) *sdk.Server {
 	register(s, o.CaptureText, "list_orphans", "Read orphan process candidates without signaling processes.", func(ctx context.Context, in machineInput) (view.Envelope, error) {
 		return o.Read(ctx, Query{Machine: in.Machine}, func(r view.Reader, f view.Filter, now time.Time) (any, error) { return view.Orphans(r, f, now) })
 	})
-	register(s, o.CaptureText, "get_machine", "Read machine health and agent memory use.", func(ctx context.Context, in machineInput) (view.Envelope, error) {
+	register(s, o.CaptureText, "get_machine", "Read machine totals, top apps by memory and CPU, processes, and proven session attribution.", func(ctx context.Context, in machineInput) (view.Envelope, error) {
 		return o.Read(ctx, Query{Machine: in.Machine}, func(r view.Reader, f view.Filter, now time.Time) (any, error) { return view.Machine(r, f, now) })
 	})
 	register(s, o.CaptureText, "list_machines", "Read cached fleet connection health, even when collection has stopped.", func(ctx context.Context, _ struct{}) (view.Envelope, error) {

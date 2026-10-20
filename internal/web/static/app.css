@@ -845,3 +845,6 @@ meter::-moz-meter-bar {
 }
 @keyframes flow-growth-ring { from { outline:2px solid var(--observation); outline-offset:1px; } to { outline:2px solid transparent; outline-offset:7px; } }
 @media (prefers-reduced-motion:reduce) { .flow-growth-ring { animation:none; } .flow-observed-pulse { display:none; } }
+
+.machine-app>summary:focus-visible { outline:1px solid var(--accent); outline-offset:3px; }
+.machine-app code { overflow-wrap:anywhere; }

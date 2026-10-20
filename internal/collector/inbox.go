@@ -254,7 +254,7 @@ func alertInbox(ctx context.Context, d Deps, st *store.Store) error {
 			if err := load("inbox_alert:", i.MachineID+":"+i.ID, seen); err != nil {
 				return err
 			}
-			sk := fmt.Sprintf("%s:%d", i.MachineID, i.SessionID)
+			sk := attention.AlertRepeatKey(i)
 			if err := load("inbox_alert_session:", sk, last); err != nil {
 				return err
 			}

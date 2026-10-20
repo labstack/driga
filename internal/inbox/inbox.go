@@ -185,6 +185,10 @@ func tmuxAttach(p Pane) string {
 
 // Policy is applied before persistence, again on exports and notifications.
 func Policy(i model.InboxItem, policy string) model.InboxItem {
+	if MachineWarning(i.Kind) {
+		i.Summary = scrub.Scrub(i.Summary)
+		return i
+	}
 	i.Tool = scrub.Snippet(i.Tool)
 	if policy == "none" {
 		i.Tool = ""
@@ -365,6 +369,20 @@ func PlanAlerts(items []model.InboxItem, sessions []model.Session, c config.Inbo
 	sort.SliceStable(items, func(i, j int) bool { return items[i].TS.Before(items[j].TS) })
 	var waiting []model.InboxItem
 	var notes []Notification
+	var health []model.InboxItem
+	flushHealth := func() {
+		if len(health) == 0 {
+			return
+		}
+		n := Notification{Kind: health[0].Kind, Title: "Machine needs attention", Sound: "Glass", ItemID: health[0].ID, MachineID: health[0].MachineID}
+		bodies := []string{}
+		for _, i := range health {
+			bodies = append(bodies, scrub.Scrub(i.Summary))
+		}
+		n.Body = strings.Join(bodies, " · ")
+		notes = append(notes, n)
+		health = nil
+	}
 	flush := func() {
 		if len(waiting) == 0 {
 			return
@@ -381,7 +399,7 @@ func PlanAlerts(items []model.InboxItem, sessions []model.Session, c config.Inbo
 	}
 	for _, i := range items {
 		key := i.MachineID + ":" + i.ID
-		if _, ok := seen[key]; ok {
+		if _, ok := seen[key]; ok && !MachineWarning(i.Kind) {
 			continue
 		}
 		// alert_after delays a wait's alert until it has lasted that long, so a
@@ -394,14 +412,21 @@ func PlanAlerts(items []model.InboxItem, sessions []model.Session, c config.Inbo
 		if c.Alerts == "off" || c.Alerts == "" || !open {
 			continue
 		}
-		if i.Kind != "waiting" && !(i.Kind == "finished" && c.Alerts == "all") {
+		if i.Kind != "waiting" && !MachineWarning(i.Kind) && !(i.Kind == "finished" && c.Alerts == "all") {
 			continue
 		}
-		sk := i.MachineID + ":" + strconv.FormatInt(i.SessionID, 10)
+		sk := AlertRepeatKey(i)
 		if prev, ok := last[sk]; ok && now.Sub(prev) < c.AlertRepeat {
 			continue
 		}
 		last[sk] = now
+		if MachineWarning(i.Kind) {
+			if len(health) > 0 && (i.MachineID != health[0].MachineID || i.TS.Sub(health[0].TS) > 3*time.Second) {
+				flushHealth()
+			}
+			health = append(health, i)
+			continue
+		}
 		if i.Kind == "finished" {
 			notes = append(notes, Notification{Kind: "finished", Title: "Finished", Body: text(i), Sound: "Pop", ItemID: i.ID, MachineID: i.MachineID})
 			continue
@@ -412,5 +437,17 @@ func PlanAlerts(items []model.InboxItem, sessions []model.Session, c config.Inbo
 		waiting = append(waiting, i)
 	}
 	flush()
+	flushHealth()
 	return notes
+}
+
+// MachineWarning identifies the two machine-only warning kinds.
+func MachineWarning(kind string) bool { return kind == "low_disk" || kind == "memory_pressure" }
+
+// AlertRepeatKey separates machine warnings from agent-session throttles.
+func AlertRepeatKey(i model.InboxItem) string {
+	if MachineWarning(i.Kind) {
+		return i.MachineID + ":health:" + i.Kind
+	}
+	return i.MachineID + ":" + strconv.FormatInt(i.SessionID, 10)
 }
