@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/labstack/driga/internal/config"
@@ -20,6 +21,7 @@ import (
 )
 
 const hookPayloadLimit = 1 << 20
+const hookTranscriptLimit = 256 << 10
 
 // HookCmd captures an agent hook quickly, without the store or process scans.
 type HookCmd struct {
@@ -84,6 +86,7 @@ func (h HookCmd) append(g *Globals) error {
 		CodexMessage     string          `json:"last-assistant-message"`
 		Type             string          `json:"type"`
 		NotificationType string          `json:"notification_type"`
+		TranscriptPath   string          `json:"transcript_path"`
 		Tool             string          `json:"tool_name"`
 		ToolInput        json.RawMessage `json:"tool_input"`
 	}
@@ -114,12 +117,20 @@ func (h HookCmd) append(g *Globals) error {
 		hookLogError(err)
 		cfg = config.Default()
 	}
+	if ev.Tool == "" && h.Adapter == "claude" && ev.Event == "Notification" && ev.NotificationType == "permission_prompt" {
+		tool, input := permissionTranscript(payload.TranscriptPath)
+		ev.Tool = scrub.Snippet(tool)
+		if tool != "" {
+			payload.ToolInput = input
+		}
+	}
 	if cfg.CaptureSnippets() {
 		ev.Message = scrub.Snippet(message)
 		var input struct {
 			Command     string `json:"command"`
 			Question    string `json:"question"`
 			Description string `json:"description"`
+			FilePath    string `json:"file_path"`
 		}
 		// MCP tools may send any JSON value. Opaque input cannot suppress the
 		// metadata-only permission event or manufacture an approval decision.
@@ -130,6 +141,9 @@ func (h HookCmd) append(g *Globals) error {
 		}
 		if detail == "" {
 			detail = input.Description
+		}
+		if detail == "" {
+			detail = input.FilePath
 		}
 		if detail == "" {
 			detail = message
@@ -180,9 +194,8 @@ func hookLogError(err error) {
 	slog.New(logfile.TextHandler(w)).Error("hook capture failed", "event", "hook_failed", "err", scrub.Snippet(err.Error()))
 }
 
-// permissionTool reads the tool name from Claude's permission message
-// ("Claude needs your permission to use Bash"); the Notification payload has
-// no tool_name. Anything else yields no tool, never a guess.
+// permissionTool reads the tool name from Claude's older permission message
+// ("Claude needs your permission to use Bash").
 func permissionTool(message string) string {
 	const marker = "needs your permission to use "
 	i := strings.Index(message, marker)
@@ -194,4 +207,56 @@ func permissionTool(message string) string {
 		return ""
 	}
 	return name
+}
+
+// permissionTranscript finds the last tool use without a later result in a
+// bounded tail. Transcript failures must not interfere with the agent's hook.
+func permissionTranscript(path string) (string, json.RawMessage) {
+	// Nonblocking open also handles symlinks to FIFOs without waiting for a writer.
+	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		return "", nil
+	}
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil || !info.Mode().IsRegular() {
+		return "", nil
+	}
+	start := max(int64(0), info.Size()-hookTranscriptLimit)
+	data, err := io.ReadAll(io.NewSectionReader(f, start, min(info.Size(), hookTranscriptLimit)))
+	if err != nil {
+		return "", nil
+	}
+	if start > 0 {
+		_, data, _ = bytes.Cut(data, []byte{'\n'})
+	}
+	lines := bytes.Split(data, []byte{'\n'})
+	answered := map[string]bool{}
+	for i := len(lines) - 1; i >= 0; i-- {
+		var line struct {
+			Type    string `json:"type"`
+			Message struct {
+				Content []struct {
+					Type      string          `json:"type"`
+					ID        string          `json:"id"`
+					Name      string          `json:"name"`
+					Input     json.RawMessage `json:"input"`
+					ToolUseID string          `json:"tool_use_id"`
+				} `json:"content"`
+			} `json:"message"`
+		}
+		if json.Unmarshal(lines[i], &line) != nil {
+			continue
+		}
+		for j := len(line.Message.Content) - 1; j >= 0; j-- {
+			block := line.Message.Content[j]
+			if line.Type == "user" && block.Type == "tool_result" {
+				answered[block.ToolUseID] = true
+			}
+			if line.Type == "assistant" && block.Type == "tool_use" && block.ID != "" && block.Name != "" && !answered[block.ID] {
+				return block.Name, block.Input
+			}
+		}
+	}
+	return "", nil
 }
