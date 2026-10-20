@@ -6,9 +6,56 @@ import (
 	"testing"
 	"time"
 
+	"github.com/labstack/driga/internal/derive"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/store"
 )
+
+func TestMachineLeakFieldsCLIParity(t *testing.T) {
+	st, _ := fixture(t)
+	t.Setenv("PATH", t.TempDir())
+	at := time.Date(2020, 1, 1, 8, 12, 0, 0, time.UTC)
+	ps := []model.Proc{{PID: 100, Cmdline: "codex app-server", StartTime: at.Add(-time.Hour)}}
+	for i := range 3 {
+		now := at.Add(time.Duration(i) * 80 * time.Minute)
+		ps = append(ps, model.Proc{PID: int32(i + 1), PPID: 100, Cmdline: "node /opt/codegraph/dist/index.js", StartTime: now, RSS: 100})
+		v := derive.MCPServers(ps, nil, now)
+		if err := st.Tx(context.Background(), func(tx *store.Tx) error {
+			if err := tx.ObserveMCP(now, v.Samples); err != nil {
+				return err
+			}
+			return tx.ReplaceProcs(ps)
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	tc := toolCase{"get_machine", map[string]any{"machine": "local", "limit": 500}, []string{"machine", "--machine", "local"}}
+	got := call(t, connect(t, globals()), tc)
+	var tool, cli map[string]any
+	if err := json.Unmarshal(canonical(t, got.StructuredContent), &tool); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(cliJSON(t, tc.cli), &cli); err != nil {
+		t.Fatal(err)
+	}
+	servers := func(w map[string]any) map[string]any {
+		return w["data"].(map[string]any)["mcp_servers"].(map[string]any)
+	}
+	a, b := servers(tool), servers(cli)
+	if string(canonical(t, a["trends"])) != string(canonical(t, b["trends"])) {
+		t.Fatalf("trend parity: %+v %+v", a, b)
+	}
+	trend := a["trends"].([]any)[0].(map[string]any)
+	if trend["state"] != "leaking" || trend["started_count"] != float64(2) || trend["ended_count"] != float64(0) || trend["net_growth"] != float64(2) || trend["rate_per_hour"] != .75 || trend["first_sample"] != "2020-01-01T08:12:00Z" || trend["last_sample"] != "2020-01-01T10:52:00Z" {
+		t.Fatal(trend)
+	}
+	for _, field := range []string{"commands", "pileups"} {
+		row := a[field].([]any)[0].(map[string]any)
+		if string(canonical(t, row["trends"])) != string(canonical(t, a["trends"])) {
+			t.Fatal(row)
+		}
+	}
+}
 
 func TestMachineWholeHostCLIParity(t *testing.T) {
 	st, id := fixture(t)

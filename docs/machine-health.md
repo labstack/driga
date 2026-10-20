@@ -114,6 +114,44 @@ cleanup eligibility.
 Advice is to restart the named host app/session and scope the MCP server per
 project. This feature never signals a process. No cleanup action is added.
 
+### Observed trends
+
+The collector records the first successful process sample of each minute in
+`mcp_minutes`, reusing the existing scan and logical server/launcher grouping.
+Rows contain machine, host PID and start time, normalized command key, server
+count, measured footprint, and each logical server's PID/start identity. Missing
+commands receive one zero sample, including when their host exits. Failed scans
+and machine-only passes add no process evidence. Restarting a host starts a new
+history, even if its PID is reused; restarting the collector preserves history.
+
+`mcp_servers.trends` reports every retained host/command history. Each command
+and pile-up also has `trends` for its hosts. Fields include `started_count`,
+`ended_count`, `net_growth`, `first_sample`, `last_sample`, `rate_per_hour`, and
+`identity_complete`. The first retained sample is a baseline: processes already
+present do not count as additions. Subsequent membership changes count starts
+and ends, so replacing a server at a flat count is still **churning**.
+**Leaking** means at least two distinct observed additions and no observed ends,
+with known host and server starts throughout the window. One addition is not
+enough. Other histories are **steady**; incomplete identities are labelled in
+details and cannot establish a leak. These are sampled observations: processes
+that start and end between minute samples are outside this evidence.
+
+The rate is observed additions divided by the time between first and last
+samples, never the host's lifetime or time since the reader opened. Machine
+rows show `leaking ↑ N/h since HH:MM`, `churning`, or `steady`; details give
+the full timestamps and counts. Command rollups select the largest leaking
+host's marker, otherwise churning or steady; they never sum unrelated hosts'
+rates or windows. Critical-pressure advice names the largest leak by measured
+footprint, with its cadence and explicit observed window.
+
+Retention matches the other per-minute observations: 30 days in a daemon,
+and the current minute plus 59 preceding minutes in disposable snapshot mode.
+Pruned evidence is not carried forward into the rate or classification. A
+fresh snapshot has only a baseline and cannot establish a leak. History reads
+stream samples rather than loading all retained rows into memory. These local
+observations are not added to the fleet wire protocol; peer reports only show
+trends when that machine has stored sample evidence.
+
 ## Early warnings
 
 `[machine] disk_free_min` accepts an integer byte string or KiB/MiB/GiB suffix,

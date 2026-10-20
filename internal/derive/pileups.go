@@ -17,33 +17,30 @@ import (
 // MCPServerView is derived solely from one existing process table. A roll-up
 // includes singles; only duplicate commands within one host are findings.
 type MCPServerView struct {
-	Pileups  []MCPPileup  `json:"pileups"`
-	Commands []MCPCommand `json:"commands"`
+	Pileups  []MCPPileup       `json:"pileups"`
+	Commands []MCPCommand      `json:"commands"`
+	Trends   []MCPTrend        `json:"trends"`
+	Samples  []model.MCPMinute `json:"-"`
 }
 
-type MCPHost struct {
-	PID       int32         `json:"pid"`
-	Name      string        `json:"name"`
-	Exe       string        `json:"exe"`
-	Cwd       string        `json:"cwd"`
-	StartedAt time.Time     `json:"started_at"`
-	Age       time.Duration `json:"age_ns"`
-}
+type MCPHost = model.MCPHost
 
 type MCPCommand struct {
-	Name             string    `json:"name"`
-	Command          string    `json:"command"`
-	Commands         []string  `json:"commands"`
-	Installs         []string  `json:"installs"`
-	IncludesLauncher bool      `json:"includes_launcher"`
-	DuplicateCount   int       `json:"duplicate_count"`
-	Count            int       `json:"count"`
-	Memory           uint64    `json:"memory_bytes"`
-	MemoryMeasure    string    `json:"memory_measure"`
-	OldestStart      time.Time `json:"oldest_start"`
-	NewestStart      time.Time `json:"newest_start"`
-	HostCount        int       `json:"host_count"`
-	PileupCount      int       `json:"pileup_count"`
+	Key              string     `json:"command_key"`
+	Trends           []MCPTrend `json:"trends"`
+	Name             string     `json:"name"`
+	Command          string     `json:"command"`
+	Commands         []string   `json:"commands"`
+	Installs         []string   `json:"installs"`
+	IncludesLauncher bool       `json:"includes_launcher"`
+	DuplicateCount   int        `json:"duplicate_count"`
+	Count            int        `json:"count"`
+	Memory           uint64     `json:"memory_bytes"`
+	MemoryMeasure    string     `json:"memory_measure"`
+	OldestStart      time.Time  `json:"oldest_start"`
+	NewestStart      time.Time  `json:"newest_start"`
+	HostCount        int        `json:"host_count"`
+	PileupCount      int        `json:"pileup_count"`
 }
 
 type MCPPileup struct {
@@ -194,6 +191,7 @@ func MCPServers(procs []model.Proc, sigs *signatures.Set, now time.Time) MCPServ
 		command string
 	}
 	groups := map[key]*MCPPileup{}
+	members := map[key][]model.ProcessIdentity{}
 	for _, p := range procs {
 		if p.Zombie || p.PID <= 0 {
 			continue
@@ -218,13 +216,14 @@ func MCPServers(procs []model.Proc, sigs *signatures.Set, now time.Time) MCPServ
 		k := key{host, command}
 		g := groups[k]
 		if g == nil {
-			g = &MCPPileup{MCPCommand: MCPCommand{Name: d.name, HostCount: 1}, Host: hosts[host]}
+			g = &MCPPileup{MCPCommand: MCPCommand{Key: command, Name: d.name, HostCount: 1}, Host: hosts[host]}
 			groups[k] = g
 		}
 		if d.name < g.Name {
 			g.Name = d.name
 		}
 		addMCPProcess(&g.MCPCommand, p)
+		members[k] = append(members[k], model.ProcessIdentity{PID: p.PID, StartedAt: p.StartTime})
 		addMCPEvidence(&g.MCPCommand, p, d)
 		cur := p
 		for collapsed[cur.PPID] == cur.PID {
@@ -239,6 +238,8 @@ func MCPServers(procs []model.Proc, sigs *signatures.Set, now time.Time) MCPServ
 	}
 	rollups := map[string]*MCPCommand{}
 	for k, g := range groups {
+		sort.Slice(members[k], func(i, j int) bool { return members[k][i].PID < members[k][j].PID })
+		result.Samples = append(result.Samples, model.MCPMinute{At: now, Host: g.Host, Key: k.command, Name: g.Name, Count: g.Count, Footprint: g.Memory, Members: members[k]})
 		finishMCPEvidence(&g.MCPCommand)
 		g.DuplicateCount = max(0, g.Count-1)
 		if g.Count > 1 {
@@ -248,7 +249,7 @@ func MCPServers(procs []model.Proc, sigs *signatures.Set, now time.Time) MCPServ
 		}
 		r := rollups[k.command]
 		if r == nil {
-			r = &MCPCommand{Name: g.Name}
+			r = &MCPCommand{Key: k.command, Name: g.Name}
 			rollups[k.command] = r
 		}
 		if g.Name < r.Name {
@@ -286,6 +287,13 @@ func MCPServers(procs []model.Proc, sigs *signatures.Set, now time.Time) MCPServ
 			return a.Host.PID < b.Host.PID
 		}
 		return less(a.MCPCommand, b.MCPCommand)
+	})
+	sort.Slice(result.Samples, func(i, j int) bool {
+		a, b := result.Samples[i], result.Samples[j]
+		if a.Host.PID != b.Host.PID {
+			return a.Host.PID < b.Host.PID
+		}
+		return a.Key < b.Key
 	})
 	return result
 }

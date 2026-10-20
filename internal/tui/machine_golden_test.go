@@ -28,11 +28,23 @@ func TestMachineGoldenFrames(t *testing.T) {
 				src.snap.Machine = view.MachineView{Sample: model.MachineSample{PressureLevel: "critical", MemUsed: 4 << 30, MemCompressed: 1 << 30, MemTotal: 8 << 30, SwapUsed: 1 << 30, SwapTotal: 2 << 30, DiskFree: 12 << 30, Cores: 4}, TopMemory: []view.MachineApp{sampleApp}, TopCPU: []view.MachineApp{sampleApp}}
 				src.snap.Machine.Sample.TS = src.snap.ObservedAt
 				at := src.snap.ObservedAt
-				src.snap.Machine.MCPServers = derive.MCPServers([]model.Proc{
+				ps := []model.Proc{
 					{PID: 10, Cmdline: "codex app-server", StartTime: at.Add(-31 * time.Hour)},
-					{PID: 11, PPID: 10, Cmdline: "node /opt/codegraph/dist/index.js", RSS: 100 << 20, StartTime: at.Add(-time.Hour)},
+					{PID: 11, PPID: 10, Cmdline: "node /opt/codegraph/dist/index.js", RSS: 100 << 20, StartTime: at.Add(-160 * time.Minute)},
 					{PID: 12, PPID: 10, Cmdline: "node /opt/codegraph/dist/index.js", RSS: 100 << 20, StartTime: at},
-				}, nil, at)
+					{PID: 13, PPID: 10, Cmdline: "node /opt/codegraph/dist/index.js", RSS: 100 << 20, StartTime: at.Add(-80 * time.Minute)},
+				}
+				trends := derive.NewMCPTrendBuilder()
+				for i, count := range []int{2, 3, 4} {
+					// PID 12 starts last, so keep chronological membership here.
+					series := []model.Proc{ps[0], ps[1], ps[3], ps[2]}
+					v := derive.MCPServers(series[:count], nil, at.Add(time.Duration(i-2)*80*time.Minute))
+					for _, s := range v.Samples {
+						trends.Add(s)
+					}
+				}
+				src.snap.Machine.MCPServers = derive.MCPServers(ps, nil, at)
+				derive.ApplyMCPTrends(&src.snap.Machine.MCPServers, trends.Trends())
 				src.snap.Summary.Sample = src.snap.Machine.Sample
 				m := setup(t, src, Options{InitialTab: "machine"}).(*app)
 				if m.tab != 4 {

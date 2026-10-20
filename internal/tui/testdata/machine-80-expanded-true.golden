@@ -13,8 +13,8 @@ swap ███░░░ 50%   load 0.0/4   disk 12.0G
   cores                          4                                              
   disk free                      12.0G                                          
   MCP servers                    enter details · read-only                      
-  codegraph mcp  2 servers · 200.0M · 1 hosts · 1 duplicates                    
-  codegraph mcp pile-up   2      codex app-server PID 10 · 31h0m0s 200.0M       
+  codegraph mcp  3 servers · 300.0M · leaking ↑ 0.75/h since 02:20 · 1 hosts · …
+  codegraph mcp pile-up   3      codex app-server PID 10 · 31h0m0s 300.0M       
   Top 10 apps by memory          → expand · enter details                       
 › ▾ Browser               70.0%  physical_footprint                2.0G         
     42 worker             70.0%  ← fixture · session #251          2.0G         

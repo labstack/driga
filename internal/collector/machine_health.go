@@ -53,12 +53,17 @@ func memoryPressureInbox(tx *store.Tx, s model.MachineSample, now time.Time, pro
 	if count < 2 {
 		return nil
 	}
+	trends := derive.NewMCPTrendBuilder()
+	if err := tx.ScanMCPMinutes(now, func(s model.MCPMinute) error { trends.Add(s); return nil }); err != nil {
+		return err
+	}
+	summary := memoryPressureSummary(processSamples, now, trends.Trends())
 	active, err := tx.Meta("machine:pressure_active")
 	if err != nil && !errors.Is(err, store.ErrNotFound) {
 		return err
 	}
 	if active == "1" {
-		return tx.RefreshMachineWarning("memory_pressure", memoryPressureSummary(processSamples, now), machineJump())
+		return tx.RefreshMachineWarning("memory_pressure", summary, machineJump())
 	}
 	raw, err = tx.Meta("machine:pressure_episode")
 	if err != nil && !errors.Is(err, store.ErrNotFound) {
@@ -66,7 +71,7 @@ func memoryPressureInbox(tx *store.Tx, s model.MachineSample, now time.Time, pro
 	}
 	episode, _ := strconv.ParseUint(raw, 10, 64)
 	episode++
-	item := model.InboxItem{ID: fmt.Sprintf("memory_pressure:%d", episode), Kind: "memory_pressure", TS: now, Summary: memoryPressureSummary(processSamples, now), Jump: machineJump()}
+	item := model.InboxItem{ID: fmt.Sprintf("memory_pressure:%d", episode), Kind: "memory_pressure", TS: now, Summary: summary, Jump: machineJump()}
 	if err := tx.UpsertInboxItem(item); err != nil {
 		return err
 	}
@@ -76,13 +81,31 @@ func memoryPressureInbox(tx *store.Tx, s model.MachineSample, now time.Time, pro
 	return tx.SetMeta("machine:pressure_active", "1")
 }
 
-func memoryPressureSummary(samples [][]model.Proc, now time.Time) string {
+func memoryPressureSummary(samples [][]model.Proc, now time.Time, trends []derive.MCPTrend) string {
 	summary := "Critical memory pressure for two samples. Driga can show the largest apps by memory and CPU in Machine."
 	if len(samples) > 0 {
 		servers := derive.MCPServers(samples[0], nil, now)
+		derive.ApplyMCPTrends(&servers, trends)
 		if len(servers.Pileups) > 0 {
 			p := servers.Pileups[0]
 			summary += fmt.Sprintf(" MCP pile-ups: %d groups; largest %s (%d processes, %.1f GiB). %s", len(servers.Pileups), p.Name, p.Count, float64(p.Memory)/(1<<30), p.Advice)
+		}
+		var largest *derive.MCPTrend
+		for _, c := range servers.Commands {
+			for _, t := range c.Trends {
+				if t.State == "leaking" && (largest == nil || t.Memory > largest.Memory) {
+					largest = &t
+				}
+			}
+		}
+		if largest != nil {
+			t := *largest
+			interval := 60 / t.RatePerHour
+			cadence := fmt.Sprintf("%.0f min", interval)
+			if interval < 1 {
+				cadence = fmt.Sprintf("%.0f sec", interval*60)
+			}
+			summary += fmt.Sprintf(" Largest MCP leak: %s PID %d adds about 1 %s every %s, none closed since %s (observed through %s; window starts %s; %.2g/h). Restart the named host app/session.", t.Host.Name, t.Host.PID, t.Name, cadence, t.FirstSample.In(time.Local).Format("15:04"), t.LastSample.Format(time.RFC3339), t.FirstSample.Format(time.RFC3339), t.RatePerHour)
 		}
 	}
 	return summary

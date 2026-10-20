@@ -32,6 +32,7 @@ type Reader interface {
 	Samples(time.Time) ([]model.MachineSample, error)
 	EventCounts(time.Time, time.Time) ([]store.EventCount, error)
 	ObservationMinutes(int64, time.Time) ([]store.ObservationMinute, error)
+	ScanMCPMinutes(time.Time, func(model.MCPMinute) error) error
 	Sources() ([]model.SourceStatus, error)
 	Gaps(time.Time) ([]model.Gap, error)
 }
