@@ -1,6 +1,9 @@
 package view
 
 import (
+	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -113,6 +116,35 @@ func TestFlowMockTokens(t *testing.T) {
 		}
 		if !found {
 			t.Error("missing console token", want.Name)
+		}
+	}
+}
+
+// Web assets read console tokens. A legacy-only token keeps its light value
+// under the console's dark palette, so every variable they use must be here.
+func TestWebAssetsUseConsoleTokens(t *testing.T) {
+	console := map[string]bool{}
+	for _, tok := range consoleTokens {
+		console[tok.Name] = true
+	}
+	legacy := map[string]bool{}
+	for _, tok := range themeTokens {
+		legacy[tok.Name] = true
+	}
+	files, err := filepath.Glob("../web/static/*.[cj]s*")
+	if err != nil || len(files) == 0 {
+		t.Fatalf("static assets: %v %v", files, err)
+	}
+	ref := regexp.MustCompile(`var\(--([a-z0-9-]+)`)
+	for _, f := range files {
+		b, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, m := range ref.FindAllStringSubmatch(string(b), -1) {
+			if legacy[m[1]] && !console[m[1]] {
+				t.Errorf("%s uses --%s, which has no console value", filepath.Base(f), m[1])
+			}
 		}
 	}
 }
