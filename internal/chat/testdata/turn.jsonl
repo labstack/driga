@@ -1,0 +1,8 @@
+{"type":"system","subtype":"init","session_id":"fixture-session","mcp_servers":[{"name":"driga","status":"connected"}],"tools":["mcp__driga__get_summary"]}
+{"type":"stream_event","session_id":"fixture-session","event":{"type":"message_start","message":{"role":"assistant","content":[]}}}
+{"type":"stream_event","session_id":"fixture-session","event":{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}}
+{"type":"stream_event","session_id":"fixture-session","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello "}}}
+{"type":"stream_event","session_id":"fixture-session","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"world"}}}
+{"type":"stream_event","session_id":"fixture-session","event":{"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"tool-fixture","name":"mcp__driga__get_summary","input":{}}}}
+{"type":"assistant","session_id":"fixture-session","message":{"role":"assistant","content":[{"type":"text","text":"Hello world"},{"type":"tool_use","id":"tool-fixture","name":"mcp__driga__get_summary","input":{}}]}}
+{"type":"result","subtype":"success","session_id":"fixture-session","is_error":false,"result":"Hello world","num_turns":1}

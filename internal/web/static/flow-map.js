@@ -106,6 +106,9 @@
   function rowSelect(id,scroll=true) {
     selected=id;
     for(const el of root.querySelectorAll("[data-map-row]")){const on=el.dataset.mapRow===String(id);el.classList.toggle("selected",on);el.setAttribute("aria-selected",String(on));if(on&&scroll)el.scrollIntoView({block:"nearest"});}
+    root.dataset.selectedSession=String(id);
+    const current=[data.lead,...(data.children||[])].find(n=>n?.id===id);root.dataset.selectedMachine=current?.machine_id||"";
+    document.dispatchEvent(new CustomEvent("driga:session-selected",{detail:{id}}));
     detail();
   }
   function detail() {
@@ -250,6 +253,7 @@
     const i=geo.rows.findIndex(r=>r.node.id===selected),delta=key==="j"||key==="ArrowDown"?1:-1;
     if(geo.rows.length)rowSelect(geo.rows[(i+delta+geo.rows.length)%geo.rows.length].node.id);
   },true);
+  document.addEventListener("driga:select-session",event=>{if(!root||!data)return;const id=Number(event.detail.id);const node=[data.lead,...(data.children||[])].find(n=>n?.id===id);if(node){if(!geo.rows.some(r=>r.node.id===id))expanded=true;selected=id;render();rowSelect(id);}});
   document.addEventListener("driga:flow-refresh",fetchFlow);document.addEventListener("htmx:afterSwap",mount);
   let resizeTimer;window.addEventListener("resize",()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{if(data)render();},100);});
   const clockTimer=setInterval(()=>{if(!root)return;for(const el of root.querySelectorAll("[data-head-at]"))el.textContent="as of "+age(el.dataset.headAt);for(const el of root.querySelectorAll("[data-wait-since]"))el.textContent=duration(Date.now()-stamp(el.dataset.waitSince));},1000);

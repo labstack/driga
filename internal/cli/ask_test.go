@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/labstack/driga/internal/chat"
+	"github.com/labstack/driga/internal/config"
 	"github.com/labstack/driga/internal/store"
 )
 
@@ -36,7 +38,11 @@ echo '{"type":"result","result":"answer","is_error":false}'`)
 		t.Fatalf("args=%q", args)
 	}
 	mcpPath := args[5]
-	want := []string{"-p", "--setting-sources", "", "--strict-mcp-config", "--mcp-config", mcpPath, "--tools", "", "--allowedTools", "mcp__driga__*", "--no-session-persistence", "--name", "driga-internal", "--output-format", "stream-json", "--verbose"}
+	tools := make([]string, len(chat.ReadTools))
+	for i, name := range chat.ReadTools {
+		tools[i] = "mcp__driga__" + name
+	}
+	want := []string{"-p", "--setting-sources", "", "--strict-mcp-config", "--mcp-config", mcpPath, "--tools", "", "--allowedTools", strings.Join(tools, ","), "--name", "driga-internal", "--output-format", "stream-json", "--verbose", "--include-partial-messages"}
 	if !reflect.DeepEqual(args, want) {
 		t.Fatalf("args=%q want=%q", args, want)
 	}
@@ -62,12 +68,12 @@ echo '{"type":"result","result":"answer","is_error":false}'`)
 	if err := json.Unmarshal(content, &got); err != nil {
 		t.Fatal(err)
 	}
-	expected := map[string]any{"mcpServers": map[string]any{"driga": map[string]any{"command": executable, "args": []any{"mcp"}}}}
+	expected := map[string]any{"mcpServers": map[string]any{"driga": map[string]any{"command": executable, "args": []any{"mcp", "--chat"}, "env": map[string]any{"DRIGA_DATA_DIR": config.DataDir(), "DRIGA_CONFIG": config.Path(), "DRIGA_SPOOL_DIR": config.SpoolDir()}}}}
 	if !reflect.DeepEqual(got, expected) {
 		t.Fatalf("MCP config=%s", content)
 	}
 	stdin, err := os.ReadFile(record + ".stdin")
-	if err != nil || string(stdin) != "where is fixture?" {
+	if err != nil || !strings.HasSuffix(string(stdin), "User question:\nwhere is fixture?") {
 		t.Fatal(string(stdin), err)
 	}
 }
@@ -196,5 +202,16 @@ func TestAskBadStreamAndCleanup(t *testing.T) {
 				t.Fatal("temporary config left", entries, err)
 			}
 		})
+	}
+}
+
+func TestAskPrintsCitationsAsSessionNumbers(t *testing.T) {
+	readEnv(t)
+	fakeClaude(t, claudeHelp, `
+echo '`+askInit+`'
+echo '{"type":"result","result":"Waiting: [[session:207]] and [[session:2]].","is_error":false}'`)
+	out, _ := readRun(t, "ask", "what needs me?")
+	if !strings.Contains(out, "Waiting: #207 and #2.") || strings.Contains(out, "[[") {
+		t.Fatalf("out=%q", out)
 	}
 }

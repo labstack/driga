@@ -10,9 +10,11 @@ import (
 	"time"
 
 	"charm.land/bubbles/v2/table"
+	"charm.land/bubbles/v2/textarea"
 	"charm.land/bubbles/v2/textinput"
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
+	"github.com/labstack/driga/internal/chat"
 	"github.com/labstack/driga/internal/cleanup"
 	"github.com/labstack/driga/internal/config"
 	"github.com/labstack/driga/internal/derive"
@@ -22,33 +24,50 @@ import (
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/platform"
 	"github.com/labstack/driga/internal/spool"
+	"github.com/labstack/driga/internal/store"
 	"github.com/labstack/driga/internal/view"
 )
 
 // Options configures scope, appearance, and injectable action dependencies.
 type Options struct {
-	MotionOff    bool
-	Tmux         string
-	JumpTerminal bool
-	Machine      string
-	Project      string
-	NoColor      bool
-	OpenCmd      string
-	TermProgram  string
-	Now          func() time.Time
-	Exec         func([]string) error
-	Kill         func(context.Context, model.Orphan, []int32, bool) (kill.Result, error)
-	Spool        func(model.HookEvent) error
-	Summarize    func(context.Context, string) error
-	CleanupList  func(context.Context) ([]cleanup.Candidate, error)
-	CleanupApply func(context.Context, cleanup.Candidate) (cleanup.Result, error)
-	DataDir      string
-	Context      context.Context
+	Chat          chat.Client
+	ChatEphemeral bool
+	MotionOff     bool
+	Tmux          string
+	JumpTerminal  bool
+	Machine       string
+	Project       string
+	NoColor       bool
+	OpenCmd       string
+	TermProgram   string
+	Now           func() time.Time
+	Exec          func([]string) error
+	Kill          func(context.Context, model.Orphan, []int32, bool) (kill.Result, error)
+	Spool         func(model.HookEvent) error
+	Summarize     func(context.Context, string) error
+	CleanupList   func(context.Context) ([]cleanup.Candidate, error)
+	CleanupApply  func(context.Context, cleanup.Candidate) (cleanup.Result, error)
+	DataDir       string
+	Context       context.Context
 	// LookupTmux resolves an ancestor pane PID to its tmux session.
 	LookupTmux func(context.Context, []int32) (string, error)
 }
 
 type app struct {
+	chatGeneration uint64
+	chatActive     bool
+	chatInput      textarea.Model
+	chatContext    chat.Context
+	chatID         string
+	chatStatus     string
+	chatMessages   []store.ChatMessage
+	chatHistory    []store.Conversation
+	chatDrafts     []string
+	chatOffset     int
+	chatEphemeral  bool
+	chatTools      bool
+	chatPolling    bool
+
 	flow             view.FlowView
 	flowID           int64
 	flowMinutes      int
@@ -71,7 +90,7 @@ type app struct {
 	pollPending      bool
 	version          int64
 	tab              int
-	cursors          [8]int
+	cursors          [9]int
 	homeOffset       int
 	homeNeedsTop     int
 	cleanupRequested bool
@@ -154,7 +173,7 @@ func New(src Source, opts Options) tea.Model {
 	input.Prompt = "/ "
 	input.Placeholder = "filter"
 	input.SetStyles(textinput.Styles{})
-	m := &app{tab: homeTab, machineScope: opts.Machine, src: src, opts: opts, width: 80, height: 24, expanded: map[string]bool{}, filter: input, table: table.New(table.WithFocused(true)), viewport: viewport.New()}
+	m := &app{chatInput: newChatInput(), chatEphemeral: opts.ChatEphemeral, tab: homeTab, machineScope: opts.Machine, src: src, opts: opts, width: 80, height: 24, expanded: map[string]bool{}, filter: input, table: table.New(table.WithFocused(true)), viewport: viewport.New()}
 	m.rebuild()
 	return m
 }
@@ -216,6 +235,53 @@ func heartbeat(dir string, now time.Time) error {
 
 func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case chatStateMsg:
+		if msg.generation != m.chatGeneration {
+			if m.tab == chatTab {
+				return m, m.readChat()
+			}
+			m.chatPolling = false
+			return m, nil
+		}
+		m.chatActive = msg.state.Active
+		if msg.err != nil {
+			m.chatStatus = msg.err.Error()
+			m.chatPolling = false
+			return m, nil
+		}
+		m.chatID = msg.state.Conversation.ID
+		m.chatMessages = msg.state.Messages
+		m.chatHistory = msg.history
+		m.chatEphemeral = msg.state.Ephemeral
+		m.chatStatus = "Ready"
+		if msg.state.Active {
+			m.chatStatus = fmt.Sprintf("Claude is answering · %d queued", msg.state.Queued)
+		}
+		if m.tab == chatTab {
+			return m, nextChatTick()
+		}
+		m.chatPolling = false
+		return m, nil
+	case chatSentMsg:
+		if msg.err != nil {
+			m.chatStatus = msg.err.Error()
+			if msg.text != "" && m.chatInput.Value() == "" {
+				m.chatInput.SetValue(msg.text)
+			}
+		} else if msg.text != "" {
+			m.chatDrafts = append(m.chatDrafts, msg.text)
+			if len(m.chatDrafts) > 100 {
+				m.chatDrafts = m.chatDrafts[len(m.chatDrafts)-100:]
+			}
+		}
+		return m, nil
+	case chatTickMsg:
+		if m.tab != chatTab {
+			m.chatPolling = false
+			return m, nil
+		}
+		return m, m.readChat()
+
 	case flowObservationFrameMsg:
 		for key, pulse := range m.flowGrowthPulse {
 			if !m.opts.Now().Before(pulse.until) {
@@ -393,6 +459,12 @@ func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if k == "ctrl+c" {
 			return m, tea.Quit
 		}
+		if m.tab == chatTab {
+			return m, m.chatKey(msg)
+		}
+		if (k == "c" || k == "8") && !m.filtering && m.confirm == nil {
+			return m, m.openChat()
+		}
 		if m.filtering {
 			switch k {
 			case "esc":
@@ -410,6 +482,9 @@ func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.rebuild()
 			return m, nil
+		}
+		if k == "esc" && m.chatActive {
+			return m, m.stopChat()
 		}
 		if k == "q" {
 			return m, tea.Quit
@@ -478,7 +553,7 @@ func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				case "k", "up":
 					m.flowAskCursor = (m.flowAskCursor + count - 1) % count
 					return m, nil
-				case "c":
+				case "C":
 					m.status = inbox.JumpCommand(w.Jump)
 					return m, nil
 				case "enter":
@@ -508,7 +583,7 @@ func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.flowMinutes = zooms[i]
 				return m, m.loadFlow()
-			case "c":
+			case "C":
 				if n := m.flowSelected(); n != nil {
 					m.status = inbox.JumpCommand(n.Jump)
 				}
@@ -710,6 +785,11 @@ func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 	default:
+		if m.tab == chatTab {
+			var cmd tea.Cmd
+			m.chatInput, cmd = m.chatInput.Update(msg)
+			return m, cmd
+		}
 		if m.filtering {
 			var cmd tea.Cmd
 			m.filter, cmd = m.filter.Update(msg)

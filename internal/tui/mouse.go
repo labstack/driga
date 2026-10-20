@@ -18,6 +18,14 @@ func (m *app) mouseClick(msg tea.MouseClickMsg) tea.Cmd {
 	_, hits := m.tabLayout()
 	for _, h := range hits {
 		if msg.Y == lipgloss.Height(m.header())+h.y && msg.X >= h.x && msg.X < h.x+h.width {
+			// Leave the composer before routing a mouse tab to its navigation key.
+			if m.tab == chatTab {
+				if h.tab == chatTab {
+					return nil
+				}
+				m.tab = homeTab
+				m.chatInput.Blur()
+			}
 			// Keep tab switching, cleanup loading and cursor retention identical to keys.
 			code := rune('0' + mapTabNumber(h.tab))
 			if h.tab == homeTab {
@@ -26,6 +34,9 @@ func (m *app) mouseClick(msg tea.MouseClickMsg) tea.Cmd {
 			_, cmd := m.Update(tea.KeyPressMsg{Code: code, Text: string(code)})
 			return cmd
 		}
+	}
+	if m.tab == chatTab {
+		return nil
 	}
 	if m.help || m.detail || !m.loaded {
 		return nil
@@ -114,6 +125,10 @@ func (m *app) mouseWheel(msg tea.MouseWheelMsg) tea.Cmd {
 	case tea.MouseWheelDown:
 		delta = 1
 	default:
+		return nil
+	}
+	if m.tab == chatTab {
+		m.chatOffset = max(0, m.chatOffset-delta)
 		return nil
 	}
 	if m.detail {

@@ -8,6 +8,7 @@ import (
 	"syscall"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/labstack/driga/internal/chat"
 	"github.com/labstack/driga/internal/cleanup"
 	"github.com/labstack/driga/internal/config"
 	"github.com/labstack/driga/internal/tui"
@@ -32,7 +33,12 @@ func (TopCmd) Run(g *Globals) error {
 		return err
 	}
 	defer closeSource()
-	opts := tui.Options{Machine: g.Machine, Project: g.Project, NoColor: g.NoColor, OpenCmd: cfg.OpenCmd, DataDir: config.DataDir(), Context: ctx}
+	chatClient, ephemeral, closeChat, err := chat.Open(ctx, config.DataDir(), cfg.CaptureSnippets())
+	if err != nil {
+		return err
+	}
+	defer closeChat()
+	opts := tui.Options{Chat: chatClient, ChatEphemeral: ephemeral, Machine: g.Machine, Project: g.Project, NoColor: g.NoColor, OpenCmd: cfg.OpenCmd, DataDir: config.DataDir(), Context: ctx}
 	opts.Tmux = os.Getenv("TMUX")
 	opts.JumpTerminal = cfg.Inbox.JumpTerminal
 	opts.MotionOff = cfg.Motion == "off"

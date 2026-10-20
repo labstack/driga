@@ -48,7 +48,7 @@ type Root struct {
 	Agent     AgentCmd     `cmd:"" help:"Show session detail."`
 	Projects  ProjectsCmd  `cmd:"" help:"List project status."`
 	Summarize SummarizeCmd `cmd:"" help:"Refresh opt-in local project summaries through Claude."`
-	Ask       AskCmd       `cmd:"" help:"Ask Claude a question using Driga's read-only tools."`
+	Ask       AskCmd       `cmd:"" help:"Ask a one-shot Chat question through Claude and driga's read-only tools."`
 	Cleanup   CleanupCmd   `cmd:"" help:"Inspect and explicitly clean local agent disk candidates."`
 	Where     WhereCmd     `cmd:"" help:"Show where a project stands."`
 	Inbox     InboxCmd     `cmd:"" help:"List attention and completion events."`

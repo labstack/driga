@@ -20,17 +20,27 @@ import (
 	"github.com/labstack/driga/internal/store"
 )
 
-const claudeHelp = "-p --safe-mode --no-session-persistence --tools --output-format --json-schema --model --max-budget-usd --name --setting-sources --strict-mcp-config --mcp-config --allowedTools --verbose"
+const claudeHelp = "-p, --print --safe-mode --no-session-persistence --tools --output-format --json-schema --model --max-budget-usd --name --setting-sources --strict-mcp-config --mcp-config --allowedTools --verbose --include-partial-messages --resume"
 
 func fakeClaude(t *testing.T, help, body string) string {
 	t.Helper()
 	dir := t.TempDir()
+	gitPath, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(gitPath, filepath.Join(dir, "git")); err != nil {
+		t.Fatal(err)
+	}
 	t.Setenv("CLAUDE_RECORD", filepath.Join(dir, "record"))
 	script := "#!/bin/sh\ncase \"$1\" in\n--version) echo version >> \"$CLAUDE_RECORD.probes\"; echo 2.1.303; exit;;\n--help) echo help >> \"$CLAUDE_RECORD.probes\"; printf '%s\\n' '" + help + "'; exit;;\nesac\nprintf '%s\\n' \"$@\" > \"$CLAUDE_RECORD.args\"\n/bin/cat > \"$CLAUDE_RECORD.stdin\"\n/bin/cat \"$CLAUDE_RECORD.stdin\" >> \"$CLAUDE_RECORD.inputs\"\nprintf 'call\\n' >> \"$CLAUDE_RECORD.calls\"\n" + body + "\n"
 	if err := os.WriteFile(filepath.Join(dir, "claude"), []byte(script), 0700); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("PATH", dir)
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+	t.Setenv("CODEX_HOME", t.TempDir())
+	t.Setenv("COPILOT_HOME", t.TempDir())
 	return filepath.Join(dir, "record")
 }
 

@@ -11,6 +11,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/labstack/driga/internal/platform"
 )
 
 type Claude struct {
@@ -41,11 +43,29 @@ func Probe(ctx context.Context) (Claude, error) {
 	probe := func(arg string) ([]byte, error) {
 		cmd := exec.CommandContext(ctx, path, arg)
 		cmd.Env = internalEnv()
-		out, err := cmd.CombinedOutput()
+		// Node can exit before a piped stdout drains, truncating --help;
+		// a regular file receives everything.
+		f, err := os.CreateTemp("", "driga-claude-probe-*")
 		if err != nil {
-			return nil, fmt.Errorf("claude %s: %w: %s", arg, err, strings.TrimSpace(string(out)))
+			return nil, err
 		}
-		return out, nil
+		defer os.Remove(f.Name())
+		defer f.Close()
+		cmd.Stdout, cmd.Stderr = f, f
+		reap := platform.OwnChild(cmd)
+		defer reap()
+		runErr := cmd.Run()
+		if _, err := f.Seek(0, io.SeekStart); err != nil {
+			return nil, err
+		}
+		output, err := io.ReadAll(io.LimitReader(f, 1<<20))
+		if err != nil {
+			return nil, err
+		}
+		if runErr != nil {
+			return nil, fmt.Errorf("claude %s: %w: %s", arg, runErr, strings.TrimSpace(string(output)))
+		}
+		return output, nil
 	}
 	version, err := probe("--version")
 	if err != nil {
@@ -85,6 +105,11 @@ func (c Claude) Run(ctx context.Context, args []string, stdin string) ([]byte, e
 
 // RunTo delivers stdout as it arrives, while retaining stderr for failures.
 func (c Claude) RunTo(ctx context.Context, args []string, stdin string, stdout io.Writer) error {
+	return c.RunIn(ctx, "", args, stdin, stdout)
+}
+
+// RunIn shares probing, process lifetime and internal-agent tagging with ask and summaries.
+func (c Claude) RunIn(ctx context.Context, dir string, args []string, stdin string, stdout io.Writer) error {
 	args = append([]string(nil), args...)
 	named := false
 	for i, arg := range args {
@@ -107,13 +132,31 @@ func (c Claude) RunTo(ctx context.Context, args []string, stdin string, stdout i
 	ctx, cancel := context.WithTimeout(ctx, 120*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, c.path, args...)
+	cmd.Dir = dir
+	cmd.WaitDelay = 2 * time.Second
+	reap := platform.OwnChild(cmd)
+	defer reap()
 	cmd.Env = internalEnv()
 	cmd.Stdin = strings.NewReader(stdin)
 	cmd.Stdout = stdout
-	var stderr bytes.Buffer
+	stderr := limitedBuffer{limit: 64 << 10}
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("claude: %w: %s", err, strings.TrimSpace(stderr.String()))
 	}
 	return nil
+}
+
+type limitedBuffer struct {
+	bytes.Buffer
+	limit int
+}
+
+func (b *limitedBuffer) Write(p []byte) (int, error) {
+	n := len(p)
+	if len(p) > b.limit-b.Len() {
+		p = p[:b.limit-b.Len()]
+	}
+	_, err := b.Buffer.Write(p)
+	return n, err
 }

@@ -34,7 +34,7 @@ func (m *app) tabVisible(tab int) bool {
 		return true
 	}
 	switch tab {
-	case homeTab, flowTab:
+	case homeTab, flowTab, chatTab:
 		return true
 	case 0:
 		return len(m.snap.Agents.Rows) > 0
@@ -78,7 +78,7 @@ func (m *app) tabLayout() (string, []tabHit) {
 	if m.machineVisible(m.localMachine()) {
 		cleanupCount = len(m.snap.Cleanup)
 	}
-	names := []string{fmt.Sprintf("Agents %d", s.Agents), fmt.Sprintf("Projects %d", projects), "Inbox", fmt.Sprintf("Orphans %d", orphans), "Machine", fmt.Sprintf("Cleanup %d", cleanupCount), "Flow"}
+	names := []string{fmt.Sprintf("Agents %d", s.Agents), fmt.Sprintf("Projects %d", projects), "Inbox", fmt.Sprintf("Orphans %d", orphans), "Machine", fmt.Sprintf("Cleanup %d", cleanupCount), "Flow", "Chat"}
 	tabs := []string{}
 	indices := []int{homeTab}
 	active := func(label string, selected bool) string {
@@ -96,6 +96,9 @@ func (m *app) tabLayout() (string, []tabHit) {
 	}
 	tabs = append(tabs, active("0 Home", m.tab == homeTab))
 	for i, name := range names {
+		if name == "Chat" {
+			i = chatTab
+		}
 		if name == "Flow" {
 			i = flowTab
 		}
@@ -155,6 +158,11 @@ func styledPack(parts []string, width int, separator string) string {
 }
 
 func (m *app) rebuild() {
+	if m.tab == chatTab {
+		m.rows = nil
+		m.chatInput.SetWidth(max(1, m.width-4))
+		return
+	}
 	if !m.tabVisible(m.tab) {
 		for i := 0; i < 6; i++ {
 			if m.tabVisible(i) {
@@ -457,6 +465,9 @@ func agentAge(d time.Duration) string {
 }
 
 func mapTabNumber(tab int) int {
+	if tab == chatTab {
+		return 8
+	}
 	if tab == flowTab {
 		return 7
 	}
