@@ -29,6 +29,7 @@ type machineReads interface {
 	Samples(time.Time) ([]model.MachineSample, error)
 	EventCounts(time.Time, time.Time) ([]EventCount, error)
 	ObservationMinutes(int64, time.Time) ([]ObservationMinute, error)
+	ScanMCPMinutes(time.Time, func(model.MCPMinute) error) error
 	Sources() ([]model.SourceStatus, error)
 	Gaps(time.Time) ([]model.Gap, error)
 }

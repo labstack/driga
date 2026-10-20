@@ -7,9 +7,39 @@ import (
 	"testing"
 	"time"
 
+	"github.com/labstack/driga/internal/derive"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/store"
 )
+
+func TestMachineMCPLeakMarker(t *testing.T) {
+	s, st, _, _ := fixture(t)
+	t.Setenv("PATH", t.TempDir())
+	original := time.Local
+	time.Local = time.UTC
+	t.Cleanup(func() { time.Local = original })
+	at := time.Date(2020, 1, 1, 8, 12, 0, 0, time.UTC)
+	ps := []model.Proc{{PID: 100, Cmdline: "codex app-server", StartTime: at.Add(-time.Hour)}}
+	for i := range 3 {
+		now := at.Add(time.Duration(i) * 80 * time.Minute)
+		ps = append(ps, model.Proc{PID: int32(i + 1), PPID: 100, Cmdline: "node /opt/codegraph/dist/index.js", StartTime: now, RSS: 100})
+		v := derive.MCPServers(ps, nil, now)
+		if err := st.Tx(context.Background(), func(tx *store.Tx) error {
+			if err := tx.ObserveMCP(now, v.Samples); err != nil {
+				return err
+			}
+			return tx.ReplaceProcs(ps)
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	w := request(s, "GET", "/machines", s.token)
+	for _, want := range []string{"leaking ↑ 0.75/h since 08:12", "started 2", "ended 0", "net &#43;2", "Observed: 2020-01-01T08:12:00Z to 2020-01-01T10:52:00Z"} {
+		if !strings.Contains(w.Body.String(), want) {
+			t.Fatalf("missing %q: %s", want, w.Body)
+		}
+	}
+}
 
 func TestMachineExpandableAppsAndEscaping(t *testing.T) {
 	s, st, id, _ := fixture(t)

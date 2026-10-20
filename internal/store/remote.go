@@ -22,7 +22,7 @@ func (tx *Tx) ClearRemoteRows(machine string) error {
 	if machine == "" || machine == tx.localID {
 		return fmt.Errorf("refuse to purge local or empty machine_id")
 	}
-	for _, table := range []string{"session_files", "handoffs", "summaries", "inbox_items", "procs", "events", "event_minutes", "observation_minutes", "sessions", "worktrees", "repos", "orphans", "machine_samples", "offsets", "sources", "gaps"} {
+	for _, table := range []string{"session_files", "handoffs", "summaries", "inbox_items", "procs", "events", "event_minutes", "observation_minutes", "mcp_minutes", "sessions", "worktrees", "repos", "orphans", "machine_samples", "offsets", "sources", "gaps"} {
 		if err := tx.exec("DELETE FROM "+table+" WHERE machine_id=?", machine); err != nil {
 			return err
 		}

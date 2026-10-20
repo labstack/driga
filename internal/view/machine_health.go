@@ -147,11 +147,39 @@ func MCPPileupText(p derive.MCPPileup) string {
 
 // MCPCommandSummary is shared by CLI, TUI and web roll-ups.
 func MCPCommandSummary(c derive.MCPCommand) string {
-	text := fmt.Sprintf("%s  %d servers · %s · %d hosts · %d duplicates", c.Name, c.Count, humanBytes(c.Memory), c.HostCount, c.DuplicateCount)
+	text := fmt.Sprintf("%s  %d servers · %s", c.Name, c.Count, humanBytes(c.Memory))
+	if marker := MCPCommandTrendMarker(c); marker != "" {
+		text += " · " + marker
+	}
+	text += fmt.Sprintf(" · %d hosts · %d duplicates", c.HostCount, c.DuplicateCount)
 	if c.IncludesLauncher {
 		text += " · includes launcher"
 	}
 	return text
+}
+
+func MCPCommandTrendMarker(c derive.MCPCommand) string {
+	if len(c.Trends) == 0 {
+		return ""
+	}
+	chosen := c.Trends[0]
+	for _, t := range c.Trends {
+		if t.State == "leaking" {
+			chosen = t
+			break
+		}
+		if t.State == "churning" {
+			chosen = t
+		}
+	}
+	return MCPTrendMarker(chosen)
+}
+
+func MCPTrendMarker(t derive.MCPTrend) string {
+	if t.State == "leaking" {
+		return fmt.Sprintf("leaking ↑ %.2g/h since %s", t.RatePerHour, t.FirstSample.In(time.Local).Format("15:04"))
+	}
+	return t.State
 }
 
 func MCPCommandDetails(c derive.MCPCommand) string {
@@ -169,6 +197,12 @@ func MCPCommandDetails(c derive.MCPCommand) string {
 	}
 	if len(c.Installs) > 0 {
 		fmt.Fprintf(&b, "\nInstalls:\n  %s", strings.Join(c.Installs, "\n  "))
+	}
+	for _, t := range c.Trends {
+		fmt.Fprintf(&b, "\n%s PID %d: %s · started %d · ended %d · net %+d · %.2g/h\nObserved: %s to %s", t.Host.Name, t.Host.PID, MCPTrendMarker(t), t.StartedCount, t.EndedCount, t.NetGrowth, t.RatePerHour, t.FirstSample.Format(time.RFC3339), t.LastSample.Format(time.RFC3339))
+		if !t.IdentityComplete {
+			b.WriteString(" · incomplete process start identities")
+		}
 	}
 	return b.String()
 }

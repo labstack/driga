@@ -165,6 +165,18 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 			}
 		}
 		work.applyCwds(procs)
+		if procsOK {
+			due, err := tx.MCPMinuteDue(now)
+			if err != nil {
+				return err
+			}
+			if due {
+				servers := derive.MCPServers(procs, d.Sigs, now)
+				if err := tx.ObserveMCP(now, servers.Samples); err != nil {
+					return err
+				}
+			}
+		}
 		if p.Machine {
 			sample, err := collected.sample, collected.machineErr
 			if e := source("machine", err); e != nil {
