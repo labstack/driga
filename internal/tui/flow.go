@@ -108,6 +108,9 @@ func (m *app) recordFlowEvent(e view.TailEvent) {
 	}
 }
 func (m *app) flowWire(n view.FlowNode) string {
+	if p, ok := m.flowGrowthPulse[growthKey(n)]; ok && m.opts.Now().Before(p.until) {
+		return m.growthWire(n, "─────▶")
+	}
 	if until := m.flowPulse[n.Adapter+":"+n.ExternalID]; m.opts.Now().Before(until) {
 		return "──●──▶"
 	}
@@ -208,6 +211,7 @@ func (m *app) flowWorkerPanel(n view.FlowNode, i, width int) string {
 		elapsed = view.TokenStyle("idle", m.opts.NoColor).Render(spark) + " · " + elapsed
 	}
 	lines := []string{view.FlowJoin(titleText, state), activity, elapsed}
+	lines = append(lines, m.observationLines(n, max(0, width-4))...)
 
 	return m.flowPanel(title, lines, width, m.cursors[flowTab] == i)
 }
@@ -223,7 +227,7 @@ func (m *app) flowWorkers() view.FlowWorkers {
 		}
 		available -= top + 1
 	}
-	return m.flow.Workers(max(1, (available-3)/6), m.flowExpanded, m.opts.Now())
+	return m.flow.Workers(max(1, (available-3)/8), m.flowExpanded, m.opts.Now())
 }
 
 // flowLayout produces both the view and hit regions from the same geometry.
@@ -283,6 +287,7 @@ func (m *app) flowLayout() (string, []flowHit) {
 								wire = "──" + wire[2:]
 							}
 						}
+						wire = m.growthWire(n, wire)
 					}
 				}
 				out = append(out, wire+line)
@@ -293,7 +298,9 @@ func (m *app) flowLayout() (string, []flowHit) {
 		}
 		return strings.Join(out, "\n")
 	}
-	leadPanel := func(w int) string { return m.flowPanel("lead · "+m.flow.Lead.Adapter, m.flowLeadLines(), w, true) }
+	leadPanel := func(w int) string {
+		return m.flowPanel("lead · "+m.flow.Lead.Adapter, append(m.flowLeadLines(), m.observationLines(*m.flow.Lead, max(0, w-4))...), w, true)
+	}
 	mixerPanel := func(w int) string {
 		return m.flowPanel("signal mixer · why: "+m.flow.Mixer.Verdict, m.flowMixerLines(), w, false)
 	}
@@ -325,7 +332,11 @@ func (m *app) flowLayout() (string, []flowHit) {
 			body = lipgloss.JoinHorizontal(lipgloss.Top, lead, strings.Join(wire, "\n"), mixer)
 			mixerX = col + 8
 		} else {
-			body = leadPanel(width) + "\n  │\n  ▼\n" + mixerPanel(width)
+			wire := []string{"  │", "  ▼"}
+			if pulse, ok := m.flowGrowthPulse[growthKey(*m.flow.Lead)]; ok && m.opts.Now().Before(pulse.until) {
+				wire[min(pulse.frame, len(wire)-1)] = view.TokenStyle("observation", m.opts.NoColor).Render("  ●")
+			}
+			body = leadPanel(width) + "\n" + strings.Join(wire, "\n") + "\n" + mixerPanel(width)
 		}
 		if len(visible.Nodes) > 0 || visible.Quiet > 0 {
 			if width >= 110 {
@@ -346,6 +357,9 @@ func (m *app) flowLayout() (string, []flowHit) {
 	}
 	if len(tail) == 0 {
 		tail = []string{"No stored events."}
+	}
+	if buckets := m.flow.ObservationLogBuckets(); len(buckets) > 0 {
+		tail = append(tail, "transcript · 60m "+view.ObservationSpark(buckets, max(0, width-21)))
 	}
 	body += "\n\n" + m.flowPanel("tail -f · this session family", tail, width, false)
 	return body, hits

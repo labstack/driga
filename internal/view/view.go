@@ -29,6 +29,7 @@ type Reader interface {
 	LatestSample() (model.MachineSample, error)
 	Samples(time.Time) ([]model.MachineSample, error)
 	EventCounts(time.Time, time.Time) ([]store.EventCount, error)
+	ObservationMinutes(int64, time.Time) ([]store.ObservationMinute, error)
 	Sources() ([]model.SourceStatus, error)
 	Gaps(time.Time) ([]model.Gap, error)
 }

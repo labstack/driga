@@ -11,10 +11,10 @@ import (
 func TestThemeCSSContainsEveryToken(t *testing.T) {
 	css := ThemeCSS()
 	sections := strings.Split(css, "}")
-	if len(ThemeTokens()) != 24 {
+	if len(ThemeTokens()) != 25 {
 		t.Fatalf("token count: %d", len(ThemeTokens()))
 	}
-	required := strings.Fields("ground surface sunk ink muted faint line strong on-strong working working-bg waiting waiting-bg waiting-bar stalled stalled-bg idle idle-bg finished finished-bg crit warn ok accent")
+	required := strings.Fields("ground surface sunk ink muted faint line strong on-strong working working-bg waiting waiting-bg waiting-bar stalled stalled-bg idle idle-bg finished finished-bg crit warn ok accent observation")
 	for _, name := range required {
 		if !strings.Contains(css, "--"+name+":") {
 			t.Errorf("missing required token %s", name)

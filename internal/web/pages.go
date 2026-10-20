@@ -364,8 +364,9 @@ func templateFuncs() template.FuncMap {
 			}
 			return fmt.Sprintf("%.4f", *v)
 		},
-		"flowSpark": view.FlowSpark,
-		"flowJoin":  view.FlowJoin,
+		"flowSpark":       view.FlowSpark,
+		"observationPath": view.ObservationPath,
+		"flowJoin":        view.FlowJoin,
 		"flowWorkers": func(v view.FlowView, expanded bool, now time.Time) view.FlowWorkers {
 			return v.Workers(5, expanded, now)
 		},

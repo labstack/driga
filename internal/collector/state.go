@@ -22,6 +22,7 @@ type State struct {
 	// procs is the process table this run last wrote, or nil before the first
 	// successful scan, when the stored rows are the only source.
 	procs []model.Proc
+	logs  map[string]logBaseline
 }
 
 type cwdResult struct {
@@ -36,10 +37,10 @@ func NewState() *State {
 
 // copy returns an independent working state; a failed transaction must not
 // advance CPU samples, cwd caches, or remembered process ownership. A pass
-// replaces prev, spawn and procs wholesale and never writes into them, so
+// replaces prev, spawn, procs and logs wholesale and never writes into them, so
 // they are shared; only the cwd cache is updated in place and is copied.
 func (s *State) copy() *State {
-	n := &State{prev: s.prev, spawn: s.spawn, procs: s.procs, cwds: make(map[int32]cwdResult, len(s.cwds))}
+	n := &State{prev: s.prev, spawn: s.spawn, procs: s.procs, logs: s.logs, cwds: make(map[int32]cwdResult, len(s.cwds))}
 	n.prevAt, n.cwdsAt, n.gitFullAt = s.prevAt, s.cwdsAt, s.gitFullAt
 	n.cwdNext = s.cwdNext
 	for k, v := range s.cwds {

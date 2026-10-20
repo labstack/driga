@@ -792,3 +792,16 @@ meter::-moz-meter-bar {
 @container (max-width:900px) { .flow-center { width:100%; } }
 
 .flow-pulse-route { fill:none; stroke:none; }
+
+/* Metadata measurements have their own role, separate from event pulses. */
+.flow-lead { position:relative; }
+.flow-observation-strip { display:flex; align-items:center; gap:8px; width:100%; min-width:0; color:var(--dim); font-size:10px; line-height:18px; }
+.flow-observation-strip>span { flex-shrink:0; }
+.flow-observation-strip svg { display:block; width:100%; min-width:0; height:12px; overflow:visible; }
+.flow-observation-strip path { stroke:var(--observation); stroke-width:.65; fill:none; }
+.flow-tail>.flow-observation-strip { opacity:.6; margin-bottom:6px; }
+.flow-observed-pulse { fill:var(--observation); }
+.flow-growth-label { position:absolute; right:8px; bottom:100%; color:var(--observation); background:var(--bg); font-size:11px; line-height:18px; padding:0 4px; white-space:nowrap; }
+.flow-growth-ring { animation:flow-growth-ring 1s ease-out 1; }
+@keyframes flow-growth-ring { from { outline:2px solid var(--observation); outline-offset:1px; } to { outline:2px solid transparent; outline-offset:7px; } }
+@media (prefers-reduced-motion:reduce) { .flow-growth-ring { animation:none; } .flow-observed-pulse { display:none; } }

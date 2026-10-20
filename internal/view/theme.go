@@ -40,6 +40,7 @@ var themeTokens = [...]ThemeToken{
 	{"warn", "#963F06", "#FAB387"},
 	{"ok", "#1A5AD8", "#89B4FA"},
 	{"accent", "#7629D6", "#CBA6F7"},
+	{"observation", "#116762", "#94E2D5"},
 }
 
 // consoleTokens maps the console's roles onto the same Catppuccin palettes.
@@ -52,6 +53,7 @@ var consoleTokens = [...]ThemeToken{
 	{"waiting", "#7A4C07", "#F9E2AF"}, {"stalled", "#B50C30", "#F38BA8"},
 	{"idle", "#1A5AD8", "#89B4FA"}, {"finished", "#5C5F77", "#A6ADC8"},
 	{"crit", "#B50C30", "#F38BA8"}, {"warn", "#963F06", "#FAB387"},
+	{"observation", "#116762", "#94E2D5"},
 }
 
 func consoleCSS() string {

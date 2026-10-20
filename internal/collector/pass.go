@@ -129,6 +129,7 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 			}
 		}
 		var procs []model.Proc
+		previousProcs := work.prev
 		procsOK := false
 		if p.Procs {
 			fresh, err := collected.procs, collected.procErr
@@ -263,6 +264,9 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 					}
 				}
 			}
+		}
+		if err := observeSessions(tx, work, ss, procs, previousProcs, procsOK, now); err != nil {
+			return err
 		}
 		idx := derive.NewProcIndex(procs)
 		// Inbox grouping needs parent IDs before labels consume the unseen items.
@@ -447,6 +451,7 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 		state.cwdNext = work.cwdNext
 		state.spawn, state.gitFullAt = work.spawn, work.gitFullAt
 		state.procs = work.procs
+		state.logs = work.logs
 	}
 	return r, err
 }

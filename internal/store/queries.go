@@ -642,6 +642,7 @@ func (tx *Tx) Prune(now time.Time) error {
 	}{
 		{"DELETE FROM events WHERE machine_id=? AND ts<?", []any{tx.machineID, month}},
 		{"DELETE FROM event_minutes WHERE machine_id=? AND minute<?", []any{tx.machineID, unix(now.Add(-30 * 24 * time.Hour).Truncate(time.Minute))}},
+		{"DELETE FROM observation_minutes WHERE machine_id=? AND minute<?", []any{tx.machineID, now.Add(-30 * 24 * time.Hour).Truncate(time.Minute).UnixMilli()}},
 		{"DELETE FROM inbox_items WHERE machine_id=? AND ts<?", []any{tx.machineID, month}},
 		{"DELETE FROM handoffs WHERE machine_id=? AND ts<?", []any{tx.machineID, month}},
 		{"DELETE FROM sessions WHERE " + expiredSession, sessionArgs},
@@ -825,6 +826,9 @@ func (tx *Tx) PruneSnapshot(now time.Time) error {
 		return err
 	}
 	cutoff := unix(now.Truncate(time.Minute).Add(-59 * time.Minute))
+	if err := tx.exec("DELETE FROM observation_minutes WHERE machine_id=? AND minute<?", tx.machineID, now.Truncate(time.Minute).Add(-59*time.Minute).UnixMilli()); err != nil {
+		return err
+	}
 	for _, query := range []string{
 		"DELETE FROM machine_samples WHERE machine_id=? AND ts<?",
 		"DELETE FROM events WHERE machine_id=? AND ts<?",

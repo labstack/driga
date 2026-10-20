@@ -37,6 +37,39 @@ type FlowNode struct {
 	OutputTokens   *int64        `json:"output_tokens,omitempty"`
 	CostUSD        *float64      `json:"cost_usd,omitempty"`
 	Activity       []int         `json:"activity"`
+	Observed       *FlowObserved `json:"observed"`
+}
+
+// FlowObserved keeps collector measurements separate from agent-emitted events.
+// The chart includes the current minute and the preceding 59, oldest first.
+type FlowObserved struct {
+	LogBytesPerMin  []int64   `json:"log_bytes_per_min"`
+	CPUMSPerMin     []int64   `json:"cpu_ms_per_min"`
+	LastGrowthAt    time.Time `json:"last_growth_at"`
+	LastGrowthBytes int64     `json:"last_growth_bytes"`
+}
+
+func flowObserved(r Reader, id int64, now time.Time) (*FlowObserved, error) {
+	rows, err := r.ObservationMinutes(id, now)
+	if err != nil || len(rows) == 0 {
+		return nil, err
+	}
+	o := &FlowObserved{LogBytesPerMin: make([]int64, 60), CPUMSPerMin: make([]int64, 60)}
+	start := now.Truncate(time.Minute).Add(-59 * time.Minute)
+	for _, row := range rows {
+		if row.LastGrowthAt.After(o.LastGrowthAt) && !row.LastGrowthAt.After(now) {
+			o.LastGrowthAt, o.LastGrowthBytes = row.LastGrowthAt, row.LastGrowthBytes
+		}
+		if row.Minute.Before(start) {
+			continue
+		}
+		i := int(row.Minute.Sub(start) / time.Minute)
+		if i >= 0 && i < 60 {
+			o.LogBytesPerMin[i] = row.LogBytes
+			o.CPUMSPerMin[i] = row.CPUMS
+		}
+	}
+	return o, nil
 }
 
 // FlowView describes one family. Usage totals cover retained api_request events
@@ -270,6 +303,10 @@ func Flow(r Reader, f Filter, sessionID int64, now time.Time) (FlowView, error) 
 			return v, err
 		}
 		n := FlowNode{MachineID: selectedReader.MachineID(), ID: s.ID, ExternalID: s.ExternalID, Adapter: s.Adapter, Kind: "worker", Title: s.Title, Project: projectName(s, repos), Branch: s.Branch, Label: s.Label, Heuristic: s.Heuristic, Age: sessionAge(s, now), LastActivityAt: s.LastActivityAt, Activity: make([]int, 10)}
+		n.Observed, err = flowObserved(selectedReader, s.ID, now)
+		if err != nil {
+			return v, err
+		}
 		if strings.TrimSpace(n.Title) == "" {
 			// LastPrompt has already passed the collector's capture policy.
 			n.Title = strings.TrimSpace(s.LastPrompt)

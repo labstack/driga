@@ -294,6 +294,11 @@ func bounded(v any, remaining *int, truncated *bool) any {
 		}
 		sort.Strings(keys)
 		for _, k := range keys {
+			// Fixed measurement vectors are part of a node, not collection
+			// entries. Preserve their 60-bucket contract even at limit=1.
+			if k == "observed" {
+				continue
+			}
 			v[k] = bounded(v[k], remaining, truncated)
 		}
 	}

@@ -39,6 +39,18 @@ buckets. Arrays are visited in deterministic field order. `truncated` is always
 present on MCP envelopes; true explicitly signals omitted entries. There is no
 cursor in this pass: narrow `machine`, `project`, or `since`, or increase `limit`.
 Counts are full-scope aggregates and are not recomputed from the bounded rows.
+Flow nodes' fixed `observed` measurement vectors are not collection entries:
+both 60-minute arrays remain complete at every MCP limit. `observed` is null
+without retained positive measurements; otherwise it contains integer
+`log_bytes_per_min`, `cpu_ms_per_min` (oldest first, current minute included),
+UTC `last_growth_at`, and integer `last_growth_bytes`. CPU-only history has a
+zero last-growth instant. These are file-metadata and process-counter
+measurements, never statements about transcript content. Positive passes only
+are summed in `observation_minutes`, retained and pruned alongside event minutes
+for 30 days. The first collector pass establishes baselines; truncation,
+rotation, and process identity changes reset them without manufacturing activity.
+CPU deltas belong only to an unambiguously owned session process; shared hosts
+and helper trees are not divided or copied into session CPU measurements.
 CLI tables retain their normal complete collection views; machine memory rows
 no longer have an implicit top-ten cutoff.
 

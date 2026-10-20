@@ -59,7 +59,24 @@
     }
     return {lead:`M ${lead.right} ${lead.y} L ${mixer.left} ${mixer.y}`,trunk:workers.length ? `M ${mixer.right} ${mixer.y} H ${x} M ${x} ${Math.min(...ys)} V ${Math.max(...ys)}` : "",branches,routes};
   }
-  globalThis.DrigaConsole = Object.freeze({parseCommand, familyEvent, flowWireGeometry});
+  function transcriptSize(bytes) {
+    const units=["B","KB","MB","GB","TB"]; let i=0,n=Math.max(0,Number(bytes)||0);
+    while(n>=1024 && i<units.length-1){n/=1024;i++;}
+    return (i ? Number(n.toFixed(1)) : n)+" "+units[i];
+  }
+  // The same detector drives refreshed DOM snapshots and the JS regression
+  // harness. Keep a high-water mark so delayed swaps cannot replay a pulse.
+  function observationPulses(seen, nodes) {
+    const pulses=[];
+    for(const node of nodes) {
+      const at=Date.parse(node.last_growth_at)||0, previous=seen.get(node.key);
+      seen.set(node.key,Math.max(previous||0,at));
+      if(previous!==undefined && at>previous && Number(node.last_growth_bytes)>0)
+        pulses.push({...node,label:"+"+transcriptSize(node.last_growth_bytes)+" transcript"});
+    }
+    return pulses;
+  }
+  globalThis.DrigaConsole = Object.freeze({parseCommand, familyEvent, flowWireGeometry, observationPulses, transcriptSize});
   if (typeof document === "undefined") return;
 
   const root = document.documentElement;
@@ -347,6 +364,36 @@
     const start=performance.now(),length=route.getTotalLength();
     function frame(now){if(!dot.isConnected)return;const progress=(now-start)/1000;if(progress>=1){dot.remove();route.remove();return;}const p=route.getPointAtLength(length*progress);dot.setAttribute("cx",String(p.x));dot.setAttribute("cy",String(p.y));requestAnimationFrame(frame);}requestAnimationFrame(frame);
   }
+  const growthSeen=new Map();
+  function refreshFlowObservations() {
+    const flow=document.querySelector("[data-flow]"); if(!flow)return;
+    const nodes=Array.from(flow.querySelectorAll("[data-growth-at]")).map(el=>({
+      key:flow.dataset.machine+"/"+el.dataset.session,session:el.dataset.session,
+      last_growth_at:el.dataset.growthAt,last_growth_bytes:el.dataset.growthBytes
+    }));
+    for(const pulse of observationPulses(growthSeen,nodes)) pulseTranscript(pulse);
+  }
+  function pulseTranscript(pulse) {
+    const node=Array.from(document.querySelectorAll("[data-flow-node]")).find(n=>n.dataset.session===pulse.session);
+    if(!node)return;
+    const label=document.createElement("span");label.className="flow-growth-label";label.textContent=pulse.label;node.append(label);
+    const reduced=matchMedia("(prefers-reduced-motion: reduce)").matches;
+    // Reduced motion retains the measurement label without moving or ringing.
+    if(!reduced) {
+      if(node.classList.contains("flow-lead")) node.classList.add("flow-growth-ring");
+      else {
+        const svg=document.querySelector(".flow-wires");
+        const path=svg && Array.from(svg.querySelectorAll("[data-wire]")).find(p=>p.dataset.wire===pulse.session);
+        if(path && path.getAttribute("d")) {
+          const dot=document.createElementNS("http://www.w3.org/2000/svg","circle");dot.setAttribute("r","4");dot.setAttribute("class","flow-observed-pulse");svg.append(dot);
+          const route=document.createElementNS("http://www.w3.org/2000/svg","path");route.setAttribute("d",path.getAttribute("data-pulse-route")||path.getAttribute("d"));route.setAttribute("class","flow-pulse-route");svg.append(route);
+          const start=performance.now(),length=route.getTotalLength();
+          function frame(now){if(!dot.isConnected){route.remove();return;}const progress=(now-start)/1000;if(progress>=1){dot.remove();route.remove();return;}const p=route.getPointAtLength(length*progress);dot.setAttribute("cx",String(p.x));dot.setAttribute("cy",String(p.y));requestAnimationFrame(frame);}requestAnimationFrame(frame);
+        }
+      }
+    }
+    setTimeout(()=>{label.remove();node.classList.remove("flow-growth-ring");},1200);
+  }
   function refreshUI() {
     applyTheme(); focusPane(focused, false);
     panes().forEach((pane, i) => {
@@ -364,7 +411,7 @@
     if (tail && !tailStarted) { tail.querySelectorAll("[data-event-key]").forEach(el => tailNodes.set(el.dataset.eventKey, el)); tailStarted = true; }
     const worker=document.querySelector("[data-worker].sel") || document.querySelector("[data-worker]");
     if(worker) { worker.classList.add("sel");worker.setAttribute("aria-pressed","true");inspectWorker(worker); }
-    renderTail(); charts.draw(); drawFlowWires();
+    renderTail(); charts.draw(); drawFlowWires(); refreshFlowObservations();
   }
   let restorePane = false;
   document.addEventListener("htmx:beforeSwap", () => { restorePane = !!document.activeElement.closest("[data-pane]"); charts.dispose(); });

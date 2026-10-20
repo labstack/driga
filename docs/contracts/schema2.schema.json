@@ -34,11 +34,39 @@
         }
       }
     },
-    "data": {},
+    "data": {
+      "if": {"type": "object", "required": ["lead", "children"]},
+      "then": {"$ref": "#/$defs/flow"}
+    },
     "truncated": {"type": "boolean", "description": "Always present for MCP; true when the limit omits entries."},
     "error": {"$ref": "#/$defs/error"}
   },
   "$defs": {
+    "flow": {
+      "type": "object",
+      "required": ["lead", "children"],
+      "properties": {
+        "lead": {"anyOf": [{"type": "null"}, {"$ref": "#/$defs/flow_node"}]},
+        "children": {"type": "array", "items": {"$ref": "#/$defs/flow_node"}}
+      }
+    },
+    "flow_node": {
+      "type": "object",
+      "required": ["observed"],
+      "properties": {"observed": {"anyOf": [{"type": "null"}, {"$ref": "#/$defs/flow_observed"}]}}
+    },
+    "flow_observed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["log_bytes_per_min", "cpu_ms_per_min", "last_growth_at", "last_growth_bytes"],
+      "properties": {
+        "log_bytes_per_min": {"type": "array", "minItems": 60, "maxItems": 60, "items": {"$ref": "#/$defs/size_bytes"}},
+        "cpu_ms_per_min": {"type": "array", "minItems": 60, "maxItems": 60, "items": {"$ref": "#/$defs/duration_ms"}},
+        "last_growth_at": {"$ref": "#/$defs/utc_instant"},
+        "last_growth_bytes": {"$ref": "#/$defs/size_bytes"}
+      },
+      "description": "Collector metadata only; oldest first, current minute plus preceding 59. Null observed means no retained positive measurements. Zero last_growth_at means CPU-only observations."
+    },
     "utc_instant": {"type": "string", "format": "date-time", "pattern": "Z$"},
     "duration_ms": {"type": "integer", "minimum": 0},
     "size_bytes": {"type": "integer", "minimum": 0},

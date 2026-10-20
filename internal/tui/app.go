@@ -51,6 +51,9 @@ type app struct {
 	flowExpanded     bool
 	flowPulse        map[string]time.Time
 	flowSeen         map[string]bool
+	flowGrowthSeen   map[string]time.Time
+	flowGrowthPulse  map[string]flowGrowthPulse
+	flowAnimating    bool
 	machineScope     string
 	src              Source
 	opts             Options
@@ -204,6 +207,18 @@ func heartbeat(dir string, now time.Time) error {
 
 func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case flowObservationFrameMsg:
+		for key, pulse := range m.flowGrowthPulse {
+			if !m.opts.Now().Before(pulse.until) {
+				delete(m.flowGrowthPulse, key)
+			} else {
+				pulse.frame++
+				m.flowGrowthPulse[key] = pulse
+			}
+		}
+		m.flowAnimating = false
+		m.rebuild()
+		return m, m.flowAnimation()
 	case flowEventMsg:
 		m.recordFlowEvent(msg.event)
 	case flowMsg:
@@ -218,6 +233,7 @@ func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if i := m.cursors[flowTab]; i >= 0 && i < len(m.flowWorkers().Nodes) {
 			selectedID = m.flowWorkers().Nodes[i].ID
 		}
+		m.recordFlowObservations(msg.flow)
 		m.flow = msg.flow
 		if m.flowSeen == nil {
 			m.flowSeen = map[string]bool{}
@@ -237,6 +253,7 @@ func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.snap.AgentDetails[id] = d
 		}
 		m.rebuild()
+		return m, m.flowAnimation()
 	case tea.WindowSizeMsg:
 		m.width = max(1, msg.Width)
 		m.height = max(1, msg.Height)
