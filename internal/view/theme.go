@@ -57,6 +57,9 @@ var consoleTokens = [...]ThemeToken{
 	{"observation", "#116762", "#94E2D5"},
 	{"waiting-bar", "#DF8E1D", "#F9E2AF"}, {"waiting-bg", "#F3E7D3", "#3A3530"},
 	{"tool", "#04778A", "#89DCEB"}, {"rail", "#A9AEBC", "#585B70"},
+	{"faint", "#5C5F77", "#A6ADC8"},
+	{"working-bg", "#D3E4D5", "#364143"}, {"stalled-bg", "#EACDD7", "#443244"},
+	{"idle-bg", "#CEDBF5", "#313953"}, {"finished-bg", "#DADCE3", "#333446"},
 }
 
 func consoleCSS() string {
