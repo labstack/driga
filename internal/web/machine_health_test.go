@@ -13,11 +13,13 @@ import (
 )
 
 func TestMachineMCPLeakMarker(t *testing.T) {
-	s, st, _, _ := fixture(t)
-	t.Setenv("PATH", t.TempDir())
+	// Pin the zone before the fixture starts its server goroutine (which reads
+	// the clock), and restore it after that goroutine stops: cleanups run LIFO.
 	original := time.Local
 	time.Local = time.UTC
 	t.Cleanup(func() { time.Local = original })
+	s, st, _, _ := fixture(t)
+	t.Setenv("PATH", t.TempDir())
 	at := time.Date(2020, 1, 1, 8, 12, 0, 0, time.UTC)
 	ps := []model.Proc{{PID: 100, Cmdline: "codex app-server", StartTime: at.Add(-time.Hour)}}
 	for i := range 3 {
