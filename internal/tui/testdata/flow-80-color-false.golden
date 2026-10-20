@@ -1,21 +1,18 @@
 ╭─ Needs you · machine-wide ───────────────────────────────────────────────────╮
-│ ◆ Permission check · 5m0s · permission · Bash · enter jump · c resume        │
+│ NEEDS YOU 1                                                                  │
+│ ◆ 5m  Permission check  Permission · Bash                                    │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Session map ────────────────────────────────────────────────────────────────╮
-│ 40m · 11:20–now · head = last observed verdict                               │
+│ 40m · 11:20–now · head = verdict as of                                       │
 │ 200m earlier · 0 asks                                                        │
-│ ›Driga flow map     ▇█▂▃▄▅▆▇█▂▃▄▅▆▇┿┿┿┿┿┿┿┿┿┿┿┿┿┿┿┿┿┿┿┿┿┿┿╼▶ as of 5s ago    │
-│                     ─ ────────── ─────────╱╱╱───────── ─────                 │
-│  Implement geometry                ╰╱╱╱╱╱╱╱╱╱╱╱╱◆▒▒▒▒╱╱╱┿╱╼▶ as of 5s ago    │
-│                                    ╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱                   │
-│  Review CSP                         ╰╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱●·━● as of 5s ago    │
-│                                     ╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱                    │
-│  Permission check                    ╰╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱◆▒▒▒◆ as of 5s ago    │
-│                                      ╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱                    │
-│  Quiet remote anal…                   ╰╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱·┈? as of 5s ago    │
-│                                       ╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱                    │
+│ ›Driga flow map     ▇█▂▃▄▅▆▇█▂▃▄▅▆▇┿┿┿┿┿┿┿┿┿┿┿┿┿┿┿┿┿┿┿┿┿┿━━▶ 5s ago          │
+│                 cpu ▇ ▁▂▂▃▄▄▅▆▆▇ ▁▂▂▃▄▄▅▆▆  ▁▂▂▃▄▄▅▆▆▇ ▁▂▂▃█                 │
+│  Implement geometry                ╰░░░░░░░░░░░░◆════░░░┿━━▶ 5s ago          │
+│  Review CSP                         ╰░░░░░░░░░░░░░░░░░░░●──● 5s ago          │
+│  Permission check                    ╰░░░░░░░░░░░░░░░░░◆═══◆ 5s ago          │
+│  Quiet remote anal…                   ╰░░░░░░░░░░░░░░░░░─┈┈? 5s ago          │
 │ +12 quiet threads · enter to expand                                          │
-│ ▁ log growth · ─ CPU · ┿ tool · ◆ wait · ○ prompt · ● end · ╱ no data        │
+│ ▁ growth / CPU · ┿ tool · ◆ wait · ○ prompt · ● end · ░ no data              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Session detail · signal mixer ──────────────────────────────────────────────╮
 │ Driga flow map · claude                                                      │
@@ -34,4 +31,3 @@
 │ 11:59:02 otlp:tool_result                                                    │
 │ 11:59:03 otlp:tool_result                                                    │
 ╰──────────────────────────────────────────────────────────────────────────────╯
-j/k session · enter jump · [/] family · -/+ zoom · tab needs · c resume

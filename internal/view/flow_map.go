@@ -132,6 +132,13 @@ func FlowGeometry(v FlowView, columns int, expanded bool) FlowMap {
 	span := func(from, to time.Time) FlowSpan {
 		return FlowSpan{col(from), min(columns, max(col(from)+1, int(to.Sub(g.FromAt)/time.Minute)+1))}
 	}
+	// Hatching ends exclusively: the first retained minute and the minute
+	// after a gap must remain available for their stored measurements.
+	hatchSpan := func(from, to time.Time) FlowSpan {
+		first := col(from)
+		last := int((to.Sub(g.FromAt) + time.Minute - 1) / time.Minute)
+		return FlowSpan{first, min(columns, max(first+1, last))}
+	}
 	workers := v.Workers(0, expanded, now)
 	g.Quiet = workers.Quiet
 	nodes := workers.Nodes
@@ -140,17 +147,24 @@ func FlowGeometry(v FlowView, columns int, expanded bool) FlowMap {
 	}
 	for _, n := range nodes {
 		r := FlowMapRow{Node: n, Start: col(n.StartedAt), Log: make([]int64, columns), CPU: make([]int64, columns)}
+		end := now
+		if n.EndedAt != nil && n.EndedAt.Before(end) {
+			end = *n.EndedAt
+		}
 		if n.RetainedFromAt.IsZero() || n.RetainedFromAt.After(g.FromAt) {
 			to := n.RetainedFromAt
 			if to.IsZero() {
-				to = now
+				to = end
+			}
+			if to.After(end) {
+				to = end
 			}
 			start := g.FromAt
 			if n.StartedAt.After(start) {
 				start = n.StartedAt
 			}
-			if to.After(start) {
-				r.Hatched = append(r.Hatched, span(start, to))
+			if to.Sub(start) >= time.Minute {
+				r.Hatched = append(r.Hatched, hatchSpan(start, to))
 			}
 		}
 		for _, gap := range v.Gaps {
@@ -159,8 +173,12 @@ func FlowGeometry(v FlowView, columns int, expanded bool) FlowMap {
 				if n.StartedAt.After(start) {
 					start = n.StartedAt
 				}
-				if gap.To.After(start) {
-					r.Hatched = append(r.Hatched, span(start, gap.To))
+				to := gap.To
+				if to.After(end) {
+					to = end
+				}
+				if to.After(start) && to.After(g.FromAt) {
+					r.Hatched = append(r.Hatched, hatchSpan(start, to))
 				}
 			}
 		}
@@ -203,7 +221,7 @@ func FlowGeometry(v FlowView, columns int, expanded bool) FlowMap {
 		if n.Observed != nil {
 			for i, x := range n.Observed.LogBytesPerMin {
 				at := n.Observed.FromAt.Add(time.Duration(i) * time.Minute)
-				if at.Before(g.FromAt) || at.After(now) {
+				if at.Before(g.FromAt) || at.Before(n.StartedAt) || at.After(end) {
 					continue
 				}
 				c := col(at)

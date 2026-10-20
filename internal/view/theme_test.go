@@ -11,7 +11,7 @@ import (
 func TestThemeCSSContainsEveryToken(t *testing.T) {
 	css := ThemeCSS()
 	sections := strings.Split(css, "}")
-	if len(ThemeTokens()) != 25 {
+	if len(ThemeTokens()) != 27 {
 		t.Fatalf("token count: %d", len(ThemeTokens()))
 	}
 	required := strings.Fields("ground surface sunk ink muted faint line strong on-strong working working-bg waiting waiting-bg waiting-bar stalled stalled-bg idle idle-bg finished finished-bg crit warn ok accent observation")
@@ -63,7 +63,7 @@ func TestConsoleThemeTokenParity(t *testing.T) {
 	// Catppuccin Mocha (official) and Latte (text roles darkened for 4.5:1).
 	for _, set := range []string{
 		`--bg:#1E1E2E;--pane:#181825;--raise:#313244;--line:#45475A;--fg:#CDD6F4;--mid:#BAC2DE;--dim:#A6ADC8;--accent:#CBA6F7;--on-accent:#1E1E2E;--working:#A6E3A1;--waiting:#F9E2AF;--stalled:#F38BA8;--idle:#89B4FA;--finished:#A6ADC8;--crit:#F38BA8;--warn:#FAB387;`,
-		`--bg:#EFF1F5;--pane:#E6E9EF;--raise:#CCD0DA;--line:#BCC0CC;--fg:#4C4F69;--mid:#5C5F77;--dim:#5C5F77;--accent:#7629D6;--on-accent:#EFF1F5;--working:#256817;--waiting:#7A4C07;--stalled:#B50C30;--idle:#1A5AD8;--finished:#5C5F77;--crit:#B50C30;--warn:#963F06;`,
+		`--bg:#EFF1F5;--pane:#E6E9EF;--raise:#CCD0DA;--line:#BCC0CC;--fg:#4C4F69;--mid:#5C5F77;--dim:#6C6F85;--accent:#7629D6;--on-accent:#EFF1F5;--working:#256817;--waiting:#7A4C07;--stalled:#B50C30;--idle:#1A5AD8;--finished:#5C5F77;--crit:#B50C30;--warn:#963F06;`,
 	} {
 		if !strings.Contains(css, set) {
 			t.Errorf("missing exact console token set %s", set)
@@ -93,6 +93,26 @@ func TestTUITokensExist(t *testing.T) {
 		}
 		if !found {
 			t.Errorf("token %q missing", name)
+		}
+	}
+}
+
+func TestFlowMockTokens(t *testing.T) {
+	for _, want := range []ThemeToken{
+		{"waiting-bar", "#DF8E1D", "#F9E2AF"}, {"waiting-bg", "#F3E7D3", "#3A3530"},
+		{"tool", "#04778A", "#89DCEB"}, {"rail", "#A9AEBC", "#585B70"},
+	} {
+		found := false
+		for _, got := range consoleTokens {
+			if got.Name == want.Name {
+				found = true
+				if got != want {
+					t.Errorf("%s: %+v", want.Name, got)
+				}
+			}
+		}
+		if !found {
+			t.Error("missing console token", want.Name)
 		}
 	}
 }

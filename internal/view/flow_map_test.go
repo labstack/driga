@@ -110,3 +110,55 @@ func TestFlowSessionHandoffsAndMachineAttention(t *testing.T) {
 		t.Fatal(v.Children)
 	}
 }
+
+func TestFlowPreRetentionNeedsOneColumn(t *testing.T) {
+	n := FlowNode{ID: 1, StartedAt: testNow.Add(-time.Hour), RetainedFromAt: testNow.Add(-time.Hour + 30*time.Second)}
+	g := FlowGeometry(FlowView{Lead: &n, ObservedAt: testNow, WindowMinutes: 60}, 60, false)
+	if len(g.Rows[0].Hatched) != 0 {
+		t.Fatal("sub-column pre-retention hatch", g.Rows[0].Hatched)
+	}
+}
+
+func TestFlowAttentionLongestWaitFirst(t *testing.T) {
+	st := fixture(t, func(tx *store.Tx) error {
+		for _, w := range []model.InboxItem{
+			{ID: "new", SessionID: 1, Kind: "waiting", TS: testNow.Add(-time.Hour), WaitingSinceAt: testNow.Add(-time.Minute)},
+			{ID: "old", SessionID: 2, Kind: "waiting", TS: testNow.Add(-time.Minute), WaitingSinceAt: testNow.Add(-2 * time.Hour)},
+		} {
+			if err := tx.UpsertInboxItem(w); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	f, err := Flow(st, Filter{}, 0, testNow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(f.Attention.Waits) != 2 || f.Attention.Waits[0].Waited != 2*time.Hour {
+		t.Fatal(f.Attention.Waits)
+	}
+}
+
+func TestFlowHatchesStopAtSessionEnd(t *testing.T) {
+	end := testNow.Add(-20 * time.Minute)
+	n := FlowNode{ID: 1, StartedAt: testNow.Add(-time.Hour), EndedAt: &end}
+	g := FlowGeometry(FlowView{Lead: &n, ObservedAt: testNow, WindowMinutes: 60}, 60, false)
+	if len(g.Rows[0].Hatched) != 1 || g.Rows[0].Hatched[0].To > 41 {
+		t.Fatal("hatch after session ended", g.Rows[0].Hatched)
+	}
+}
+
+func TestFlowHatchesDoNotHideBoundaryMeasurements(t *testing.T) {
+	n := FlowNode{ID: 1, StartedAt: testNow.Add(-time.Hour), RetainedFromAt: testNow.Add(-59 * time.Minute), Observed: &FlowObserved{FromAt: testNow.Add(-59 * time.Minute), LogBytesPerMin: []int64{10}}}
+	g := FlowGeometry(FlowView{Lead: &n, ObservedAt: testNow, WindowMinutes: 60}, 60, false)
+	if len(g.Rows[0].Hatched) != 1 || g.Rows[0].Hatched[0] != (FlowSpan{0, 1}) || g.Rows[0].Log[1] != 10 {
+		t.Fatal("retention boundary hid stored data", g.Rows[0])
+	}
+	n.RetainedFromAt = testNow.Add(-time.Hour)
+	n.Observed = &FlowObserved{FromAt: testNow.Add(-53 * time.Minute), LogBytesPerMin: []int64{20}}
+	g = FlowGeometry(FlowView{Lead: &n, ObservedAt: testNow, WindowMinutes: 60, Gaps: []model.Gap{{From: testNow.Add(-55 * time.Minute), To: testNow.Add(-53 * time.Minute)}}}, 60, false)
+	if g.Rows[0].Hatched[0] != (FlowSpan{5, 7}) || g.Rows[0].Log[7] != 20 {
+		t.Fatal("gap boundary hid stored data", g.Rows[0])
+	}
+}

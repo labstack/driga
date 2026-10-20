@@ -330,7 +330,13 @@ func Flow(r Reader, f Filter, sessionID int64, now time.Time) (FlowView, error) 
 			selectedReader, selectedMachine, all = selected.reader, selected.machine, selected.sessions
 		}
 	}
-	sort.SliceStable(v.Attention.Waits, func(i, j int) bool { return inbox.Less(v.Attention.Waits[i].InboxItem, v.Attention.Waits[j].InboxItem) })
+	sort.SliceStable(v.Attention.Waits, func(i, j int) bool {
+		a, b := v.Attention.Waits[i], v.Attention.Waits[j]
+		if a.Waited != b.Waited {
+			return a.Waited > b.Waited
+		}
+		return inbox.Less(a.InboxItem, b.InboxItem)
+	})
 	if selectedReader == nil {
 		if sessionID != 0 {
 			return v, store.ErrNotFound

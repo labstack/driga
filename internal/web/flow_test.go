@@ -30,7 +30,7 @@ func TestFlowSharedDefault(t *testing.T) {
 func TestFlowMapLayoutParts(t *testing.T) {
 	s, _, id, _ := fixture(t)
 	body := request(s, "GET", fmt.Sprint("/flow?id=", id), s.token).Body.String()
-	for _, part := range []string{"Needs you · machine-wide", "Session map · measured activity", "Session detail · signal mixer", "data-flow-svg", "data-flow-zoom", "data-flow-quiet", "/static/flow-map.js", "/static/flow-map.css"} {
+	for _, part := range []string{"Needs you", "Session map", "Session detail", "data-flow-svg", "data-flow-zoom", "metro-key", "/static/flow-map.js", "/static/flow-map.css"} {
 		if !strings.Contains(body, part) {
 			t.Error("missing", part)
 		}
