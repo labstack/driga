@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/labstack/driga/internal/cleanup"
+	"github.com/labstack/driga/internal/inbox"
 	"github.com/labstack/driga/internal/store"
 	"github.com/labstack/driga/internal/view"
 	"github.com/labstack/driga/internal/viewer"
@@ -42,6 +43,7 @@ type pageData struct {
 	AgentRows                                    []view.AgentRow
 	Needs                                        []view.Attention
 	NeedsMore                                    int
+	InboxWaiting, InboxRecent                    []view.InboxRow
 	All                                          bool
 	StaleSources, StaleDetails, PendingSources   string
 	States                                       []view.StateCount
@@ -266,6 +268,24 @@ func (p *pageData) prepare() {
 		}
 	}
 	p.Inbox.Rows = visibleInbox
+	for _, row := range visibleInbox {
+		if inbox.Active(row.InboxItem) {
+			row.Waited = inbox.Waited(row.InboxItem, p.ObservedAt)
+			p.InboxWaiting = append(p.InboxWaiting, row)
+		} else {
+			p.InboxRecent = append(p.InboxRecent, row)
+		}
+	}
+	sort.SliceStable(p.InboxWaiting, func(i, j int) bool {
+		a, b := p.InboxWaiting[i], p.InboxWaiting[j]
+		if a.Waited != b.Waited {
+			return a.Waited > b.Waited
+		}
+		return inbox.Less(a.InboxItem, b.InboxItem)
+	})
+	sort.SliceStable(p.InboxRecent, func(i, j int) bool {
+		return inbox.Less(p.InboxRecent[i].InboxItem, p.InboxRecent[j].InboxItem)
+	})
 	p.AgentRows = flatten(p.Agents.Rows)
 	counts := map[string]int{}
 	for _, a := range p.AgentRows {
@@ -358,6 +378,18 @@ func (p *pageData) prepare() {
 
 func templateFuncs() template.FuncMap {
 	return template.FuncMap{
+		"inboxKey": func(row view.InboxRow) string {
+			key, _ := json.Marshal([]string{row.MachineID, row.ID})
+			return string(key)
+		},
+		"inboxTable": func(rows []view.InboxRow, p pageData, recent bool) any {
+			return struct {
+				Rows        []view.InboxRow
+				Scope       string
+				All, Recent bool
+				ObservedAt  time.Time
+			}{rows, p.Scope, p.All, recent, p.ObservedAt}
+		},
 		"waitingHeader": view.WaitingHeader,
 		"dollars": func(v *float64) string {
 			if v == nil {

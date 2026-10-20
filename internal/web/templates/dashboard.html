@@ -188,23 +188,41 @@
 {{if .AttentionOnly}}
 <section data-pane tabindex="0" class="pane"><div class="pt"><b>needs-you · {{len .Needs}}</b><span>enter open</span></div>{{$p := .}}{{range .Needs}}<article data-row tabindex="-1" class="item stripe {{stateClass .State}}">{{template "chip" .State}}<h3><a data-row href="{{link (agentPath .ID) $p.Scope $p.All}}">{{.Title}}</a></h3><p>{{.Project}} · {{.Summary}}</p><small>{{relative .At $p.ObservedAt}}</small></article>{{else}}<p class="empty">Nothing needs you.</p>{{end}}</section>
 {{else}}
-<section data-pane tabindex="0" class="pane">
-<div class="pt">
-<b>attention & completions</b><span class="muted">Acknowledgements stay in the CLI / TUI</span>
-</div>{{$p := .}}{{range .Inbox.Rows}}
-<article data-row tabindex="-1" class="item stripe {{stateClass .Kind}}">
-<div class="item-top">{{template "chip" .Kind}}{{if eq .Kind "waiting"}}<span class="chip waiting">{{.Reason}}</span>{{if .Tool}}<code>{{.Tool}}</code>{{end}}<small>waiting {{duration .Waited}}</small>{{end}}<small>{{.MachineName}} · {{stamp .TS}}{{if .Stale}} · stale{{end}}</small>
-</div>
-<h3>{{if .SessionID}}<a href="{{link (agentPath .SessionID) $p.Scope}}">{{.Summary}}</a>{{else}}{{.Summary}}{{end}}
-</h3>
-<p class="muted">{{.Project}}{{if .Branch}} · {{.Branch}}{{end}}{{if .Title}} · {{.Title}}{{end}}{{if .Detail}} · {{.Detail}}{{end}}{{if .AckPendingAt}} · acknowledgement pending{{end}}
-</p>
-{{with .Jump}}<p class="muted">{{.Cwd}}</p>{{if .Command}}<label>Jump command<input readonly aria-label="Jump command" value="{{.Command}}" spellcheck="false"></label>{{end}}{{if .URL}}<a href="{{.URL}}" rel="noopener noreferrer">Open agent</a>{{end}}{{end}}
-</article>{{else}}
-<p class="empty">Your inbox is clear.
-</p>{{end}}
+<section data-pane tabindex="0" class="pane inbox-pane" data-inbox-section="needs" aria-labelledby="inbox-needs">
+<div class="pt"><h2 id="inbox-needs">needs you · {{waitingHeader .InboxWaiting .ObservedAt}}</h2><span>enter expand · read-only</span></div>
+{{template "inboxTable" (inboxTable .InboxWaiting . false)}}
+{{if not .InboxWaiting}}<p class="empty">Nothing needs you.</p>{{end}}
+</section>
+<section data-pane tabindex="0" class="pane inbox-pane" data-inbox-section="recent" aria-labelledby="inbox-recent">
+<div class="pt"><h2 id="inbox-recent">recent · {{len .InboxRecent}}</h2><span>Acknowledgements stay in the CLI / TUI</span></div>
+{{template "inboxTable" (inboxTable .InboxRecent . true)}}
+{{if gt (len .InboxRecent) 50}}<button type="button" class="inbox-older" data-inbox-older>show older · next 50</button>{{end}}
+{{if not .InboxRecent}}<p class="empty">No recent completions.</p>{{end}}
 </section>{{end}}
 
+{{end}}
+
+{{define "inboxTable"}}
+<div class="inbox-table {{if eq .Scope "all"}}inbox-fleet{{end}}" role="table" aria-label="{{if .Recent}}Recent completions{{else}}Active waits{{end}}">
+<div class="inbox-columns inbox-header" role="row"><span role="columnheader">reason</span><span role="columnheader">tool</span><span role="columnheader">wait / age</span>{{if eq .Scope "all"}}<span role="columnheader" data-inbox-machine>machine</span>{{end}}<span role="columnheader">project · branch</span><span role="columnheader">title / detail</span><span role="columnheader">time</span></div>
+{{$p := .}}{{range $i, $row := .Rows}}
+<details class="inbox-row" data-row data-inbox-key="{{inboxKey .}}"{{if $p.Recent}} data-inbox-recent{{if ge $i 50}} hidden{{end}}{{end}}>
+<summary class="inbox-columns" role="row">
+<span role="cell" class="inbox-reason {{stateClass .Kind}}">{{if eq .Kind "waiting"}}[{{if .Reason}}{{.Reason}}{{else}}waiting{{end}}]{{else}}finished{{end}}</span>
+<span role="cell" class="inbox-tool">{{if .Tool}}{{.Tool}}{{else}}—{{end}}</span>
+<span role="cell" class="inbox-age d">{{if eq .Kind "waiting"}}{{duration .Waited}}{{else}}{{relative .TS $p.ObservedAt}}{{end}}</span>
+{{if eq $p.Scope "all"}}<span role="cell" class="inbox-machine m" data-inbox-machine>{{.MachineName}}</span>{{end}}
+<span role="cell" class="inbox-project m">{{.Project}}{{if .Branch}} · {{.Branch}}{{end}}</span>
+<span role="cell" class="inbox-title">{{if .Title}}{{.Title}}{{else}}{{.Summary}}{{end}}{{if .Detail}} · {{.Detail}}{{end}}</span>
+<time role="cell" class="inbox-time d" title="{{stamp .TS}}">{{clock .TS}}</time>
+</summary>
+<div class="inbox-detail">
+<p>{{if .Title}}{{.Title}} · {{end}}{{.Summary}}{{if .Detail}} · {{.Detail}}{{end}}{{if .Stale}} · stale{{end}}{{if .AckPendingAt}} · acknowledgement pending{{end}}</p>
+{{with .Jump}}{{if .Cwd}}<dl class="inbox-cwd"><dt>cwd</dt><dd>{{.Cwd}}</dd></dl>{{end}}{{if .Command}}<div class="inbox-jump"><div class="inbox-copy-bar"><span class="d">Jump command</span><button type="button" data-inbox-copy>Copy</button><span data-inbox-copy-status role="status" aria-live="polite"></span></div><pre data-inbox-command tabindex="0" aria-label="Jump command" aria-readonly="true">{{.Command}}</pre></div>{{end}}{{if .URL}}<a href="{{.URL}}" rel="noopener noreferrer">Open agent</a>{{end}}{{end}}
+{{if .SessionID}}<a href="{{link (agentPath .SessionID) $p.Scope $p.All}}">Agent detail</a>{{end}}
+</div>
+</details>{{end}}
+</div>
 {{end}}
 
 {{define "orphans"}}

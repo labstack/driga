@@ -76,10 +76,62 @@
     }
     return pulses;
   }
-  globalThis.DrigaConsole = Object.freeze({parseCommand, familyEvent, flowWireGeometry, observationPulses, transcriptSize});
+  function createInboxController(doc, viewport) {
+    let expanded = new Set(), limit = 50, position = null;
+    const allRows = () => Array.from(doc.querySelectorAll("[data-inbox-key]"));
+    function render() {
+      let recent = 0;
+      for (const row of allRows()) {
+        const capped = row.hasAttribute("data-inbox-recent");
+        const pane = row.closest("[data-pane]");
+        const field = pane && pane.querySelector(".filter input");
+        const matches = !field || row.textContent.toLowerCase().includes(field.value.toLowerCase());
+        // Keep an expanded row visible if fresh completions push it past the cap.
+        row.hidden = !matches || (capped && recent++ >= limit && !row.open);
+      }
+      const older = doc.querySelector("[data-inbox-older]");
+      if (older) {
+        const remaining = Math.max(0, doc.querySelectorAll("[data-inbox-recent]").length - limit);
+        older.hidden = remaining === 0;
+        older.textContent = "show older · next " + Math.min(50, remaining) + " (" + remaining + " remaining)";
+      }
+    }
+    return {
+      render,
+      capture() {
+        if (!allRows().length) return;
+        expanded = new Set(allRows().filter(row => row.open).map(row => row.dataset.inboxKey));
+        position = {x:viewport.scrollX, y:viewport.scrollY, panes:Array.from(doc.querySelectorAll("[data-pane]")).map(p => [p.scrollLeft, p.scrollTop])};
+      },
+      restore() {
+        for (const row of allRows()) row.open = expanded.has(row.dataset.inboxKey);
+        render();
+        if (position) {
+          doc.querySelectorAll("[data-pane]").forEach((p,i) => { if (position.panes[i]) [p.scrollLeft,p.scrollTop] = position.panes[i]; });
+          viewport.scrollTo(position.x, position.y);
+        }
+      },
+      showOlder() { limit += 50; render(); },
+      copy(button, clipboard) {
+        const jump = button.closest(".inbox-jump"), command = jump.querySelector("[data-inbox-command]"), status = jump.querySelector("[data-inbox-copy-status]");
+        const fallback = () => {
+          command.focus({preventScroll:true});
+          const range = doc.createRange(); range.selectNodeContents(command);
+          const selection = doc.getSelection(); selection.removeAllRanges(); selection.addRange(range);
+          status.textContent = "Command selected · copy with your keyboard";
+        };
+        try {
+          // Invoke immediately in the click's user activation, before any await.
+          return clipboard.writeText(command.textContent).then(() => { status.textContent = "Copied"; }, fallback);
+        } catch (_) { fallback(); return Promise.resolve(); }
+      }
+    };
+  }
+  globalThis.DrigaConsole = Object.freeze({parseCommand, familyEvent, flowWireGeometry, observationPulses, transcriptSize, createInboxController});
   if (typeof document === "undefined") return;
 
   const root = document.documentElement;
+  const inboxUI = createInboxController(document, window);
   const system = matchMedia("(prefers-color-scheme: light)");
   const phone = matchMedia("(max-width: 900px)");
   const css = name => getComputedStyle(root).getPropertyValue("--" + name).trim();
@@ -162,12 +214,12 @@
     all.forEach((p, i) => p.classList.toggle("focus", i === focused));
     if (focus) all[focused].focus({preventScroll: true});
   }
-  function selectRow(pane, index) {
+  function selectRow(pane, index, scroll = true) {
     const all = rows(pane); if (!all.length) return;
     const row = all[(index + all.length) % all.length];
     all.forEach(el => el.classList.toggle("sel", el === row));
     selected = row.getAttribute("href") || row.dataset.session || String(all.indexOf(row));
-    row.scrollIntoView({block: "nearest"});
+    if (scroll) row.scrollIntoView({block: "nearest"});
      if (row.matches("[data-worker]")) inspectWorker(row);
   }
   function filterPane(pane, focus = true) {
@@ -179,6 +231,7 @@
       input.addEventListener("input", () => {
         filters.set(paneIndex, input.value);
         pane.querySelectorAll("[data-row]").forEach(row => { row.hidden = !row.textContent.toLowerCase().includes(input.value.toLowerCase()); });
+        inboxUI.render();
       });
       label.append(input); pane.prepend(label);
     }
@@ -277,12 +330,15 @@
   function closeHelp() { help.close(); focusPane(focused); }
   document.querySelector("[data-close-help]").addEventListener("click", closeHelp);
   document.addEventListener("click", event => {
+    const copy = event.target.closest("[data-inbox-copy]");
+    if (copy) { inboxUI.copy(copy, navigator.clipboard); return; }
+    if (event.target.closest("[data-inbox-older]")) { inboxUI.showOlder(); return; }
     if (!event.target.closest(".cmd")) closeMenu();
     if (event.target.closest("[data-pause-tail]")) pauseTail();
     const flowNav = event.target.closest('[data-window="7"]');
     if (flowNav && !document.querySelector("[data-flow]")) flowNav.href = selectedFlowURL(flowNav.href);
     const pane = event.target.closest("[data-pane]");
-    if (pane) { focusPane(panes().indexOf(pane), false); const row = event.target.closest("[data-row]"); if (row) selectRow(pane, rows(pane).indexOf(row)); }
+    if (pane) { focusPane(panes().indexOf(pane), false); const row = event.target.closest("[data-row]"); if (row) selectRow(pane, rows(pane).indexOf(row), !row.matches("[data-inbox-key]")); }
   });
   document.addEventListener("focusin", event => {
     const pane = event.target.closest("[data-pane]"); if (pane) focusPane(panes().indexOf(pane), false);
@@ -292,7 +348,7 @@
     if (event.defaultPrevented || event.ctrlKey || event.altKey || event.metaKey || event.isComposing) return;
     if (help.open) { if (event.key === "?" || event.key === "Escape") { event.preventDefault(); closeHelp(); } return; }
     if (event.target.closest("input,textarea,select,[contenteditable='true']")) {
-      if (event.key === "Escape" && event.target.closest(".filter")) { event.preventDefault(); filters.delete(focused); const pane = panes()[focused]; pane.querySelectorAll("[data-row]").forEach(el => { el.hidden = false; }); event.target.closest(".filter").remove(); focusPane(focused); }
+      if (event.key === "Escape" && event.target.closest(".filter")) { event.preventDefault(); filters.delete(focused); const pane = panes()[focused]; pane.querySelectorAll("[data-row]").forEach(el => { el.hidden = false; }); event.target.closest(".filter").remove(); inboxUI.render(); focusPane(focused); }
       return;
     }
     const flow = document.querySelector("[data-flow]");
@@ -329,9 +385,9 @@
       event.preventDefault(); const all = rows(pane), current = all.findIndex(r => r.classList.contains("sel"));
       selectRow(pane, current < 0 ? 0 : current + (["j", "ArrowDown"].includes(event.key) ? 1 : -1));
     } else if (pane && event.key === "Enter" && event.target === pane) {
-      event.preventDefault(); const row = pane.querySelector("[data-row].sel") || rows(pane)[0]; const link = row && (row.matches("a") ? row : row.querySelector("a")); if (link) link.click();
+      event.preventDefault(); const row = pane.querySelector("[data-row].sel") || rows(pane)[0]; const link = row && (row.matches("a") ? row : row.querySelector(row.matches("[data-inbox-key]") ? "summary" : "a")); if (link) link.click();
     } else if (pane && event.key === "/") { event.preventDefault(); filterPane(pane); }
-    else if (event.key === "Tab" && pane && (event.target.matches("[data-pane]") || event.target.closest("[data-row]"))) { event.preventDefault(); focusPane(focused + (event.shiftKey ? -1 : 1)); }
+    else if (event.key === "Tab" && pane && !pane.matches(".inbox-pane") && (event.target.matches("[data-pane]") || event.target.closest("[data-row]"))) { event.preventDefault(); focusPane(focused + (event.shiftKey ? -1 : 1)); }
     else if (event.key === "Escape") { closeMenu(); if (pane) { pane.querySelectorAll(".sel").forEach(el => el.classList.remove("sel")); focusPane(focused); } }
   });
   function inspectWorker(worker) {
@@ -398,7 +454,8 @@
     applyTheme(); focusPane(focused, false);
     panes().forEach((pane, i) => {
       for (const row of pane.querySelectorAll("[data-row]")) {
-        if (!row.title) row.title = row.textContent.trim();
+        if (!row.title && !row.matches("[data-inbox-key]")) row.title = row.textContent.trim();
+        row.querySelectorAll(".inbox-columns [role='cell']").forEach(el => { el.title = el.textContent; });
         row.querySelectorAll(".t,.l,.branch,.item p,dd").forEach(el => { if (!el.title) el.title = el.textContent; });
         if (row.matches("[data-worker]") && selected) {
           const match = row.dataset.session === selected;
@@ -414,9 +471,10 @@
     renderTail(); charts.draw(); drawFlowWires(); refreshFlowObservations();
   }
   let restorePane = false;
-  document.addEventListener("htmx:beforeSwap", () => { restorePane = !!document.activeElement.closest("[data-pane]"); charts.dispose(); });
-  document.addEventListener("htmx:afterSwap", () => { refreshUI(); if (restorePane) focusPane(focused); });
+  document.addEventListener("htmx:beforeSwap", () => { restorePane = !!document.activeElement.closest("[data-pane]"); inboxUI.capture(); charts.dispose(); });
+  document.addEventListener("htmx:afterSwap", () => { refreshUI(); inboxUI.restore(); if (restorePane) focusPane(focused); });
   refreshUI();
+  inboxUI.restore();
   if (document.fonts) document.fonts.ready.then(() => charts.draw());
   system.addEventListener("change", () => { if (preference === "system") charts.draw(); });
   phone.addEventListener("change", () => charts.draw());
