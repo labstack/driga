@@ -20,6 +20,7 @@ type Reader interface {
 	Repos() ([]model.Repo, error)
 	Worktrees(int64) ([]model.Worktree, error)
 	Handoffs(int64, int) ([]model.CompletionEvent, error)
+	SessionHandoffs(int64, time.Time, time.Time) ([]model.CompletionEvent, error)
 	Summaries(int64) ([]model.Summary, error)
 	SessionFiles(time.Time) (map[int64][]model.FileTouch, error)
 	Events(string, string, time.Time) ([]model.Event, error)
@@ -102,6 +103,7 @@ func newEnvelopeLocal(r Reader, mode string, now time.Time, intervals Intervals,
 
 // Filter scopes a view to a canonical repo path and an optional time window.
 type Filter struct {
+	FlowMinutes int
 	CaptureText string
 	Scope       store.Scope
 	Project     string

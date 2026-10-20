@@ -29,24 +29,21 @@ func TestFlowObservedRendering(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	body := request(s, "GET", fmt.Sprint("/flow?id=", id), s.token).Body.String()
-	for _, want := range []string{`data-growth-at="` + at.Format(time.RFC3339Nano) + `"`, `data-growth-bytes="12288"`, `data-growth-bytes="123"`, `60 one-minute transcript growth buckets`, `data-observation-strip`} {
+	body := request(s, "GET", fmt.Sprint("/flow.json?id=", id), s.token).Body.String()
+	for _, want := range []string{`"last_growth_at":"` + at.Format(time.RFC3339Nano) + `"`, `"last_growth_bytes":12288`, `"last_growth_bytes":123`, `"from_at"`, `"cpu_ms_per_min"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("missing %s", want)
 		}
 	}
-	if strings.Count(body, "60 one-minute transcript growth buckets") < 3 {
-		t.Fatal("lead/worker/tail missing sparklines")
-	}
-	css, _ := assets.ReadFile("static/app.css")
-	js, _ := assets.ReadFile("static/app.js")
-	for _, want := range []string{".flow-observed-pulse", ".flow-growth-ring", "prefers-reduced-motion"} {
+	css, _ := assets.ReadFile("static/flow-map.css")
+	js, _ := assets.ReadFile("static/flow-map.js")
+	for _, want := range []string{".metro-log-band", ".metro-cpu", "prefers-reduced-motion"} {
 		if !strings.Contains(string(css), want) {
-			t.Errorf("missing CSS %s", want)
+			t.Error("missing", want)
 		}
 	}
-	if !strings.Contains(string(js), "refreshFlowObservations();") {
-		t.Fatal("growth observer not connected to refresh")
+	if !strings.Contains(string(js), "driga:flow-refresh") {
+		t.Fatal("missing JSON refresh hook")
 	}
 }
 
@@ -60,11 +57,10 @@ func TestFlowObservedJavaScript(t *testing.T) {
 	var cmd *exec.Cmd
 	if runtime, err := exec.LookPath("node"); err == nil {
 		cmd = exec.Command(runtime, "-e", code)
-	} else if runtime, err := exec.LookPath("osascript"); err == nil {
-		cmd = exec.Command(runtime, "-l", "JavaScript", "-e", code)
 	} else {
 		t.Skip("JavaScript runner unavailable")
 	}
+	cmd.Env = []string{"PATH=" + t.TempDir(), "HOME=" + t.TempDir()}
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("JavaScript observations: %v\n%s", err, out)
 	}

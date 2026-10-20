@@ -453,10 +453,7 @@ func (m *app) selectedCwd() string {
 
 // agentAge renders an unknown (zero) session age as "—".
 func agentAge(d time.Duration) string {
-	if d == 0 {
-		return "—"
-	}
-	return duration(d)
+	return view.SessionDuration(d)
 }
 
 func mapTabNumber(tab int) int {

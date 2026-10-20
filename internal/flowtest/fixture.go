@@ -92,6 +92,11 @@ func Seed(tx *store.Tx) (int64, error) {
 		if _, err := tx.UpsertSession(model.Session{ParentID: &id, SessionObs: obs, Label: "idle"}); err != nil {
 			return 0, err
 		}
+		if i < 5 {
+			if err := tx.InsertEvent(model.Event{Adapter: obs.Adapter, ExternalID: obs.ExternalID, Kind: "retained", TS: Now.Add(-5 * time.Minute)}); err != nil {
+				return 0, err
+			}
+		}
 	}
 	if err := tx.ReplaceProcs([]model.Proc{{PID: in.Obs.PID, CPUPercent: 0}}); err != nil {
 		return 0, err

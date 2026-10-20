@@ -8,55 +8,68 @@ import (
 	"time"
 
 	"github.com/labstack/driga/internal/derive"
+	"github.com/labstack/driga/internal/inbox"
 	"github.com/labstack/driga/internal/jsonwire"
 	"github.com/labstack/driga/internal/model"
+	"github.com/labstack/driga/internal/scrub"
 	"github.com/labstack/driga/internal/store"
 )
 
 // FlowNode contains a session and only usage measurements actually retained.
 type FlowNode struct {
-	Reason         string        `json:"reason,omitempty"`
-	MachineID      string        `json:"machine_id"`
-	ID             int64         `json:"id"`
-	ExternalID     string        `json:"external_id"`
-	Adapter        string        `json:"adapter"`
-	Kind           string        `json:"kind"`
-	Title          string        `json:"title"`
-	Project        string        `json:"project"`
-	Branch         string        `json:"branch"`
-	Label          string        `json:"label"`
-	Heuristic      bool          `json:"heuristic"`
-	Age            time.Duration `json:"age_ms"`
-	Elapsed        time.Duration `json:"elapsed_ms"`
-	LastActivityAt time.Time     `json:"last_activity_at"`
-	LastActivity   string        `json:"last_activity,omitempty"`
-	LastTool       string        `json:"last_tool,omitempty"`
-	Mem            *uint64       `json:"mem_bytes,omitempty"`
-	Helpers        *int          `json:"helpers,omitempty"`
-	Model          string        `json:"model,omitempty"`
-	InputTokens    *int64        `json:"input_tokens,omitempty"`
-	OutputTokens   *int64        `json:"output_tokens,omitempty"`
-	CostUSD        *float64      `json:"cost_usd,omitempty"`
-	Activity       []int         `json:"activity"`
-	Observed       *FlowObserved `json:"observed"`
+	StartedAt      time.Time               `json:"started_at"`
+	EndedAt        *time.Time              `json:"ended_at"`
+	ParentID       *int64                  `json:"parent_id"`
+	Mixer          model.StateMixer        `json:"mixer"`
+	Events         []model.Event           `json:"events"`
+	Waits          []FlowWait              `json:"waits"`
+	Handoffs       []model.CompletionEvent `json:"handoffs"`
+	RetainedFromAt time.Time               `json:"retained_from_at"`
+	Jump           *model.InboxJump        `json:"jump,omitempty"`
+	Reason         string                  `json:"reason,omitempty"`
+	MachineID      string                  `json:"machine_id"`
+	ID             int64                   `json:"id"`
+	ExternalID     string                  `json:"external_id"`
+	Adapter        string                  `json:"adapter"`
+	Kind           string                  `json:"kind"`
+	Title          string                  `json:"title"`
+	Project        string                  `json:"project"`
+	Branch         string                  `json:"branch"`
+	Label          string                  `json:"label"`
+	Heuristic      bool                    `json:"heuristic"`
+	Age            time.Duration           `json:"age_ms"`
+	Elapsed        time.Duration           `json:"elapsed_ms"`
+	ElapsedText    string                  `json:"elapsed_text"`
+	LastActivityAt time.Time               `json:"last_activity_at"`
+	LastActivity   string                  `json:"last_activity,omitempty"`
+	LastTool       string                  `json:"last_tool,omitempty"`
+	Mem            *uint64                 `json:"mem_bytes,omitempty"`
+	Helpers        *int                    `json:"helpers,omitempty"`
+	Model          string                  `json:"model,omitempty"`
+	InputTokens    *int64                  `json:"input_tokens,omitempty"`
+	OutputTokens   *int64                  `json:"output_tokens,omitempty"`
+	CostUSD        *float64                `json:"cost_usd,omitempty"`
+	Activity       []int                   `json:"activity"`
+	Observed       *FlowObserved           `json:"observed"`
 }
 
 // FlowObserved keeps collector measurements separate from agent-emitted events.
-// The chart includes the current minute and the preceding 59, oldest first.
+// Buckets include the current minute and the selected window, oldest first.
 type FlowObserved struct {
+	FromAt          time.Time `json:"from_at"`
 	LogBytesPerMin  []int64   `json:"log_bytes_per_min"`
 	CPUMSPerMin     []int64   `json:"cpu_ms_per_min"`
 	LastGrowthAt    time.Time `json:"last_growth_at"`
 	LastGrowthBytes int64     `json:"last_growth_bytes"`
 }
 
-func flowObserved(r Reader, id int64, now time.Time) (*FlowObserved, error) {
-	rows, err := r.ObservationMinutes(id, now)
-	if err != nil || len(rows) == 0 {
-		return nil, err
+func flowObserved(rows []store.ObservationMinute, now time.Time, minutes int) *FlowObserved {
+	if len(rows) == 0 {
+		return nil
 	}
-	o := &FlowObserved{LogBytesPerMin: make([]int64, 60), CPUMSPerMin: make([]int64, 60)}
-	start := now.Truncate(time.Minute).Add(-59 * time.Minute)
+	o := &FlowObserved{LogBytesPerMin: make([]int64, minutes), CPUMSPerMin: make([]int64, minutes)}
+	start := now.Truncate(time.Minute).Add(-time.Duration(minutes-1) * time.Minute)
+	o.FromAt = start
 	for _, row := range rows {
 		if row.LastGrowthAt.After(o.LastGrowthAt) && !row.LastGrowthAt.After(now) {
 			o.LastGrowthAt, o.LastGrowthBytes = row.LastGrowthAt, row.LastGrowthBytes
@@ -65,17 +78,22 @@ func flowObserved(r Reader, id int64, now time.Time) (*FlowObserved, error) {
 			continue
 		}
 		i := int(row.Minute.Sub(start) / time.Minute)
-		if i >= 0 && i < 60 {
+		if i >= 0 && i < minutes {
 			o.LogBytesPerMin[i] = row.LogBytes
 			o.CPUMSPerMin[i] = row.CPUMS
 		}
 	}
-	return o, nil
+	return o
 }
 
 // FlowView describes one family. Usage totals cover retained api_request events
 // only (at most 200 stored events per session), never estimated lifetime usage.
 type FlowView struct {
+	FromAt          time.Time        `json:"from_at"`
+	ObservedAt      time.Time        `json:"observed_at"`
+	WindowMinutes   int              `json:"window_minutes"`
+	Gaps            []model.Gap      `json:"gaps"`
+	Attention       FlowAttention    `json:"attention"`
 	Lead            *FlowNode        `json:"lead"`
 	Children        []FlowNode       `json:"children"`
 	Mixer           model.StateMixer `json:"mixer"`
@@ -93,18 +111,28 @@ type FlowWorkers struct {
 	Quiet int
 }
 
+// Workers folds only sessions with no retained evidence or open inbox wait.
+// limit is retained for callers; active rows scroll rather than being called quiet.
 func (v FlowView) Workers(limit int, expanded bool, now time.Time) FlowWorkers {
-	// Every surface partitions the same snapshot. A viewer's clock must not
-	// move a hosted thread into the quiet summary between renders.
-	if !v.Mixer.ObservedAt.IsZero() {
-		now = v.Mixer.ObservedAt
-	}
 	nodes := append([]FlowNode(nil), v.Children...)
 	sortFlowWorkers(nodes)
 	w := FlowWorkers{Nodes: []FlowNode{}}
 	for _, n := range nodes {
-		oldHosted := n.Kind == "hosted" && n.Label == "idle" && (n.LastActivityAt.IsZero() || now.Sub(n.LastActivityAt) > time.Hour)
-		if !expanded && (oldHosted || len(w.Nodes) >= max(0, limit)) {
+		quiet := len(n.Events) == 0 && len(n.Handoffs) == 0
+		for _, wait := range n.Waits {
+			if wait.EndedAt == nil {
+				quiet = false
+			}
+		}
+		if n.Observed != nil {
+			for i, x := range n.Observed.LogBytesPerMin {
+				if x > 0 || i < len(n.Observed.CPUMSPerMin) && n.Observed.CPUMSPerMin[i] > 0 {
+					quiet = false
+					break
+				}
+			}
+		}
+		if quiet && !expanded {
 			w.Quiet++
 		} else {
 			w.Nodes = append(w.Nodes, n)
@@ -112,17 +140,12 @@ func (v FlowView) Workers(limit int, expanded bool, now time.Time) FlowWorkers {
 	}
 	return w
 }
-
 func sortFlowWorkers(nodes []FlowNode) {
-	active := func(n FlowNode) bool { return n.Label == "working" || n.Label == "waiting" || n.Label == "stalled" }
 	sort.SliceStable(nodes, func(i, j int) bool {
-		if active(nodes[i]) != active(nodes[j]) {
-			return active(nodes[i])
-		}
-		if nodes[i].LastActivityAt.Equal(nodes[j].LastActivityAt) {
+		if nodes[i].StartedAt.Equal(nodes[j].StartedAt) {
 			return nodes[i].ID < nodes[j].ID
 		}
-		return nodes[i].LastActivityAt.After(nodes[j].LastActivityAt)
+		return nodes[i].StartedAt.Before(nodes[j].StartedAt)
 	})
 }
 
@@ -149,6 +172,25 @@ func (n FlowNode) DisplayTitle() string {
 		agent = "agent"
 	}
 	return agent + " thread"
+}
+
+func flowAttentionTitle(s model.Session, project, capture string) string {
+	hint := ""
+	if capture != "none" {
+		hint = scrub.Snippet(s.Title)
+	}
+	if hint == "" {
+		hint = scrub.Snippet(s.Branch)
+	}
+	if hint == "" {
+		id := []rune(strings.TrimSpace(s.ExternalID))
+		if len(id) > 0 {
+			hint = "#" + string(id[max(0, len(id)-6):])
+		} else {
+			hint = fmt.Sprintf("#%d", s.ID)
+		}
+	}
+	return FlowJoin(project, scrub.Truncate(hint, 40))
 }
 
 // defaultFlowLead is the no-id selection policy for every flow surface.
@@ -209,7 +251,14 @@ func defaultFlowLead(sessions []model.Session, since time.Time) *model.Session {
 // Flow selects an explicit session's root, or the shared default interactive lead.
 // Machine and project scopes apply before selection; ancestry never crosses machines.
 func Flow(r Reader, f Filter, sessionID int64, now time.Time) (FlowView, error) {
-	v := FlowView{Children: []FlowNode{}, Tail: []TailEvent{}, UsageWindow: "retained api_request events"}
+	minutes := f.FlowMinutes
+	if minutes == 0 {
+		minutes = 60
+	}
+	if minutes != 15 && minutes != 60 && minutes != 240 {
+		return FlowView{}, fmt.Errorf("flow minutes must be 15, 60 or 240")
+	}
+	v := FlowView{ObservedAt: now, FromAt: now.Add(-time.Duration(minutes) * time.Minute), WindowMinutes: minutes, Gaps: []model.Gap{}, Attention: FlowAttention{Waits: []InboxRow{}}, Children: []FlowNode{}, Tail: []TailEvent{}, UsageWindow: "retained api_request events"}
 	var selectedReader Reader
 	var selectedMachine model.Machine
 	var all []model.Session
@@ -222,6 +271,34 @@ func Flow(r Reader, f Filter, sessionID int64, now time.Time) (FlowView, error) 
 	byMachine := map[string]machineFlow{}
 	var defaults []model.Session
 	err := machineReaders(r, f.Scope, func(mr Reader, m model.Machine) error {
+		// Attention is machine-wide, independent of selected project/family.
+		ssAll, err := mr.Sessions(store.SessionFilter{IncludeEnded: true})
+		if err != nil {
+			return err
+		}
+		items, err := mr.Inbox(time.Time{}, true)
+		if err != nil {
+			return err
+		}
+		repos, err := mr.Repos()
+		if err != nil {
+			return err
+		}
+		sessions := map[int64]model.Session{}
+		for _, s := range ssAll {
+			sessions[s.ID] = s
+			if s.Label == "working" && s.EndedAt == nil {
+				v.Attention.Working++
+			}
+		}
+		for _, item := range items {
+			if inbox.Active(item) && !item.TS.After(now) {
+				item = inbox.Policy(item, f.CaptureText)
+				s := sessions[item.SessionID]
+				project := projectName(s, repos)
+				v.Attention.Waits = append(v.Attention.Waits, InboxRow{InboxItem: item, MachineID: mr.MachineID(), Adapter: s.Adapter, Title: flowAttentionTitle(s, project, f.CaptureText), Project: project, Branch: s.Branch, Age: max(0, now.Sub(item.TS)), Waited: inbox.Waited(item, now)})
+			}
+		}
 		ss, err := mr.Sessions(store.SessionFilter{IncludeEnded: true, RepoPath: f.Project})
 		if err != nil {
 			return err
@@ -253,6 +330,7 @@ func Flow(r Reader, f Filter, sessionID int64, now time.Time) (FlowView, error) 
 			selectedReader, selectedMachine, all = selected.reader, selected.machine, selected.sessions
 		}
 	}
+	sort.SliceStable(v.Attention.Waits, func(i, j int) bool { return inbox.Less(v.Attention.Waits[i].InboxItem, v.Attention.Waits[j].InboxItem) })
 	if selectedReader == nil {
 		if sessionID != 0 {
 			return v, store.ErrNotFound
@@ -292,13 +370,13 @@ func Flow(r Reader, f Filter, sessionID int64, now time.Time) (FlowView, error) 
 		return v, err
 	}
 	var leadEvents []model.Event
-	waits, err := selectedReader.Inbox(time.Time{}, false)
+	waits, err := selectedReader.Inbox(time.Time{}, true)
 	if err != nil {
 		return v, err
 	}
 	reasons := map[int64]string{}
 	for _, i := range waits {
-		if i.Kind == "waiting" && i.EndedAt == nil {
+		if inbox.Active(i) {
 			reasons[i.SessionID] = i.Reason
 		}
 	}
@@ -314,11 +392,58 @@ func Flow(r Reader, f Filter, sessionID int64, now time.Time) (FlowView, error) 
 			return v, err
 		}
 		n := FlowNode{MachineID: selectedReader.MachineID(), ID: s.ID, ExternalID: s.ExternalID, Adapter: s.Adapter, Kind: "worker", Title: s.Title, Project: projectName(s, repos), Branch: s.Branch, Label: s.Label, Heuristic: s.Heuristic, Age: sessionAge(s, now), LastActivityAt: s.LastActivityAt, Activity: make([]int, 10)}
-		n.Reason = reasons[s.ID]
-		n.Observed, err = flowObserved(selectedReader, s.ID, now)
-		if err != nil {
-			return v, err
+		n.StartedAt, n.EndedAt, n.ParentID, n.Mixer = s.StartedAt, s.EndedAt, s.ParentID, derive.SessionMixer(s)
+		n.Events = []model.Event{}
+		n.Waits = []FlowWait{}
+		n.Handoffs = []model.CompletionEvent{}
+		n.Jump = inbox.ResolveJump(s, "", nil)
+		n.RetainedFromAt = time.Time{}
+		for _, e := range events {
+			if !e.TS.After(now) && (n.RetainedFromAt.IsZero() || e.TS.Before(n.RetainedFromAt)) {
+				n.RetainedFromAt = e.TS
+			}
 		}
+		var rows []store.ObservationMinute
+		if selectedReader.MachineID() == r.MachineID() {
+			var e error
+			rows, e = selectedReader.ObservationMinutes(s.ID, now)
+			if e != nil {
+				return v, e
+			}
+		}
+		if len(rows) > 0 {
+			oldest := rows[0].Minute
+			if n.RetainedFromAt.IsZero() || oldest.After(n.RetainedFromAt) {
+				n.RetainedFromAt = oldest
+			}
+		}
+		for _, item := range waits {
+			if item.Kind != "waiting" || item.SessionID != s.ID {
+				continue
+			}
+			item = inbox.Policy(item, f.CaptureText)
+			w := flowWait(item)
+			if w.StartedAt.After(now) || w.EndedAt != nil && w.EndedAt.Before(v.FromAt) {
+				continue
+			}
+			n.Waits = append(n.Waits, w)
+			if item.Jump != nil {
+				n.Jump = item.Jump
+			}
+		}
+		if s.Adapter == "codex" || s.Adapter == "gemini" {
+			hs, e := selectedReader.SessionHandoffs(s.ID, v.FromAt, now)
+			if e != nil {
+				return v, e
+			}
+			for _, h := range hs {
+				if !h.TS.Before(v.FromAt) && !h.TS.After(now) {
+					n.Handoffs = append(n.Handoffs, h)
+				}
+			}
+		}
+		n.Reason = reasons[s.ID]
+		n.Observed = flowObserved(rows, now, minutes)
 		if strings.TrimSpace(n.Title) == "" {
 			// LastPrompt has already passed the collector's capture policy.
 			n.Title = strings.TrimSpace(s.LastPrompt)
@@ -331,6 +456,7 @@ func Flow(r Reader, f Filter, sessionID int64, now time.Time) (FlowView, error) 
 		if s.EndedAt != nil && !s.StartedAt.IsZero() {
 			n.Elapsed = max(time.Duration(0), s.EndedAt.Sub(s.StartedAt))
 		}
+		n.ElapsedText = SessionDuration(n.Elapsed)
 		tree := procTree(s, idx)
 		if len(tree) > 0 {
 			var rss uint64
@@ -354,6 +480,9 @@ func Flow(r Reader, f Filter, sessionID int64, now time.Time) (FlowView, error) 
 				if bucket < 10 {
 					n.Activity[bucket]++
 				}
+			}
+			if !e.TS.Before(v.FromAt) {
+				n.Events = append(n.Events, e)
 			}
 			n.LastActivity = e.Kind
 			title := n.Title
@@ -390,6 +519,9 @@ func Flow(r Reader, f Filter, sessionID int64, now time.Time) (FlowView, error) 
 				n.LastTool = e.Summary
 			}
 		}
+		if len(n.Events) > 100 {
+			n.Events = n.Events[len(n.Events)-100:]
+		}
 		if s.ID == lead.ID {
 			n.Kind = "lead"
 			v.Lead = &n
@@ -399,6 +531,11 @@ func Flow(r Reader, f Filter, sessionID int64, now time.Time) (FlowView, error) 
 		}
 	}
 	sortFlowWorkers(v.Children)
+	v.Gaps, err = selectedReader.Gaps(v.FromAt)
+	if err != nil {
+		return v, err
+	}
+	v.Gaps = nonNil(v.Gaps)
 	v.Mixer = derive.SessionMixer(lead)
 	telemetryCount := 0
 	for _, e := range leadEvents {

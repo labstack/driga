@@ -54,12 +54,22 @@ func TestRenderedFramesNeverContainTabs(t *testing.T) {
 }
 
 func flowFixture() view.FlowView {
-	return view.FlowView{Lead: &view.FlowNode{ID: 1, MachineID: "local", ExternalID: "lead", Adapter: "claude", Title: "Lead", Label: "working"}, Mixer: model.StateMixer{Verdict: "working", Rows: []model.StateSignal{{Name: "registry", Reading: "busy", Strength: 1}, {Name: "hooks", Reading: "Stop", Strength: .3}, {Name: "telemetry", Reading: "1 / min", Strength: .5}, {Name: "process", Reading: "alive", Strength: 1}}}, Children: []view.FlowNode{{ID: 2, MachineID: "local", ExternalID: "worker", Adapter: "codex", Title: strings.Repeat("worker ", 40), Label: "working", Activity: []int{0, 1, 2, 3, 4, 5, 0, 0, 1, 0}}, {ID: 3, ExternalID: "hosted", Kind: "hosted", Title: "Hosted", Label: "idle", LastActivityAt: time.Now()}, {ID: 4, Title: "Finished", Label: "finished"}}, Tail: []view.TailEvent{{Key: "old", MachineID: "local", Adapter: "claude", ExternalID: "lead", Summary: "family only"}}}
+	now := flowtest.Now
+	mixer := model.StateMixer{ObservedAt: now, Verdict: "working", Evidence: "stored verdict", Rows: []model.StateSignal{{Name: "registry", Reading: "busy"}, {Name: "hooks", Reading: "Stop"}, {Name: "telemetry", Reading: "1 / min"}, {Name: "process", Reading: "alive"}}}
+	lead := view.FlowNode{ID: 1, Kind: "lead", MachineID: "local", Adapter: "claude", ExternalID: "lead", Title: "Lead", Label: "working", Mixer: mixer, StartedAt: now.Add(-time.Hour), RetainedFromAt: now.Add(-40 * time.Minute), Events: []model.Event{{Kind: "otlp:user_prompt", TS: now.Add(-10 * time.Minute)}}}
+	f := view.FlowView{Lead: &lead, Mixer: mixer, ObservedAt: now, WindowMinutes: 60}
+	for i := 0; i < 3; i++ {
+		id := int64(i + 2)
+		parent := int64(1)
+		f.Children = append(f.Children, view.FlowNode{ID: id, MachineID: "local", ExternalID: fmt.Sprint("worker-", i), Adapter: "codex", Title: []string{strings.Repeat("worker ", 40), "Hosted", "Finished"}[i], Label: "working", Mixer: mixer, ParentID: &parent, StartedAt: now.Add(time.Duration(i-50) * time.Minute), Events: []model.Event{{Kind: "retained", TS: now.Add(-time.Minute)}}, Jump: &model.InboxJump{Kind: "resume", Command: "codex resume 'fixture'"}})
+	}
+	return f
 }
 func TestFlowWidthsAndPulse(t *testing.T) {
 	now := time.Now()
 	m := setup(t, fixture(), Options{Now: func() time.Time { return now }}).(*app)
 	m.tab = flowTab
+	m.opts.NoColor = false
 	m.flow = flowFixture()
 	m.loaded = true
 	for _, width := range []int{160, 120, 80} {
@@ -81,7 +91,7 @@ func TestFlowWidthsAndPulse(t *testing.T) {
 				t.Fatalf("%d: %q", width, line)
 			}
 		}
-		for _, want := range []string{"lead", "signal mixer", "registry", "hooks", "telemetry", "process", "this session family"} {
+		for _, want := range []string{"Lead", "signal mixer", "registry", "hooks", "telemetry", "process", "this session family"} {
 			if !strings.Contains(text, want) {
 				t.Errorf("%d missing %s", width, want)
 			}
@@ -91,16 +101,16 @@ func TestFlowWidthsAndPulse(t *testing.T) {
 		}
 	}
 	m.width = 160
-	m.Update(flowEventMsg{view.TailEvent{Key: "new", MachineID: "other", Adapter: "codex", ExternalID: "worker"}})
-	if strings.Contains(m.flowView(), "──●") {
+	m.Update(flowEventMsg{view.TailEvent{Key: "new", MachineID: "other", Adapter: "codex", ExternalID: "worker-0"}})
+	if strings.Contains(m.flowView(), "◉") {
 		t.Fatal("pulse from another machine")
 	}
-	m.Update(flowEventMsg{view.TailEvent{Key: "new", MachineID: "local", Adapter: "codex", ExternalID: "worker"}})
-	if !strings.Contains(m.flowView(), "──●") {
+	m.Update(flowEventMsg{view.TailEvent{Key: "new", MachineID: "local", Adapter: "codex", ExternalID: "worker-0"}})
+	if !strings.Contains(m.flowView(), "◉") {
 		t.Fatal("missing event pulse")
 	}
 	now = now.Add(2 * time.Second)
-	if strings.Contains(m.flowView(), "──●") {
+	if strings.Contains(m.flowView(), "◉") {
 		t.Fatal("pulse did not expire")
 	}
 }
@@ -121,7 +131,7 @@ func TestFlowWorkerKeysAndMouse(t *testing.T) {
 		t.Fatal(m.cursors)
 	}
 	hits := m.flowWorkerHits()
-	if len(hits) != 3 {
+	if len(hits) != 4 {
 		t.Fatal(hits)
 	}
 	h := hits[1]
@@ -130,8 +140,8 @@ func TestFlowWorkerKeysAndMouse(t *testing.T) {
 		t.Fatal("click did not select worker")
 	}
 	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
-	if !m.detail || m.detailRow == nil || m.detailRow.agent != 3 {
-		t.Fatal("Enter did not open selected worker")
+	if m.detail || !strings.Contains(m.status, "codex resume") {
+		t.Fatal("Enter did not plan selected session jump", m.status)
 	}
 }
 
@@ -147,7 +157,7 @@ func TestFlowRefreshKeepsSelectionAndOnlyNewEventsPulse(t *testing.T) {
 	next := flowFixture()
 	next.Children[0], next.Children[1] = next.Children[1], next.Children[0]
 	m.Update(flowMsg{id: 1, flow: next})
-	if m.flowWorkers().Nodes[m.cursors[flowTab]].ID != 3 {
+	if m.flowWorkers().Nodes[m.cursors[flowTab]].ID != 2 {
 		t.Fatal("worker selection changed during reorder")
 	}
 	snapshot := m.snap
@@ -226,50 +236,23 @@ func TestFlowSharedDefault(t *testing.T) {
 	}
 }
 
-func TestFlowConnectorBranchCounts(t *testing.T) {
-	for _, width := range []int{80, 120, 150, 160} {
-		for _, count := range []int{1, 2, 6} {
-			t.Run(fmt.Sprintf("width=%d/workers=%d", width, count), func(t *testing.T) {
-				m := setup(t, fixture(), Options{}).(*app)
-				m.tab, m.width, m.height, m.loaded = flowTab, width, 100, true
-				m.flow = flowFixture()
-				m.flow.Children = nil
-				for i := 0; i < count; i++ {
-					m.flow.Children = append(m.flow.Children, view.FlowNode{ID: int64(i + 2), Adapter: "codex", Label: "working"})
-				}
-				text, hits := m.flowLayout()
-				if len(hits) != count {
-					t.Fatalf("visible workers = %d; want %d", len(hits), count)
-				}
-				lines := strings.Split(text, "\n")
-				for i, h := range hits {
-					line := lines[h.y+2]
-					if count == 1 {
-						if strings.ContainsAny(text, "┬├└") {
-							t.Errorf("single worker has branching glyph:\n%s", text)
-						}
-						if !strings.Contains(line, "─────▶") {
-							t.Errorf("missing straight connector: %s", line)
-						}
-					} else {
-						want := "├"
-						if i == 0 && width >= 150 {
-							want = "┬"
-						}
-						if i == count-1 {
-							want = "└"
-						}
-						if !strings.Contains(line, want) {
-							t.Errorf("branch %d missing %s: %s", i, want, line)
-						}
-					}
-				}
-				for _, line := range lines {
-					if lipgloss.Width(line) > width {
-						t.Errorf("line overflows %d: %s", width, line)
-					}
-				}
-			})
+func TestFlowMapRowsAndParent(t *testing.T) {
+	m := setup(t, fixture(), Options{Now: func() time.Time { return flowtest.Now }}).(*app)
+	m.flow = flowFixture()
+	m.flowMinutes = 60
+	for _, width := range []int{40, 80, 100, 140} {
+		m.width = width
+		text, hits := m.flowLayout()
+		if len(hits) != 4 {
+			t.Fatal(hits)
+		}
+		if width >= 100 && !strings.Contains(text, "╰") {
+			t.Fatal("missing parent start mark")
+		}
+		for _, line := range strings.Split(text, "\n") {
+			if lipgloss.Width(line) > width {
+				t.Fatal(width, line)
+			}
 		}
 	}
 }
@@ -304,35 +287,21 @@ func TestFlowQuietSummaryExpands(t *testing.T) {
 	}
 }
 
-func TestFlowConnectedBranchesAndReason(t *testing.T) {
-	now := time.Now()
-	m := setup(t, fixture(), Options{NoColor: true, Now: func() time.Time { return now }}).(*app)
-	m.tab, m.width, m.height, m.loaded = flowTab, 160, 50, true
+func TestFlowSelectedMixerAndWidths(t *testing.T) {
+	m := setup(t, fixture(), Options{NoColor: true, Now: func() time.Time { return flowtest.Now }}).(*app)
 	m.flow = flowFixture()
-	m.flow.Mixer.Evidence = "because registry: busy"
-	m.Update(flowEventMsg{view.TailEvent{Key: "branch", MachineID: "local", Adapter: "codex", ExternalID: "worker"}})
-	text, hits := m.flowLayout()
-	lines := strings.Split(text, "\n")
-	if !strings.Contains(text, "because registry: busy") {
-		t.Error("missing deciding signal")
-	}
-	if !strings.Contains(text, "├") || !strings.Contains(text, "└") {
-		t.Error("missing connected trunk branches")
-	}
-	for _, h := range hits {
-		line := lines[h.y+2]
-		if !strings.Contains(lines[h.y+1], m.flowWorkers().Nodes[h.index].Label) {
-			t.Error("long worker title hides state")
-		}
-		if strings.Contains(line, "──●") != (h.index == 0) {
-			t.Errorf("event marker on wrong worker branch %d: %s", h.index, line)
-		}
-	}
-	for _, width := range []int{160, 120, 80, 40, 20, 8} {
+	m.tab = flowTab
+	m.cursors[flowTab] = 1
+	m.flow.Children[0].Mixer.Evidence = "worker own stored reason"
+	for _, width := range []int{140, 100, 80, 59, 40, 20, 8} {
 		m.width = width
-		for _, line := range strings.Split(m.flowView(), "\n") {
+		text := m.flowView()
+		if width >= 60 && !strings.Contains(text, "worker own stored reason") {
+			t.Fatal("wrong mixer")
+		}
+		for _, line := range strings.Split(text, "\n") {
 			if lipgloss.Width(line) > width {
-				t.Errorf("overflow at %d", width)
+				t.Fatal(width, line)
 			}
 		}
 	}

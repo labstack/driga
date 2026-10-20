@@ -336,11 +336,12 @@ func pathWithin(path, root string) bool {
 
 // FlowCmd reads a family; omitted ID selects the newest live interactive session.
 type FlowCmd struct {
-	ID int64 `arg:"" optional:"" help:"Internal session ID (defaults to most recently active live interactive session)."`
+	Minutes int   `default:"60" help:"Time window: 15, 60 or 240 minutes."`
+	ID      int64 `arg:"" optional:"" help:"Internal session ID (defaults to most recently active live interactive session)."`
 }
 
 func (c FlowCmd) Run(g *Globals) error {
-	return runRead(g, view.Filter{}, "", func(r view.Reader, f view.Filter, now time.Time) (any, error) {
+	return runRead(g, view.Filter{FlowMinutes: c.Minutes}, "", func(r view.Reader, f view.Filter, now time.Time) (any, error) {
 		if c.ID < 0 {
 			return nil, fmt.Errorf("session id must be positive")
 		}

@@ -12,6 +12,7 @@ import (
 
 // Config is the effective configuration (§12 of the design).
 type Config struct {
+	Motion          string
 	Roots           []string
 	RootDepth       int
 	Exclude         []string

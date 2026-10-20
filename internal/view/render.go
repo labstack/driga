@@ -269,7 +269,7 @@ func renderAgents(w io.Writer, v AgentsView, label func(string) string) {
 				title += fmt.Sprintf(" (%d workers finished)", r.FinishedChildren)
 			}
 			fmt.Fprint(w, machinePrefix(multi, r.MachineID, r.MachineFresh))
-			fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", r.ID, name, label(r.Label), cell(r.Origin), cell(r.Project), cell(r.Branch), sessionAgeText(r.Age), humanBytes(r.Mem), title, cell(r.Evidence))
+			fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", r.ID, name, label(r.Label), cell(r.Origin), cell(r.Project), cell(r.Branch), SessionDuration(r.Age), humanBytes(r.Mem), title, cell(r.Evidence))
 			rows(r.Children, depth+1)
 		}
 	}
@@ -327,8 +327,8 @@ func humanBytes(n uint64) string {
 }
 func age(d time.Duration) string { return max(0, d).Round(time.Second).String() }
 
-// sessionAgeText renders an unknown (zero) session age as "—".
-func sessionAgeText(d time.Duration) string {
+// SessionDuration renders a session duration, or "—" for an unknown (zero) age.
+func SessionDuration(d time.Duration) string {
 	if d == 0 {
 		return "—"
 	}

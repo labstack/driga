@@ -120,7 +120,7 @@ func TestFlowQuietSplitUsesSnapshotTime(t *testing.T) {
 		}
 		for _, cap := range []int{1, 4, 5, 20} {
 			w := v.Workers(cap, false, now)
-			if len(w.Nodes) != min(cap, 5) || w.Quiet != 18-len(w.Nodes) {
+			if len(w.Nodes) != 5 || w.Quiet != 18-len(w.Nodes) {
 				t.Errorf("cap %d at %s: visible=%d hidden=%d", cap, now, len(w.Nodes), w.Quiet)
 			}
 		}
@@ -163,27 +163,17 @@ func TestFlowTitlesAndRelevance(t *testing.T) {
 	}
 }
 
-func TestFlowWorkerOrderAndCap(t *testing.T) {
-	v := FlowView{}
-	for i := 0; i < 11; i++ {
-		v.Children = append(v.Children, FlowNode{ID: int64(i + 1), Kind: "hosted", Label: "idle", LastActivityAt: testNow.Add(-2 * time.Hour)})
+func TestFlowWorkerOrderAndQuiet(t *testing.T) {
+	v := FlowView{Children: []FlowNode{{ID: 3, StartedAt: testNow, Label: "waiting"}, {ID: 2, StartedAt: testNow, Events: []model.Event{{Kind: "stored"}}}, {ID: 4, StartedAt: testNow.Add(-time.Hour), Events: []model.Event{{Kind: "stored"}}}}}
+	w := v.Workers(1, false, testNow)
+	if len(w.Nodes) != 2 || w.Quiet != 1 || w.Nodes[0].ID != 4 || w.Nodes[1].ID != 2 {
+		t.Fatal(w)
 	}
-	v.Children = append(v.Children, FlowNode{ID: 20, Label: "idle", LastActivityAt: testNow}, FlowNode{ID: 21, Label: "working", LastActivityAt: testNow.Add(-time.Minute)}, FlowNode{ID: 22, Label: "waiting", LastActivityAt: testNow.Add(-2 * time.Minute)}, FlowNode{ID: 23, Label: "stalled", LastActivityAt: testNow.Add(-3 * time.Minute)}, FlowNode{ID: 24, Label: "finished", LastActivityAt: testNow.Add(-time.Second)}, FlowNode{ID: 25, Label: "idle", LastActivityAt: testNow.Add(-time.Minute)})
-	w := v.Workers(5, false, testNow)
-	if len(w.Nodes) != 5 || w.Quiet != 12 {
-		t.Fatalf("%+v", w)
-	}
-	for i, id := range []int64{21, 22, 23, 20, 24} {
-		if w.Nodes[i].ID != id {
-			t.Fatal(w.Nodes)
-		}
-	}
-	if all := v.Workers(5, true, testNow); len(all.Nodes) != 17 || all.Quiet != 0 {
-		t.Fatal(all)
-	}
-	w = v.Workers(20, false, testNow)
-	if len(w.Nodes) != 6 || w.Quiet != 11 {
-		t.Fatal("old hosted threads escaped summary", w)
+	v.Children[0].Label = "working"
+	v.Children[0].LastActivityAt = testNow.Add(time.Hour)
+	w = v.Workers(1, true, testNow)
+	if len(w.Nodes) != 3 || w.Nodes[0].ID != 4 || w.Nodes[1].ID != 2 || w.Nodes[2].ID != 3 {
+		t.Fatal(w)
 	}
 }
 

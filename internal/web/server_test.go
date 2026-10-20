@@ -205,8 +205,15 @@ func TestSSEDataChange(t *testing.T) {
 		t.Fatal(err)
 	}
 	scan := bufio.NewScanner(resp.Body)
+	refreshed := false
 	for scan.Scan() {
+		if scan.Text() == "event: refresh" {
+			refreshed = true
+		}
 		if scan.Text() == "event: change" {
+			if !refreshed {
+				t.Fatal("missing refresh event for JSON flow clients")
+			}
 			return
 		}
 	}

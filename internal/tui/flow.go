@@ -7,7 +7,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/labstack/driga/internal/derive"
+	"github.com/labstack/driga/internal/inbox"
+	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/store"
 	"github.com/labstack/driga/internal/view"
 	"github.com/labstack/driga/internal/viewer"
@@ -31,23 +32,17 @@ func (m *app) loadFlow() tea.Cmd {
 		return nil
 	}
 	id, scope, ctx := m.flowID, m.flowScope(), m.opts.Context
+	minutes := m.flowZoom()
 	scopeKey := m.machineScope
 	return func() tea.Msg {
-		f, err := source.LoadFlow(ctx, scope, id)
-		details := map[int64]view.AgentView{}
-		if err == nil && f.Lead != nil {
-			if s, ok := source.(viewer.DetailSource); ok {
-				nodes := append([]view.FlowNode{*f.Lead}, f.Children...)
-				for _, n := range nodes {
-					d, e := s.LoadAgent(ctx, store.Scope{Machines: []string{n.MachineID}}, n.ID)
-					if e != nil {
-						return flowMsg{id: id, scope: scopeKey, err: e}
-					}
-					details[n.ID] = d
-				}
-			}
+		var f view.FlowView
+		var err error
+		if window, ok := m.src.(viewer.FlowWindowSource); ok && minutes != 60 {
+			f, err = window.LoadFlowWindow(ctx, scope, id, minutes)
+		} else {
+			f, err = source.LoadFlow(ctx, scope, id)
 		}
-		return flowMsg{id: id, scope: scopeKey, flow: f, details: details, err: err}
+		return flowMsg{id: id, scope: scopeKey, flow: f, err: err}
 	}
 }
 func (m *app) flowScope() store.Scope {
@@ -82,9 +77,11 @@ func (m *app) flowSession(delta int) {
 	}
 	i = (i + delta + len(roots)) % len(roots)
 	m.flowID = roots[i].ID
+	m.flowSelectID = 0
 	m.flowExpanded = false
 	m.cursors[flowTab] = 0
 	m.flowPulse = nil
+	m.flowBranchPulse = nil
 	m.flowSeen = nil
 	m.flowOffset = 0
 }
@@ -107,15 +104,6 @@ func (m *app) recordFlowEvent(e view.TailEvent) {
 		}
 	}
 }
-func (m *app) flowWire(n view.FlowNode) string {
-	if p, ok := m.flowGrowthPulse[growthKey(n)]; ok && m.opts.Now().Before(p.until) {
-		return m.growthWire(n, "─────▶")
-	}
-	if until := m.flowPulse[n.Adapter+":"+n.ExternalID]; m.opts.Now().Before(until) {
-		return "──●──▶"
-	}
-	return "─────▶"
-}
 func (m *app) flowPanel(title string, lines []string, width int, selected bool) string {
 	width = max(4, width)
 	inner := width - 4
@@ -134,255 +122,288 @@ func (m *app) flowPanel(title string, lines []string, width int, selected bool) 
 	}
 	return text
 }
-func (m *app) flowLeadLines() []string {
-	n := m.flow.Lead
+func (m *app) flowWorkers() view.FlowWorkers {
+	w := m.flow.Workers(0, m.flowExpanded, m.opts.Now())
+	if m.flow.Lead != nil {
+		w.Nodes = append([]view.FlowNode{*m.flow.Lead}, w.Nodes...)
+	}
+	return w
+}
+func (m *app) flowZoom() int {
+	if m.flowMinutes == 0 {
+		return 60
+	}
+	return m.flowMinutes
+}
+func (m *app) flowSelected() *view.FlowNode {
+	w := m.flowWorkers()
+	i := m.cursors[flowTab]
+	if i >= 0 && i < len(w.Nodes) {
+		return &w.Nodes[i]
+	}
+	return nil
+}
+func (m *app) jumpFlow() tea.Cmd {
+	n := m.flowSelected()
 	if n == nil {
-		return []string{"No live interactive session."}
+		return nil
 	}
-	state := n.Label
-	if n.Reason != "" {
-		state += " [" + n.Reason + "]"
+	j := n.Jump
+	for _, w := range m.flow.Attention.Waits {
+		if w.SessionID == n.ID && w.MachineID == n.MachineID && w.Jump != nil {
+			j = w.Jump
+			break
+		}
 	}
-	if n.Heuristic {
-		state = "~" + state
+	return m.jumpInbox(tabRow{machine: n.MachineID, inbox: &model.InboxItem{Jump: j}})
+}
+func (m *app) jumpFlowAttention(w view.InboxRow) tea.Cmd {
+	jump := m.jumpInbox(tabRow{machine: w.MachineID, inbox: &w.InboxItem})
+	m.flowAttention = false
+	for i, n := range m.flowWorkers().Nodes {
+		if n.ID == w.SessionID && n.MachineID == w.MachineID {
+			m.cursors[flowTab] = i
+			return jump
+		}
 	}
-	if n.Label == "stalled" {
-		state += "?"
+	m.flowID = w.SessionID
+	m.flowSelectID = w.SessionID
+	m.machineScope = w.MachineID
+	m.cursors[flowTab] = 0
+	return tea.Batch(jump, m.loadFlow())
+}
+
+func (m *app) flowDetailLines() []string {
+	if m.flowAttention && len(m.flow.Attention.Waits) > 0 {
+		w := m.flow.Attention.Waits[min(m.flowAskCursor, len(m.flow.Attention.Waits)-1)]
+		return []string{clean(w.Title) + " · " + w.Adapter, "◆ needs you · " + duration(inbox.Waited(w.InboxItem, m.opts.Now())), clean(view.FlowJoin(w.Reason, w.Tool, w.Detail)), "Copy resume: " + clean(inbox.JumpCommand(w.Jump)), "enter Jump · c show resume command · tab map"}
 	}
-	lines := []string{clean(n.DisplayTitle()), view.StateStyle(n.Label, m.opts.NoColor).Render("● " + state), "project " + clean(view.FlowJoin(n.Project, n.Branch)), "age     " + agentAge(n.Age)}
-	if n.Model != "" {
-		lines = append(lines, "model   "+clean(n.Model))
+
+	n := m.flowSelected()
+	if n == nil {
+		return []string{"Select a session · Enter expands quiet threads"}
+	}
+	state := n.Mixer.Verdict
+	if state == "" {
+		state = n.Label
+	}
+	lines := []string{clean(n.DisplayTitle()) + " · " + n.Adapter, view.FlowGlyph(state) + " " + view.FlowStateName(state) + " · as of " + flowAge(n.Mixer.ObservedAt, m.opts.Now()), "why: " + clean(n.Mixer.Evidence), "running " + agentAge(flowElapsed(*n, m.opts.Now()))}
+	tools := 0
+	for _, e := range n.Events {
+		if view.FlowEventMark(n.Adapter, e.Kind) == "tool" {
+			tools++
+		}
+	}
+	if n.Adapter != "claude" && n.Adapter != "copilot" {
+		lines = append(lines, "no tool events for "+n.Adapter, "no prompt events for "+n.Adapter)
+	} else {
+		lines = append(lines, fmt.Sprintf("tool calls %d · retained window", tools))
+	}
+	if n.Adapter == "gemini" {
+		lines = append(lines, "no wait source for gemini")
 	}
 	if n.InputTokens != nil {
-		lines = append(lines, fmt.Sprintf("input   %d tokens", *n.InputTokens))
+		lines = append(lines, fmt.Sprintf("input %d tokens", *n.InputTokens))
 	}
 	if n.OutputTokens != nil {
-		lines = append(lines, fmt.Sprintf("output  %d tokens", *n.OutputTokens))
+		lines = append(lines, fmt.Sprintf("output %d tokens", *n.OutputTokens))
 	}
 	if n.CostUSD != nil {
-		lines = append(lines, fmt.Sprintf("cost    $%.4f · retained events", *n.CostUSD))
+		lines = append(lines, fmt.Sprintf("cost $%.4f · retained events", *n.CostUSD))
 	}
-	if n.LastTool != "" {
-		lines = append(lines, "tool    "+clean(n.LastTool))
+	lines = append(lines, fmt.Sprintf("verdict %s · %d of 4 agree", state, n.Mixer.Agreement))
+	for _, r := range n.Mixer.Rows {
+		lines = append(lines, clean(r.Name+": "+r.Reading))
 	}
-	if n.Mem != nil {
-		lines = append(lines, fmt.Sprintf("memory  %s · %d helpers", humanBytes(*n.Mem), *n.Helpers))
+	if command := inbox.JumpCommand(n.Jump); command != "" {
+		lines = append(lines, "Copy resume: "+clean(command))
 	}
-	return lines
-}
-func (m *app) flowMixerLines() []string {
-	lines := []string{}
-	for _, r := range m.flow.Mixer.Rows {
-		filled := min(12, max(0, int(r.Strength*12+.5)))
-		bars := strings.Repeat("▮", filled) + strings.Repeat("▯", 12-filled)
-		token := "idle"
-		if r.Supports {
-			token = "working"
-		}
-		lines = append(lines, fmt.Sprintf("%-9s %s", r.Name, view.TokenStyle(token, m.opts.NoColor).Render(bars)), "          "+clean(r.Reading))
-		if !r.At.IsZero() {
-			lines[len(lines)-1] += " · " + duration(r.Age) + " ago"
-		}
+	if n.Observed != nil && !n.Observed.LastGrowthAt.IsZero() {
+		lines = append(lines, "last growth "+transcriptSize(n.Observed.LastGrowthBytes)+" · "+flowAge(n.Observed.LastGrowthAt, m.opts.Now()))
 	}
-	lines = append(lines, fmt.Sprintf("verdict %s · %d of 4 agree", m.flow.Mixer.Verdict, m.flow.Mixer.Agreement))
-	if m.flow.Mixer.Heuristic {
-		lines = append(lines, "heuristic")
+	lines = append(lines, "Recent events · this session family")
+	for _, e := range n.Events[max(0, len(n.Events)-4):] {
+		lines = append(lines, e.TS.Local().Format("15:04:05")+" "+clean(e.Kind+" "+e.Summary))
 	}
-	if m.flow.Mixer.Evidence != "" {
-		lines = append(lines, clean(m.flow.Mixer.Evidence))
+	if len(n.Events) == 0 {
+		lines = append(lines, "No retained events in window.")
 	}
 	return lines
 }
-func (m *app) flowWorkerPanel(n view.FlowNode, i, width int) string {
-	kind := n.Kind
-	if kind == "" {
-		kind = "worker"
+func flowAge(at, now time.Time) string {
+	if at.IsZero() {
+		return "unknown"
 	}
-	title := view.FlowJoin(kind, n.Adapter)
-	activity := "activity unavailable"
-	if !n.LastActivityAt.IsZero() {
-		activity = view.FlowJoin(clean(n.LastActivity), duration(m.opts.Now().Sub(n.LastActivityAt))+" ago")
-	}
-	if n.LastTool != "" {
-		activity = view.FlowJoin(clean(n.LastTool), activity)
-	}
-	state := view.StateStyle(n.Label, m.opts.NoColor).Render(derive.Display(n.Label, n.Heuristic))
-	if n.Reason != "" {
-		state += " " + view.StateStyle("waiting", m.opts.NoColor).Render("["+n.Reason+"]")
-	}
-	titleText := truncate(clean(n.DisplayTitle()), max(0, width-7-lipgloss.Width(state)))
-	spark := view.FlowSpark(n.Activity)
-	elapsed := agentAge(n.Elapsed)
-	if strings.TrimSpace(spark) != "" {
-		elapsed = view.TokenStyle("idle", m.opts.NoColor).Render(spark) + " · " + elapsed
-	}
-	lines := []string{view.FlowJoin(titleText, state), activity, elapsed}
-	lines = append(lines, m.observationLines(n, max(0, width-4))...)
-
-	return m.flowPanel(title, lines, width, m.cursors[flowTab] == i)
+	return duration(max(0, now.Sub(at))) + " ago"
 }
 
-// flowWorkers reserves room for the shared panels, tail and summary. Expanded
-// families remain scrollable so every thread can still be opened.
-func (m *app) flowWorkers() view.FlowWorkers {
-	top := max(len(m.flowLeadLines()), len(m.flowMixerLines())) + 2
-	available := m.bodyHeight() - 9
-	if m.width < 150 {
-		if m.width < 110 {
-			top = len(m.flowLeadLines()) + len(m.flowMixerLines()) + 5
-		}
-		available -= top + 1
-	}
-	return m.flow.Workers(max(1, (available-3)/8), m.flowExpanded, m.opts.Now())
-}
-
-// flowLayout produces both the view and hit regions from the same geometry.
+// flowLayout lays out attention, a bounded map, and the selected session details.
 func (m *app) flowLayout() (string, []flowHit) {
+	width := max(4, m.width)
+	needs := []string{}
+	for i, w := range m.flow.Attention.Waits {
+		prefix := ""
+		if m.flowAttention && i == m.flowAskCursor {
+			prefix = "› "
+		}
+		needs = append(needs, fmt.Sprintf(prefix+"◆ %s · %s · %s · enter jump · c resume", clean(w.Title), duration(inbox.Waited(w.InboxItem, m.opts.Now())), clean(view.FlowJoin(w.Reason, w.Tool, w.Detail))))
+	}
+	if len(needs) == 0 {
+		needs = append(needs, fmt.Sprintf("Nothing needs you · %d working", m.flow.Attention.Working))
+	}
+	body := m.flowPanel("Needs you · machine-wide", needs, width, m.flowAttention) + "\n"
 	if m.flow.Lead == nil {
-		return truncate("No live interactive session.", max(0, m.width)), nil
+		return body + "No live interactive session.", nil
 	}
-	if m.width < 12 {
-		return truncate("Widen terminal for flow", max(0, m.width)), nil
+	label := 20
+	stateWidth := 0
+	if width >= 100 {
+		stateWidth = 12
 	}
-	width := m.width
-	visible := m.flowWorkers()
+	columns := max(1, width-label-stateWidth-20)
+	f := m.flow
+	f.ObservedAt = m.opts.Now()
+	f.WindowMinutes = m.flowZoom()
+	g := view.FlowGeometry(f, columns, m.flowExpanded)
+	lines := []string{fmt.Sprintf("%dm · %s–now · head = last observed verdict", g.Minutes, g.FromAt.Local().Format("15:04"))}
+	if g.EarlierMinutes > 0 {
+		lines = append(lines, fmt.Sprintf("%dm earlier · %d asks", g.EarlierMinutes, g.EarlierAsks))
+	}
 	hits := []flowHit{}
-
-	summary := func(w int) string {
-		return m.flowPanel(fmt.Sprintf("+%d quiet threads", visible.Quiet), []string{"Enter / click to expand"}, w, m.cursors[flowTab] == len(visible.Nodes))
-	}
-	body := ""
-	// Draw the branch rail once; each event marker belongs to its worker only.
-	branchStack := func(panelWidth, prefixWidth, x, y int, wide bool) string {
-		panels := []string{}
-		for i, n := range visible.Nodes {
-			panels = append(panels, m.flowWorkerPanel(n, i, panelWidth))
+	first := max(0, m.cursors[flowTab]-7)
+	first = min(first, max(0, len(g.Rows)-8))
+	rowY := lipgloss.Height(body) + 1 + len(lines)
+	for i := first; i < min(len(g.Rows), first+8); i++ {
+		r := g.Rows[i]
+		n := r.Node
+		state := n.Mixer.Verdict
+		if state == "" {
+			state = n.Label
 		}
-		if visible.Quiet > 0 {
-			panels = append(panels, summary(panelWidth))
+		prefix := " "
+		if i == m.cursors[flowTab] {
+			prefix = "›"
 		}
-		out := []string{}
-		for i, panel := range panels {
-			lines := strings.Split(panel, "\n")
-			hits = append(hits, flowHit{x: x, y: y + len(out), width: panelWidth, height: len(lines), index: i})
-			for j, line := range lines {
-				wire := "  │" + strings.Repeat(" ", prefixWidth-3)
-				if wide && i == 0 && j < 2 || i == len(panels)-1 && j > 2 {
-					wire = strings.Repeat(" ", prefixWidth)
-				}
-				if j == 2 {
-					joint := "├"
-					if i == len(panels)-1 {
-						joint = "└"
-					}
-					if wide && i == 0 {
-						joint = "┬"
-					}
-					if len(panels) == 1 {
-						joint = "─"
-					}
-					wire = "  " + joint + strings.Repeat("─", prefixWidth-4) + "▶"
-					if wide && i == 0 {
-						wire = "──" + wire[2:]
-					}
-					if i < len(visible.Nodes) {
-						n := visible.Nodes[i]
-						if m.opts.Now().Before(m.flowPulse[n.Adapter+":"+n.ExternalID]) {
-							wire = "  " + joint + "──●" + strings.Repeat("─", prefixWidth-7) + "▶"
-							if wide && i == 0 {
-								wire = "──" + wire[2:]
-							}
-						}
-						wire = m.growthWire(n, wire)
-					}
-				}
-				out = append(out, wire+line)
-			}
-			if i < len(panels)-1 {
-				out = append(out, "  │"+strings.Repeat(" ", prefixWidth-3+panelWidth))
-			}
-		}
-		return strings.Join(out, "\n")
-	}
-	leadPanel := func(w int) string {
-		return m.flowPanel("lead · "+m.flow.Lead.Adapter, append(m.flowLeadLines(), m.observationLines(*m.flow.Lead, max(0, w-4))...), w, true)
-	}
-	mixerPanel := func(w int) string {
-		return m.flowPanel("signal mixer · why: "+m.flow.Mixer.Verdict, m.flowMixerLines(), w, false)
-	}
-	if width >= 150 {
-		col := (width - 16) / 3
-		lead, mixer := leadPanel(col), mixerPanel(col)
-		wire := []string{}
-		for i := 0; i < max(lipgloss.Height(lead), lipgloss.Height(mixer)); i++ {
-			w := "      "
-			if i == 2 {
-				w = m.flowWire(*m.flow.Lead)
-			}
-			wire = append(wire, w)
-		}
-		body = lipgloss.JoinHorizontal(lipgloss.Top, lead, strings.Join(wire, "\n"), mixer, branchStack(width-2*col-16, 10, 2*col+16, 0, true))
-	} else {
-		mixerX := 2
-		if width >= 110 {
-			col := (width - 6) / 2
-			lead, mixer := leadPanel(col), mixerPanel(width-col-6)
-			wire := []string{}
-			for i := 0; i < max(lipgloss.Height(lead), lipgloss.Height(mixer)); i++ {
-				w := "      "
-				if i == 2 {
-					w = m.flowWire(*m.flow.Lead)
-				}
-				wire = append(wire, w)
-			}
-			body = lipgloss.JoinHorizontal(lipgloss.Top, lead, strings.Join(wire, "\n"), mixer)
-			mixerX = col + 8
+		title := truncate(clean(n.DisplayTitle()), label-2)
+		title += strings.Repeat(" ", max(0, label-2-lipgloss.Width(title)))
+		line := prefix + title + " "
+		if width < 60 {
+			cap := view.FlowGlyph(state) + " " + view.FlowStateName(state)
+			line = prefix + truncate(clean(n.DisplayTitle()), max(0, width-7-lipgloss.Width(cap))) + " · " + cap
 		} else {
-			wire := []string{"  │", "  ▼"}
-			if pulse, ok := m.flowGrowthPulse[growthKey(*m.flow.Lead)]; ok && m.opts.Now().Before(pulse.until) {
-				wire[min(pulse.frame, len(wire)-1)] = view.TokenStyle("observation", m.opts.NoColor).Render("  ●")
+			if stateWidth > 0 {
+				st := view.FlowGlyph(state) + " " + view.FlowStateName(state)
+				line += st + strings.Repeat(" ", max(1, stateWidth-lipgloss.Width(st)))
 			}
-			body = leadPanel(width) + "\n" + strings.Join(wire, "\n") + "\n" + mixerPanel(width)
-		}
-		if len(visible.Nodes) > 0 || visible.Quiet > 0 {
-			if width >= 110 {
-				body += "\n  ┌" + strings.Repeat("─", max(0, mixerX-3)) + "┘\n"
-			} else {
-				body += "\n  │\n"
+			track := make([]rune, g.Columns)
+			cpu := make([]rune, g.Columns)
+			for c := range track {
+				track[c] = ' '
+				cpu[c] = ' '
 			}
-			y := lipgloss.Height(body) - 1
-			body += branchStack(width-8, 8, 8, y, false)
+			last := len(track)
+			if n.EndedAt != nil {
+				last = max(r.Start, min(last, int(n.EndedAt.Sub(g.FromAt)/time.Minute)+1))
+			}
+			for c := r.Start; c < last; c++ {
+				track[c] = '·'
+			}
+			for _, h := range r.Hatched {
+				for c := h.From; c < min(h.To, len(track)); c++ {
+					track[c] = '╱'
+					cpu[c] = '╱'
+				}
+			}
+			var peak, cp int64
+			for c, x := range r.Log {
+				peak = max(peak, x)
+				cp = max(cp, r.CPU[c])
+			}
+			for c, x := range r.Log {
+				if x > 0 {
+					track[c] = []rune("▁▂▃▄▅▆▇█")[min(7, int(float64(x)/float64(peak)*7))]
+				}
+				if r.CPU[c] > 0 && cp > 0 {
+					cpu[c] = '─'
+				}
+			}
+			for _, w := range r.Waits {
+				for c := w.From; c < min(w.To, len(track)); c++ {
+					track[c] = '▒'
+				}
+			}
+			for _, b := range r.Tools {
+				track[b.Column] = '┿'
+			}
+			for _, mark := range r.Marks {
+				ch := '◆'
+				switch mark.Kind {
+				case "prompt":
+					ch = '○'
+				case "end":
+					ch = '●'
+				}
+				track[mark.Column] = ch
+			}
+			if n.ParentID != nil && !n.StartedAt.Before(g.FromAt) {
+				track[r.Start] = '╰'
+				if !m.opts.NoColor && !m.opts.MotionOff && m.opts.Now().Before(m.flowBranchPulse[growthKey(n)]) {
+					track[r.Start] = '✦'
+				}
+			}
+			head := []rune(view.FlowGlyph(state))[0]
+			if state == "waiting" && !m.opts.NoColor && !m.opts.MotionOff {
+				for _, w := range n.Waits {
+					age := m.opts.Now().Sub(w.StartedAt)
+					if w.EndedAt == nil && age >= 0 && age < 8*time.Second && m.opts.Now().Unix()%4 < 2 {
+						head = '◇'
+					}
+				}
+			}
+			track[len(track)-1] = head
+			if len(track) > 1 {
+				track[len(track)-2] = view.FlowHeadPattern(state)
+			}
+			growth := m.flowGrowthPulse[growthKey(n)]
+			if !m.opts.NoColor && !m.opts.MotionOff && (m.opts.Now().Before(m.flowPulse[n.Adapter+":"+n.ExternalID]) || m.opts.Now().Before(growth.until)) {
+				head = '◉'
+				track[len(track)-1] = head
+			}
+			line += view.StateStyle(state, m.opts.NoColor).Render(string(track)) + " as of " + flowAge(n.Mixer.ObservedAt, m.opts.Now())
+			lines = append(lines, line)
+			hits = append(hits, flowHit{x: 0, y: rowY, width: width, height: 2, index: i})
+			rowY += 2
+			lines = append(lines, strings.Repeat(" ", label+stateWidth)+view.TokenStyle("observation", m.opts.NoColor).Render(string(cpu)))
+			continue
 		}
+		lines = append(lines, line)
+		hits = append(hits, flowHit{x: 0, y: rowY, width: width, height: 1, index: i})
+		rowY++
 	}
-	tail := []string{}
-	for _, e := range m.flow.Tail {
-		tail = append(tail, e.TS.Local().Format("15:04:05")+" "+clean(e.Adapter)+" "+clean(e.Kind)+" "+clean(e.Summary))
+	if g.Quiet > 0 {
+		lines = append(lines, fmt.Sprintf("+%d quiet threads · enter to expand", g.Quiet))
+		hits = append(hits, flowHit{x: 0, y: rowY, width: width, height: 1, index: len(m.flowWorkers().Nodes)})
 	}
-	if len(tail) > 5 {
-		tail = tail[len(tail)-5:]
+	if len(g.Rows) > 8 {
+		lines = append(lines, fmt.Sprintf("rows %d–%d of %d · j/k scroll", first+1, min(first+8, len(g.Rows)), len(g.Rows)))
 	}
-	if len(tail) == 0 {
-		tail = []string{"No stored events."}
+	if width >= 60 {
+		lines = append(lines, "▁ log growth · ─ CPU · ┿ tool · ◆ wait · ○ prompt · ● end · ╱ no data")
 	}
-	if buckets := m.flow.ObservationLogBuckets(); len(buckets) > 0 {
-		tail = append(tail, "transcript · 60m "+view.ObservationSpark(buckets, max(0, width-21)))
-	}
-	body += "\n\n" + m.flowPanel("tail -f · this session family", tail, width, false)
+	body += m.flowPanel("Session map", lines, width, false) + "\n" + m.flowPanel("Session detail · signal mixer", m.flowDetailLines(), width, false)
+	body += "\n" + truncate("j/k session · enter jump · [/] family · -/+ zoom · tab needs · c resume", width)
 	return body, hits
 }
 func (m *app) flowView() string          { text, _ := m.flowLayout(); return text }
 func (m *app) flowWorkerHits() []flowHit { _, hits := m.flowLayout(); return hits }
+func (m *app) flowEnsureVisible()        { m.flowOffset = 0 }
 
-func (m *app) flowEnsureVisible() {
-	for _, h := range m.flowWorkerHits() {
-		if h.index == m.cursors[flowTab] {
-			if h.y < m.flowOffset {
-				m.flowOffset = h.y
-			}
-			if h.y+h.height > m.flowOffset+m.bodyHeight() {
-				m.flowOffset = max(0, h.y+h.height-m.bodyHeight())
-			}
-			return
-		}
+func flowElapsed(n view.FlowNode, now time.Time) time.Duration {
+	if n.StartedAt.IsZero() {
+		return n.Elapsed
 	}
+	if n.EndedAt != nil {
+		now = *n.EndedAt
+	}
+	return max(0, now.Sub(n.StartedAt))
 }

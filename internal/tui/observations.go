@@ -46,18 +46,8 @@ func (m *app) recordFlowObservations(f view.FlowView) {
 	}
 }
 
-func (m *app) flowAnimation() tea.Cmd {
-	if m.flowAnimating {
-		return nil
-	}
-	for _, p := range m.flowGrowthPulse {
-		if m.opts.Now().Before(p.until) {
-			m.flowAnimating = true
-			return tea.Tick(150*time.Millisecond, func(time.Time) tea.Msg { return flowObservationFrameMsg{} })
-		}
-	}
-	return nil
-}
+// The regular one-second clock expires event-bound accents. No frame timer.
+func (m *app) flowAnimation() tea.Cmd { return nil }
 
 func (m *app) growthWire(n view.FlowNode, wire string) string {
 	pulse, ok := m.flowGrowthPulse[growthKey(n)]
