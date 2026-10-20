@@ -15,9 +15,12 @@ func LabelWithEvidence(in StateInput, now time.Time, th Thresholds) model.StateM
 	if th.StalledAfter <= 0 {
 		th.StalledAfter = 10 * time.Minute
 	}
+	if in.Obs.Adapter == "copilot" && in.Obs.RegistryStatus != "" {
+		in.LastHook, in.LastHookAt = in.Obs.RegistryStatus, in.Obs.LastActivityAt
+	}
 	// Retain only inputs the label table consumes: no prompt text, paths or
 	// process command lines. These travel with the verdict, including in feeds.
-	in.Obs = model.SessionObs{Adapter: in.Obs.Adapter, PID: in.Obs.PID, RegistryStatus: in.Obs.RegistryStatus, LastActivityAt: in.Obs.LastActivityAt, Hosted: in.Obs.Hosted, TurnOpen: in.Obs.TurnOpen}
+	in.Obs = model.SessionObs{Adapter: in.Obs.Adapter, PID: in.Obs.PID, RegistryStatus: in.Obs.RegistryStatus, LastActivityAt: in.Obs.LastActivityAt, StartedAt: in.Obs.StartedAt, Hosted: in.Obs.Hosted, TurnOpen: in.Obs.TurnOpen}
 	if in.Proc != nil {
 		in.Proc = &model.Proc{PID: in.Proc.PID, CPUPercent: in.Proc.CPUPercent}
 	}
@@ -106,6 +109,16 @@ func LabelWithEvidence(in StateInput, now time.Time, th Thresholds) model.StateM
 	support := [4]bool{}
 	deciding := "registry"
 	switch in.Obs.Adapter {
+	case "copilot":
+		deciding = "hooks"
+		m.Rows[0].Reading, m.Rows[0].Strength = "unavailable", 0
+		m.Rows[1].Reading = "Copilot " + in.Obs.RegistryStatus
+		m.Rows[1].At = in.Obs.LastActivityAt
+		support[1] = in.Obs.RegistryStatus != ""
+		support[3] = available && (alive || verdict == "dead")
+		if in.Obs.RegistryStatus == "" {
+			deciding = "process"
+		}
 	case "claude":
 		switch verdict {
 		case "waiting":

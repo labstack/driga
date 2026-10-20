@@ -480,6 +480,8 @@ func drainOnly(ctx context.Context, d Deps, st *store.Store) error {
 			return err
 		}
 		ss = hookSessions(ss, hooks)
+		copilotCapturePolicy(ss, d.Cfg.CaptureText)
+		reconcileCopilot(ss, d.Plat, now)
 		for i := range ss {
 			if ss[i].ID == 0 {
 				id, e := tx.UpsertSession(ss[i])
@@ -497,6 +499,29 @@ func drainOnly(ctx context.Context, d Deps, st *store.Store) error {
 		}
 		if err := resolveInboxJumps(ctx, tx, d, ss, nil); err != nil {
 			return err
+		}
+		items, err := tx.Inbox(time.Time{}, false)
+		if err != nil {
+			return err
+		}
+		unseen := map[int64]bool{}
+		for _, item := range items {
+			if item.Kind == "finished" {
+				unseen[item.SessionID] = true
+			}
+		}
+		procs, err := tx.Procs()
+		if err != nil {
+			return err
+		}
+		for i := range ss {
+			if ss[i].Adapter != "copilot" {
+				continue
+			}
+			labelCopilot(&ss[i], procs, unseen[ss[i].ID], now, d.Cfg.StalledAfter)
+			if _, err := tx.UpsertSession(ss[i]); err != nil {
+				return err
+			}
 		}
 		for _, h := range hooks {
 			if id, ok := byKey[sessionKey(h.Adapter, h.SessionID)]; ok && h.Event == "Stop" && h.Message != "" {

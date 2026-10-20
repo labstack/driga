@@ -162,3 +162,13 @@ func TestConfigFleetValidation(t *testing.T) {
 		})
 	}
 }
+
+func TestCaptureNoneRejected(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(p, []byte(`capture_text = "none"`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := config.Load(p); err == nil {
+		t.Fatal("capture_text=none accepted")
+	}
+}

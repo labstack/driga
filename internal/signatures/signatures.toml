@@ -2,6 +2,18 @@
 # Every pattern starts at the executable token, never at an arbitrary argument.
 
 [[signature]]
+name = "copilot-headless"
+agent = "copilot"
+role = "headless"
+match = ['^(?:[^[:space:]]*/)?(?:copilot|node[[:space:]]+[^[:space:]]*/@github/copilot/npm-loader\.js)[[:space:]]+(?:[^[:space:]]+[[:space:]]+)*(?:-p|--prompt)([[:space:]]|=|$)']
+
+[[signature]]
+name = "copilot-interactive"
+agent = "copilot"
+role = "interactive"
+match = ['^(?:[^[:space:]]*/)?(?:copilot|node[[:space:]]+[^[:space:]]*/@github/copilot/npm-loader\.js)([[:space:]]|$)']
+
+[[signature]]
 name = "driga-internal"
 agent = "claude"
 role = "internal"

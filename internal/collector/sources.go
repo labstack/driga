@@ -224,16 +224,27 @@ func collectSources(ctx context.Context, d Deps, st *store.Store, p Plan, state 
 			procs, _ = state.storedProcs(st.Procs)
 		}
 		reconcileSessions(r.sessions, procs, d.Plat, now)
-		// agy has no supported transcript schema yet. Its only session
-		// evidence is the sampled executable, PID identity, cwd and liveness.
+		// agy and Copilot without hooks use executable, PID identity, cwd and liveness.
 		for _, proc := range procs {
-			if proc.Agent != "agy" || proc.Role != "interactive" || !d.Plat.Alive(proc.PID, proc.StartTime) {
+			if (proc.Agent != "agy" && (proc.Agent != "copilot" || !d.Cfg.Adapters["copilot"].Enabled)) || (proc.Role != "interactive" && !(proc.Agent == "copilot" && proc.Role == "headless")) || !d.Plat.Alive(proc.PID, proc.StartTime) {
+				continue
+			}
+			linked := false
+			if proc.Agent == "copilot" {
+				for _, s := range r.sessions {
+					if s.Adapter == "copilot" && !strings.HasPrefix(s.ExternalID, "pid:") && s.PID == proc.PID && platform.SameStart(proc.StartTime, s.ProcStart) {
+						linked = true
+						break
+					}
+				}
+			}
+			if linked {
 				continue
 			}
 			id := fmt.Sprintf("pid:%d:%d", proc.PID, proc.StartTime.UnixNano())
 			i := -1
 			for j, s := range r.sessions {
-				if s.Adapter == "agy" && s.ExternalID == id {
+				if s.Adapter == proc.Agent && s.ExternalID == id {
 					i = j
 					break
 				}
@@ -243,7 +254,10 @@ func collectSources(ctx context.Context, d Deps, st *store.Store, p Plan, state 
 				r.sessions = append(r.sessions, model.Session{})
 			}
 			s := &r.sessions[i]
-			s.SessionObs = model.SessionObs{Adapter: "agy", ExternalID: id, Origin: "interactive", PID: proc.PID, ProcStart: proc.StartTime, StartedAt: proc.StartTime, Cwd: proc.Cwd}
+			s.SessionObs = model.SessionObs{Adapter: proc.Agent, ExternalID: id, Origin: proc.Role, PID: proc.PID, ProcStart: proc.StartTime, StartedAt: proc.StartTime, Cwd: proc.Cwd}
+			if proc.Agent == "copilot" && proc.Cwd != "" {
+				s.Title = filepath.Base(proc.Cwd)
+			}
 			s.EndedAt = nil
 		}
 		if p.Git {
@@ -328,6 +342,13 @@ func writeGit(tx *store.Tx, repos []repoResult, scanErr error, source func(strin
 func reconcileSessions(ss []model.Session, procs []model.Proc, plat platform.Platform, now time.Time) {
 	for i := range ss {
 		s := &ss[i]
+		if s.Adapter == "copilot" && s.RegistryStatus == "ended" {
+			if s.EndedAt == nil {
+				at := s.LastActivityAt
+				s.EndedAt = &at
+			}
+			continue
+		}
 		if s.PID != 0 && !plat.Alive(s.PID, s.ProcStart) {
 			s.PID = 0
 		}
@@ -335,6 +356,9 @@ func reconcileSessions(ss []model.Session, procs []model.Proc, plat platform.Pla
 	linkCodex(ss, procs, plat)
 	for i := range ss {
 		s := &ss[i]
+		if s.Adapter == "copilot" && s.RegistryStatus == "ended" {
+			continue
+		}
 		if s.PID != 0 || s.Hosted && now.Sub(s.LastActivityAt) <= 24*time.Hour {
 			s.EndedAt = nil
 			if s.Label == "dead" {

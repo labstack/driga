@@ -59,7 +59,7 @@ func (n node) cmd(ctx context.Context, args ...string) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, n.bin, args...)
 	home := n.path("home")
 	cmd.Env = append(os.Environ(),
-		"HOME="+home, "CODEX_HOME="+filepath.Join(home, ".codex"), "GEMINI_CLI_HOME=",
+		"HOME="+home, "CODEX_HOME="+filepath.Join(home, ".codex"), "COPILOT_HOME="+filepath.Join(home, ".copilot"), "GEMINI_CLI_HOME=",
 		// Linux service logs and trash resolve through XDG; keep them isolated too.
 		"XDG_STATE_HOME="+filepath.Join(home, ".local", "state"), "XDG_DATA_HOME="+filepath.Join(home, ".local", "share"),
 		"XDG_CONFIG_HOME="+filepath.Join(home, ".config"),
@@ -169,7 +169,7 @@ func TestSmoke(t *testing.T) {
 {"type":"assistant","sessionId":"smoke-session","timestamp":"` + ts(-time.Minute) + `","message":{"content":[],"stop_reason":"end_turn"}}
 `
 	write(t, local.path("home", ".claude", "projects", "-smoke-project", "smoke-session.jsonl"), transcript)
-	write(t, local.path("config.toml"), "roots = ['"+filepath.Dir(repo)+"']\n[fleet]\nserve = false\n[intake]\notlp = false\n")
+	write(t, local.path("config.toml"), "roots = ['"+filepath.Dir(repo)+"']\n[fleet]\nserve = false\n[intake]\notlp = false\n[adapters.copilot]\nenabled = false\n")
 
 	if v := local.run("version"); strings.TrimSpace(v) == "" {
 		t.Fatal("empty version")
@@ -227,7 +227,7 @@ func TestSmoke(t *testing.T) {
 
 	// Fleet: the local node serves on loopback; a viewer with an empty HOME
 	// pairs and must see the served session through the stream.
-	write(t, local.path("config.toml"), "roots = ['"+filepath.Dir(repo)+"']\n[fleet]\nserve = true\nlisten = \"127.0.0.1:0\"\n[intake]\notlp = false\n")
+	write(t, local.path("config.toml"), "roots = ['"+filepath.Dir(repo)+"']\n[fleet]\nserve = true\nlisten = \"127.0.0.1:0\"\n[intake]\notlp = false\n[adapters.copilot]\nenabled = false\n")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	var serveLog logBuffer
@@ -248,7 +248,7 @@ func TestSmoke(t *testing.T) {
 	peerID := strings.TrimSpace(local.run("fleet", "id"))
 
 	viewer := newNode(t, bin, "viewer")
-	write(t, viewer.path("config.toml"), "[adapters.claude]\nenabled = false\n[adapters.codex]\nenabled = false\n[fleet]\nserve = false\n[intake]\notlp = false\n")
+	write(t, viewer.path("config.toml"), "[adapters.claude]\nenabled = false\n[adapters.codex]\nenabled = false\n[fleet]\nserve = false\n[intake]\notlp = false\n[adapters.copilot]\nenabled = false\n")
 	viewerID := strings.TrimSpace(viewer.run("fleet", "id"))
 	local.run("fleet", "enroll", "--allow", viewerID)
 	viewer.run("fleet", "add", addr, "--name", "smoke-peer", "--id", peerID)

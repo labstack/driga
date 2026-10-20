@@ -450,6 +450,9 @@ func templateFuncs() template.FuncMap {
 			if s == "" {
 				return "?"
 			}
+			if s == "copilot" {
+				return "P"
+			}
 			if s == "codex" {
 				return "X"
 			}

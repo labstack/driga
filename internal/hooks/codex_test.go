@@ -122,6 +122,7 @@ func TestCodexDryRunAndMissingFile(t *testing.T) {
 
 func runHooksCLI(t *testing.T, input string, args ...string) string {
 	t.Helper()
+	t.Setenv("COPILOT_HOME", filepath.Join(os.Getenv("HOME"), ".copilot"))
 	var root struct {
 		Hooks cli.HooksCmd `cmd:""`
 	}

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/labstack/driga/internal/adapter/copilot"
 	"github.com/labstack/driga/internal/model"
 )
 
@@ -49,6 +50,44 @@ func label(in StateInput, now time.Time, th Thresholds) (label string, heuristic
 		quiet = "no activity timestamp"
 	}
 	switch in.Obs.Adapter {
+	case "copilot":
+		live := in.Obs.PID != 0 || in.Obs.Hosted && copilot.Recent(in.Obs, now)
+		switch in.Obs.RegistryStatus {
+		case "ended":
+			return "finished", false, "Copilot sessionEnd"
+		case "started":
+			if live {
+				return "idle", false, "Copilot sessionStart"
+			}
+		case "waiting":
+			if live {
+				return "waiting", false, "Copilot notification requests input"
+			}
+		case "busy":
+			if live {
+				if age >= th.StalledAfter {
+					return "stalled", false, "Copilot turn open, " + quiet
+				}
+				return "working", false, "Copilot turn activity"
+			}
+		case "idle":
+			if in.Unseen {
+				return "finished", false, "unacknowledged Copilot agentStop"
+			}
+			if live {
+				return "idle", false, "Copilot session started or turn completed"
+			}
+		}
+		if in.Obs.RegistryStatus == "" && in.Proc != nil {
+			return "unknown", false, "Copilot process alive; install hooks with driga hooks install copilot"
+		}
+		if in.Proc == nil {
+			if in.Obs.RegistryStatus == "idle" && in.Unseen {
+				return "finished", false, "Copilot turn completed; process gone"
+			}
+			return "dead", false, "Copilot process gone or identity unavailable"
+		}
+		return "unknown", false, "no recognized Copilot hook state"
 	case "claude":
 		cleared := in.LastUserPrompt
 		for _, ts := range []*time.Time{in.LastDecision, in.LastToolResult} {

@@ -96,6 +96,16 @@ func Main(args []string, version string, metadata ...string) int {
 }
 
 func run(args []string, version string, stdin io.Reader, stdout, stderr io.Writer, metadata ...string) int {
+	// Hooks are synchronous agent callbacks. Bypass the interactive command
+	// parser and its usage output; every hook invocation must be quiet and fail open.
+	if len(args) > 0 && args[0] == "hook" {
+		if len(args) < 3 {
+			hookLogError(errors.New("hook requires adapter and event"))
+			return 0
+		}
+		_ = (HookCmd{Adapter: args[1], Event: args[2], Payload: args[3:]}).Run(&Globals{Stdin: stdin})
+		return 0
+	}
 	var root Root
 	root.Version, root.Stdout, root.Stderr, root.Stdin = version, stdout, stderr, stdin
 	root.Commit, root.Date = "unknown", "unknown"

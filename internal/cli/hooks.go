@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -24,9 +25,9 @@ type HooksCmd struct {
 
 // HooksOptions selects agents and controls preview-only operation.
 type HooksOptions struct {
-	Target string `arg:"" optional:"" help:"Agent name (claude, codex, or all); overrides --agent."`
+	Target string `arg:"" optional:"" help:"Agent name (claude, codex, copilot, or all); overrides --agent."`
 	DryRun bool   `help:"Print the diff without writing or prompting."`
-	Agent  string `enum:"claude,codex,all" default:"all" help:"Agent to configure: claude, codex, or all."`
+	Agent  string `enum:"claude,codex,copilot,all" default:"all" help:"Agent to configure: claude, codex, copilot, or all."`
 	OTLP   bool   `help:"Configure optional metadata-only loopback OTLP instead of hooks."`
 	Traces bool   `help:"Include Claude beta spans (requires --otlp)."`
 }
@@ -63,6 +64,19 @@ func (c HooksStatusCmd) Run(g *Globals) error {
 		return err
 	}
 	out := hooksOutput(g)
+	if agent == "copilot" || agent == "all" {
+		exe, err := os.Executable()
+		if err != nil {
+			return err
+		}
+		status, err := hooks.CopilotStatus(copilotHookPath(), stablePath(exe))
+		if err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintln(out, "Copilot:", status); err != nil {
+			return err
+		}
+	}
 	if agent == "claude" || agent == "all" {
 		events, err := hooks.ClaudeStatus(claude)
 		if err != nil {
@@ -100,10 +114,10 @@ func (c HooksOptions) agent() (string, error) {
 	switch c.Agent {
 	case "":
 		return "all", nil
-	case "claude", "codex", "all":
+	case "claude", "codex", "copilot", "all":
 		return c.Agent, nil
 	default:
-		return "", fmt.Errorf("unknown hook agent %q (use claude, codex, or all)", c.Agent)
+		return "", fmt.Errorf("unknown hook agent %q (use claude, codex, copilot, or all)", c.Agent)
 	}
 }
 
@@ -122,6 +136,10 @@ func hookPaths() (claude, codex string, err error) {
 	return filepath.Join(home, ".claude", "settings.json"), filepath.Join(codexHome, "config.toml"), nil
 }
 
+func copilotHookPath() string {
+	return hooks.CopilotPath(config.ExpandHome("~"), os.Getenv("COPILOT_HOME"))
+}
+
 func hooksOutput(g *Globals) io.Writer {
 	if g.Stdout == nil {
 		return io.Discard
@@ -136,6 +154,9 @@ func (c HooksOptions) change(g *Globals, install bool) error {
 	agent, err := c.agent()
 	if err != nil {
 		return err
+	}
+	if c.OTLP && agent == "copilot" {
+		return errors.New("Copilot supports hooks only; OTLP is not supported")
 	}
 	claude, codex, err := hookPaths()
 	if err != nil {
@@ -159,6 +180,21 @@ func (c HooksOptions) change(g *Globals, install bool) error {
 	}
 	now := time.Now()
 	var operations []func(bool) (hooks.Diff, error)
+	if install && !c.OTLP && (agent == "copilot" || agent == "all") {
+		if warning := copilotVersionWarning(context.Background()); warning != "" {
+			if _, err := fmt.Fprintln(hooksOutput(g), "Warning:", warning); err != nil {
+				return err
+			}
+		}
+	}
+	if !c.OTLP && (agent == "copilot" || agent == "all") {
+		operations = append(operations, func(dryRun bool) (hooks.Diff, error) {
+			if install {
+				return hooks.CopilotInstall(copilotHookPath(), driga, dryRun, now)
+			}
+			return hooks.CopilotUninstall(copilotHookPath(), dryRun)
+		})
+	}
 	if agent == "claude" || agent == "all" {
 		operations = append(operations, func(dryRun bool) (hooks.Diff, error) {
 			if c.OTLP {
@@ -229,6 +265,10 @@ func (c HooksOptions) change(g *Globals, install bool) error {
 			return err
 		}
 	}
+	if !install && !c.OTLP && (agent == "copilot" || agent == "all") {
+		_, err := fmt.Fprintln(out, "Running Copilot sessions keep calling the removed hook until restarted; Copilot fails open.")
+		return err
+	}
 	return nil
 }
 
@@ -236,6 +276,9 @@ func (c HooksOptions) otlpStatus(g *Globals) error {
 	agent, err := c.agent()
 	if err != nil {
 		return err
+	}
+	if agent == "copilot" {
+		return errors.New("Copilot supports hooks only; OTLP is not supported")
 	}
 	claude, codex, err := hookPaths()
 	if err != nil {

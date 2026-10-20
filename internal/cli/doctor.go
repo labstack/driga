@@ -56,6 +56,7 @@ type DoctorDeps struct {
 	Config         config.Config
 	Home           string
 	CodexHome      string // Optional override; defaults to Home/.codex.
+	CopilotHome    string // Optional override; defaults to Home/.copilot.
 	Now            time.Time
 	LockProbe      func(dataDir string) (held bool, err error)
 	NotifierLookup func() string // Optional cached notifier lookup for fixtures.
@@ -64,6 +65,7 @@ type DoctorDeps struct {
 // Doctor checks stored evidence without collecting, writing, or controlling launchd.
 func Doctor(ctx context.Context, d DoctorDeps) []Check {
 	checks := []Check{}
+	copilotSeen := false
 	add := func(name, status, detail, fix string) { checks = append(checks, Check{name, status, detail, fix}) }
 	for _, entry := range []struct{ name, path string }{
 		{"storage:db", filepath.Join(d.DataDir, "driga.db")},
@@ -154,6 +156,12 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 			sigs, _ := signatures.Load(nil)
 			for _, p := range procs {
 				sig, ok := sigs.Match(p.Cmdline, p.Exe)
+				if p.Agent == "copilot" || ok && sig.Agent == "copilot" {
+					copilotSeen = true
+				}
+			}
+			for _, p := range procs {
+				sig, ok := sigs.Match(p.Cmdline, p.Exe)
 				if p.Agent == "agy" || ok && sig.Agent == "agy" {
 					add("agy", "info", "process-level (schema not yet supported)", "")
 					break
@@ -200,6 +208,37 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 			continue
 		}
 		var dirs []string
+		if name == "copilot" {
+			if warning := copilotVersionWarning(ctx); warning != "" {
+				add("version:copilot", "warn", warning, "upgrade Copilot CLI to 1.0.98 or newer")
+			}
+			if copilotSandboxEnabled(d.Home, d.CopilotHome) {
+				add("sandbox:copilot", "warn", "sandbox.enabled is true; sandboxed hooks may be unable to reach Driga's spool", "allow the Driga spool in the Copilot sandbox or disable the sandbox")
+			}
+			if copilotSeen {
+				received := ""
+				if d.Store != nil {
+					received, _ = d.Store.Meta("hooks:copilot:received")
+				}
+				if received == "" || received == "0" {
+					add("events:copilot", "warn", "Copilot processes seen but no Copilot hook events received; check sandbox, disableAllHooks, and sessions started before installation", "driga hooks install copilot; restart running Copilot sessions")
+				}
+			}
+			exe, err := os.Executable()
+			status := "missing"
+			if err == nil {
+				status, err = hooks.CopilotStatus(hooks.CopilotPath(d.Home, d.CopilotHome), stablePath(exe))
+			}
+			fix := "driga hooks install copilot"
+			if err != nil {
+				add("hooks:copilot", "fail", err.Error(), fix)
+			} else if status == "installed" {
+				add("hooks:copilot", "ok", "installed", "")
+			} else {
+				add("hooks:copilot", "warn", status+"; without hooks, process-level sessions have unknown state", fix)
+			}
+			continue
+		}
 		switch name {
 		case "claude":
 			dirs = []string{filepath.Join(d.Home, ".claude", "sessions"), filepath.Join(d.Home, ".claude", "projects")}
@@ -430,7 +469,7 @@ func (DoctorCmd) Run(g *Globals) error {
 	if err != nil {
 		return err
 	}
-	d := DoctorDeps{DataDir: config.DataDir(), Config: cfg, Home: config.ExpandHome("~"), CodexHome: os.Getenv("CODEX_HOME"), Now: time.Now(), LockProbe: probeCollectorLock}
+	d := DoctorDeps{DataDir: config.DataDir(), Config: cfg, Home: config.ExpandHome("~"), CodexHome: os.Getenv("CODEX_HOME"), CopilotHome: os.Getenv("COPILOT_HOME"), Now: time.Now(), LockProbe: probeCollectorLock}
 	st, openErr := store.Open(filepath.Join(d.DataDir, "driga.db"), store.ReadOnly)
 	if openErr == nil {
 		defer st.Close()

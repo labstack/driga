@@ -40,6 +40,7 @@ var settings = []Setting{
 	{"adapters.claude.enabled", "", "bool", true, "Enable Claude session discovery.", "true or false"},
 	{"adapters.codex.enabled", "", "bool", true, "Enable Codex session discovery.", "true or false"},
 	{"adapters.gemini.enabled", "", "bool", true, "Enable Gemini session discovery.", "true or false"},
+	{"adapters.copilot.enabled", "", "bool", true, "Enable Copilot hook and process discovery.", "true or false"},
 	{"orphans.extra_signatures", "ExtraSignatures", "list", []string{}, "Additional signature files; ~ expands to HOME.", "file-only; empty = built-in signatures"},
 	{"summaries.enabled", "Summaries.Enabled", "bool", false, "Enable optional local Claude summaries.", "true or false"},
 	{"summaries.model", "Summaries.Model", "string", "haiku", "Model selection passed to the Claude CLI.", "nonempty"},
