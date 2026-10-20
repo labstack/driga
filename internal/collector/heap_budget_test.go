@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
+	"runtime/metrics"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -77,17 +78,19 @@ func TestInitialImportPeakHeap(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// Collect garbage eagerly so HeapInuse tracks live buffers rather than GC
-	// pacing (64 KiB lines are short-lived garbage); the regression held ~120 MiB
-	// live, the fix a few MiB.
+	// Measure the live heap marked by each GC, not HeapInuse: under CPU
+	// contention GC lags allocation and HeapInuse also counts garbage waiting
+	// to be swept (9.9 to 40 MiB for the same input on a loaded machine). The
+	// regression held ~120 MiB live, the fix a few MiB.
 	debug.SetGCPercent(10)
 	runtime.GC()
 	var peak atomic.Uint64
+	live := []metrics.Sample{{Name: "/gc/heap/live:bytes"}}
 	sample := func() {
-		var m runtime.MemStats
-		runtime.ReadMemStats(&m)
-		for old := peak.Load(); m.HeapInuse > old; old = peak.Load() {
-			if peak.CompareAndSwap(old, m.HeapInuse) {
+		metrics.Read(live)
+		v := live[0].Value.Uint64()
+		for old := peak.Load(); v > old; old = peak.Load() {
+			if peak.CompareAndSwap(old, v) {
 				break
 			}
 		}
@@ -116,9 +119,9 @@ func TestInitialImportPeakHeap(t *testing.T) {
 	if got := len(sessions(t, st)); got != 50 {
 		t.Fatalf("imported %d sessions, want 50", got)
 	}
-	t.Logf("initial import peak HeapInuse = %.2f MiB", float64(peak.Load())/(1<<20))
+	t.Logf("initial import peak live heap = %.2f MiB", float64(peak.Load())/(1<<20))
 	if peak.Load() >= 30_000_000 {
-		t.Fatalf("peak HeapInuse = %d bytes, want < 30 MB", peak.Load())
+		t.Fatalf("peak live heap = %d bytes, want < 30 MB", peak.Load())
 	}
 }
 

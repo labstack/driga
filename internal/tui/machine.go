@@ -48,6 +48,9 @@ func (m *app) machineRows(add func(tabRow)) {
 			apps      []view.MachineApp
 		}{{"Top 10 apps by memory", "mem", host.TopMemory}, {"Top 10 apps by CPU", "cpu", host.TopCPU}} {
 			add(tabRow{machine: host.MachineID, cells: []string{"", rank.name, "", "→ expand · enter details", ""}})
+			if rank.key == "mem" {
+				add(tabRow{machine: host.MachineID, cells: []string{"", "", "", "incl. swap: may exceed RAM", ""}})
+			}
 			if len(rank.apps) == 0 {
 				add(tabRow{machine: host.MachineID, cells: []string{"", "No process readings", "", "", ""}})
 			}

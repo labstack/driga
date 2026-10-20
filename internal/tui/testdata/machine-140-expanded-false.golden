@@ -14,10 +14,10 @@
   codegraph mcp  3 servers · 300.0M · leaking ↑ 0.75/h since 02:20 · 1 hosts · 2 duplicates                                                 
     codegraph mcp pile-up                      3            codex app-server PID 10 · 31h0m0s                            300.0M             
     Top 10 apps by memory                                   → expand · enter details                                                        
+                                                            incl. swap: may exceed RAM                                                      
 ›   ▸ Browser                                  70.0%        physical_footprint                                           2.0G               
     Top 10 apps by CPU                                      → expand · enter details                                                        
     ▸ Browser                                  70.0%        physical_footprint                                           2.0G               
-                                                                                                                                            
                                                                                                                                             
                                                                                                                                             
                                                                                                                                             

@@ -285,7 +285,7 @@
 <pre>{{mcpDetails .MCPCommand}}</pre><p>{{.Advice}}</p>
 </article>{{else}}<p class="empty">No MCP pile-ups.</p>{{end}}
 </section>
-<div data-machine-rank="memory" data-machine-id="{{.MachineID}}"><h4>Top 10 apps by memory</h4>{{range .TopMemory}}{{template "machine-app" .}}{{else}}<p class="empty">No process readings.</p>{{end}}</div>
+<div data-machine-rank="memory" data-machine-id="{{.MachineID}}"><h4>Top 10 apps by memory</h4><p class="note">{{footprintNote}}</p>{{range .TopMemory}}{{template "machine-app" .}}{{else}}<p class="empty">No process readings.</p>{{end}}</div>
 <div data-machine-rank="cpu" data-machine-id="{{.MachineID}}"><h4>Top 10 apps by CPU</h4>{{range .TopCPU}}{{template "machine-app" .}}{{else}}<p class="empty">No process readings.</p>{{end}}</div>
 </article>{{end}}
 <h3>Agent memory

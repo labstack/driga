@@ -215,6 +215,9 @@ func Render(w io.Writer, v any, opts RenderOpts) error {
 				apps []MachineApp
 			}{{"Top 10 apps by memory", h.TopMemory}, {"Top 10 apps by CPU", h.TopCPU}} {
 				fmt.Fprintln(tw, rank.name)
+				if rank.name == "Top 10 apps by memory" {
+					fmt.Fprintln(tw, "("+FootprintNote+")")
+				}
 				fmt.Fprintln(tw, "APP\tMEM\tMEASURE\tCPU")
 				for _, app := range rank.apps {
 					fmt.Fprintf(tw, "%s\t%s\t%s\t%.1f%%\n", cell(app.Name), humanBytes(app.Memory), app.MemoryMeasure, app.CPUPercent)
@@ -368,6 +371,9 @@ func cell(s string) string {
 		return r
 	}, s)
 }
+
+// FootprintNote explains why app memory can add up to more than RAM.
+const FootprintNote = "footprint includes compressed and swapped memory, so apps can add up to more than RAM"
 
 func multipleMachines(ids []string) bool {
 	seen := map[string]bool{}
