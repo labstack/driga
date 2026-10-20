@@ -1,12 +1,15 @@
 package view
 
 import (
+	"fmt"
 	"path"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/labstack/driga/internal/derive"
 	"github.com/labstack/driga/internal/model"
+	"github.com/labstack/driga/internal/signatures"
 )
 
 // MachineAttribution records the proof, never a guessed executable match.
@@ -47,16 +50,10 @@ func machineApps(procs []model.Proc, sessions []model.Session) ([]MachineApp, []
 		if p.Zombie {
 			continue
 		}
-		row := MachineProcess{Proc: p, Memory: p.RSS}
+		row := MachineProcess{Proc: p}
+		row.Memory, row.MemoryMeasure = derive.ProcessMemory(p)
 		// Stored orphan ancestry is not evidence of a currently live session.
 		row.SessionID = 0
-		if p.MemoryMeasure == "physical_footprint" {
-			row.Memory = p.Footprint
-		} else if p.MemoryMeasure == "rss_swap" {
-			row.Memory += p.Swap
-		} else {
-			row.MemoryMeasure = "rss"
-		}
 		bundle := ""
 		cur := p
 		seen := map[int32]bool{}
@@ -99,10 +96,7 @@ func machineApps(procs []model.Proc, sessions []model.Session) ([]MachineApp, []
 		}
 		id, name := bundle, strings.TrimSuffix(path.Base(bundle), ".app")
 		if bundle == "" {
-			name = path.Base(p.Exe)
-			if p.Exe == "" {
-				name = "unknown"
-			}
+			name = signatures.Builtin().ProcessName(p.Cmdline, p.Exe)
 			id = "exe:" + name
 		}
 		a := apps[id]
@@ -141,6 +135,46 @@ func machineApps(procs []model.Proc, sessions []model.Session) ([]MachineApp, []
 		return cpu[i].ID < cpu[j].ID
 	})
 	return mem[:min(10, len(mem))], cpu[:min(10, len(cpu))]
+}
+
+// MCPPileupText supplies the same evidence and read-only advice to CLI/TUI.
+func MCPPileupText(p derive.MCPPileup) string {
+	return fmt.Sprintf("%s: %d processes · %s (%s)\n%s\nHost: %s (PID %d) · age %s\nHost started: %s\nHost project: %s\nOldest: %s\nNewest: %s\n%s",
+		p.Name, p.Count, humanBytes(p.Memory), p.MemoryMeasure, MCPCommandDetails(p.MCPCommand),
+		p.Host.Name, p.Host.PID, age(p.Host.Age), p.Host.StartedAt.Format(time.RFC3339), p.Host.Cwd,
+		p.OldestStart.Format(time.RFC3339), p.NewestStart.Format(time.RFC3339), strings.ReplaceAll(p.Advice, "; ", ";\n"))
+}
+
+// MCPCommandSummary is shared by CLI, TUI and web roll-ups.
+func MCPCommandSummary(c derive.MCPCommand) string {
+	text := fmt.Sprintf("%s  %d servers · %s · %d hosts · %d duplicates", c.Name, c.Count, humanBytes(c.Memory), c.HostCount, c.DuplicateCount)
+	if c.IncludesLauncher {
+		text += " · includes launcher"
+	}
+	return text
+}
+
+func MCPCommandDetails(c derive.MCPCommand) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Memory measure: %s", c.MemoryMeasure)
+	if c.IncludesLauncher {
+		b.WriteString(" · includes launcher")
+	}
+	commands := c.Commands
+	if len(commands) == 0 {
+		commands = []string{c.Command}
+	}
+	for _, command := range commands {
+		fmt.Fprintf(&b, "\nCommand: %s", command)
+	}
+	if len(c.Installs) > 0 {
+		fmt.Fprintf(&b, "\nInstalls:\n  %s", strings.Join(c.Installs, "\n  "))
+	}
+	return b.String()
+}
+
+func MCPCommandText(c derive.MCPCommand) string {
+	return MCPCommandSummary(c) + "\n" + MCPCommandDetails(c)
 }
 
 // machineProjectSessions uses known checkout roots so a session launched in a

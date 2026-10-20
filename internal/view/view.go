@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/labstack/driga/internal/collector"
+	"github.com/labstack/driga/internal/derive"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/store"
 )
@@ -287,12 +288,13 @@ type MemoryRow struct {
 // MachineView contains host totals, whole-machine app rankings, and agent role totals.
 type MachineView struct {
 	MachineFresh
-	TopMemory []MachineApp        `json:"top_memory"`
-	TopCPU    []MachineApp        `json:"top_cpu"`
-	Machines  []MachineView       `json:"machines,omitempty"`
-	MachineID string              `json:"machine_id"`
-	Sample    model.MachineSample `json:"sample"`
-	Memory    []MemoryRow         `json:"memory"`
+	MCPServers derive.MCPServerView `json:"mcp_servers"`
+	TopMemory  []MachineApp         `json:"top_memory"`
+	TopCPU     []MachineApp         `json:"top_cpu"`
+	Machines   []MachineView        `json:"machines,omitempty"`
+	MachineID  string               `json:"machine_id"`
+	Sample     model.MachineSample  `json:"sample"`
+	Memory     []MemoryRow          `json:"memory"`
 }
 
 // SummaryView contains the counts and health values used by the summary line.

@@ -276,6 +276,15 @@
 <h3>{{.MachineName}} · Machine</h3>
 <p class="muted">OS pressure: {{.Sample.PressureLevel}} · Memory measures are labelled per process.</p>
 <dl class="metrics"><div><dt>compressed</dt><dd>{{bytes .Sample.MemCompressed}}</dd></div></dl>
+<section aria-label="MCP servers"><h4>MCP servers</h4>
+{{range .MCPServers.Commands}}<details><summary>{{mcpSummary .}}</summary><pre>{{mcpDetails .}}</pre></details>{{end}}
+{{range .MCPServers.Pileups}}<article class="item">
+<strong>{{.Name}} pile-up · {{.Count}} processes · {{bytes .Memory}} ({{.MemoryMeasure}})</strong>
+<p>Host: {{.Host.Name}} · PID {{.Host.PID}} · age {{duration .Host.Age}} · {{.Host.Cwd}}</p>
+<p class="muted">Host started {{stamp .Host.StartedAt}} · oldest {{stamp .OldestStart}} · newest {{stamp .NewestStart}}</p>
+<pre>{{mcpDetails .MCPCommand}}</pre><p>{{.Advice}}</p>
+</article>{{else}}<p class="empty">No MCP pile-ups.</p>{{end}}
+</section>
 <div data-machine-rank="memory" data-machine-id="{{.MachineID}}"><h4>Top 10 apps by memory</h4>{{range .TopMemory}}{{template "machine-app" .}}{{else}}<p class="empty">No process readings.</p>{{end}}</div>
 <div data-machine-rank="cpu" data-machine-id="{{.MachineID}}"><h4>Top 10 apps by CPU</h4>{{range .TopCPU}}{{template "machine-app" .}}{{else}}<p class="empty">No process readings.</p>{{end}}</div>
 </article>{{end}}

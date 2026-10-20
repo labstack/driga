@@ -1,7 +1,7 @@
  driga   test-host · ● live · daemon · 05:00:00                                   mem ███░░░ 50%   swap ███░░░ 50%   load 0.0/4   disk 12.0G
 0 Home   1 Agents 1   2 Projects 0   3 Inbox 1   4 Orphans 1   [5 Machine]   6 Cleanup 0   7 Flow   8 Chat
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-    METRIC / APP / PROCESS                     CPU          MEASURE / ATTRIBUTION                                        MEM                
+    METRIC / APP / PROCESS                     CPU/#        MEASURE / HOST / ATTRIBUTION                                 MEM                
     memory                                                  4.0G/8.0G                                                                       
     compressed                                              1.0G                                                                            
     swap                                                    1.0G/2.0G                                                                       
@@ -10,13 +10,13 @@
     load (1/5/15)                                           0.0 / 0.0 / 0.0                                                                 
     cores                                                   4                                                                               
     disk free                                               12.0G                                                                           
+    MCP servers                                             enter details · read-only                                                       
+  codegraph mcp  2 servers · 200.0M · 1 hosts · 1 duplicates                                                                                
+    codegraph mcp pile-up                      2            codex app-server PID 10 · 31h0m0s                            200.0M             
     Top 10 apps by memory                                   → expand · enter details                                                        
 ›   ▸ Browser                                  70.0%        physical_footprint                                           2.0G               
     Top 10 apps by CPU                                      → expand · enter details                                                        
     ▸ Browser                                  70.0%        physical_footprint                                           2.0G               
-                                                                                                                                            
-                                                                                                                                            
-                                                                                                                                            
                                                                                                                                             
                                                                                                                                             
                                                                                                                                             

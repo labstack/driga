@@ -30,6 +30,10 @@ func (m *app) openDetail(r tabRow) {
 		}
 	}
 	switch {
+	case r.mcpCommand != nil:
+		fmt.Fprintln(&buf, wrapText(view.MCPCommandText(*r.mcpCommand), m.width))
+	case r.pileup != nil:
+		fmt.Fprintln(&buf, wrapText(view.MCPPileupText(*r.pileup), m.width))
 	case r.app != nil:
 		a := r.app
 		fmt.Fprintf(&buf, "%s · %s · %.1f%% CPU · %s\n", clean(a.Name), humanBytes(a.Memory), a.CPUPercent, a.MemoryMeasure)

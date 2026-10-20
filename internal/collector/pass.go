@@ -185,7 +185,7 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 				if err := lowDiskInbox(tx, d.Cfg.Machine, sample, now); err != nil {
 					return err
 				}
-				if err := memoryPressureInbox(tx, sample, now); err != nil {
+				if err := memoryPressureInbox(tx, sample, now, procs); err != nil {
 					return err
 				}
 				sample.MachineID = tx.MachineID()

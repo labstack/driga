@@ -1,13 +1,40 @@
 package view
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/labstack/driga/internal/derive"
 	"github.com/labstack/driga/internal/model"
+	"github.com/labstack/driga/internal/store"
 )
+
+func TestMCPRollupSummaryAndDetails(t *testing.T) {
+	ps := []model.Proc{
+		{PID: 1, Cmdline: "claude"},
+		{PID: 2, PPID: 1, Cmdline: "node exec firecrawl-mcp", RSS: 10 << 20},
+		{PID: 3, PPID: 2, Cmdline: "node /cache/node_modules/.bin/firecrawl-mcp", RSS: 20 << 20},
+		{PID: 4, PPID: 1, Cmdline: "node /cache/node_modules/.bin/firecrawl-mcp", RSS: 30 << 20},
+	}
+	servers := derive.MCPServers(ps, nil, time.Time{})
+	var buf bytes.Buffer
+	if err := Render(&buf, MachineView{MCPServers: servers}, RenderOpts{NoColor: true}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(buf.String(), "firecrawl-mcp  2 servers · 60.0M · 1 hosts · 1 duplicates") {
+		t.Fatal(buf.String())
+	}
+	for _, want := range []string{"includes launcher", ps[1].Cmdline, ps[2].Cmdline, "Installs:"} {
+		if !strings.Contains(buf.String(), want) {
+			t.Errorf("missing %q: %s", want, buf.String())
+		}
+	}
+}
 
 func TestMachineAppsGroupingAndProofs(t *testing.T) {
 	start := time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC)
@@ -81,6 +108,56 @@ func TestMachineTopTenAndMixedMeasures(t *testing.T) {
 	}
 	if v["memory_bytes"] != float64(50) || v["memory_measure"] != "rss_swap" {
 		t.Fatalf("process marshal lost view fields: %s", b)
+	}
+}
+
+func TestMachineVersionedAppsStaySeparate(t *testing.T) {
+	mem, _ := machineApps([]model.Proc{
+		{PID: 1, Exe: "/home/fixture/.local/share/claude/versions/2.1.304", Cmdline: "claude", RSS: 30},
+		{PID: 2, Exe: "/home/fixture/.local/share/claude/versions/2.1.303", Cmdline: "claude", RSS: 20},
+		{PID: 3, Exe: "/home/fixture/.local/share/claude/versions/2.1.304", Cmdline: "claude", RSS: 10},
+	}, nil)
+	if len(mem) != 2 || mem[0].Name != "claude 2.1.304" || mem[0].Memory != 40 || mem[1].Name != "claude 2.1.303" {
+		t.Fatal(mem)
+	}
+}
+
+func TestMachinePileupsStayWithinMachineAndRenderEvidence(t *testing.T) {
+	st := fleetFixture(t)
+	if err := st.Tx(context.Background(), func(tx *store.Tx) error {
+		for _, id := range []string{tx.MachineID(), "remote"} {
+			ps := []model.Proc{{PID: 10, Cmdline: "claude", StartTime: testNow.Add(-31 * time.Hour)}, {PID: 11, PPID: 10, Cmdline: "node /opt/codegraph/dist/index.js", RSS: 100, StartTime: testNow.Add(-time.Hour)}}
+			if id == tx.MachineID() {
+				ps = append(ps, model.Proc{PID: 12, PPID: 10, Cmdline: "node /opt/codegraph/dist/index.js", RSS: 100, StartTime: testNow})
+			}
+			if err := tx.ForMachine(id).ReplaceProcs(ps); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	v, err := Machine(st, Filter{}, testNow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(v.MCPServers.Pileups) != 1 || v.MCPServers.Commands[0].Count != 2 {
+		t.Fatal(v.MCPServers)
+	}
+	for _, m := range v.Machines {
+		if m.MachineID == "remote" && (len(m.MCPServers.Pileups) != 0 || m.MCPServers.Commands[0].Count != 1) {
+			t.Fatal(m.MCPServers)
+		}
+	}
+	var buf bytes.Buffer
+	if err := Render(&buf, v, RenderOpts{NoColor: true}); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"MCP servers", "codegraph mcp: 2 processes", "PID 10", "31h", "Oldest:", "Newest:", "Restart", "per project"} {
+		if !strings.Contains(buf.String(), want) {
+			t.Fatalf("missing %q: %s", want, buf.String())
+		}
 	}
 }
 

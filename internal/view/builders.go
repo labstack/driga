@@ -490,6 +490,7 @@ func machineLocal(r Reader, f Filter, now time.Time) (MachineView, error) {
 		return v, err
 	}
 	v.TopMemory, v.TopCPU = machineApps(procs, machineProjectSessions(ss, repos, worktrees))
+	v.MCPServers = derive.MCPServers(procs, nil, now)
 	allowed := map[int32]bool{}
 	if f.Project != "" {
 		ss, err := sessions(r, f, now)
