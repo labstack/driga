@@ -1,0 +1,18 @@
+name: Feature request
+description: Something Driga should show, answer or do.
+type: Feature
+labels: ["enhancement"]
+title: "feat: "
+body:
+  - type: textarea
+    id: moment
+    attributes:
+      label: The moment you needed it
+      description: What were you doing, and what did you have to do instead?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help
+      description: Optional. Describe the outcome; the shape can be worked out together.

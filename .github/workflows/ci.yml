@@ -1,0 +1,112 @@
+# Canon: README.md (Pixel CI) and .github/workflows/typescript.yml (runner
+# selection and action pins). Same isolation and pins as release.yml.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  # Escape hatch: run on GitHub-hosted runners when pixel is down or a clean
+  # image is needed. Paid minutes are manual, except that an untrusted pull
+  # request is always isolated from the persistent runner.
+  workflow_dispatch:
+    inputs:
+      hosted:
+        description: "Run on GitHub-hosted runners (spends paid minutes)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  runners:
+    name: Choose runner
+    # The selector honors the escape hatch itself, so a hosted run never
+    # queues behind an unavailable pixel runner.
+    runs-on: ${{ (inputs.hosted || github.actor == 'dependabot[bot]' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)) && fromJSON('["ubuntu-24.04"]') || fromJSON('["self-hosted","Linux","X64","pixel"]') }}
+    timeout-minutes: 5
+    outputs:
+      linux: ${{ steps.select.outputs.linux }}
+    steps:
+      - name: Select Linux runner
+        id: select
+        env:
+          HOSTED: ${{ inputs.hosted || github.actor == 'dependabot[bot]' }}
+          UNTRUSTED_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+        run: |
+          if [ "$HOSTED" = "true" ] || [ "$UNTRUSTED_PR" = "true" ]; then
+            echo 'linux=["ubuntu-24.04"]' >>"$GITHUB_OUTPUT"
+            echo "Runner: GitHub-hosted"
+          else
+            echo 'linux=["self-hosted","Linux","X64","pixel"]' >>"$GITHUB_OUTPUT"
+            echo "Runner: Pixel Linux"
+          fi
+
+  test:
+    name: Tests and build
+    needs: runners
+    runs-on: ${{ fromJSON(needs.runners.outputs.linux) }}
+    timeout-minutes: 30
+    env:
+      GOTOOLCHAIN: local
+      GOWORK: "off"
+      GOFLAGS: ""
+      GOEXPERIMENT: ""
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1; Canon pin
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version-file: go.mod
+          check-latest: false
+          cache: false
+      # Tests must never see a real home, agent config or Driga data, on a
+      # shared runner least of all.
+      - name: Isolate test and build state
+        run: |
+          task_root=$(mktemp -d "$RUNNER_TEMP/driga-ci.XXXXXX")
+          mkdir -p "$task_root/home" "$task_root/data" "$task_root/spool"
+          {
+            echo "HOME=$task_root/home"
+            echo "CODEX_HOME=$task_root/home/.codex"
+            echo "GEMINI_CLI_HOME=$task_root/home/.gemini"
+            echo "XDG_CONFIG_HOME=$task_root/home/.config"
+            echo "XDG_DATA_HOME=$task_root/home/.local/share"
+            echo "XDG_STATE_HOME=$task_root/home/.local/state"
+            echo "DRIGA_DATA_DIR=$task_root/data"
+            echo "DRIGA_SPOOL_DIR=$task_root/spool"
+            echo "DRIGA_CONFIG=$task_root/config.toml"
+            echo "GOCACHE=$task_root/gocache"
+            echo "GOMODCACHE=$task_root/gomodcache"
+          } >> "$GITHUB_ENV"
+      - name: Format, vet and generated files
+        run: |
+          unformatted=$(gofmt -l cmd internal)
+          if [ -n "$unformatted" ]; then echo "gofmt needed:"; echo "$unformatted"; exit 1; fi
+          go vet ./...
+          go generate ./internal/config
+          git diff --exit-code -- .env.example
+      - name: Test on Linux
+        run: go test ./...
+      - name: Race test
+        env:
+          CGO_ENABLED: "1"
+        run: go test -race ./...
+      - name: Cross-build the cgo-free targets
+        env:
+          CGO_ENABLED: "0"
+        run: |
+          for target in darwin/arm64 darwin/amd64 linux/amd64 linux/arm64 windows/amd64; do
+            GOOS=${target%/*} GOARCH=${target#*/} go build -o /dev/null ./cmd/driga
+          done
