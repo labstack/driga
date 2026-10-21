@@ -2,6 +2,7 @@ package cli
 
 import (
 	"os"
+	"runtime"
 	"runtime/debug"
 )
 
@@ -24,5 +25,13 @@ func applyCollectorMemoryLimit() {
 	}
 	if os.Getenv("GOGC") == "" {
 		debug.SetGCPercent(collectorGCPercent)
+	}
+}
+
+// applyCollectorParallelism reduces GC coordination across Ps for the daemon's
+// small heap and high allocation churn. An explicit user GOMAXPROCS wins.
+func applyCollectorParallelism() {
+	if _, set := os.LookupEnv("GOMAXPROCS"); !set {
+		runtime.GOMAXPROCS(min(2, runtime.NumCPU()))
 	}
 }

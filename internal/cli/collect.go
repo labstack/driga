@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"syscall"
+	"time"
 
 	"github.com/labstack/driga/internal/collector"
 	"github.com/labstack/driga/internal/config"
@@ -20,12 +21,17 @@ import (
 
 // CollectCmd runs the daemon, or one persistent pass with --once.
 type CollectCmd struct {
-	Once bool `help:"Collect once into the persistent database and exit."`
+	Once       bool          `help:"Collect once into the persistent database and exit."`
+	CPUProfile string        `name:"cpu-profile" type:"path" help:"Write a CPU profile of the collector to this file."`
+	ProfileFor time.Duration `name:"profile-for" default:"2m" help:"How long --cpu-profile records before it stops."`
 }
 
 // Run loads collection sources and handles graceful termination signals.
 func (c CollectCmd) Run(g *Globals) error {
 	applyCollectorMemoryLimit()
+	if !c.Once {
+		applyCollectorParallelism()
+	}
 	cfg, err := config.Load(config.Path())
 	if err != nil {
 		return err
@@ -36,6 +42,13 @@ func (c CollectCmd) Run(g *Globals) error {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	if c.CPUProfile != "" {
+		stopProfile, err := startCPUProfile(c.CPUProfile, c.ProfileFor)
+		if err != nil {
+			return err
+		}
+		defer stopProfile()
+	}
 	dir := config.DataDir()
 	if !c.Once {
 		restore, err := collectorLogging()

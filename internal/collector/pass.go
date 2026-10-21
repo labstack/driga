@@ -681,8 +681,9 @@ func appendFeed(tx *store.Tx, kind feed.Kind, row any, share feed.ShareText, now
 type passFeedRow struct {
 	kind       feed.Kind
 	key        string
-	payload    []byte
-	comparison []byte
+	row        any
+	comparison any
+	share      feed.ShareText
 }
 
 var evidenceDuration = regexp.MustCompile(`\b[0-9]+(?:\.[0-9]+)?(?:h|ms|m|s)(?:[0-9]+(?:\.[0-9]+)?(?:h|ms|m|s))*\b`)
@@ -693,13 +694,11 @@ var evidenceDuration = regexp.MustCompile(`\b[0-9]+(?:\.[0-9]+)?(?:h|ms|m|s)(?:[
 func passFeedRows(tx *store.Tx, now time.Time, share feed.ShareText) (map[string]passFeedRow, error) {
 	rows := make(map[string]passFeedRow)
 	add := func(kind feed.Kind, row any) {
-		key, payload := feed.Encode(kind, row, share)
-		if payload == nil {
-			return
-		}
+		var key string
 		comparisonRow := row
 		switch v := row.(type) {
 		case feed.SessionRow:
+			key = feed.Key(v.Adapter, v.ExternalID)
 			// Evidence is an observation at the feed row's timestamp. Keep its
 			// readable sampled age, but age alone must not publish every wake.
 			v.Evidence = evidenceDuration.ReplaceAllString(v.Evidence, "<age>")
@@ -721,23 +720,41 @@ func passFeedRows(tx *store.Tx, now time.Time, share feed.ShareText) (map[string
 			}
 			comparisonRow = v
 		case model.SourceStatus:
+			key = v.Name
 			failed := !v.LastErrorAt.IsZero() && !v.LastErrorAt.Before(v.LastOKAt)
 			v.LastOKAt, v.LastErrorAt = time.Time{}, time.Time{}
 			comparisonRow = struct {
 				model.SourceStatus
 				Failed bool
 			}{v, failed}
-		}
-		if w, ok := row.(feed.WorktreeRow); ok {
+		case feed.WorktreeRow:
+			key = v.Path
 			// Git refreshes UpdatedAt on every scan; only publish changed facts.
-			w.UpdatedAt = time.Time{}
-			comparisonRow = w
+			v.UpdatedAt = time.Time{}
+			comparisonRow = v
+		case model.Repo:
+			key = v.Path
+		case feed.FilesRow:
+			key = feed.Key(v.Session.Adapter, v.Session.ExternalID)
+		case feed.SummaryRow:
+			if share != feed.Titles && share != feed.Snippets || v.UsedSnippets && share != feed.Snippets {
+				return
+			}
+			key = feed.Key(v.RepoPath, v.UsedSnippets)
+		case feed.InboxRow:
+			key = v.ID
+		case model.Orphan:
+			key = v.ID
+		case model.Machine:
+			key = v.MachineID
+			if key == "" {
+				key = v.ID
+			}
+			// Compare precisely the host metadata exported by feed.Encode;
+			// LastSeen and the viewer's fleet state are collection cadence.
+			comparisonRow = model.Machine{MachineID: key, Hostname: v.Hostname, OS: v.OS, Arch: v.Arch, Cores: v.Cores, MemTotal: v.MemTotal, DrigaVersion: v.DrigaVersion}
 		}
-		comparison, _ := jsonwire.Marshal(comparisonRow)
-		if kind == feed.Machine {
-			comparison = payload
-		} // LastSeen is collection cadence, not host metadata.
-		rows[feed.Key(kind, key)] = passFeedRow{kind, key, payload, comparison}
+		rows[feed.Key(kind, key)] = passFeedRow{kind: kind, key: key, row: row, comparison: comparisonRow, share: share}
 	}
 	repos, err := tx.Repos()
 	if err != nil {
@@ -843,8 +860,16 @@ func appendPassChanges(tx *store.Tx, before, after map[string]passFeedRow, now t
 	order := map[feed.Kind]int{feed.Machine: 0, feed.Repo: 1, feed.Worktree: 2, feed.Session: 3, feed.SessionFiles: 4, feed.Inbox: 5, feed.Orphan: 6, feed.Source: 7, feed.Summary: 8}
 	var changed []passFeedRow
 	for id, row := range after {
-		publish := !bytes.Equal(before[id].comparison, row.comparison)
-		if row.kind == feed.Source && !publish && !bytes.Equal(before[id].payload, row.payload) {
+		previous, exists := before[id]
+		publish := !exists
+		if exists && !reflect.DeepEqual(previous.comparison, row.comparison) {
+			// Most rows are unchanged. Only use wire comparison for real field
+			// differences, preserving JSON omission/normalization semantics.
+			old, _ := jsonwire.Marshal(previous.comparison)
+			current, _ := jsonwire.Marshal(row.comparison)
+			publish = !bytes.Equal(old, current)
+		}
+		if row.kind == feed.Source && !publish && !reflect.DeepEqual(previous.row, row.row) {
 			last, err := tx.Meta("feed_source:" + row.key)
 			if err != nil && !errors.Is(err, store.ErrNotFound) {
 				return err
@@ -863,7 +888,7 @@ func appendPassChanges(tx *store.Tx, before, after map[string]passFeedRow, now t
 		return changed[i].key < changed[j].key
 	})
 	for _, row := range changed {
-		if _, err := tx.AppendFeed(string(row.kind), row.key, row.payload, now); err != nil {
+		if err := appendFeed(tx, row.kind, row.row, row.share, now); err != nil {
 			return err
 		}
 		if row.kind == feed.Source {

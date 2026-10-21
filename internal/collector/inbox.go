@@ -233,7 +233,7 @@ func alertInbox(ctx context.Context, d Deps, st *store.Store) error {
 			return err
 		}
 		seen, last := map[string]time.Time{}, map[string]time.Time{}
-		sessions, err := tx.SessionsScoped(store.SessionFilter{IncludeEnded: true}, scope)
+		sessions, err := tx.InboxSessionLabels(scope)
 		if err != nil {
 			return err
 		}

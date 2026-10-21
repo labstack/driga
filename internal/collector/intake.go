@@ -197,24 +197,40 @@ func applyIntake(ctx context.Context, d Deps, st *store.Store, b intake.Batch) (
 	err := st.Tx(ctx, func(tx *store.Tx) error {
 		now := d.now()
 		share := feed.EffectiveShare(feed.ShareText(d.Cfg.Fleet.ShareText), d.Cfg.CaptureText)
-		before, err := passFeedRows(tx, now, share)
-		if err != nil {
+		enabled, err := tx.Meta("feed_enabled")
+		if err != nil && !errors.Is(err, store.ErrNotFound) {
 			return err
 		}
-		ss, err := tx.Sessions(store.SessionFilter{IncludeEnded: true})
-		if err != nil {
-			return err
-		}
-		byID := make(map[string]int)
-		for i, s := range ss {
-			if s.Adapter == "claude" {
-				byID[s.ExternalID] = i
+		var before map[string]passFeedRow
+		// Match AppendFeed's default for an unconfigured store, but avoid
+		// snapshotting the database when publication has been suspended.
+		if enabled != "false" {
+			before, err = passFeedRows(tx, now, share)
+			if err != nil {
+				return err
 			}
+		}
+		var ss []model.Session
+		byID := make(map[string]int)
+		for _, f := range b.Facts {
+			if _, ok := byID[f.SessionID]; ok {
+				continue
+			}
+			s, err := tx.SessionByKey("claude", f.SessionID)
+			if errors.Is(err, store.ErrNotFound) {
+				byID[f.SessionID] = -1
+				continue
+			}
+			if err != nil {
+				return err
+			}
+			byID[f.SessionID] = len(ss)
+			ss = append(ss, s)
 		}
 		changed := make(map[int]bool)
 		for _, f := range b.Facts {
 			i, ok := byID[f.SessionID]
-			if !ok {
+			if !ok || i < 0 {
 				unmatched++
 				continue
 			}
@@ -341,6 +357,9 @@ func applyIntake(ctx context.Context, d Deps, st *store.Store, b intake.Batch) (
 			if err := tx.SetSourceOK("otlp", now); err != nil {
 				return err
 			}
+		}
+		if before == nil {
+			return nil
 		}
 		after, err := passFeedRows(tx, now, share)
 		if err != nil {

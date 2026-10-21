@@ -2,9 +2,39 @@ package cli
 
 import (
 	"math"
+	"os"
+	"runtime"
 	"runtime/debug"
 	"testing"
 )
+
+func TestCollectorParallelismDefault(t *testing.T) {
+	old := runtime.GOMAXPROCS(4)
+	t.Cleanup(func() { runtime.GOMAXPROCS(old) })
+	t.Setenv("GOMAXPROCS", "")
+	if err := os.Unsetenv("GOMAXPROCS"); err != nil {
+		t.Fatal(err)
+	}
+
+	applyCollectorParallelism()
+	if got, want := runtime.GOMAXPROCS(0), min(2, runtime.NumCPU()); got != want {
+		t.Fatalf("default GOMAXPROCS = %d, want %d", got, want)
+	}
+}
+
+func TestCollectorParallelismUserEnv(t *testing.T) {
+	old := runtime.GOMAXPROCS(3)
+	t.Cleanup(func() { runtime.GOMAXPROCS(old) })
+	for _, value := range []string{"8", ""} {
+		t.Run("GOMAXPROCS="+value, func(t *testing.T) {
+			t.Setenv("GOMAXPROCS", value)
+			applyCollectorParallelism()
+			if got := runtime.GOMAXPROCS(0); got != 3 {
+				t.Fatalf("user GOMAXPROCS must win, value changed to %d", got)
+			}
+		})
+	}
+}
 
 // The collector is a long-lived daemon with a ~5 MB live heap; without a soft
 // limit the runtime keeps far more resident than the 50 MB budget allows.

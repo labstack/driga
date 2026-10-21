@@ -286,6 +286,12 @@ can hold the lock in a data directory. Idle collection samples processes/machine
 every 60 seconds and Git every five minutes. A viewer heartbeat speeds these to
 5 seconds, 10 seconds, and 30 seconds respectively. Cwd lookup remains at most
 once per minute. Full Git status runs at least every five minutes.
+To see where a collector spends CPU, stop the service and run
+`driga collect --cpu-profile cpu.pprof` (it records for `--profile-for`, default 2m),
+then read it with `go tool pprof -top $(which driga) cpu.pprof`. When the window
+ends or the collector stops early, it also writes an allocation profile to
+`cpu.pprof.alloc`; inspect it with
+`go tool pprof -sample_index=alloc_space -top $(which driga) cpu.pprof.alloc`.
 
 ## Fleet setup
 
