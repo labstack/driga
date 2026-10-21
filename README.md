@@ -25,26 +25,38 @@ evidence is shown explicitly. Expect changes as the interfaces settle.
 
 ## Install
 
-Download the archive for your platform from
-[GitHub Releases](https://github.com/labstack/driga/releases). The release matrix
-covers macOS, Linux, and Windows on amd64 and arm64. Windows archives are ZIPs
-containing `driga.exe`; real-agent Windows support is still being verified.
-Check the archive against its
-`SHA256SUMS`, unpack it, and put `driga` on PATH. The
-[release guide](docs/release.md#verify-and-install-a-release-archive) gives the
-verification and installation steps.
+On macOS, install the signed and notarized release with Homebrew:
+
+```sh
+brew install --cask labstack/tap/driga
+```
+
+On Windows (experimental), use Scoop:
+
+```powershell
+scoop bucket add labstack https://github.com/labstack/scoop-bucket
+scoop install labstack/driga
+```
+
+Debian `.deb` and RPM `.rpm` packages, plus archives for macOS, Linux, and
+Windows on amd64 and arm64, are available from
+[GitHub Releases](https://github.com/labstack/driga/releases). Windows archives
+contain `driga.exe`; macOS and Linux use tar.gz archives. Verify downloads
+against `driga_<version>_checksums.txt` before installing. The
+[release guide](docs/release.md#verify-and-install-a-release-archive) covers
+checksums, packages, and archive installation.
 
 To build from a source checkout, use the Go version in [go.mod](go.mod) or newer:
 
 ```sh
 CGO_ENABLED=0 go build ./cmd/driga
-./driga --help
+./driga version
 ```
 
 Keep Git on PATH and the installed binary at a stable absolute path before
 setting up hooks or a service. CalVer tags use the year as their major number;
 Go module major-version rules prevent `go install ...@<tag>` with this module
-path. Use an archive or a source checkout.
+path. Use a package, archive, or source checkout.
 
 ## Windows (experimental)
 

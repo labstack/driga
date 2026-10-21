@@ -1,0 +1,626 @@
+package scripts_test
+
+import (
+	_ "embed"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"testing"
+	"time"
+)
+
+//go:embed release.sh
+var releaseScript string
+
+type testRepository struct {
+	origin string
+	work   string
+	racer  string
+	head   string
+}
+
+func TestReleaseRevision(t *testing.T) {
+	requireReleaseTools(t)
+
+	t.Run("first release in UTC month", func(t *testing.T) {
+		repo := newTestRepository(t)
+		month := utcPeriod()
+		tag := "v" + month + ".0-alpha"
+
+		output, err := runRelease(t, repo, normalCheckShim, nil)
+		skipIfUTCMonthChanged(t, month)
+		if err != nil {
+			t.Fatalf("release failed: %v\n%s", err, output)
+		}
+		assertPublishedRelease(t, repo, tag)
+	})
+
+	t.Run("revision compares integers across nine to ten", func(t *testing.T) {
+		repo := newTestRepository(t)
+		month := utcPeriod()
+		for _, tag := range []string{"v" + month + ".8", "v" + month + ".9-alpha", "v" + month + ".08", "v" + month + ".09", "v" + month + ".010", "v" + month + ".invalid"} {
+			runGit(t, repo.work, "tag", tag, repo.head)
+		}
+		runGit(t, repo.work, "push", "origin", "--tags")
+
+		tag := "v" + month + ".10-alpha"
+		output, err := runRelease(t, repo, normalCheckShim, nil)
+		skipIfUTCMonthChanged(t, month)
+		if err != nil {
+			t.Fatalf("release failed: %v\n%s", err, output)
+		}
+		assertPublishedRelease(t, repo, tag)
+	})
+
+	t.Run("revision resets in a new UTC month", func(t *testing.T) {
+		repo := newTestRepository(t)
+		now := time.Now().UTC()
+		month := releasePeriod(now)
+		// The last day of the previous month, not AddDate(0, -1, 0): from the
+		// 31st that normalizes back into the current month, which silently
+		// turns this into a same-month test — and fails outright on the days
+		// where the normalization lands on today.
+		previousMonth := releasePeriod(time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC).AddDate(0, 0, -1))
+		runGit(t, repo.work, "tag", "v"+previousMonth+".41", repo.head)
+		runGit(t, repo.work, "push", "origin", "--tags")
+
+		tag := "v" + month + ".0-alpha"
+		output, err := runRelease(t, repo, normalCheckShim, nil)
+		skipIfUTCMonthChanged(t, month)
+		if err != nil {
+			t.Fatalf("release failed: %v\n%s", err, output)
+		}
+		assertPublishedRelease(t, repo, tag)
+	})
+}
+
+func TestReleaseRejectsMalformedUTCCalendar(t *testing.T) {
+	requireReleaseTools(t)
+	for _, calendar := range []string{"26:08", "2026:8", "2026:13"} {
+		t.Run(calendar, func(t *testing.T) {
+			repo := newTestRepository(t)
+			output, err := runReleaseAt(t, repo, normalCheckShim, nil, calendar)
+			if err == nil {
+				t.Fatalf("release unexpectedly accepted %s:\n%s", calendar, output)
+			}
+			if !strings.Contains(output, "could not determine the UTC release month") {
+				t.Fatalf("release did not explain the invalid UTC calendar:\n%s", output)
+			}
+			if tags := gitOutput(t, repo.work, "tag", "--list", "v*"); tags != "" {
+				t.Fatalf("release created tags after refusing the year: %s", tags)
+			}
+			assertRemoteMain(t, repo, repo.head)
+		})
+	}
+}
+
+func TestReleaseRejectsMainAdvanceDuringChecks(t *testing.T) {
+	requireReleaseTools(t)
+	repo := newTestRepository(t)
+	month := utcPeriod()
+	shim := `#!/bin/sh
+set -eu
+if [ "${1:-}" = "test" ]; then
+  git -C "$RACER_REPO" commit --allow-empty -m during-checks
+  git -C "$RACER_REPO" push origin main
+fi
+`
+
+	output, err := runRelease(t, repo, shim, nil)
+	skipIfUTCMonthChanged(t, month)
+	if err == nil {
+		t.Fatalf("release unexpectedly succeeded:\n%s", output)
+	}
+	if !strings.Contains(output, "origin/main advanced while release checks were running") {
+		t.Fatalf("release did not report post-check revalidation failure:\n%s", output)
+	}
+	assertNoReleaseTags(t, repo, month)
+	assertRemoteMain(t, repo, gitOutput(t, repo.racer, "rev-parse", "HEAD"))
+}
+
+func TestReleaseRejectsMainAdvanceBeforeAtomicPublication(t *testing.T) {
+	requireReleaseTools(t)
+	repo := newTestRepository(t)
+	month := utcPeriod()
+	tag := "v" + month + ".0-alpha"
+	hook := `#!/bin/sh
+set -eu
+git -C "$RACER_REPO" fetch origin main
+git -C "$RACER_REPO" reset --hard origin/main
+git -C "$RACER_REPO" commit --allow-empty -m before-publication
+git -C "$RACER_REPO" push origin main
+`
+
+	output, err := runRelease(t, repo, normalCheckShim, &hook)
+	skipIfUTCMonthChanged(t, month)
+	if err == nil {
+		t.Fatalf("release unexpectedly succeeded after origin/main advanced:\n%s", output)
+	}
+	assertLocalTag(t, repo, tag, false)
+	assertRemoteTag(t, repo, tag, "")
+	assertRemoteMain(t, repo, gitOutput(t, repo.racer, "rev-parse", "HEAD"))
+	if got := gitOutput(t, repo.work, "rev-parse", "HEAD"); got != repo.head {
+		t.Fatalf("local main = %s after failed publication, want %s", got, repo.head)
+	}
+}
+
+func TestNoOpBranchRefMissesMainAdvanceAfterAdvertisement(t *testing.T) {
+	requireReleaseTools(t)
+	repo := newTestRepository(t)
+	month := utcPeriod()
+	tag := "v" + month + ".0-alpha"
+	hook := `#!/bin/sh
+set -eu
+git -C "$RACER_REPO" fetch origin main
+git -C "$RACER_REPO" reset --hard origin/main
+git -C "$RACER_REPO" commit --allow-empty -m after-advertisement
+git -C "$RACER_REPO" push origin main
+`
+	writeExecutable(t, filepath.Join(repo.work, ".git", "hooks", "pre-push"), hook)
+	runGit(t, repo.work, "tag", "--no-sign", tag, repo.head)
+
+	cmd := gitCommand(t, repo.work,
+		"push", "--atomic",
+		"--force-with-lease=refs/heads/main:"+repo.head,
+		"origin",
+		repo.head+":refs/heads/main",
+		"refs/tags/"+tag+":refs/tags/"+tag,
+	)
+	cmd.Env = append(cmd.Env, "RACER_REPO="+repo.racer)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("no-op branch characterization push failed: %v\n%s", err, output)
+	}
+
+	assertRemoteMain(t, repo, gitOutput(t, repo.racer, "rev-parse", "HEAD"))
+	assertRemoteTag(t, repo, tag, repo.head)
+}
+
+func TestReleaseLosesCompetingTagRaceWithoutReplacingWinner(t *testing.T) {
+	requireReleaseTools(t)
+	repo := newTestRepository(t)
+	month := utcPeriod()
+	tag := "v" + month + ".0-alpha"
+	hook := `#!/bin/sh
+set -eu
+git -C "$RACER_REPO" commit --allow-empty -m competing-tag
+git -C "$RACER_REPO" tag "$RELEASE_TEST_TAG"
+git -C "$RACER_REPO" push origin "refs/tags/$RELEASE_TEST_TAG:refs/tags/$RELEASE_TEST_TAG"
+`
+
+	output, err := runRelease(t, repo, normalCheckShim, &hook, "RELEASE_TEST_TAG="+tag)
+	skipIfUTCMonthChanged(t, month)
+	if err == nil {
+		t.Fatalf("release unexpectedly replaced a competing tag:\n%s", output)
+	}
+	assertLocalTag(t, repo, tag, false)
+	assertRemoteTag(t, repo, tag, gitOutput(t, repo.racer, "rev-parse", "HEAD"))
+	assertRemoteMain(t, repo, repo.head)
+}
+
+func TestReleaseFailsClosedWhenBranchPolicyRejectsMainUpdate(t *testing.T) {
+	requireReleaseTools(t)
+	repo := newTestRepository(t)
+	month := utcPeriod()
+	tag := "v" + month + ".0-alpha"
+	hook := `#!/bin/sh
+set -eu
+while read -r old_object new_object ref_name; do
+  if [ "$ref_name" = "refs/heads/main" ]; then
+    echo "direct main updates are disabled" >&2
+    exit 1
+  fi
+done
+`
+	writeExecutable(t, filepath.Join(repo.origin, "hooks", "pre-receive"), hook)
+
+	output, err := runRelease(t, repo, normalCheckShim, nil)
+	skipIfUTCMonthChanged(t, month)
+	if err == nil {
+		t.Fatalf("release unexpectedly bypassed branch policy:\n%s", output)
+	}
+	assertLocalTag(t, repo, tag, false)
+	assertRemoteTag(t, repo, tag, "")
+	assertRemoteMain(t, repo, repo.head)
+	if got := gitOutput(t, repo.work, "rev-parse", "HEAD"); got != repo.head {
+		t.Fatalf("local main = %s after branch-policy refusal, want %s", got, repo.head)
+	}
+}
+
+const normalCheckShim = `#!/bin/sh
+set -eu
+exit 0
+`
+
+func requireReleaseTools(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("release workflow requires Bash and Unix Git hooks")
+	}
+	for _, tool := range []string{"bash", "git"} {
+		if _, err := exec.LookPath(tool); err != nil {
+			t.Skipf("%s is unavailable: %v", tool, err)
+		}
+	}
+}
+
+func newTestRepository(t *testing.T) testRepository {
+	t.Helper()
+	root := t.TempDir()
+	repo := testRepository{
+		origin: filepath.Join(root, "origin.git"),
+		work:   filepath.Join(root, "work"),
+		racer:  filepath.Join(root, "racer"),
+	}
+
+	runGit(t, root, "init", "--bare", "--initial-branch=main", repo.origin)
+	runGit(t, root, "init", "--initial-branch=main", repo.work)
+	configureGitIdentity(t, repo.work)
+	runGit(t, repo.work, "commit", "--allow-empty", "-m", "initial")
+	runGit(t, repo.work, "remote", "add", "origin", repo.origin)
+	runGit(t, repo.work, "push", "--set-upstream", "origin", "main")
+	runGit(t, root, "clone", repo.origin, repo.racer)
+	configureGitIdentity(t, repo.racer)
+	repo.head = gitOutput(t, repo.work, "rev-parse", "HEAD")
+	return repo
+}
+
+func configureGitIdentity(t *testing.T, dir string) {
+	t.Helper()
+	runGit(t, dir, "config", "user.name", "Driga Release Test")
+	runGit(t, dir, "config", "user.email", "release-test@driga.invalid")
+	runGit(t, dir, "config", "commit.gpgSign", "false")
+	runGit(t, dir, "config", "tag.gpgSign", "false")
+}
+
+func runRelease(t *testing.T, repo testRepository, checkShim string, prePushHook *string, extraEnv ...string) (string, error) {
+	t.Helper()
+	return runReleaseAt(t, repo, checkShim, prePushHook, "", extraEnv...)
+}
+
+func runReleaseAt(t *testing.T, repo testRepository, checkShim string, prePushHook *string, calendar string, extraEnv ...string) (string, error) {
+	t.Helper()
+	binDir := filepath.Join(t.TempDir(), "bin")
+	if err := os.MkdirAll(binDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	writeExecutable(t, filepath.Join(binDir, "go"), checkShim)
+	writeExecutable(t, filepath.Join(binDir, "gofmt"), normalCheckShim)
+	// A gh that reports the previous release as published, so the in-flight gate
+	// is exercised by the tests that care about it and inert everywhere else.
+	ghShim := "#!/usr/bin/env bash\nexit 0\n"
+	for _, entry := range extraEnv {
+		if value, ok := strings.CutPrefix(entry, "RELEASE_TEST_GH="); ok {
+			ghShim = value
+		}
+	}
+	writeExecutable(t, filepath.Join(binDir, "gh"), ghShim)
+	if calendar != "" {
+		writeExecutable(t, filepath.Join(binDir, "date"), "#!/bin/sh\nset -eu\nprintf '%s\\n' \"$RELEASE_TEST_CALENDAR\"\n")
+		extraEnv = append(extraEnv, "RELEASE_TEST_CALENDAR="+calendar)
+	}
+	if prePushHook != nil {
+		writeExecutable(t, filepath.Join(repo.work, ".git", "hooks", "pre-push"), *prePushHook)
+	}
+
+	script := filepath.Join(t.TempDir(), "release.sh")
+	if err := os.WriteFile(script, []byte(releaseScript), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.CommandContext(t.Context(), "bash", script)
+	cmd.Dir = repo.work
+	cmd.Env = append(releaseTestEnv(t),
+		"PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"RACER_REPO="+repo.racer,
+	)
+	cmd.Env = append(cmd.Env, extraEnv...)
+	output, err := cmd.CombinedOutput()
+	return string(output), err
+}
+
+func writeExecutable(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(content), 0o700); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func runGit(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	if output, err := gitCommand(t, dir, args...).CombinedOutput(); err != nil {
+		t.Fatalf("git %s failed: %v\n%s", strings.Join(args, " "), err, output)
+	}
+}
+
+func gitOutput(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	output, err := gitCommand(t, dir, args...).CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %s failed: %v\n%s", strings.Join(args, " "), err, output)
+	}
+	return strings.TrimSpace(string(output))
+}
+
+func gitCommand(t *testing.T, dir string, args ...string) *exec.Cmd {
+	t.Helper()
+	cmd := exec.CommandContext(t.Context(), "git", args...)
+	cmd.Dir = dir
+	cmd.Env = append(releaseTestEnv(t), "LC_ALL=C", "GIT_TERMINAL_PROMPT=0")
+	return cmd
+}
+
+func assertLocalTag(t *testing.T, repo testRepository, tag string, want bool) {
+	t.Helper()
+	err := gitCommand(t, repo.work, "rev-parse", "--quiet", "--verify", "refs/tags/"+tag).Run()
+	if (err == nil) != want {
+		t.Fatalf("local tag %s existence = %v, want %v", tag, err == nil, want)
+	}
+}
+
+func assertPublishedRelease(t *testing.T, repo testRepository, tag string) {
+	t.Helper()
+	assertLocalTag(t, repo, tag, true)
+	releaseCommit := remoteRef(t, repo, "refs/heads/main")
+	if releaseCommit == repo.head {
+		t.Fatalf("remote main did not advance from checked commit %s", repo.head)
+	}
+	assertRemoteTag(t, repo, tag, releaseCommit)
+	if got := gitOutput(t, repo.work, "rev-parse", "HEAD"); got != releaseCommit {
+		t.Fatalf("local main = %s, want published release commit %s", got, releaseCommit)
+	}
+	if parent := gitOutput(t, repo.work, "rev-parse", releaseCommit+"^"); parent != repo.head {
+		t.Fatalf("release parent = %s, want checked commit %s", parent, repo.head)
+	}
+	releaseTree := gitOutput(t, repo.work, "rev-parse", releaseCommit+"^{tree}")
+	checkedTree := gitOutput(t, repo.work, "rev-parse", repo.head+"^{tree}")
+	if releaseTree != checkedTree {
+		t.Fatalf("release tree = %s, want checked tree %s", releaseTree, checkedTree)
+	}
+}
+
+func assertRemoteTag(t *testing.T, repo testRepository, tag, wantObject string) {
+	t.Helper()
+	output := gitOutput(t, repo.work, "ls-remote", "--tags", "origin", "refs/tags/"+tag)
+	if wantObject == "" {
+		if output != "" {
+			t.Fatalf("remote tag %s unexpectedly exists: %s", tag, output)
+		}
+		return
+	}
+	fields := strings.Fields(output)
+	if len(fields) != 2 || fields[0] != wantObject {
+		t.Fatalf("remote tag %s = %q, want object %s", tag, output, wantObject)
+	}
+}
+
+func assertNoReleaseTags(t *testing.T, repo testRepository, month string) {
+	t.Helper()
+	if output := gitOutput(t, repo.work, "tag", "--list", "v"+month+".*"); output != "" {
+		t.Fatalf("local release tags unexpectedly exist: %s", output)
+	}
+	if output := gitOutput(t, repo.work, "ls-remote", "--tags", "origin", "refs/tags/v"+month+".*"); output != "" {
+		t.Fatalf("remote release tags unexpectedly exist: %s", output)
+	}
+}
+
+func assertRemoteMain(t *testing.T, repo testRepository, want string) {
+	t.Helper()
+	if got := remoteRef(t, repo, "refs/heads/main"); got != want {
+		t.Fatalf("remote main = %s, want object %s", got, want)
+	}
+}
+
+func remoteRef(t *testing.T, repo testRepository, ref string) string {
+	t.Helper()
+	output := gitOutput(t, repo.work, "ls-remote", "origin", ref)
+	fields := strings.Fields(output)
+	if len(fields) != 2 {
+		t.Fatalf("remote ref %s has unexpected output %q", ref, output)
+	}
+	return fields[0]
+}
+
+func utcPeriod() string {
+	return releasePeriod(time.Now().UTC())
+}
+
+func releasePeriod(value time.Time) string {
+	return fmt.Sprintf("%d.%d", value.Year(), int(value.Month()))
+}
+
+func skipIfUTCMonthChanged(t *testing.T, start string) {
+	t.Helper()
+	if end := utcPeriod(); end != start {
+		t.Skipf("UTC month changed during test from %s to %s", start, end)
+	}
+}
+
+// A nineteen-digit revision is valid, and one past the widest machine integer is
+// still valid: the contract bounds the width, not the arithmetic, so the creator
+// carries by hand rather than refusing a range it is supposed to serve.
+func TestReleaseIncrementsARevisionWiderThanMachineArithmetic(t *testing.T) {
+	requireReleaseTools(t)
+	repo := newTestRepository(t)
+	month := utcPeriod()
+	// One past the signed 64-bit maximum, so plain arithmetic would wrap.
+	runGit(t, repo.work, "tag", "v"+month+".9223372036854775808-alpha", repo.head)
+	runGit(t, repo.work, "push", "origin", "--tags")
+
+	output, err := runRelease(t, repo, normalCheckShim, nil)
+	skipIfUTCMonthChanged(t, month)
+	if err != nil {
+		t.Fatalf("release failed: %v\n%s", err, output)
+	}
+	assertPublishedRelease(t, repo, "v"+month+".9223372036854775809-alpha")
+}
+
+// Bash arithmetic is signed 64-bit, so incrementing a revision the grammar still
+// admits can wrap negative and tag garbage. The creator refuses instead.
+func TestReleaseRefusesWhenTheRevisionSpaceIsExhausted(t *testing.T) {
+	requireReleaseTools(t)
+	repo := newTestRepository(t)
+	month := utcPeriod()
+	exhausted := "v" + month + ".9999999999999999999-alpha"
+	runGit(t, repo.work, "tag", exhausted, repo.head)
+	runGit(t, repo.work, "push", "origin", "--tags")
+
+	output, err := runRelease(t, repo, normalCheckShim, nil)
+	skipIfUTCMonthChanged(t, month)
+	if err == nil {
+		t.Fatalf("release created a tag past the representable revision:\n%s", output)
+	}
+	if !strings.Contains(output, "revision space for") {
+		t.Fatalf("release did not explain the refusal:\n%s", output)
+	}
+	if tags := gitOutput(t, repo.origin, "tag", "--list"); tags != exhausted {
+		t.Fatalf("a refused release must publish no new tag, got:\n%s", tags)
+	}
+}
+
+// Only one release may be in flight, because GitHub orders queued runs by when
+// they start waiting rather than by tag age: two tags created close together can
+// publish out of order, and the older one is then correctly refused at publish
+// time — a release nobody gets. This refuses to create the second tag instead.
+//
+// Terminality is the question, not publication: a run that failed before it
+// published is precisely the case the contract repairs under the next revision,
+// so waiting for a release it will never create would block that repair forever.
+func TestReleaseWaitsForThePreviousReleaseRunToFinish(t *testing.T) {
+	requireReleaseTools(t)
+	for _, test := range []struct {
+		name    string
+		status  string
+		wantErr string
+	}{
+		{name: "previous run succeeded", status: "completed"},
+		{name: "previous run failed before publishing", status: "completed"},
+		{name: "previous run never started", status: ""},
+		{name: "previous run is queued", status: "queued", wantErr: "is queued"},
+		{name: "previous run is in progress", status: "in_progress", wantErr: "is in_progress"},
+		{name: "run state is unreadable", status: "api-failure", wantErr: "cannot read the"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			repo := newTestRepository(t)
+			month := utcPeriod()
+			runGit(t, repo.work, "tag", "v"+month+".0-alpha", repo.head)
+			runGit(t, repo.work, "push", "origin", "--tags")
+
+			stub := "#!/usr/bin/env bash\nprintf '%s\\n' '" + test.status + "'\n"
+			if test.status == "api-failure" {
+				stub = "#!/usr/bin/env bash\necho 'HTTP 502' >&2\nexit 1\n"
+			}
+			output, err := runRelease(t, repo, normalCheckShim, nil, "DRIGA_RELEASE_REPOSITORY=labstack/driga", "RELEASE_TEST_GH="+stub)
+			skipIfUTCMonthChanged(t, month)
+			switch {
+			case test.wantErr == "" && err != nil:
+				t.Fatalf("release failed: %v\n%s", err, output)
+			case test.wantErr == "":
+				assertPublishedRelease(t, repo, "v"+month+".1-alpha")
+			case err == nil:
+				t.Fatalf("release created a tag while the previous run was %s:\n%s", test.status, output)
+			case !strings.Contains(output, test.wantErr):
+				t.Fatalf("release did not explain the refusal:\n%s", output)
+			}
+		})
+	}
+}
+
+// All Git operations use disposable repositories, ignore host Git configuration,
+// and all child commands see only disposable agent and application state.
+func releaseTestEnv(t *testing.T) []string {
+	t.Helper()
+	root := t.TempDir()
+	home := filepath.Join(root, "home")
+	if err := os.MkdirAll(home, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	return append(os.Environ(),
+		"HOME="+home, "USERPROFILE="+home,
+		"APPDATA="+filepath.Join(home, "AppData", "Roaming"),
+		"LOCALAPPDATA="+filepath.Join(home, "AppData", "Local"),
+		"CODEX_HOME="+filepath.Join(home, ".codex"),
+		"CLAUDE_CONFIG_DIR="+filepath.Join(home, ".claude"),
+		"COPILOT_HOME="+filepath.Join(home, ".copilot"),
+		"GEMINI_CLI_HOME="+filepath.Join(home, ".gemini"),
+		"XDG_CONFIG_HOME="+filepath.Join(home, ".config"),
+		"XDG_DATA_HOME="+filepath.Join(home, ".local", "share"),
+		"XDG_STATE_HOME="+filepath.Join(home, ".local", "state"),
+		"DRIGA_DATA_DIR="+filepath.Join(root, "data"),
+		"DRIGA_SPOOL_DIR="+filepath.Join(root, "spool"),
+		"DRIGA_CONFIG="+filepath.Join(root, "config.toml"),
+		"DRIGA_RELEASE_REPOSITORY=", "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL="+os.DevNull,
+		"GIT_TERMINAL_PROMPT=0",
+	)
+}
+
+func TestReleaseRejectsDirtyOrWrongBranch(t *testing.T) {
+	requireReleaseTools(t)
+	for _, kind := range []string{"untracked", "tracked", "staged", "branch", "behind"} {
+		t.Run(kind, func(t *testing.T) {
+			repo := newTestRepository(t)
+			switch kind {
+			case "untracked":
+				writeFixtureFile(t, filepath.Join(repo.work, "extra.txt"), "extra", 0o600)
+			case "tracked", "staged":
+				writeFixtureFile(t, filepath.Join(repo.work, "tracked.txt"), "original", 0o600)
+				runGit(t, repo.work, "add", "tracked.txt")
+				runGit(t, repo.work, "commit", "-m", "add fixture")
+				runGit(t, repo.work, "push", "origin", "main")
+				writeFixtureFile(t, filepath.Join(repo.work, "tracked.txt"), "changed", 0o600)
+				if kind == "staged" {
+					runGit(t, repo.work, "add", "tracked.txt")
+				}
+			case "branch":
+				runGit(t, repo.work, "checkout", "-b", "feature")
+			case "behind":
+				runGit(t, repo.racer, "commit", "--allow-empty", "-m", "advance")
+				runGit(t, repo.racer, "push", "origin", "main")
+			}
+			output, err := runRelease(t, repo, normalCheckShim, nil)
+			if err == nil {
+				t.Fatalf("release accepted %s: %s", kind, output)
+			}
+			if tags := gitOutput(t, repo.work, "tag", "--list"); tags != "" {
+				t.Fatalf("unexpected tags: %s", tags)
+			}
+		})
+	}
+}
+
+func TestReleaseRejectsFailedChecks(t *testing.T) {
+	requireReleaseTools(t)
+	for _, check := range []string{"vet", "test"} {
+		t.Run(check, func(t *testing.T) {
+			repo := newTestRepository(t)
+			shim := "#!/bin/sh\nif [ \"${1:-}\" = \"" + check + "\" ]; then exit 1; fi\n"
+			output, err := runRelease(t, repo, shim, nil)
+			if err == nil {
+				t.Fatalf("release accepted failed %s: %s", check, output)
+			}
+			assertRemoteMain(t, repo, repo.head)
+			if tags := gitOutput(t, repo.work, "tag", "--list"); tags != "" {
+				t.Fatalf("unexpected tags: %s", tags)
+			}
+		})
+	}
+}
+
+func TestReleaseRejectsFormerPackagingArguments(t *testing.T) {
+	requireReleaseTools(t)
+	for _, arg := range []string{"--dry-run", "v2026.10.0-alpha"} {
+		t.Run(arg, func(t *testing.T) {
+			script := filepath.Join(t.TempDir(), "release.sh")
+			writeFixtureFile(t, script, releaseScript, 0o600)
+			cmd := exec.CommandContext(t.Context(), "bash", script, arg)
+			cmd.Dir = t.TempDir()
+			cmd.Env = releaseTestEnv(t)
+			output, err := cmd.CombinedOutput()
+			if err == nil || !strings.Contains(string(output), "no arguments") {
+				t.Fatalf("old invocation not refused: %v: %s", err, output)
+			}
+		})
+	}
+}

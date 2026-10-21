@@ -1,217 +1,197 @@
 # Releasing Driga
 
-The release tag is the single version source. Packaging strips its leading `v`
-for `main.version` and archive names. `main.commit` is the full source revision;
-`main.date` is that commit's UTC committer time, rather than the packaging clock.
-`driga version` reports those fields, the Go toolchain, and OS/architecture.
-`driga version --json` keeps the existing schema-2 envelope and adds `commit`,
-`date`, `go_version`, `os`, and `arch` alongside `data.version`. Ordinary source builds
-still identify as `dev`, with `unknown` commit/date. Version commands do not read
-agent histories or create Driga data.
+Driga uses the same tag-driven GoReleaser flow as Onebox. The release script
+creates a tag; GitHub Actions verifies the source, publishes the prerelease,
+and updates Homebrew and Scoop. Windows remains experimental.
 
 ## Version policy
 
-Driga is in alpha. Tags use **`vYYYY.M.REVISION-alpha`**, for example
-`v2026.10.0-alpha`. The month has no leading zero. `REVISION` starts at `0`
-each UTC month and increments for each release in that month. The `-alpha`
-suffix is optional in the validator to allow stable releases later.
-
-The script and workflow use this validation pattern:
+Tags use **`vYYYY.M.REVISION-alpha`**, for example `v2026.10.0-alpha`.
+The month has no leading zero, and revision starts at zero each UTC month.
+`scripts/release.sh` chooses the next unused revision from fetched tags.
+The validator also accepts a stable tag for future use:
 
 ```text
 ^v[1-9][0-9]{3}\.([1-9]|1[0-2])\.(0|[1-9][0-9]{0,18})(-alpha)?$
 ```
 
-Choose an unused tag for the current UTC month and the next revision. Validation
-checks syntax; the maintainer checks the month and revision against prior tags.
-Never replace a released tag or its artifacts. Product versions do not change
-the CLI JSON schema or fleet protocol version. Breaking behavior needs migration
-notes in the release notes.
+The workflow currently triggers only on `v*.*.*-alpha`. All releases are marked
+as prereleases and do not change GitHub's latest-release pointer. A future
+stable release needs an intentional trigger and release-policy update.
+Never replace a published tag or its artifacts. If publication partially fails,
+wait for the run to finish and cut the next revision to repair it.
 
-Because the major number is the year, `go install ...@<tag>` does not work with
-the unsuffixed `github.com/labstack/driga` module path under Go's module
-major-version rules. Install from release archives or build a source checkout.
+The tag is the version source. GoReleaser strips its leading `v` for
+`main.version` and artifact names, embeds the full source commit in `main.commit`,
+and uses the commit date for `main.date`. `driga version` prints the version,
+commit, date, Go toolchain, and OS/architecture. `driga version --json` preserves
+the schema-2 envelope with those fields under `data`. Source builds report
+`dev` and `unknown` commit/date. The version command does not collect agent data.
 
-## Prerequisites
+## Required credentials and publication targets
 
-- Use Bash, Python 3.9+, Git, `shasum`, and exactly the Go version in `go.mod`.
-  Dependencies must be cached for offline builds; the scripts install no tools.
-- Run formatting, vet, tests, race tests, and a cgo-free build. Review skipped
-  platform checks and exercise macOS, Linux, and Windows before publishing.
-  On Windows verify per-user task installation/logon/restart, hook delivery,
-  terminal launch, and plain toast delivery with a real agent session.
-- Driga is licensed under Apache-2.0. Packaging requires `LICENSE` and ships
-  `NOTICE` and bundled font/JavaScript license notices.
-- Optional SBOM generation needs preinstalled **Syft 1.33.0**. Optional signing
-  needs preinstalled **Cosign 2.6.0** and a managed private-key mount. Supply any
-  `COSIGN_PASSWORD` through runtime injection; keep keys and passwords out of
-  source, command output, and temporary files.
+Configure these repository Actions secrets before a real release:
 
-## Local verification
+| Secret | Purpose |
+| --- | --- |
+| `PACKAGE_REPOS_TOKEN` | Contents write/push access to `labstack/homebrew-tap` and `labstack/scoop-bucket`, both with default branch `main`. |
+| `MACOS_SIGN_P12` | Base64-encoded Developer ID Application signing certificate in PKCS#12 format. |
+| `MACOS_SIGN_PASSWORD` | Password for that signing certificate. |
+| `MACOS_NOTARY_ISSUER_ID` | App Store Connect API issuer ID. |
+| `MACOS_NOTARY_KEY_ID` | App Store Connect API key ID. |
+| `MACOS_NOTARY_KEY` | Base64-encoded App Store Connect `.p8` private key. |
 
-From the repository root, isolate test state before running checks:
+GitHub supplies `GITHUB_TOKEN`; the release job grants it `contents: write`
+for publishing GitHub Releases. Other jobs have read-only repository access.
+The release preflight refuses empty secrets and checks the package token's
+push access and both publication repositories' default branches. Real releases
+always enable macOS signing and notarization, even when credentials are absent,
+so missing credentials fail the release instead of publishing unsigned binaries.
+Keep credential values in the secrets store; do not put them in commands,
+release notes, or committed files.
 
-```sh
-task_root=$(mktemp -d)
-mkdir -p "$task_root/home" "$task_root/data" "$task_root/spool"
-export HOME="$task_root/home"
-export CODEX_HOME="$HOME/.codex" CLAUDE_CONFIG_DIR="$HOME/.claude"
-export COPILOT_HOME="$HOME/.copilot" GEMINI_CLI_HOME="$HOME/.gemini"
-export XDG_CONFIG_HOME="$HOME/.config" XDG_DATA_HOME="$HOME/.local/share"
-export XDG_STATE_HOME="$HOME/.local/state"
-export DRIGA_DATA_DIR="$task_root/data" DRIGA_SPOOL_DIR="$task_root/spool"
-export DRIGA_CONFIG="$task_root/config.toml"
-# Preserve an existing module cache if needed for offline builds.
-gofmt -l .
-go vet ./...
-go test ./...
-go test -race ./...
-actionlint .github/workflows/*.yml
-GOPROXY=off bash scripts/release.sh --dry-run v2026.10.0-alpha
-```
+The maintainer running the release script needs Git push access to `main` and
+tags, plus authenticated `gh` read access to Actions runs. The script accepts
+GitHub HTTPS or SSH origins; `DRIGA_RELEASE_REPOSITORY=labstack/driga` can name
+the repository explicitly for other remote URL forms. Branch protection must
+permit the release identity's metadata-only fast-forward of `main`.
 
-The last command really builds all targets, including on a dirty tree, into a
-new temporary directory. It prints `DRY RUN — NON-DISTRIBUTABLE` and a final
-`DIST_DIR=...` path. That directory is retained for inspection; only the script's
-own intermediate directory is removed. Dry-run archives carry
-`NON-DISTRIBUTABLE.txt`, and dirty source is stamped with `<commit>-dirty`.
-A missing LICENSE is omitted only in this mode; no placeholder license is chosen.
-Checksums are generated and verified automatically. To independently check them:
+## Cut a release
 
-```sh
-# Substitute the exact DIST_DIR printed by the dry run.
-sh -c 'cd "$1" && shasum -a 256 -c SHA256SUMS' sh /path/to/driga-release-dry-run.XXXXXX
-```
-
-## Cut and qualify a release
-
-1. Review the change and run the checks above. Record platform coverage and
-   any skips, then merge through the repository's normal review process.
-2. Choose the next calendar version, create a signed tag on the reviewed `main`
-   commit, and push it. For example, `v2026.10.0-alpha` is October 2026's first
-   alpha release; this document does not reserve that number.
-3. On a clean checkout of the existing tag, run:
+1. Merge reviewed changes to `main`, update your checkout, and ensure it is clean,
+   including untracked files. Use Bash, Git, `gh`, and the Go version in `go.mod`.
+2. From the repository root on `main`, run:
 
    ```sh
-   GOPROXY=off scripts/release.sh v2026.10.0-alpha
-   scripts/release-evidence.sh sbom dist
+   scripts/release.sh
    ```
 
-   Normal packaging requires the tag to point at HEAD, rejects tracked and
-   untracked changes, and refuses an existing `dist` path. Preserve earlier
-   artifacts elsewhere. Packaging does not run the tests itself.
-4. Tag pushes run `.github/workflows/release.yml` on GitHub-hosted
-   `ubuntu-24.04`. A calendar-shaped tag trigger is followed by an exact regex
-   guard, including for manual dispatch on a tag. Dispatch on a branch does no
-   packaging. The workflow checks ancestry on `main`, formatting, vet, Linux
-   tests, race tests, packaging, and checksums. It generates SBOMs when Syft is
-   provisioned and reports missing coverage otherwise.
-5. Download the qualified artifact and retain its run record. Compare
-   `build-info.json` to the reviewed commit and tag, and verify SHA256SUMS. If
-   CI lacked Syft, generate SBOMs on those exact archives before publication.
-   Do not rebuild binaries for publication. If signing is used, sign the final
-   manifest through a managed key mount:
+   This fetches main and tags and requires HEAD to equal `origin/main`. It checks
+   `gofmt -l .`, runs `go vet ./...` and `go test ./...` using disposable agent
+   and Driga directories, then revalidates the checkout and remote main. It
+   refuses to start while the previous release workflow is still running or
+   its status cannot be read. Local test repositories use local remotes only.
+3. The script creates a metadata-only release commit with the checked source
+   tree, tags it with the next calendar revision, and atomically pushes main
+   and the tag under a lease on the checked main commit. An advanced main,
+   competing tag, or branch-policy refusal publishes neither update and removes
+   the local candidate tag. A successful push advances local main too.
+4. Watch the [Release workflow](https://github.com/labstack/driga/actions/workflows/release.yml).
+   Its `verify` job calls the existing CI workflow, including **Tests and build**
+   and **Windows tests**. Publication waits for both jobs to succeed.
+5. The release job fetches lineage, validates the tag at HEAD and its ancestry on
+   main, refuses an already-published or older release, checks credentials and
+   publication targets, and runs GoReleaser **v2.18.0** with `release --clean`.
+   It verifies the resulting distribution after publication. Releases share a
+   global queue, protecting the shared package repositories.
 
-   ```sh
-   scripts/release-evidence.sh sign /absolute/path/to/qualified-output /absolute/path/to/managed/key
-   ```
+A completed workflow does not replace platform qualification: Windows is
+experimental until real sessions, service logon/restart, hooks, terminal launch,
+and notifications have been verified on hardware. A binary rollback does not
+undo data migrations; review compatibility before changing installed versions.
 
-   The signature covers archives, metadata, and SBOMs through SHA256SUMS.
-   Signing refuses dry-run artifacts and existing signatures and makes no
-   transparency-log upload.
-6. Publish those exact archives, SHA256SUMS, build-info, SBOMs, and optional
-   signature. **Mark any `-alpha` GitHub release as a prerelease.** No workflow
-   or script here creates a GitHub release, updates a tap, or publishes a
-   module. Retain published artifacts beyond CI's 30-day retention.
+## What gets published
 
-The workflow has read-only repository permission, pinned Actions, no PR trigger,
-no stored checkout credentials, and no shared build cache. `build-info.json` is
-an unsigned build record, not a verified provenance attestation. SBOMs describe
-discoverable dependencies; they are not vulnerability scans or complete license
-audits. A binary rollback does not undo database migrations; review data
-compatibility before changing installed versions.
+- Six archives for linux/darwin/windows on amd64/arm64:
+  `driga_<version>_<os>_<arch>.tar.gz`, with `.zip` for Windows.
+- Four Linux packages: `driga_<version>_linux_<arch>.deb` and `.rpm`, installing
+  `/usr/bin/driga` for amd64 and arm64.
+- `driga_<version>_checksums.txt`, a SHA-256 manifest of all ten downloads.
+- `Casks/driga.rb` in `labstack/homebrew-tap`, installing the signed and notarized
+  macOS binaries, and `driga.json` in `labstack/scoop-bucket` for Windows.
 
-## Reproduce the archives
+Each archive contains `driga` (or `driga.exe`), `README.md`, `LICENSE`, `NOTICE`,
+`third-party/vendor-LICENSES.txt`, and `third-party/fonts-LICENSE.txt`. The last
+two preserve the bundled web vendor and font license notices. Builds disable
+cgo, use `-trimpath`, and embed version, full commit, and commit date.
+The package metadata names LabStack, `support@labstack.com`, and Apache-2.0.
+Changelogs sort ascending and omit `docs:` and `test:` entries.
 
-The shipped matrix is macOS (`darwin`), Linux, and experimental Windows, each on
-amd64 and arm64. macOS/Linux archives are
-`driga_<version>_<os>_<arch>.tar.gz`; Windows archives are
-`driga_<version>_windows_<arch>.zip`. Each contains `driga` (or `driga.exe`),
-`README.md`, `LICENSE`, `NOTICE`, `third-party/vendor-LICENSES.txt`, and
-`third-party/fonts-LICENSE.txt`. All six targets appear in `build-info.json` and
-`SHA256SUMS`; there are no compile-only targets. SBOM generation covers ZIPs too.
+GoReleaser replaces the old packaging/evidence scripts and manual Homebrew
+template. This flow does not generate the former optional Syft SBOMs or Cosign
+manifest signatures. macOS code signing and notarization are required instead;
+SHA-256 manifests detect corruption but do not authenticate their own origin.
 
-Builds use `CGO_ENABLED=0`, `-mod=readonly`, `-trimpath`, `-buildvcs=false`,
-`-ldflags "-s -w -X main.version=... -X main.commit=... -X main.date=..."`,
-GOAMD64=v1 and GOARM64=v8.0. User GOFLAGS and GOEXPERIMENT are cleared, workspaces
-and automatic toolchain downloads are disabled. Archive contents have sorted
-names, fixed permissions, zero owners, commit-time tar mtimes, and zero gzip
-mtime with no filename. ZIP entries use commit-time UTC DOS timestamps
-(two-second resolution, clamped to 1980), fixed Unix mode attributes and deflate
-level 9. Rebuild the same tag using the same toolchain, source,
-dependency checksums, and Python/zlib versions, then compare archive hashes.
-Optional SBOMs and signatures may carry tool-generated metadata and are outside
-the byte-reproducible archive claim.
+## Local release verification
+
+With GoReleaser v2.18.0 and the Go version in `go.mod` already installed:
+
+```sh
+goreleaser check
+goreleaser release --snapshot --clean --skip=publish,sign,notarize
+scripts/verify-release-dist.sh dist
+```
+
+Snapshots build local artifacts and package metadata without publishing. Their
+synthetic version differs from the current Git tag; they are for inspection.
+Unsigned snapshots need no publication credentials. `--clean` replaces `dist`.
+CI runs the same configuration check, snapshot build, and artifact inspection
+inside **Tests and build**, as well as its existing tests and cross-builds.
+
+The verifier checks the exact six-archive/four-package inventory, complete
+checksums, every archive's files, Debian binary installation path when
+`dpkg-deb` is available, and the Homebrew/Scoop versions, URLs, and hashes.
+It runs only the host binary's safe `version --json` command, checks its version
+against the tag without `v` (or the snapshot version), and requires embedded
+commit/date metadata. Verification hosts are macOS or Linux on amd64/arm64.
+The Go tests under `scripts/` use disposable repositories and fake commands,
+never real agent CLIs or application data.
 
 ## Verify and install a release archive
 
-Download the archive for your OS/architecture plus its manifest and build record
-from [GitHub Releases](https://github.com/labstack/driga/releases). Check the
-expected version, reviewed commit, and builder/run before installation. Checksums
-detect corruption; authenticating an attacker-supplied manifest requires an
-independently trusted signing key or provenance identity.
-
-With a signing key already obtained through a trusted channel, optional offline
-signature verification is:
+Homebrew on macOS:
 
 ```sh
-cosign verify-blob --key /trusted/path/driga.pub --signature SHA256SUMS.sig --insecure-ignore-tlog SHA256SUMS
+brew install --cask labstack/tap/driga
 ```
 
-The tlog option is appropriate only for this explicitly key-based offline
-signature, which does not have a transparency-log entry. An attestation added
-later must be verified against the expected repository, source revision and
-builder identity, not merely accepted because a verification command succeeds.
+Scoop on experimental Windows:
 
-If all manifest files were downloaded, run `shasum -a 256 -c SHA256SUMS`.
-For one platform, select only that exact filename from the authenticated manifest:
+```powershell
+scoop bucket add labstack https://github.com/labstack/scoop-bucket
+scoop install labstack/driga
+```
+
+For manual installation, download the archive or Linux package for your
+OS/architecture and `driga_<version>_checksums.txt` from
+[GitHub Releases](https://github.com/labstack/driga/releases). Check the expected
+release and repository before trusting the manifest. For example, with only
+the macOS/arm64 archive downloaded:
 
 ```sh
-# Example for macOS/arm64; substitute the intended release and platform.
-sh -c 'awk '\''$2 == "driga_2026.10.0-alpha_darwin_arm64.tar.gz" { print; found=1 } END { if (!found) exit 1 }'\'' SHA256SUMS > selected-checksum.txt && shasum -a 256 -c selected-checksum.txt'
+version=2026.10.0-alpha
+archive="driga_${version}_darwin_arm64.tar.gz"
+awk -v archive="$archive" '$2 == archive { print; found=1 } END { if (!found) exit 1 }' \
+  "driga_${version}_checksums.txt" > selected-checksum.txt
+shasum -a 256 -c selected-checksum.txt
 mkdir -p release-unpacked
-tar -xzf driga_2026.10.0-alpha_darwin_arm64.tar.gz -C release-unpacked
+tar -xzf "$archive" -C release-unpacked
 mkdir -p "$HOME/.local/bin"
 install -m 0755 release-unpacked/driga "$HOME/.local/bin/driga"
 "$HOME/.local/bin/driga" version --json
 ```
 
-Keep Git and `~/.local/bin` on PATH and the installed binary at a stable absolute path
-before configuring hooks or a service. Retain the archive and its LICENSE.
+If all ten artifacts are downloaded, `sha256sum -c driga_<version>_checksums.txt`
+(or `shasum -a 256 -c`) checks them together. On Windows, compare the ZIP with
+its exact checksum entry using `Get-FileHash -Algorithm SHA256`, then use
+`Expand-Archive` and place `driga.exe` in a stable directory on PATH.
 
-On Windows, use `Get-FileHash -Algorithm SHA256` to compare the ZIP's hash with
-its exact entry in the authenticated `SHA256SUMS`, then extract the ZIP with
-Explorer or `Expand-Archive`. Put `driga.exe` in a stable directory on PATH and
-run `driga version --json`, then `driga service install` and `driga doctor`.
-PowerShell here is an optional installation shell; Driga does not invoke it for
-tasks, alerts or terminal launch. Windows remains experimental (phase 2).
+After verifying a Linux package, install it with
+`sudo dpkg -i driga_<version>_linux_<arch>.deb` or
+`sudo rpm -Uvh driga_<version>_linux_<arch>.rpm`. Keep Git and the installed
+binary on PATH at a stable absolute path before setting up hooks or a service.
+Retain the archive's license notices.
 
-## Install from source and Homebrew template
+## Install from source
 
-Build a source checkout using the Go version in `go.mod` or newer:
+Use a source checkout and the Go version in `go.mod` or newer:
 
 ```sh
 CGO_ENABLED=0 go build ./cmd/driga
 ./driga version
 ```
 
-An ordinary source build reports `dev`; it does not apply the release linker
-stamps. To build a specific release, check out its tag first. `go install` with
-a CalVer tag is incompatible with the module path's major-version rules, as
-explained above.
-
-`packaging/homebrew/driga.rb` is an unpublished template. Replace its version and
-all four SHA256 placeholders using the final verified manifest, keep the
-Apache-2.0 license, and review/test in a separately managed tap. It installs
-prebuilt macOS/Linux archives and needs no Go build dependency. There is no
-Homebrew publication automation in this repository.
+Check out a release tag first to build that source. Ordinary builds still report
+`dev` without linker stamps. CalVer's year is the major number, so Go module
+major-version rules prevent `go install ...@<tag>` with this unsuffixed module
+path. Use a package, archive, or source checkout.
