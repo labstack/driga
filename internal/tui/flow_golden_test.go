@@ -35,6 +35,7 @@ func TestFlowGoldenFrames(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	f.Lead.StartedFrom = "Editor"
 	original := compat.HasDarkBackground
 	compat.HasDarkBackground = true
 	defer func() { compat.HasDarkBackground = original }()

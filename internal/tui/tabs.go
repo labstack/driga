@@ -252,7 +252,7 @@ func (m *app) rebuild() {
 						mark = "▾ "
 					}
 				}
-				title := r.Title
+				title := r.Title + view.FromSuffix(r.StartedFrom)
 				if r.FinishedChildren > 0 {
 					title += fmt.Sprintf(" (%d workers finished)", r.FinishedChildren)
 				}

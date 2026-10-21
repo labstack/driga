@@ -333,6 +333,7 @@ func PlanAlerts(items []model.InboxItem, sessions []model.Session, c config.Inbo
 		id      int64
 	}
 	labels := map[sessionKey]string{}
+	surfaces := map[sessionKey]string{}
 	for _, s := range sessions {
 		label := ""
 		if policy != "none" {
@@ -342,6 +343,7 @@ func PlanAlerts(items []model.InboxItem, sessions []model.Session, c config.Inbo
 			label = filepath.Base(s.Cwd)
 		}
 		labels[sessionKey{s.MachineID, s.ID}] = scrub.Snippet(label)
+		surfaces[sessionKey{s.MachineID, s.ID}] = scrub.Snippet(s.StartedFrom)
 	}
 	text := func(i model.InboxItem) string {
 		i = Policy(i, policy)
@@ -363,6 +365,9 @@ func PlanAlerts(items []model.InboxItem, sessions []model.Session, c config.Inbo
 			body += " · " + i.Detail
 		} else if policy == "snippets" && i.Kind == "finished" && i.Summary != "" && i.Summary != reason {
 			body += " · " + i.Summary
+		}
+		if surface := surfaces[sessionKey{i.MachineID, i.SessionID}]; surface != "" {
+			body += " · from " + surface
 		}
 		return body
 	}
@@ -390,6 +395,18 @@ func PlanAlerts(items []model.InboxItem, sessions []model.Session, c config.Inbo
 		n := Notification{Kind: "waiting", Title: "Needs you", Sound: "Glass"}
 		if len(waiting) > 1 {
 			n.Body = fmt.Sprintf("%d sessions waiting", len(waiting))
+			var apps []string
+			known := map[string]bool{}
+			for _, i := range waiting {
+				app := surfaces[sessionKey{i.MachineID, i.SessionID}]
+				if app != "" && !known[app] {
+					known[app] = true
+					apps = append(apps, app)
+				}
+			}
+			if len(apps) > 0 {
+				n.Body += " · from " + strings.Join(apps, ", ")
+			}
 		} else {
 			n.Body, n.ItemID = text(waiting[0]), waiting[0].ID
 			n.MachineID = waiting[0].MachineID

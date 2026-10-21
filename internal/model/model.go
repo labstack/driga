@@ -181,10 +181,11 @@ type Summary struct {
 
 // Session is a stored session with derived fields.
 type Session struct {
-	Mixer     *StateMixer `json:"mixer,omitempty"`
-	MachineID string      `json:"machine_id"`
-	ID        int64       `json:"id"`
-	ParentID  *int64      `json:"parent_id,omitempty"`
+	StartedFrom string      `json:"started_from,omitempty"`
+	Mixer       *StateMixer `json:"mixer,omitempty"`
+	MachineID   string      `json:"machine_id"`
+	ID          int64       `json:"id"`
+	ParentID    *int64      `json:"parent_id,omitempty"`
 	SessionObs
 	RepoID     *int64     `json:"repo_id,omitempty"`
 	WorktreeID *int64     `json:"worktree_id,omitempty"`

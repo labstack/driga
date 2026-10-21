@@ -161,6 +161,10 @@ func snapshotRows[T any](ctx context.Context, tx *sql.Tx, table, machine, suffix
 					}
 					return nil
 				})
+			case f.typ.Kind() == reflect.String && f.column == "started_from":
+				raw := new(sql.NullString)
+				dest[i] = raw
+				finish = append(finish, func() error { field.SetString(raw.String); return nil })
 			case f.typ.Kind() == reflect.Slice || f.typ.Kind() == reflect.Pointer && f.typ.Elem().Kind() == reflect.Struct:
 				raw := new(string)
 				dest[i] = raw

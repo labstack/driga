@@ -113,7 +113,7 @@ func agentDetail(d view.AgentView, width int) string {
 	kv("Origin", s.Origin)
 	kv("Cwd", s.Cwd)
 	kv("Branch", s.Branch)
-	kv("Title", s.Title)
+	kv("Title", s.Title+view.FromSuffix(s.StartedFrom))
 	kv("Evidence", s.Evidence)
 	kv("Observed at", d.ObservedAt.Format(time.RFC3339))
 	if s.LastPrompt != "" {

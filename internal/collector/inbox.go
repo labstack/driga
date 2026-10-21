@@ -228,33 +228,40 @@ func alertInbox(ctx context.Context, d Deps, st *store.Store) error {
 	}
 	var notes []attention.Notification
 	err := st.Tx(ctx, func(tx *store.Tx) error {
-		rows, err := tx.InboxScoped(time.Time{}, false, scope)
+		rows, err := tx.InboxAlertCandidates(scope)
 		if err != nil {
 			return err
+		}
+		if len(rows) == 0 {
+			return nil
 		}
 		seen, last := map[string]time.Time{}, map[string]time.Time{}
 		sessions, err := tx.InboxSessionLabels(scope)
 		if err != nil {
 			return err
 		}
-		// Two range reads instead of two point reads per inbox item: thousands
-		// of unacknowledged items made this the collector's largest cost.
-		alerted, err := tx.MetaPrefix("inbox_alert:")
-		if err != nil {
-			return err
-		}
-		repeated, err := tx.MetaPrefix("inbox_alert_session:")
-		if err != nil {
-			return err
-		}
-		load := func(stored map[string]string, k string, m map[string]time.Time) {
-			if at, e := time.Parse(time.RFC3339Nano, stored[k]); e == nil {
-				m[k] = at
+		// Only candidate keys are loaded. Range-reading seen/repeat metadata
+		// would allocate for the entire consumed backlog again.
+		load := func(prefix, key string, dst map[string]time.Time) error {
+			if _, ok := dst[key]; ok {
+				return nil
 			}
+			raw, err := tx.Meta(prefix + key)
+			if err != nil && !errors.Is(err, store.ErrNotFound) {
+				return err
+			}
+			if at, err := time.Parse(time.RFC3339Nano, raw); err == nil {
+				dst[key] = at
+			}
+			return nil
 		}
 		for _, i := range rows {
-			load(alerted, i.MachineID+":"+i.ID, seen)
-			load(repeated, attention.AlertRepeatKey(i), last)
+			if err := load("inbox_alert:", i.MachineID+":"+i.ID, seen); err != nil {
+				return err
+			}
+			if err := load("inbox_alert_session:", attention.AlertRepeatKey(i), last); err != nil {
+				return err
+			}
 		}
 		previousSeen, previousLast := maps.Clone(seen), maps.Clone(last)
 		notes = attention.PlanAlerts(rows, sessions, d.Cfg.Inbox, d.Cfg.CaptureText, d.now(), seen, last)
@@ -262,6 +269,13 @@ func alertInbox(ctx context.Context, d Deps, st *store.Store) error {
 		for k := range notes {
 			if notes[k].MachineID != st.MachineID() {
 				notes[k].ItemID = ""
+			}
+		}
+		for _, i := range rows {
+			if _, consumed := seen[i.MachineID+":"+i.ID]; consumed {
+				if err := tx.MarkInboxAlerted(i.MachineID, i.ID); err != nil {
+					return err
+				}
 			}
 		}
 		for k, v := range seen {

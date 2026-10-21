@@ -83,10 +83,7 @@ func PlaceProcesses(procs []model.Proc, sessions []model.Session, sigs *signatur
 		agent, likely, appBoundary := false, false, false
 		var shared int32
 		bundle := ""
-		cur := p
-		seen := map[int32]bool{}
-		for cur.PID > 0 && !seen[cur.PID] && !cur.Zombie {
-			seen[cur.PID] = true
+		for cur := range processChain(byPID, p.PID) {
 			if bundle == "" {
 				bundle = AppBundle(cur.Exe)
 			}
@@ -109,12 +106,6 @@ func PlaceProcesses(procs []model.Proc, sessions []model.Session, sigs *signatur
 					appBoundary = true
 				}
 			}
-			parent, ok := byPID[cur.PPID]
-			// Reject impossible links left by PID reuse in a non-atomic scan.
-			if !ok || (!cur.StartTime.IsZero() && !parent.StartTime.IsZero() && parent.StartTime.After(cur.StartTime)) {
-				break
-			}
-			cur = parent
 		}
 		// An agent process in the chain is stronger evidence than a shared cwd:
 		// that agent owns its own tree.

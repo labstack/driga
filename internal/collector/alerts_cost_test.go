@@ -62,3 +62,54 @@ func TestAlertInboxIgnoresUnrelatedSessions(t *testing.T) {
 		t.Fatal("already alerted item notified again")
 	}
 }
+
+func TestAlertInboxAllocationsFlatWithUnackedBacklog(t *testing.T) {
+	d, st, _, _ := setup(t)
+	d.Notifier = &fakeNotifier{}
+	d.Cfg.Inbox.Alerts = "all"
+	d.Cfg.Inbox.AlertAfter = time.Hour
+	// Keep one delayed candidate throughout: label and metadata reads must also
+	// stay flat, not just the empty-candidate fast path.
+	if err := st.Tx(context.Background(), func(tx *store.Tx) error {
+		id, err := tx.UpsertSession(model.Session{SessionObs: model.SessionObs{Adapter: "claude", ExternalID: "pending", Title: "Pending"}})
+		if err != nil {
+			return err
+		}
+		return tx.UpsertInboxItem(model.InboxItem{ID: "pending", SessionID: id, Kind: "waiting", TS: d.now()})
+	}); err != nil {
+		t.Fatal(err)
+	}
+	measure := func() float64 {
+		return testing.AllocsPerRun(5, func() {
+			if err := alertInbox(context.Background(), d, st); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+	baseline := measure()
+	for _, count := range []int{100, 1000} {
+		if err := st.Tx(context.Background(), func(tx *store.Tx) error {
+			for i := range count {
+				id, err := tx.UpsertSession(model.Session{SessionObs: model.SessionObs{Adapter: "claude", ExternalID: fmt.Sprint(i), Title: "Backlog"}})
+				if err != nil {
+					return err
+				}
+				if err := tx.UpsertInboxItem(model.InboxItem{ID: fmt.Sprint(i), SessionID: id, Kind: "finished", TS: d.now()}); err != nil {
+					return err
+				}
+			}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+		// Consume each newly committed batch; the items remain unacknowledged.
+		if err := alertInbox(context.Background(), d, st); err != nil {
+			t.Fatal(err)
+		}
+		got := measure()
+		t.Logf("baseline %.0f allocations; %d unacked items: %.0f", baseline, count, got)
+		if got > baseline+100 {
+			t.Fatalf("%d backlog items added %.0f steady-state allocations", count, got-baseline)
+		}
+	}
+}

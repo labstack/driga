@@ -113,7 +113,7 @@ func agentsLocal(r Reader, f AgentFilter, now time.Time) (AgentsView, error) {
 		if title == "" {
 			title = s.LastPrompt
 		}
-		row := AgentRow{MachineID: r.MachineID(), ID: s.ID, Heuristic: s.Heuristic, Label: derive.Display(s.Label, s.Heuristic), Adapter: s.Adapter, Origin: s.Origin, Project: projectName(s, repos), Branch: s.Branch, Title: title, Age: sessionAge(s, now), Evidence: s.Evidence, ObservedAt: now, Children: []AgentRow{}, FinishedChildren: counts[s.ID]}
+		row := AgentRow{StartedFrom: s.StartedFrom, MachineID: r.MachineID(), ID: s.ID, Heuristic: s.Heuristic, Label: derive.Display(s.Label, s.Heuristic), Adapter: s.Adapter, Origin: s.Origin, Project: projectName(s, repos), Branch: s.Branch, Title: title, Age: sessionAge(s, now), Evidence: s.Evidence, ObservedAt: now, Children: []AgentRow{}, FinishedChildren: counts[s.ID]}
 		if s.RepoID != nil {
 			row.RepoID = *s.RepoID
 		}

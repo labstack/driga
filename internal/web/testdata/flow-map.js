@@ -51,3 +51,6 @@ assert.equal(f.signalGlyph({strength:1,supports:false}),"✗");
 const runs=f.recentEvents(Array.from({length:7},(_,i)=>({kind:"Stop",occurred_at:at(-10+i)})));
 assert.equal(runs.length,4);assert.equal(runs[3].more,4);
 assert.equal(runs[3].kind,"Stop");assert.equal(runs[3].from,at(-10));assert.equal(runs[3].to,at(-7));
+
+assert.equal(f.sessionTitle({title:"Task",adapter:"claude",started_from:"Editor"}),"Task · from Editor");
+assert.equal(f.sessionTitle({title:"Task",adapter:"claude"}),"Task");

@@ -103,9 +103,9 @@ func buildAgentShare(v *MachineView, procs []model.Proc, sessions []model.Sessio
 			c := costs[a.SessionID]
 			if c == nil {
 				s := bySession[a.SessionID]
-				c = &SessionCost{SessionID: a.SessionID, Adapter: s.Adapter, Project: a.Project, Processes: []MachineProcess{}}
+				c = &SessionCost{SessionID: a.SessionID, Adapter: s.Adapter, Project: a.Project, StartedFrom: s.StartedFrom, Processes: []MachineProcess{}}
 				// Launch surface follows the session root, never a helper's own bundle.
-				if root, ok := placements[s.PID]; ok {
+				if root, ok := placements[s.PID]; ok && c.StartedFrom == "" {
 					c.StartedFrom = strings.TrimSuffix(path.Base(root.Bundle), ".app")
 					if root.Bundle == "" {
 						c.StartedFrom = ""

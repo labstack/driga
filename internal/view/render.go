@@ -62,14 +62,14 @@ func Render(w io.Writer, v any, opts RenderOpts) error {
 			fmt.Fprintln(tw, "No live interactive session.")
 			break
 		}
-		fmt.Fprintf(tw, "lead · %s · %s · %s\n", cell(x.Lead.Adapter), cell(x.Lead.Title), label(derive.Display(x.Lead.Label, x.Lead.Heuristic)))
+		fmt.Fprintf(tw, "lead · %s · %s · %s\n", cell(x.Lead.Adapter), cell(x.Lead.DisplayTitle()), label(derive.Display(x.Lead.Label, x.Lead.Heuristic)))
 		fmt.Fprintf(tw, "project %s · %s\n", cell(x.Lead.Project), cell(x.Lead.Branch))
 		for _, r := range x.Mixer.Rows {
 			fmt.Fprintf(tw, "%s\t%s\t%s\t%.2f\t%t\n", r.Name, cell(r.Reading), age(r.Age), r.Strength, r.Supports)
 		}
 		fmt.Fprintf(tw, "verdict %s · %d of 4 agree\n", x.Mixer.Verdict, x.Mixer.Agreement)
 		for _, c := range x.Children {
-			fmt.Fprintf(tw, "%s\t%d\t%s\t%s\t%s\t%s\n", c.Kind, c.ID, cell(c.Title), label(derive.Display(c.Label, c.Heuristic)), FlowSpark(c.Activity), age(c.Elapsed))
+			fmt.Fprintf(tw, "%s\t%d\t%s\t%s\t%s\t%s\n", c.Kind, c.ID, cell(c.DisplayTitle()), label(derive.Display(c.Label, c.Heuristic)), FlowSpark(c.Activity), age(c.Elapsed))
 		}
 	case ActivityView:
 		fmt.Fprintln(tw, "MACHINE\tWINDOW\tSAMPLES\tEVENTS\tLATEST LOAD")
@@ -104,7 +104,7 @@ func Render(w io.Writer, v any, opts RenderOpts) error {
 		s := x.Session
 		fmt.Fprintf(tw, "Machine:\t%s\n", cell(originLabel(x.MachineID, x.MachineFresh)))
 		fmt.Fprintln(tw, "ID\tAGENT\tSTATE\tPROJECT / CWD\tBRANCH\tTITLE")
-		fmt.Fprintf(tw, "%d\t%s\t%s\t%s\t%s\t%s\n", s.ID, cell(s.Adapter), label(x.Label), cell(s.Cwd), cell(s.Branch), cell(s.Title))
+		fmt.Fprintf(tw, "%d\t%s\t%s\t%s\t%s\t%s\n", s.ID, cell(s.Adapter), label(x.Label), cell(s.Cwd), cell(s.Branch), cell(s.Title+FromSuffix(s.StartedFrom)))
 		fmt.Fprintf(tw, "Evidence:\t%s\nObserved at:\t%s\n", cell(s.Evidence), x.ObservedAt.Format(time.RFC3339))
 		if s.LastPrompt != "" {
 			fmt.Fprintf(tw, "Last prompt:\t%s\n", cell(s.LastPrompt))
@@ -301,7 +301,7 @@ func renderAgents(w io.Writer, v AgentsView, label func(string) string) {
 			if depth > 0 {
 				name = strings.Repeat("  ", depth-1) + "↳ " + name
 			}
-			title := cell(r.Title)
+			title := cell(r.Title + FromSuffix(r.StartedFrom))
 			if r.FinishedChildren > 0 {
 				title += fmt.Sprintf(" (%d workers finished)", r.FinishedChildren)
 			}
@@ -422,4 +422,12 @@ func HealthText(sample model.MachineSample, loadFormat string) string {
 		return "health unavailable"
 	}
 	return fmt.Sprintf("swap %s/%s · load "+loadFormat+"/%d", humanBytes(sample.SwapUsed), humanBytes(sample.SwapTotal), sample.Load1, sample.Cores)
+}
+
+// FromSuffix is the shared short launch-surface wording for session surfaces.
+func FromSuffix(app string) string {
+	if app == "" {
+		return ""
+	}
+	return " · from " + app
 }

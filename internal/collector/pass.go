@@ -240,6 +240,11 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 
 		for i := range ss {
 			s := &ss[i]
+			if procsOK && s.StartedFrom == "" && !s.Hosted && s.EndedAt == nil && s.Label != "dead" && !s.ProcStart.IsZero() {
+				if proc, ok := work.prev[s.PID]; ok && derive.SameStart(proc.StartTime, s.ProcStart) {
+					s.StartedFrom = derive.LaunchSurface(work.prev, s.PID)
+				}
+			}
 			if s.Adapter == "agy" {
 				if err := tx.SetMeta("warn:agy:unsupported_version", "process-level; title/state schema not yet supported"); err != nil {
 					return err

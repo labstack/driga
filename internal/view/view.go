@@ -120,6 +120,7 @@ type AgentFilter = Filter
 
 // AgentRow describes one agent and its nested family.
 type AgentRow struct {
+	StartedFrom string `json:"started_from,omitempty"`
 	MachineFresh
 	MachineID        string        `json:"machine_id"`
 	ID               int64         `json:"id"`

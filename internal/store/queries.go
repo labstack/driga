@@ -48,6 +48,10 @@ func (tx *Tx) upsertID(table, columns, conflict string, values ...any) (int64, e
 	updates := make([]string, len(cols))
 	for i, col := range cols {
 		updates[i] = col + "=excluded." + col
+		if table == "sessions" && col == "started_from" {
+			// Launch provenance is immutable once observed, including peer updates.
+			updates[i] = "started_from=COALESCE(NULLIF(sessions.started_from,''),excluded.started_from)"
+		}
 	}
 	query := "INSERT INTO " + table + " (" + columns + ") VALUES (" + strings.TrimSuffix(strings.Repeat("?,", len(cols)), ",") + ") ON CONFLICT (" + conflict + ") DO UPDATE SET " + strings.Join(updates, ",") + " RETURNING id"
 	var id int64
@@ -258,7 +262,7 @@ func (q *querier) Worktrees(repoID int64) ([]model.Worktree, error) {
 	})
 }
 
-const sessionColumns = "machine_id,adapter,external_id,parent_session_id,origin,version,pid,proc_start,cwd,branch,repo_id,worktree_id,title,last_prompt,registry_status,state,state_heuristic,evidence,started_at,last_activity_at,last_prompt_at,hosted,turn_open,ended_at,source_path,mixer"
+const sessionColumns = "machine_id,adapter,external_id,parent_session_id,origin,version,pid,proc_start,cwd,branch,repo_id,worktree_id,title,last_prompt,registry_status,state,state_heuristic,evidence,started_at,last_activity_at,last_prompt_at,hosted,turn_open,ended_at,source_path,mixer,started_from"
 
 // UpsertSession stores every scalar observation and derived session field.
 // Completions and FilesTouched are persisted separately by the collector.
@@ -267,7 +271,7 @@ func (tx *Tx) UpsertSession(s model.Session) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	return tx.upsertID("sessions", sessionColumns, "machine_id,adapter,external_id", tx.machineID, s.Adapter, s.ExternalID, s.ParentID, s.Origin, s.Version, s.PID, unix(s.ProcStart), s.Cwd, s.Branch, s.RepoID, s.WorktreeID, s.Title, s.LastPrompt, s.RegistryStatus, s.Label, s.Heuristic, s.Evidence, unix(s.StartedAt), unix(s.LastActivityAt), unix(s.LastPromptAt), s.Hosted, s.TurnOpen, nullableTime(s.EndedAt), s.SourcePath, string(mixer))
+	return tx.upsertID("sessions", sessionColumns, "machine_id,adapter,external_id", tx.machineID, s.Adapter, s.ExternalID, s.ParentID, s.Origin, s.Version, s.PID, unix(s.ProcStart), s.Cwd, s.Branch, s.RepoID, s.WorktreeID, s.Title, s.LastPrompt, s.RegistryStatus, s.Label, s.Heuristic, s.Evidence, unix(s.StartedAt), unix(s.LastActivityAt), unix(s.LastPromptAt), s.Hosted, s.TurnOpen, nullableTime(s.EndedAt), s.SourcePath, string(mixer), nullableString(s.StartedFrom))
 }
 
 func scanSession(s scanner) (model.Session, error) {
@@ -275,10 +279,12 @@ func scanSession(s scanner) (model.Session, error) {
 	var start, procStart, activity, promptAt int64
 	var ended sql.NullInt64
 	var mixer string
-	err := s.Scan(&m.ID, &m.MachineID, &m.Adapter, &m.ExternalID, &m.ParentID, &m.Origin, &m.Version, &m.PID, &procStart, &m.Cwd, &m.Branch, &m.RepoID, &m.WorktreeID, &m.Title, &m.LastPrompt, &m.RegistryStatus, &m.Label, &m.Heuristic, &m.Evidence, &start, &activity, &promptAt, &m.Hosted, &m.TurnOpen, &ended, &m.SourcePath, &mixer)
+	var startedFrom sql.NullString
+	err := s.Scan(&m.ID, &m.MachineID, &m.Adapter, &m.ExternalID, &m.ParentID, &m.Origin, &m.Version, &m.PID, &procStart, &m.Cwd, &m.Branch, &m.RepoID, &m.WorktreeID, &m.Title, &m.LastPrompt, &m.RegistryStatus, &m.Label, &m.Heuristic, &m.Evidence, &start, &activity, &promptAt, &m.Hosted, &m.TurnOpen, &ended, &m.SourcePath, &mixer, &startedFrom)
 	if err == nil {
 		err = json.Unmarshal([]byte(mixer), &m.Mixer)
 	}
+	m.StartedFrom = startedFrom.String
 	m.ProcStart, m.StartedAt, m.LastActivityAt, m.LastPromptAt, m.EndedAt = fromUnix(procStart), fromUnix(start), fromUnix(activity), fromUnix(promptAt), timePointer(ended)
 	return m, err
 }
@@ -313,17 +319,17 @@ func (q *querier) SessionsScoped(filter SessionFilter, scope Scope) ([]model.Ses
 }
 
 // InboxSessionLabels returns only the identity and display fields needed by
-// alerts for pending inbox items. Ended sessions can still have pending
+// alerts for candidate inbox items. Ended sessions can still have pending
 // completions; unrelated sessions and their mixer JSON need not be loaded.
 func (q *querier) InboxSessionLabels(scope Scope) ([]model.Session, error) {
 	where, args := scope.where("machine_id")
 	args = append(args, unix(time.Time{}))
-	return readMany(q, `SELECT s.id,s.machine_id,s.title,s.cwd FROM
-		(SELECT DISTINCT machine_id,session_id FROM inbox_items WHERE `+where+`
-			AND ts>=? AND acked_at IS NULL AND ended_at IS NULL) i
+	return readMany(q, `SELECT s.id,s.machine_id,s.title,s.cwd,COALESCE(s.started_from,'') FROM
+		(SELECT DISTINCT machine_id,session_id FROM inbox_items INDEXED BY inbox_alert_candidates WHERE `+where+`
+			AND ts>=? AND `+alertCandidateWhere+`) i
 		JOIN sessions s ON s.machine_id=i.machine_id AND s.id=i.session_id`, args, func(s scanner) (model.Session, error) {
 		var m model.Session
-		err := s.Scan(&m.ID, &m.MachineID, &m.Title, &m.Cwd)
+		err := s.Scan(&m.ID, &m.MachineID, &m.Title, &m.Cwd, &m.StartedFrom)
 		return m, err
 	})
 }
@@ -479,19 +485,21 @@ func (q *querier) Inbox(since time.Time, includeAcked bool) ([]model.InboxItem, 
 func (q *querier) InboxScoped(since time.Time, includeAcked bool, scope Scope) ([]model.InboxItem, error) {
 	where, args := scope.where("machine_id")
 	args = append(args, unix(since), includeAcked)
-	return readMany(q, "SELECT machine_id,id,session_id,kind,ts,summary,acked_at,ack_pending_at,reason,tool,detail,waiting_since_at,source,ended_at,jump FROM inbox_items WHERE "+where+" AND ts>=? AND (? OR (acked_at IS NULL AND ended_at IS NULL)) ORDER BY CASE WHEN kind='waiting' AND acked_at IS NULL AND ended_at IS NULL THEN 0 ELSE 1 END, CASE WHEN kind='waiting' AND acked_at IS NULL AND ended_at IS NULL THEN ts END ASC,ts DESC,id,machine_id", args, func(s scanner) (model.InboxItem, error) {
-		var i model.InboxItem
-		var ts, wait int64
-		var ack, pending, ended sql.NullInt64
-		var jump string
-		err := s.Scan(&i.MachineID, &i.ID, &i.SessionID, &i.Kind, &ts, &i.Summary, &ack, &pending, &i.Reason, &i.Tool, &i.Detail, &wait, &i.Source, &ended, &jump)
-		i.TS, i.AckedAt, i.AckPendingAt = fromUnix(ts), timePointer(ack), timePointer(pending)
-		i.WaitingSinceAt, i.EndedAt = fromUnix(wait), timePointer(ended)
-		if err == nil {
-			err = json.Unmarshal([]byte(jump), &i.Jump)
-		}
-		return i, err
-	})
+	return readMany(q, "SELECT machine_id,id,session_id,kind,ts,summary,acked_at,ack_pending_at,reason,tool,detail,waiting_since_at,source,ended_at,jump FROM inbox_items WHERE "+where+" AND ts>=? AND (? OR (acked_at IS NULL AND ended_at IS NULL)) ORDER BY CASE WHEN kind='waiting' AND acked_at IS NULL AND ended_at IS NULL THEN 0 ELSE 1 END, CASE WHEN kind='waiting' AND acked_at IS NULL AND ended_at IS NULL THEN ts END ASC,ts DESC,id,machine_id", args, scanInbox)
+}
+
+func scanInbox(s scanner) (model.InboxItem, error) {
+	var i model.InboxItem
+	var ts, wait int64
+	var ack, pending, ended sql.NullInt64
+	var jump string
+	err := s.Scan(&i.MachineID, &i.ID, &i.SessionID, &i.Kind, &ts, &i.Summary, &ack, &pending, &i.Reason, &i.Tool, &i.Detail, &wait, &i.Source, &ended, &jump)
+	i.TS, i.AckedAt, i.AckPendingAt = fromUnix(ts), timePointer(ack), timePointer(pending)
+	i.WaitingSinceAt, i.EndedAt = fromUnix(wait), timePointer(ended)
+	if err == nil {
+		err = json.Unmarshal([]byte(jump), &i.Jump)
+	}
+	return i, err
 }
 
 // ReplaceOrphans replaces this machine's latest orphan snapshot.
@@ -806,6 +814,13 @@ func (tx *Tx) Prune(now time.Time) error {
  AND NOT EXISTS(SELECT 1 FROM inbox_items i WHERE i.machine_id=? AND i.id=meta.value)`, tx.machineID, tx.machineID); err != nil {
 			return err
 		}
+		// Expiring the source seen metadata must also expire its candidate
+		// projection, including a peer wait still open after a month.
+		if err := tx.exec(`UPDATE inbox_items SET alerted=0 WHERE alerted=1 AND EXISTS (
+ SELECT 1 FROM meta WHERE meta.machine_id=? AND key='inbox_alert:'||inbox_items.machine_id||':'||inbox_items.id AND value<?
+)`, tx.machineID, now.Add(-30*24*time.Hour).UTC().Format(time.RFC3339Nano)); err != nil {
+			return err
+		}
 		if err := tx.exec(`DELETE FROM meta WHERE machine_id=? AND (key LIKE 'inbox_alert:%' OR key LIKE 'inbox_alert_session:%') AND value<?`, tx.machineID, now.Add(-30*24*time.Hour).UTC().Format(time.RFC3339Nano)); err != nil {
 			return err
 		}
@@ -1002,4 +1017,28 @@ func (q *querier) SessionHandoffs(id int64, from, to time.Time) ([]model.Complet
 		e.ID, e.TS = strconv.FormatInt(id, 10), fromUnix(ts)
 		return e, err
 	})
+}
+
+func nullableString(s string) any {
+	if s == "" {
+		return nil
+	}
+	return s
+}
+
+// alertCandidateWhere matches the partial index, so consumed unacked history
+// costs neither a table scan nor Go allocations. Health episodes remain eligible
+// for PlanAlerts' repeat policy; delayed waits remain unseen until it consumes them.
+const alertCandidateWhere = "acked_at IS NULL AND ended_at IS NULL AND (alerted=0 OR kind IN ('low_disk','memory_pressure'))"
+
+func (q *querier) InboxAlertCandidates(scope Scope) ([]model.InboxItem, error) {
+	where, args := scope.where("machine_id")
+	args = append(args, unix(time.Time{}))
+	return readMany(q, "SELECT machine_id,id,session_id,kind,ts,summary,acked_at,ack_pending_at,reason,tool,detail,waiting_since_at,source,ended_at,jump FROM inbox_items INDEXED BY inbox_alert_candidates WHERE "+where+" AND ts>=? AND "+alertCandidateWhere+" ORDER BY CASE WHEN kind='waiting' AND acked_at IS NULL AND ended_at IS NULL THEN 0 ELSE 1 END, CASE WHEN kind='waiting' AND acked_at IS NULL AND ended_at IS NULL THEN ts END ASC,ts DESC,id,machine_id", args, scanInbox)
+}
+
+// MarkInboxAlerted is local bookkeeping even for a peer item. Call in the same
+// transaction as the existing seen/repeat metadata; it does not acknowledge.
+func (tx *Tx) MarkInboxAlerted(machine, id string) error {
+	return tx.exec("UPDATE inbox_items SET alerted=1 WHERE machine_id=? AND id=? AND alerted=0", machine, id)
 }

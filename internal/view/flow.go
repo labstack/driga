@@ -17,6 +17,7 @@ import (
 
 // FlowNode contains a session and only usage measurements actually retained.
 type FlowNode struct {
+	StartedFrom    string                  `json:"started_from,omitempty"`
 	StartedAt      time.Time               `json:"started_at"`
 	EndedAt        *time.Time              `json:"ended_at"`
 	ParentID       *int64                  `json:"parent_id"`
@@ -162,16 +163,16 @@ func FlowJoin(parts ...string) string {
 
 func (n FlowNode) DisplayTitle() string {
 	if title := strings.TrimSpace(n.Title); title != "" {
-		return title
+		return title + FromSuffix(n.StartedFrom)
 	}
 	if n.Project != "" {
-		return FlowJoin(n.Project, n.Branch)
+		return FlowJoin(n.Project, n.Branch) + FromSuffix(n.StartedFrom)
 	}
 	agent := strings.TrimSpace(n.Adapter)
 	if agent == "" {
 		agent = "agent"
 	}
-	return agent + " thread"
+	return agent + " thread" + FromSuffix(n.StartedFrom)
 }
 
 func flowAttentionTitle(s model.Session, project, capture string) string {
@@ -397,7 +398,7 @@ func Flow(r Reader, f Filter, sessionID int64, now time.Time) (FlowView, error) 
 		if err != nil {
 			return v, err
 		}
-		n := FlowNode{MachineID: selectedReader.MachineID(), ID: s.ID, ExternalID: s.ExternalID, Adapter: s.Adapter, Kind: "worker", Title: s.Title, Project: projectName(s, repos), Branch: s.Branch, Label: s.Label, Heuristic: s.Heuristic, Age: sessionAge(s, now), LastActivityAt: s.LastActivityAt, Activity: make([]int, 10)}
+		n := FlowNode{StartedFrom: s.StartedFrom, MachineID: selectedReader.MachineID(), ID: s.ID, ExternalID: s.ExternalID, Adapter: s.Adapter, Kind: "worker", Title: s.Title, Project: projectName(s, repos), Branch: s.Branch, Label: s.Label, Heuristic: s.Heuristic, Age: sessionAge(s, now), LastActivityAt: s.LastActivityAt, Activity: make([]int, 10)}
 		n.StartedAt, n.EndedAt, n.ParentID, n.Mixer = s.StartedAt, s.EndedAt, s.ParentID, derive.SessionMixer(s)
 		n.Events = []model.Event{}
 		n.Waits = []FlowWait{}

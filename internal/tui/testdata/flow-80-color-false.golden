@@ -5,7 +5,7 @@
 ╭─ Session map ────────────────────────────────────────────────────────────────╮
 │ 40m · 11:20–now · head = verdict as of                                       │
 │ 200m earlier · 0 asks                                                        │
-│ ›Driga flow map     ▇█▂▃▄▅▆▇█▂▃▄▅▆▇┿┿┿┿┿┿┿┿┿┿┿┿┿┿┿┿┿┿┿┿┿┿━━▶ 5s ago          │
+│ ›Driga flow map · … ▇█▂▃▄▅▆▇█▂▃▄▅▆▇┿┿┿┿┿┿┿┿┿┿┿┿┿┿┿┿┿┿┿┿┿┿━━▶ 5s ago          │
 │                 cpu ▇ ▁▂▂▃▄▄▅▆▆▇ ▁▂▂▃▄▄▅▆▆  ▁▂▂▃▄▄▅▆▆▇ ▁▂▂▃█                 │
 │  Implement geometry                ╰░░░░░░░░░░░░◆════░░░┿━━▶ 5s ago          │
 │  Review CSP                         ╰░░░░░░░░░░░░░░░░░░░●──● 5s ago          │
@@ -15,7 +15,7 @@
 │ ▁ growth / CPU · ┿ tool · ◆ wait · ○ prompt · ● end · ░ no data              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Session detail · signal mixer ──────────────────────────────────────────────╮
-│ Driga flow map · claude                                                      │
+│ Driga flow map · from Editor · claude                                        │
 │ ▶ working · as of 5s ago                                                     │
 │ why: stored hooks and process verdict                                        │
 │ running 8h0m0s                                                               │

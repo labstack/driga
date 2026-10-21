@@ -5,6 +5,7 @@
   const valid=x=>Number.isFinite(x)&&x>-60000000000000;
   const glyph=s=>({working:"▶",waiting:"◆",stalled:"‖",unknown:"?",idle:"○",finished:"●",dead:"●"})[s]||"?";
   const stateName=s=>s==="waiting"?"needs you":s==="stalled"?"stalled?":s;
+  const sessionTitle=n=>(n.title||n.adapter+" thread")+(n.started_from?" · from "+n.started_from:"");
   const state=n=>n.mixer?.verdict||n.label||"unknown";
   function eventMark(adapter,kind) {
     return ({claude:{"otlp:tool_result":"tool","otlp:user_prompt":"prompt",Stop:"end"},copilot:{postToolUse:"tool",userPromptSubmitted:"prompt",agentStop:"end"}})[adapter]?.[kind]||"";
@@ -84,7 +85,7 @@
     }
     return out.slice(0,7);
   }
-  globalThis.DrigaFlow=Object.freeze({geometry,eventMark,glyph,sortAttention,waitReason,signalGlyph,recentEvents});
+  globalThis.DrigaFlow=Object.freeze({geometry,eventMark,glyph,sortAttention,waitReason,signalGlyph,recentEvents,sessionTitle});
   if(typeof document==="undefined")return;
   const ns="http://www.w3.org/2000/svg";
   function svg(tag,attrs={},label) {
@@ -116,7 +117,7 @@
     const node=[data.lead,...(data.children||[])].find(n=>n?.id===selected),panel=root.querySelector("[data-flow-detail]");panel.replaceChildren();
     panel.append(html("h2","","Session detail"));
     if(!node){panel.append(html("p","d","Select a session."));return;}
-    panel.append(html("h3","",node.title||node.adapter+" thread"));
+    panel.append(html("h3","",sessionTitle(node)));
     const chips=html("div","metro-chips");
     if(node.kind==="lead"||node.id===data.lead?.id)chips.append(html("span","metro-chip lead","LEAD"));
     for(const text of [node.adapter,node.project,node.branch,jumpTarget(node.jump)])if(text)chips.append(html("span","metro-chip",text));panel.append(chips);
@@ -189,7 +190,7 @@
     for(const r of geo.rows) {
       const n=r.node,st=state(n),group=svg("g",{class:"metro-row"+(n.id===selected?" selected":""),"data-map-row":n.id,role:"option","aria-selected":n.id===selected});
       group.append(svg("rect",{x:0,y:r.y-28,width,height:60,class:"metro-row-bg"}));
-      const label=svg("text",{x:14,y:r.y-5,class:"metro-title"},trim(n.title||n.adapter+" thread",Math.floor((geo.left-22)/7.4)));markTitle(label,n.title||n.adapter);group.append(label);
+      const label=svg("text",{x:14,y:r.y-5,class:"metro-title"},trim(sessionTitle(n),Math.floor((geo.left-22)/7.4)));markTitle(label,sessionTitle(n));group.append(label);
       const lead=n.kind==="lead"||n.id===data.lead?.id,subText=[n.adapter,n.project,n.branch].filter(Boolean).join(" · ");
       if(lead)group.append(svg("rect",{x:14,y:r.y+5,width:34,height:15,rx:3,class:"metro-lead-chip"}),svg("text",{x:18,y:r.y+16,class:"metro-lead-label"},"LEAD"));
       const sub=svg("text",{x:lead?54:14,y:r.y+16,class:"metro-sub"},trim(subText,Math.floor((geo.left-(lead?64:24))/6.6)));markTitle(sub,subText);group.append(sub);
