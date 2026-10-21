@@ -63,6 +63,10 @@ jobs:
           go vet ./...
           go generate ./internal/config
           git diff --exit-code -- .env.example
+      - name: Vulnerability check
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
+          "$(go env GOPATH)/bin/govulncheck" ./...
       - name: Test on Linux
         run: go test ./...
       - name: Race test
