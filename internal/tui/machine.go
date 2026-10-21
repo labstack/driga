@@ -13,72 +13,97 @@ import (
 )
 
 func (m *app) machineRows(add func(tabRow)) {
-	for _, r := range m.snap.Machines.Rows {
-		add(tabRow{machine: r.MachineID, cells: []string{"", m.machineName(r.MachineID), "", r.State, m.machineAge(r.MachineID)}})
-	}
 	hosts := m.snap.Machine.Machines
 	if len(hosts) == 0 {
 		hosts = []view.MachineView{m.snap.Machine}
 	}
 	for _, host := range hosts {
-		s := host.Sample
-		for _, metric := range [][3]string{
-			{"memory", humanBytes(s.MemUsed) + "/" + humanBytes(s.MemTotal), ""},
-			{"compressed", humanBytes(s.MemCompressed), ""},
-			{"swap", humanBytes(s.SwapUsed) + "/" + humanBytes(s.SwapTotal), ""},
-			{"pressure level", s.PressureLevel, ""},
-			{"pressure free", fmt.Sprintf("%.1f%%", s.PressureFree), ""},
-			{"load (1/5/15)", fmt.Sprintf("%.1f / %.1f / %.1f", s.Load1, s.Load5, s.Load15), ""},
-			{"cores", strconv.Itoa(s.Cores), ""}, {"disk free", humanBytes(s.DiskFree), ""},
-		} {
-			add(tabRow{machine: host.MachineID, cells: []string{"", metric[0], "", metric[1], metric[2]}})
+		textRow := func(text string) {
+			for _, line := range strings.Split(ansi.Wrap(text, max(1, m.width-4), ""), "\n") {
+				add(tabRow{machine: host.MachineID, machineText: line, cells: []string{"", line, "", "", ""}})
+			}
 		}
-		add(tabRow{machine: host.MachineID, cells: []string{"", "MCP servers", "", "enter details · read-only", ""}})
+		textRow(view.MachineSummary(host))
+		textRow("Memory measure: " + host.AgentShare.MemoryMeasure + " · " + view.FootprintNote)
+		textRow("Sessions by cost")
+		for _, a := range view.MachineSessionApps(host) {
+			m.machineAppRows(add, host.MachineID, "session", a)
+			if _, surface, ok := strings.Cut(a.Name, " · started from "); ok {
+				textRow("Started from " + surface)
+			}
+		}
+
+		textRow("Agent processes without a session")
+		for _, a := range host.AgentNoSession {
+			m.machineAppRows(add, host.MachineID, "agent", a)
+		}
+		textRow("MCP servers and helper processes")
 		for _, c := range host.MCPServers.Commands {
-			add(tabRow{machine: host.MachineID, mcpCommand: &c, cells: []string{"", c.Name, fmt.Sprintf("%d servers", c.Count), fmt.Sprintf("%d hosts · %d duplicates", c.HostCount, c.DuplicateCount), humanBytes(c.Memory)}})
+			add(tabRow{machine: host.MachineID, mcpCommand: &c, cells: []string{"", c.Name, view.MCPProcessLabel(c), fmt.Sprintf("%d hosts · %d duplicates", c.HostCount, c.DuplicateCount), humanBytes(c.Memory)}})
 		}
 		if len(host.MCPServers.Pileups) == 0 {
-			add(tabRow{machine: host.MachineID, cells: []string{"", "No MCP pile-ups", "", "", ""}})
+			textRow("No MCP pile-ups")
 		}
 		for _, p := range host.MCPServers.Pileups {
 			add(tabRow{machine: host.MachineID, pileup: &p, cells: []string{"", p.Name + " pile-up", fmt.Sprint(p.Count), fmt.Sprintf("%s PID %d · %s", p.Host.Name, p.Host.PID, duration(p.Host.Age)), humanBytes(p.Memory)}})
 		}
-		for _, rank := range []struct {
-			name, key string
-			apps      []view.MachineApp
-		}{{"Top 10 apps by memory", "mem", host.TopMemory}, {"Top 10 apps by CPU", "cpu", host.TopCPU}} {
-			add(tabRow{machine: host.MachineID, cells: []string{"", rank.name, "", "→ expand · enter details", ""}})
-			if rank.key == "mem" {
-				add(tabRow{machine: host.MachineID, cells: []string{"", "", "", "incl. swap: may exceed RAM", ""}})
+		if len(host.LikelyAgent) > 0 {
+			textRow("Likely agent work (shared with editor)")
+			for _, a := range host.LikelyAgent {
+				m.machineAppRows(add, host.MachineID, "likely", a)
 			}
-			if len(rank.apps) == 0 {
-				add(tabRow{machine: host.MachineID, cells: []string{"", "No process readings", "", "", ""}})
-			}
-			for _, a := range rank.apps {
-				key := "machine:" + host.MachineID + ":" + rank.key + ":" + a.ID
-				mark := "▸ "
-				if m.expanded[key] {
-					mark = "▾ "
-				}
-				add(tabRow{machine: host.MachineID, key: key, app: &a, cells: []string{"", mark + a.Name, fmt.Sprintf("%.1f%%", a.CPUPercent), a.MemoryMeasure, humanBytes(a.Memory)}})
-				if m.expanded[key] {
-					for _, p := range a.Processes {
-						detail := p.MemoryMeasure
-						if p.Attribution != nil {
-							detail = fmt.Sprintf("← %s · session #%d", p.Attribution.Project, p.Attribution.SessionID)
-						}
-						add(tabRow{machine: host.MachineID, cwd: p.Cwd, key: key + fmt.Sprint(p.PID), app: &a, cells: []string{"", fmt.Sprintf("  %d %s", p.PID, path.Base(p.Exe)), fmt.Sprintf("%.1f%%", p.CPUPercent), detail, humanBytes(p.Memory)}})
-					}
+		}
+		other := view.MachineOtherApps(host)
+		key := "machine:" + host.MachineID + ":other"
+		mark := "▸ "
+		if m.expanded[key] {
+			mark = "▾ "
+		}
+		add(tabRow{machine: host.MachineID, key: key, machineText: mark + "Other apps · " + humanBytes(other.Memory) + " (" + other.MemoryMeasure + ")", cells: []string{"", mark + "Other apps", "", other.MemoryMeasure, humanBytes(other.Memory)}})
+		if m.expanded[key] {
+			for _, rank := range []struct {
+				name, key string
+				apps      []view.MachineApp
+			}{{"Top 10 apps by memory", "mem", host.TopMemory}, {"Top 10 apps by CPU", "cpu", host.TopCPU}} {
+				textRow(rank.name)
+				for _, a := range rank.apps {
+					m.machineAppRows(add, host.MachineID, rank.key, a)
 				}
 			}
 		}
-		if len(host.Memory) > 0 {
-			add(tabRow{machine: host.MachineID, cells: []string{"", "Agent memory by role", "", "", ""}})
-			for _, r := range host.Memory {
-				add(tabRow{machine: r.MachineID, cells: []string{"", r.Agent, "", r.Role, humanBytes(r.RSS)}})
-			}
+		textRow("Machine vitals")
+		s := host.Sample
+		for _, metric := range [][2]string{
+			{"memory", humanBytes(s.MemUsed) + "/" + humanBytes(s.MemTotal)},
+			{"compressed", humanBytes(s.MemCompressed)},
+			{"swap", humanBytes(s.SwapUsed) + "/" + humanBytes(s.SwapTotal)},
+			{"pressure level", s.PressureLevel}, {"pressure free", fmt.Sprintf("%.1f%%", s.PressureFree)},
+			{"load (1/5/15)", fmt.Sprintf("%.1f / %.1f / %.1f", s.Load1, s.Load5, s.Load15)},
+			{"cores", strconv.Itoa(s.Cores)}, {"disk free", humanBytes(s.DiskFree)},
+		} {
+			add(tabRow{machine: host.MachineID, cells: []string{"", metric[0], "", metric[1], ""}})
 		}
-
+		textRow("Agent memory by role")
+		for _, r := range host.Memory {
+			add(tabRow{machine: r.MachineID, cells: []string{"", r.Agent, "", r.Role, humanBytes(r.RSS)}})
+		}
+	}
+}
+func (m *app) machineAppRows(add func(tabRow), machine, rank string, a view.MachineApp) {
+	key := "machine:" + machine + ":" + rank + ":" + a.ID
+	mark := "▸ "
+	if m.expanded[key] {
+		mark = "▾ "
+	}
+	add(tabRow{machine: machine, key: key, app: &a, cells: []string{"", mark + a.Name, fmt.Sprintf("%.1f%%", a.CPUPercent), a.MemoryMeasure, humanBytes(a.Memory)}})
+	if m.expanded[key] {
+		for _, p := range a.Processes {
+			detail := p.MemoryMeasure
+			if p.Attribution != nil {
+				detail = view.AttributionText(p.Attribution)
+			}
+			add(tabRow{machine: machine, cwd: p.Cwd, key: key + fmt.Sprint(p.PID), app: &a, cells: []string{"", fmt.Sprintf("  %d %s", p.PID, path.Base(p.Exe)), fmt.Sprintf("%.1f%%", p.CPUPercent), detail, humanBytes(p.Memory)}})
+		}
 	}
 }
 
@@ -98,7 +123,7 @@ func (m *app) machineTable(body string) string {
 	}
 	for i := 1; i < len(lines); i++ {
 		row := m.cursors[m.tab] + i - cursorLine
-		if row < 0 || row >= len(m.rows) || m.rows[row].mcpCommand == nil {
+		if row < 0 || row >= len(m.rows) || (m.rows[row].mcpCommand == nil && m.rows[row].machineText == "") {
 			continue
 		}
 		r := m.rows[row]
@@ -109,7 +134,11 @@ func (m *app) machineTable(body string) string {
 		if len(r.cells) == 6 {
 			text += m.machineName(r.machine) + " · "
 		}
-		text += view.MCPCommandSummary(*r.mcpCommand)
+		if r.mcpCommand != nil {
+			text += view.MCPCommandSummary(*r.mcpCommand)
+		} else {
+			text += r.machineText
+		}
 		if r.stale {
 			text += " (stale " + m.machineAge(r.machine) + ")"
 		}

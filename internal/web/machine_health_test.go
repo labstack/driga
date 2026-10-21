@@ -1,7 +1,10 @@
 package web
 
 import (
+	"bytes"
 	"context"
+	"github.com/labstack/driga/internal/view"
+	"github.com/labstack/driga/internal/viewer"
 	"os/exec"
 	"strings"
 	"testing"
@@ -36,7 +39,7 @@ func TestMachineMCPLeakMarker(t *testing.T) {
 		}
 	}
 	w := request(s, "GET", "/machines", s.token)
-	for _, want := range []string{"leaking ↑ 0.75/h since 08:12", "started 2", "ended 0", "net &#43;2", "Observed: 2020-01-01T08:12:00Z to 2020-01-01T10:52:00Z"} {
+	for _, want := range []string{"observed growth ↑ 0.75/h since 08:12", "started 2", "ended 0", "net &#43;2", "Observed: 2020-01-01T08:12:00Z to 2020-01-01T10:52:00Z"} {
 		if !strings.Contains(w.Body.String(), want) {
 			t.Fatalf("missing %q: %s", want, w.Body)
 		}
@@ -135,5 +138,48 @@ func TestMachineMCPLauncherSummaryAndEvidence(t *testing.T) {
 	}
 	if strings.Contains(w.Body.String(), "<fixture>") {
 		t.Fatal("unescaped command")
+	}
+}
+
+func TestMachinePageAgentsFirst(t *testing.T) {
+	s, _, _, _ := fixture(t)
+	w := request(s, "GET", "/machines", s.token)
+	text := w.Body.String()
+	summary, other := strings.Index(text, "agents "), strings.Index(text, "<summary>Other apps")
+	if summary < 0 || other < summary || !strings.Contains(text, "Sessions by cost") {
+		t.Fatal(text)
+	}
+	start := strings.LastIndex(text[:other], "<details")
+	if start < 0 || strings.Contains(text[start:other], " open") {
+		t.Fatal("Other apps must start collapsed", text)
+	}
+}
+func TestMachineViewOlderPeerFields(t *testing.T) {
+	s, _, _, _ := fixture(t)
+	var b bytes.Buffer
+	p := pageData{Snapshot: viewer.Snapshot{Machine: view.MachineView{Machines: []view.MachineView{{MachineID: "peer", TopMemory: []view.MachineApp{{ID: "old", Name: "Legacy", Memory: 2 << 30}}}}}}}
+	if err := s.templates.ExecuteTemplate(&b, "machines", p); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(b.String(), "Other apps · 2.0 GiB") || !strings.Contains(b.String(), "Legacy") {
+		t.Fatal(b.String())
+	}
+}
+
+func TestMachineBucketDisclosuresKeepMachineScope(t *testing.T) {
+	s, _, _, _ := fixture(t)
+	p := pageData{Snapshot: viewer.Snapshot{Machine: view.MachineView{Machines: []view.MachineView{{MachineID: "peer"}}}}}
+	var b bytes.Buffer
+	if err := s.templates.ExecuteTemplate(&b, "machines", p); err != nil {
+		t.Fatal(err)
+	}
+	for _, rank := range []string{"sessions", "agent", "likely", "other"} {
+		if rank == "likely" {
+			continue
+		} // Absent when there is no likely work.
+		want := `data-machine-rank="` + rank + `" data-machine-id="peer"`
+		if !strings.Contains(b.String(), want) {
+			t.Fatalf("missing %s", want)
+		}
 	}
 }

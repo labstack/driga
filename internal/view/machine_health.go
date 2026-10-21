@@ -33,18 +33,9 @@ type MachineApp struct {
 }
 
 func machineApps(procs []model.Proc, sessions []model.Session) ([]MachineApp, []MachineApp) {
-	byPID := make(map[int32]model.Proc, len(procs))
-	for _, p := range procs {
-		byPID[p.PID] = p
-	}
-	live := map[int32]model.Session{}
-	for _, s := range sessions {
-		p, ok := byPID[s.PID]
-		if !ok || s.ID == 0 || s.EndedAt != nil || s.Label == "dead" || s.Hosted || s.ProcStart.IsZero() || !derive.SameStart(p.StartTime, s.ProcStart) {
-			continue
-		}
-		live[s.PID] = s
-	}
+	return machineAppsPlaced(procs, derive.PlaceProcesses(procs, sessions, nil))
+}
+func machineAppsPlaced(procs []model.Proc, placements map[int32]derive.ProcPlacement) ([]MachineApp, []MachineApp) {
 	apps := map[string]*MachineApp{}
 	for _, p := range procs {
 		if p.Zombie {
@@ -54,42 +45,10 @@ func machineApps(procs []model.Proc, sessions []model.Session) ([]MachineApp, []
 		row.Memory, row.MemoryMeasure = derive.ProcessMemory(p)
 		// Stored orphan ancestry is not evidence of a currently live session.
 		row.SessionID = 0
-		bundle := ""
-		cur := p
-		seen := map[int32]bool{}
-		for cur.PID > 0 && !seen[cur.PID] && !cur.Zombie {
-			seen[cur.PID] = true
-			if bundle == "" {
-				bundle = derive.AppBundle(cur.Exe)
-			}
-			if s, ok := live[cur.PID]; ok && row.Attribution == nil {
-				row.Attribution = &MachineAttribution{SessionID: s.ID, Project: path.Base(s.Cwd), Proof: "parent_chain"}
-			}
-			parent, ok := byPID[cur.PPID]
-			// Reject impossible links left by PID reuse in a non-atomic scan.
-			if !ok || (!cur.StartTime.IsZero() && !parent.StartTime.IsZero() && parent.StartTime.After(cur.StartTime)) {
-				break
-			}
-			cur = parent
-		}
-		if row.Attribution == nil && p.Cwd != "" && !p.StartTime.IsZero() {
-			var chosen *model.Session
-			for _, s := range live {
-				if s.StartedAt.IsZero() || !p.StartTime.After(s.StartedAt) || !within(p.Cwd, s.Cwd) {
-					continue
-				}
-				// Multiple sessions in the same best-matching project cannot prove which
-				// session started the process. Prefer a uniquely more specific project.
-				if chosen == nil || len(s.Cwd) > len(chosen.Cwd) {
-					copy := s
-					chosen = &copy
-				} else if len(s.Cwd) == len(chosen.Cwd) {
-					chosen.ID = 0
-				}
-			}
-			if chosen != nil && chosen.ID != 0 {
-				row.Attribution = &MachineAttribution{SessionID: chosen.ID, Project: path.Base(chosen.Cwd), Proof: "cwd_started_after"}
-			}
+		placement := placements[p.PID]
+		bundle := placement.Bundle
+		if a := placement.Attribution; a != nil {
+			row.Attribution = &MachineAttribution{SessionID: a.SessionID, Project: a.Project, Proof: a.Proof}
 		}
 		if row.Attribution != nil {
 			row.SessionID = row.Attribution.SessionID
@@ -147,7 +106,7 @@ func MCPPileupText(p derive.MCPPileup) string {
 
 // MCPCommandSummary is shared by CLI, TUI and web roll-ups.
 func MCPCommandSummary(c derive.MCPCommand) string {
-	text := fmt.Sprintf("%s  %d servers · %s", c.Name, c.Count, humanBytes(c.Memory))
+	text := fmt.Sprintf("%s  %s · %s", c.Name, MCPProcessLabel(c), humanBytes(c.Memory))
 	if marker := MCPCommandTrendMarker(c); marker != "" {
 		text += " · " + marker
 	}
@@ -177,7 +136,7 @@ func MCPCommandTrendMarker(c derive.MCPCommand) string {
 
 func MCPTrendMarker(t derive.MCPTrend) string {
 	if t.State == "leaking" {
-		return fmt.Sprintf("leaking ↑ %.2g/h since %s", t.RatePerHour, t.FirstSample.In(time.Local).Format("15:04"))
+		return fmt.Sprintf("observed growth ↑ %.2g/h since %s", t.RatePerHour, t.FirstSample.In(time.Local).Format("15:04"))
 	}
 	return t.State
 }
@@ -235,4 +194,20 @@ func machineProjectSessions(sessions []model.Session, repos []model.Repo, worktr
 		}
 	}
 	return sessions
+}
+
+func MachineSessionApps(v MachineView) []MachineApp {
+	apps := make([]MachineApp, 0, min(10, len(v.SessionCosts)))
+	for _, c := range v.SessionCosts[:min(10, len(v.SessionCosts))] {
+		name := fmt.Sprintf("%s · %s · session #%d", c.Adapter, c.Project, c.SessionID)
+		if c.StartedFrom != "" {
+			name += " · started from " + c.StartedFrom
+		}
+		a := MachineApp{ID: fmt.Sprintf("session:%d", c.SessionID), Name: name, Memory: c.Memory, CPUPercent: c.CPUPercent, Processes: c.Processes}
+		for _, p := range c.Processes {
+			a.MemoryMeasure = mergeMeasure(a.MemoryMeasure, p.MemoryMeasure)
+		}
+		apps = append(apps, a)
+	}
+	return apps
 }

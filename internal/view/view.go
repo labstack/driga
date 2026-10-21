@@ -288,6 +288,11 @@ type MemoryRow struct {
 
 // MachineView contains host totals, whole-machine app rankings, and agent role totals.
 type MachineView struct {
+	AgentShare     AgentShare    `json:"agent_share"`
+	SessionCosts   []SessionCost `json:"session_costs"`
+	AgentNoSession []MachineApp  `json:"agent_processes_without_session"`
+	LikelyAgent    []MachineApp  `json:"likely_agent_work"`
+	OtherApps      MachineApp    `json:"other_apps"`
 	MachineFresh
 	MCPServers derive.MCPServerView `json:"mcp_servers"`
 	TopMemory  []MachineApp         `json:"top_memory"`

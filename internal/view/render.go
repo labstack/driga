@@ -185,20 +185,27 @@ func Render(w io.Writer, v any, opts RenderOpts) error {
 		if len(hosts) == 0 {
 			hosts = []MachineView{x}
 		}
-		ids := []string{}
 		for _, h := range hosts {
-			ids = append(ids, h.MachineID)
-		}
-		multi := multipleMachines(ids)
-		fmt.Fprint(tw, machineHeading(multi))
-		fmt.Fprintln(tw, "MEMORY\tCOMPRESSED\tSWAP\tLOAD (1/5/15)\tCORES\tDISK FREE\tPRESSURE LEVEL / FREE")
-		for _, h := range hosts {
-			s := h.Sample
-			fmt.Fprint(tw, machinePrefix(multi, h.MachineID, h.MachineFresh))
-			fmt.Fprintf(tw, "%s/%s\t%s\t%s/%s\t%.1f/%.1f/%.1f\t%d\t%s\t%s / %.1f\n", humanBytes(s.MemUsed), humanBytes(s.MemTotal), humanBytes(s.MemCompressed), humanBytes(s.SwapUsed), humanBytes(s.SwapTotal), s.Load1, s.Load5, s.Load15, s.Cores, humanBytes(s.DiskFree), s.PressureLevel, s.PressureFree)
-		}
-		for _, h := range hosts {
-			fmt.Fprintln(tw, "MCP servers ·", cell(h.MachineName))
+			if len(hosts) > 1 {
+				fmt.Fprintln(tw, "Machine ·", cell(h.MachineName))
+			}
+			fmt.Fprintln(tw, cell(MachineSummary(h)))
+			fmt.Fprintf(tw, "Memory measure: %s · %s\n", h.AgentShare.MemoryMeasure, FootprintNote)
+			apps := func(rows []MachineApp, processes bool) {
+				for _, a := range rows {
+					fmt.Fprintf(tw, "%s\t%s\t%s\t%.1f%% CPU\n", cell(a.Name), humanBytes(a.Memory), a.MemoryMeasure, a.CPUPercent)
+					if processes {
+						for _, p := range a.Processes {
+							fmt.Fprintf(tw, "  PID %d %s\t%s\t%.1f%% CPU\t%s\n", p.PID, cell(p.Exe), humanBytes(p.Memory), p.CPUPercent, cell(AttributionText(p.Attribution)))
+						}
+					}
+				}
+			}
+			fmt.Fprintln(tw, "Sessions by cost")
+			apps(MachineSessionApps(h), true)
+			fmt.Fprintln(tw, "Agent processes without a session")
+			apps(h.AgentNoSession, false)
+			fmt.Fprintln(tw, "MCP servers")
 			for _, c := range h.MCPServers.Commands {
 				fmt.Fprintln(tw, cell(MCPCommandSummary(c)))
 			}
@@ -210,25 +217,28 @@ func Render(w io.Writer, v any, opts RenderOpts) error {
 					fmt.Fprintln(tw, cell(line))
 				}
 			}
+			if len(h.LikelyAgent) > 0 {
+				fmt.Fprintln(tw, "Likely agent work (shared with editor)")
+				apps(h.LikelyAgent, false)
+			}
+			other := MachineOtherApps(h)
+			fmt.Fprintf(tw, "Other apps · %s (%s) · %.1f%% CPU\n", humanBytes(other.Memory), other.MemoryMeasure, other.CPUPercent)
 			for _, rank := range []struct {
 				name string
 				apps []MachineApp
 			}{{"Top 10 apps by memory", h.TopMemory}, {"Top 10 apps by CPU", h.TopCPU}} {
-				fmt.Fprintln(tw, rank.name)
-				if rank.name == "Top 10 apps by memory" {
-					fmt.Fprintln(tw, "("+FootprintNote+")")
-				}
-				fmt.Fprintln(tw, "APP\tMEM\tMEASURE\tCPU")
-				for _, app := range rank.apps {
-					fmt.Fprintf(tw, "%s\t%s\t%s\t%.1f%%\n", cell(app.Name), humanBytes(app.Memory), app.MemoryMeasure, app.CPUPercent)
-				}
+				fmt.Fprintln(tw, "  "+rank.name)
+				apps(rank.apps, false)
 			}
-		}
-		fmt.Fprint(tw, machineHeading(multi))
-		fmt.Fprintln(tw, "AGENT\tROLE\tMEM")
-		for _, m := range x.Memory {
-			fmt.Fprint(tw, machinePrefix(multi, m.MachineID, m.MachineFresh))
-			fmt.Fprintf(tw, "%s\t%s\t%s\n", cell(m.Agent), cell(m.Role), humanBytes(m.RSS))
+			s := h.Sample
+			fmt.Fprintln(tw, "Vitals detail")
+			fmt.Fprintln(tw, "MEMORY\tCOMPRESSED\tSWAP\tLOAD (1/5/15)\tCORES\tDISK FREE\tPRESSURE LEVEL / FREE")
+			fmt.Fprintf(tw, "%s/%s\t%s\t%s/%s\t%.1f/%.1f/%.1f\t%d\t%s\t%s / %.1f\n", humanBytes(s.MemUsed), humanBytes(s.MemTotal), humanBytes(s.MemCompressed), humanBytes(s.SwapUsed), humanBytes(s.SwapTotal), s.Load1, s.Load5, s.Load15, s.Cores, humanBytes(s.DiskFree), s.PressureLevel, s.PressureFree)
+			fmt.Fprintln(tw, "Agent memory by role")
+			fmt.Fprintln(tw, "AGENT\tROLE\tMEM")
+			for _, r := range h.Memory {
+				fmt.Fprintf(tw, "%s\t%s\t%s\n", cell(r.Agent), cell(r.Role), humanBytes(r.RSS))
+			}
 		}
 
 	default:

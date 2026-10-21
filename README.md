@@ -106,12 +106,15 @@ queries never acknowledges inbox items. Use `x`/Space in Inbox or `driga inbox a
 acknowledgments are queued for the next collection. Orphan kills recheck process
 identity and the descendant set immediately before signaling; young candidates
 are refused. `--force` requires a second confirmation before SIGKILL.
-The Machine tab and web Machine page show the top ten apps by memory and CPU,
-with expandable processes and proven session attribution. `driga machine --json`
-and MCP `get_machine` return the same data. Low-disk and sustained critical-memory
-warnings use the existing inbox and desktop notifier; notification clicks open
-`driga top --tab machine`. See [machine health](docs/machine-health.md) for memory
-measures, thresholds, attribution proofs, and platform limits.
+The Machine tab and web Machine page lead with agents' memory and CPU, session
+costs, agent processes without a session, and likely work shared with an editor.
+Sessions expand into processes with attribution proofs and their launch app;
+Other apps starts collapsed around the existing top-ten memory and CPU lists.
+`driga machine --json` and MCP `get_machine` add the same buckets to schema 2.
+Low-disk and sustained critical-memory-pressure warnings open Machine, with
+pressure text naming agents' share and observed growth. Open it directly with
+`driga top --tab machine`. See [machine health](docs/machine-health.md) for rules,
+measurements, JSON fields, and deferred editor integrations.
 
 Remote orphans cannot be killed here; run the kill command on their machine.
 Remote inbox acknowledgments require the peer's `--ack` grant; unreachable peers

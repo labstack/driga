@@ -26,6 +26,9 @@ func TestMachineGoldenFrames(t *testing.T) {
 				src := fixture()
 				sampleApp := view.MachineApp{ID: "/Applications/Browser.app", Name: "Browser", Memory: 2 << 30, CPUPercent: 70, MemoryMeasure: "physical_footprint", Processes: []view.MachineProcess{{Proc: model.Proc{PID: 42, Exe: "/bin/worker", MemoryMeasure: "physical_footprint", CPUPercent: 70}, Memory: 2 << 30, Attribution: &view.MachineAttribution{SessionID: 251, Project: "fixture", Proof: "parent_chain"}}}}
 				src.snap.Machine = view.MachineView{Sample: model.MachineSample{PressureLevel: "critical", MemUsed: 4 << 30, MemCompressed: 1 << 30, MemTotal: 8 << 30, SwapUsed: 1 << 30, SwapTotal: 2 << 30, DiskFree: 12 << 30, Cores: 4}, TopMemory: []view.MachineApp{sampleApp}, TopCPU: []view.MachineApp{sampleApp}}
+				src.snap.Machine.AgentShare = view.AgentShare{Memory: 2 << 30, MachineMemory: 4 << 30, MemoryMeasure: "physical_footprint", CPUPercent: 70, Processes: 1, MCPServers: 3}
+				src.snap.Machine.SessionCosts = []view.SessionCost{{SessionID: 251, Adapter: "claude", Project: "fixture", StartedFrom: "Editor", Memory: 2 << 30, CPUPercent: 70, Processes: sampleApp.Processes}}
+				src.snap.Machine.OtherApps = view.MachineApp{ID: "other", Name: "Other apps", Memory: 1 << 30, MemoryMeasure: "rss"}
 				src.snap.Machine.Sample.TS = src.snap.ObservedAt
 				at := src.snap.ObservedAt
 				ps := []model.Proc{
@@ -107,5 +110,36 @@ func TestMachineWarningJumpStaysInCurrentTUI(t *testing.T) {
 	}
 	if m.tab != 4 {
 		t.Fatal("did not switch to Machine")
+	}
+}
+
+func TestMachineViewOlderPeerFields(t *testing.T) {
+	src := fixture()
+	src.snap.Machine = view.MachineView{Machines: []view.MachineView{{MachineID: "peer", TopMemory: []view.MachineApp{{ID: "legacy", Name: "Legacy", Memory: 2 << 30}}}}}
+	m := setup(t, src, Options{InitialTab: "machine"}).(*app)
+	m.rebuild()
+	var text strings.Builder
+	otherKey := ""
+	for _, r := range m.rows {
+		line := strings.Join(r.cells, " ")
+		text.WriteString(line)
+		if strings.Contains(line, "Other apps") {
+			otherKey = r.key
+		}
+	}
+	if !strings.Contains(text.String(), "Other apps") || !strings.Contains(text.String(), "2.0G") {
+		t.Fatal(text.String())
+	}
+	if strings.Contains(text.String(), "Legacy") {
+		t.Fatal("Other apps started expanded")
+	}
+	m.expanded[otherKey] = true
+	m.rebuild()
+	text.Reset()
+	for _, r := range m.rows {
+		text.WriteString(strings.Join(r.cells, " "))
+	}
+	if !strings.Contains(text.String(), "Legacy") {
+		t.Fatal(text.String())
 	}
 }

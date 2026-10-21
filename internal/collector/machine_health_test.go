@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/labstack/driga/internal/derive"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/store"
 )
@@ -197,5 +198,31 @@ func TestMachineViewReusesCollectorProcessSample(t *testing.T) {
 	}
 	if !seen {
 		t.Fatal("worker missing")
+	}
+}
+
+func TestPressureSummaryLeadsWithAgents(t *testing.T) {
+	ps := []model.Proc{{PID: 1, Cmdline: "claude", RSS: 4 << 30}, {PID: 2, Exe: "/bin/browser", RSS: 12 << 30}}
+	text := memoryPressureSummary([][]model.Proc{ps}, nil, time.Now(), nil)
+	if !strings.HasPrefix(text, "Critical memory pressure for two samples. Agents hold 4.0 GiB of 16.0 GiB in use (25%)") {
+		t.Fatal(text)
+	}
+}
+func TestPressureSummaryAgentsSmallShare(t *testing.T) {
+	ps := []model.Proc{{PID: 1, Exe: "/bin/editor", RSS: 16 << 30}}
+	text := memoryPressureSummary([][]model.Proc{ps}, nil, time.Now(), nil)
+	if !strings.Contains(text, "Agents hold none of the 16.0 GiB in use; other apps are the cause.") {
+		t.Fatal(text)
+	}
+}
+func TestPressureSummaryObservedGrowthWording(t *testing.T) {
+	at := time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC)
+	ps := []model.Proc{{PID: 1, Cmdline: "claude", StartTime: at}, {PID: 2, PPID: 1, Cmdline: "node weather-mcp", StartTime: at.Add(time.Second), RSS: 1 << 30}}
+	servers := derive.MCPServers(ps, nil, at.Add(time.Hour))
+	c := servers.Commands[0]
+	trends := []derive.MCPTrend{{Key: c.Key, Name: c.Name, Host: derive.MCPHost{PID: 1, StartedAt: at, Name: "claude"}, State: "leaking", Memory: 1 << 30, RatePerHour: 1, FirstSample: at, LastSample: at.Add(time.Hour)}}
+	text := memoryPressureSummary([][]model.Proc{ps}, nil, at.Add(time.Hour), trends)
+	if strings.Contains(strings.ToLower(text), "leak") || !strings.Contains(text, "Largest observed growth:") {
+		t.Fatal(text)
 	}
 }

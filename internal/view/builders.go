@@ -489,8 +489,11 @@ func machineLocal(r Reader, f Filter, now time.Time) (MachineView, error) {
 	if err != nil {
 		return v, err
 	}
-	v.TopMemory, v.TopCPU = machineApps(procs, machineProjectSessions(ss, repos, worktrees))
+	ss = machineProjectSessions(ss, repos, worktrees)
+	placements := derive.PlaceProcesses(procs, ss, nil)
+	v.TopMemory, v.TopCPU = machineAppsPlaced(procs, placements)
 	v.MCPServers = derive.MCPServers(procs, nil, now)
+	buildAgentShare(&v, procs, ss, placements)
 	trends := derive.NewMCPTrendBuilder()
 	if err := r.ScanMCPMinutes(now, func(s model.MCPMinute) error { trends.Add(s); return nil }); err != nil {
 		return v, err
