@@ -1,4 +1,9 @@
-# Driga
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="internal/web/static/brand/lockup-white.svg">
+    <img src="internal/web/static/brand/lockup.svg" alt="Driga" width="300" height="107">
+  </picture>
+</h1>
 
 **See what your coding agents are doing, and what needs you.**
 
@@ -141,6 +146,7 @@ for paths, capture settings, and the fleet sharing table.
 
 ## Documentation
 
+- [Brand assets](docs/brand.html): Murmur logos, icons, and usage guidance.
 - [Usage and configuration](docs/usage.md): commands, hooks, service, fleet,
   cleanup, Chat, web dashboard, MCP, and OTLP.
 - [Machine health](docs/machine-health.md): attribution, measurements, trends,
