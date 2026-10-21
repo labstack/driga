@@ -3,12 +3,12 @@ package cli
 import (
 	"context"
 	"fmt"
+	"github.com/labstack/driga/internal/pathx"
+	"github.com/labstack/driga/internal/secfile"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"sort"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/labstack/driga/internal/collector"
@@ -106,7 +106,7 @@ func (c AgentCmd) Run(g *Globals) error {
 			}
 			ok := false
 			for _, repo := range repos {
-				if repo.Path == f.Project && v.Session.RepoID != nil && *v.Session.RepoID == repo.ID {
+				if pathx.Equal(repo.Path, f.Project) && v.Session.RepoID != nil && *v.Session.RepoID == repo.ID {
 					ok = true
 				}
 			}
@@ -159,7 +159,7 @@ func runRead(g *Globals, base view.Filter, project string, build readBuilder) er
 	if _, err := parseSince(g.Since, time.Now()); err != nil {
 		return err
 	}
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	ctx, stop := notifyContext(context.Background())
 	defer stop()
 	for {
 		if g.Watch > 0 {
@@ -250,10 +250,10 @@ func readOnce(ctx context.Context, g *Globals, base view.Filter, project string,
 
 func touchHeartbeat() error {
 	dir := config.DataDir()
-	if err := os.MkdirAll(dir, 0700); err != nil {
+	if err := secfile.MkdirPrivate(dir); err != nil {
 		return err
 	}
-	f, err := os.OpenFile(filepath.Join(dir, "viewer.heartbeat"), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
+	f, err := secfile.OpenFile(filepath.Join(dir, "viewer.heartbeat"), os.O_CREATE|os.O_WRONLY|os.O_TRUNC)
 	if err != nil {
 		return err
 	}
@@ -329,10 +329,7 @@ func resolveProject(r view.Reader, input string) (string, error) {
 	}
 }
 
-func pathWithin(path, root string) bool {
-	rel, err := filepath.Rel(root, path)
-	return err == nil && !filepath.IsAbs(rel) && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
-}
+func pathWithin(path, root string) bool { return pathx.Within(path, root) }
 
 // FlowCmd reads a family; omitted ID selects the newest live interactive session.
 type FlowCmd struct {

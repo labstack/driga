@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/labstack/driga/internal/pathx"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -923,15 +924,19 @@ func mergeObs(dst *model.SessionObs, src model.SessionObs) {
 	if src.ParentExternalID != "" {
 		dst.ParentExternalID = src.ParentExternalID
 	}
-	// One identity per path (Review Focus 3): /tmp vs /private/tmp, /var vs
-	// /private/var and symlinked repos must compare equal to git's paths.
-	if src.Cwd != "" {
+	// Preserve the historical Unix canonical identity for local symlinks.
+	// Windows observations and foreign paths retain their recorded spelling;
+	// comparisons/discovery normalize separate keys, not the stored observation.
+	if src.Cwd != "" && runtime.GOOS != "windows" && !pathx.WindowsStyle(src.Cwd) {
 		src.Cwd = gitscan.NormalizePath(src.Cwd)
 	}
 	if len(src.FilesTouched) > 0 {
 		files := make([]model.FileTouch, len(src.FilesTouched))
 		for i, f := range src.FilesTouched {
-			files[i] = model.FileTouch{Path: gitscan.NormalizePath(f.Path), TS: f.TS}
+			if runtime.GOOS != "windows" && !pathx.WindowsStyle(f.Path) {
+				f.Path = gitscan.NormalizePath(f.Path)
+			}
+			files[i] = f
 		}
 		src.FilesTouched = files
 	}
@@ -1030,7 +1035,7 @@ func linkCodex(ss []model.Session, procs []model.Proc, plat platform.Platform) {
 			if sessionCwd == "" {
 				sessionCwd = gitscan.NormalizePath(s.Cwd)
 			}
-			if cwd(j) != sessionCwd {
+			if !pathx.RecordedEqual(cwd(j), sessionCwd) {
 				continue
 			}
 			if best == nil || p.StartTime.After(best.StartTime) || p.StartTime.Equal(best.StartTime) && p.PID < best.PID {
@@ -1071,7 +1076,7 @@ func mapRepos(tx *store.Tx, ss []model.Session) error {
 		best := -1
 		for _, w := range ws {
 			path := w.Path
-			if len(path) > best && (cwd == path || strings.HasPrefix(cwd, strings.TrimSuffix(path, string(filepath.Separator))+string(filepath.Separator))) {
+			if len(path) > best && pathx.RecordedWithin(cwd, path) {
 				repo, worktree := w.RepoID, w.ID
 				s.RepoID, s.WorktreeID = &repo, &worktree
 				best = len(path)

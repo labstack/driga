@@ -6,10 +6,8 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"runtime"
-	"syscall"
 	"time"
 
 	"github.com/labstack/driga/internal/collector"
@@ -40,7 +38,7 @@ func (c CollectCmd) Run(g *Globals) error {
 	if err != nil {
 		return err
 	}
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	ctx, stop := notifyContext(context.Background())
 	defer stop()
 	if c.CPUProfile != "" {
 		stopProfile, err := startCPUProfile(c.CPUProfile, c.ProfileFor)

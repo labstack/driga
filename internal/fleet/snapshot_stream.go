@@ -7,8 +7,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/labstack/driga/internal/pathx"
 	"io"
-	"net/url"
 	"path/filepath"
 	"time"
 
@@ -19,8 +19,7 @@ import (
 // streamSnapshot keeps the cursor, reference closure and row encoder inside
 // one SQLite WAL read transaction on a dedicated read-only connection.
 func (s *Server) streamSnapshot(ctx context.Context, w io.Writer) error {
-	u := url.URL{Scheme: "file", Path: filepath.Join(s.dataDir, "driga.db")}
-	db, err := sql.Open("sqlite", u.String()+"?mode=ro&_pragma=busy_timeout(5000)")
+	db, err := sql.Open("sqlite", pathx.FileURL(filepath.Join(s.dataDir, "driga.db"))+"?mode=ro&_pragma=busy_timeout(5000)")
 	if err != nil {
 		return err
 	}

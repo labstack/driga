@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -16,6 +17,10 @@ import (
 )
 
 func TestCodexInstallWhenUnset(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix permission-bit contract; Windows uses ACLs")
+	}
+
 	path := filepath.Join(t.TempDir(), "config.toml")
 	before := "# keep in backup\nmodel = 'example'\n[custom]\ncount = 9007199254740993\n"
 	writeFixture(t, path, before)
@@ -52,6 +57,9 @@ func TestCodexInstallWhenUnset(t *testing.T) {
 // permission hook: the hook is a separate table, so install appends it and
 // leaves the foreign notify bytes alone, and uninstall restores the original.
 func TestCodexInstallKeepsForeignNotify(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("hook installation is not supported on Windows in phase 1")
+	}
 	for _, value := range []string{`["x", "y"]`, `[]`, `"custom"`, `["/opt/driga", "hook", "codex", "different"]`} {
 		t.Run(value, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "config.toml")
@@ -99,6 +107,10 @@ func TestCodexUninstallOnlyIfOurs(t *testing.T) {
 }
 
 func TestCodexDryRunAndMissingFile(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix permission-bit contract; Windows uses ACLs")
+	}
+
 	path := filepath.Join(t.TempDir(), ".codex", "config.toml")
 	d, err := hooks.CodexInstall(path, "/opt/driga", true, testNow)
 	if err != nil || !d.Changed {
@@ -145,8 +157,12 @@ func runHooksCLI(t *testing.T, input string, args ...string) string {
 }
 
 func TestHooksCLIConfirmationAndStatus(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("hook installation is not supported on Windows in phase 1")
+	}
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	t.Setenv("CODEX_HOME", "")
 	claude := filepath.Join(home, ".claude", "settings.json")
 	codex := filepath.Join(home, ".codex", "config.toml")
@@ -187,8 +203,12 @@ func TestHooksCLIConfirmationAndStatus(t *testing.T) {
 }
 
 func TestHooksCLICodexForeignNotify(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("hook installation is not supported on Windows in phase 1")
+	}
 	home, codexHome := t.TempDir(), t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	t.Setenv("CODEX_HOME", codexHome)
 	path := filepath.Join(codexHome, "config.toml")
 	before := "notify = ['another-tool']\n"

@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -16,6 +17,10 @@ import (
 )
 
 func TestRunExclusiveLock(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix permission-bit contract; Windows uses ACLs")
+	}
+
 	d, _, _, a := setup(t)
 	dir := config.DataDir()
 	ready := make(chan struct{})
@@ -127,6 +132,10 @@ func TestDaemonSchedule(t *testing.T) {
 // Running reads the PID the lock holder wrote; it never takes the lock, so it
 // cannot make a collector that is starting at the same moment fail.
 func TestRunningReadsLockOwner(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix true executable fixture")
+	}
+
 	dir := t.TempDir()
 	if Running(dir) {
 		t.Fatal("no lock file reported running")

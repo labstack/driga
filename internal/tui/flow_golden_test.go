@@ -75,7 +75,7 @@ func TestFlowGoldenFrames(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if got != string(want) {
+				if got != strings.ReplaceAll(string(want), "\r\n", "\n") {
 					t.Fatalf("golden drift: %s", path)
 				}
 			})

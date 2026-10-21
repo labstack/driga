@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -52,6 +53,10 @@ var (
 )
 
 func (c OrphansKillCmd) Run(g *Globals) error {
+	if runtime.GOOS == "windows" {
+		return platform.ErrWindowsAction
+	}
+
 	if err := actionSelection(c.ID, c.All); err != nil {
 		return err
 	}

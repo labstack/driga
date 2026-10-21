@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/labstack/driga/internal/secfile"
 	"io"
 	"os"
 	"os/exec"
@@ -200,13 +201,13 @@ func configTextSources(c config.Config, commented bool, chosen map[string]bool, 
 
 func writeConfig(path, text string) error {
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0700); err != nil {
+	if err := secfile.MkdirPrivate(dir); err != nil {
 		return err
 	}
-	if err := os.Chmod(dir, 0700); err != nil {
+	if err := secfile.Protect(dir); err != nil {
 		return err
 	}
-	f, err := os.CreateTemp(dir, ".config-*")
+	f, err := secfile.CreateTemp(dir, ".config-*")
 	if err != nil {
 		return err
 	}

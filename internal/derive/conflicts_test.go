@@ -1,7 +1,8 @@
 package derive
 
 import (
-	"path/filepath"
+	"github.com/labstack/driga/internal/pathx"
+	"path"
 	"reflect"
 	"strings"
 	"testing"
@@ -14,11 +15,11 @@ func conflictTestSession(id int64, cwd string) model.Session {
 	return model.Session{ID: id, Label: "working", SessionObs: model.SessionObs{Cwd: cwd, Branch: "main"}}
 }
 
-func conflictTestWorktree(path string) (repo, worktree, rel string) {
-	path = filepath.Clean(path)
+func conflictTestWorktree(p string) (repo, worktree, rel string) {
+	p = path.Clean(p)
 	for _, wt := range []string{"/repo/wt1", "/repo/wt2"} {
-		if path == wt || strings.HasPrefix(path, wt+"/") {
-			rel, _ = filepath.Rel(wt, path)
+		if p == wt || strings.HasPrefix(p, wt+"/") {
+			rel, _ = pathx.RecordedRel(wt, p)
 			return "/repo", wt, rel
 		}
 	}
@@ -138,7 +139,7 @@ func TestConflictDeterministic(t *testing.T) {
 	files := map[int64][]model.FileTouch{}
 	for _, s := range sessions {
 		for _, path := range []string{"b", "a"} {
-			files[s.ID] = append(files[s.ID], model.FileTouch{Path: filepath.Join(s.Cwd, path), TS: now})
+			files[s.ID] = append(files[s.ID], model.FileTouch{Path: pathx.RecordedJoin(s.Cwd, path), TS: now})
 		}
 	}
 	want := Conflicts(sessions, files, nil, conflictTestWorktree, now)

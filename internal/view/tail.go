@@ -3,7 +3,7 @@ package view
 import (
 	"crypto/sha256"
 	"fmt"
-	"path/filepath"
+	"github.com/labstack/driga/internal/pathx"
 	"sort"
 	"strings"
 	"time"
@@ -52,7 +52,7 @@ func EventTail(r Reader, scope store.Scope, now time.Time) ([]TailEvent, error) 
 			}
 			project := projectName(session, repos)
 			if project == "" && session.Cwd != "" {
-				project = filepath.Base(session.Cwd)
+				project = pathx.RecordedBase(session.Cwd)
 			}
 			if project != "" {
 				title = project + " · " + title

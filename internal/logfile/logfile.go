@@ -3,12 +3,14 @@ package logfile
 
 import (
 	"errors"
+	"github.com/labstack/driga/internal/filelock"
+	"github.com/labstack/driga/internal/secfile"
 	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
-	"syscall"
 )
 
 const MaxSize int64 = 10 << 20
@@ -34,18 +36,24 @@ type Writer struct {
 func (w *Writer) Write(p []byte) (int, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	if err := os.MkdirAll(filepath.Dir(w.Path), 0700); err != nil {
+	if err := secfile.MkdirPrivate(filepath.Dir(w.Path)); err != nil {
 		return 0, err
 	}
-	f, err := os.OpenFile(w.Path, os.O_CREATE|os.O_APPEND|os.O_RDWR, 0600)
+	flags := os.O_CREATE | os.O_APPEND | os.O_RDWR
+	if runtime.GOOS == "windows" {
+		// O_APPEND drops FILE_WRITE_DATA on Windows, which Truncate needs.
+		// The file lock serializes seeking and writing with other Writers.
+		flags &^= os.O_APPEND
+	}
+	f, err := secfile.OpenFile(w.Path, flags)
 	if err != nil {
 		return 0, err
 	}
 	defer f.Close()
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+	if err := filelock.Lock(f, false); err != nil {
 		return 0, err
 	}
-	defer syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+	defer filelock.Unlock(f)
 	info, err := f.Stat()
 	if err != nil {
 		return 0, err
@@ -55,7 +63,7 @@ func (w *Writer) Write(p []byte) (int, error) {
 		p = p[len(p)-int(MaxSize):]
 	}
 	if info.Size()+int64(len(p)) > MaxSize {
-		old, err := os.OpenFile(w.Path+".1", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
+		old, err := secfile.OpenFile(w.Path+".1", os.O_CREATE|os.O_TRUNC|os.O_WRONLY)
 		if err != nil {
 			return 0, err
 		}
@@ -64,6 +72,11 @@ func (w *Writer) Write(p []byte) (int, error) {
 			return 0, err
 		}
 		if err := f.Truncate(0); err != nil {
+			return 0, err
+		}
+	}
+	if runtime.GOOS == "windows" {
+		if _, err := f.Seek(0, io.SeekEnd); err != nil {
 			return 0, err
 		}
 	}

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -45,7 +46,11 @@ func equal[T any](t *testing.T, want, got T, err error) {
 }
 
 func TestMigrateAndRoundTrip(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "data ?#", "driga.db")
+	name := "data ?#"
+	if runtime.GOOS == "windows" {
+		name = "data # ü"
+	}
+	path := filepath.Join(t.TempDir(), name, "driga.db")
 	s := openTest(t, path, ReadWrite)
 	now := time.Date(2026, 10, 18, 12, 0, 0, 123456789, time.UTC)
 	if len(s.MachineID()) != 36 {
@@ -358,6 +363,10 @@ func TestPruneRetention(t *testing.T) {
 }
 
 func TestFilePermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix permission-bit contract; Windows uses ACLs")
+	}
+
 	for _, existing := range []bool{false, true} {
 		t.Run(fmt.Sprint(existing), func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "data", "driga.db")

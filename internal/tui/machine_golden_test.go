@@ -89,7 +89,7 @@ func TestMachineGoldenFrames(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if got != string(want) {
+				if got != strings.ReplaceAll(string(want), "\r\n", "\n") {
 					t.Fatal("golden drift", name)
 				}
 				m.openDetail(m.rows[first])

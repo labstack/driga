@@ -9,6 +9,7 @@ import (
 
 func TestCleanupConfig(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	path := filepath.Join(t.TempDir(), "config.toml")
 	if err := os.WriteFile(path, []byte("[cleanup]\nworktree_idle = '48h'\nlow_disk_percent = 5\nlow_disk_bytes = '2GiB'\nregenerable = ['node_modules/', 'cache/generated/']\n"), 0600); err != nil {
 		t.Fatal(err)

@@ -7,10 +7,15 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"testing"
 )
 
 func procFixture(t *testing.T) string {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix symlink fixture; Windows watch tests require no Developer Mode or admin rights")
+	}
+
 	t.Helper()
 	root := t.TempDir()
 	if err := os.CopyFS(root, os.DirFS("testdata/proc")); err != nil {
@@ -111,6 +116,10 @@ func TestParseProcNetTCPAndUnix(t *testing.T) {
 }
 
 func TestLinuxExternalPeers(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix symlink fixture; Windows watch tests require no Developer Mode or admin rights")
+	}
+
 	root := procFixture(t)
 	fs := procFS{root: root, unixPeers: func(context.Context) map[uint64]uint64 {
 		// A hand-written UNIX_DIAG_PEER snapshot for the socket pair.

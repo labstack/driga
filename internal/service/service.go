@@ -3,6 +3,7 @@ package service
 
 import (
 	"errors"
+	"github.com/labstack/driga/internal/platform"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -16,6 +17,9 @@ import (
 func LogPath() string { return logPathForOS(runtime.GOOS) }
 
 func logPathForOS(goos string) string {
+	if goos == "windows" {
+		return filepath.Join(config.DataDir(), "collector.log")
+	}
 	if goos == "linux" {
 		root := os.Getenv("XDG_STATE_HOME")
 		if !filepath.IsAbs(root) {
@@ -70,6 +74,9 @@ func InstallHint(goos string) string {
 
 // New creates a control handle; installation and startup remain explicit actions.
 func New(binPath string) (ks.Service, error) {
+	if runtime.GOOS == "windows" {
+		return nil, platform.ErrWindowsAction
+	}
 	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
 		return nil, errors.New("driga service requires macOS launchd or Linux systemd")
 	}

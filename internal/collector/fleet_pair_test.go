@@ -14,7 +14,7 @@ import (
 
 func TestRemovePeerPurgesThroughCollector(t *testing.T) {
 	d, _, _, _ := setup(t)
-	dir, err := os.MkdirTemp("/tmp", "driga-purge-")
+	dir, err := os.MkdirTemp("", "driga-purge-")
 	if err != nil {
 		t.Fatal(err)
 	}

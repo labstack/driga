@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"os/exec"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -56,6 +57,13 @@ func TestWatchJSONIsCompactNDJSON(t *testing.T) {
 		}
 	}
 	// This is the child started by this test, never a collector or unrelated PID.
+	if runtime.GOOS == "windows" {
+		if err := cmd.Process.Kill(); err != nil {
+			t.Fatal(err)
+		}
+		_ = cmd.Wait()
+		return
+	}
 	if err = cmd.Process.Signal(os.Interrupt); err != nil {
 		t.Fatal(err)
 	}

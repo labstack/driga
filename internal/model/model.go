@@ -29,6 +29,8 @@ type Machine struct {
 
 // Proc is one process in a snapshot.
 type Proc struct {
+	// Partial means one or more live Windows process queries were denied.
+	Partial       bool      `json:"partial,omitempty"`
 	TTY           string    `json:"tty,omitempty"`
 	MachineID     string    `json:"machine_id"`
 	PID           int32     `json:"pid"`
@@ -56,6 +58,9 @@ type Proc struct {
 
 // MachineSample is one machine-health reading.
 type MachineSample struct {
+	// Windows commit accounting is not pagefile occupancy.
+	CommitLimit uint64 `json:"commit_limit_bytes,omitempty"`
+	CommitUsed  uint64 `json:"commit_used_bytes,omitempty"`
 	// DiskTotal is live inspection data for the collector's low_disk threshold.
 	// It is not a new persisted column.
 	DiskTotal     uint64    `json:"-"`
@@ -69,10 +74,11 @@ type MachineSample struct {
 	DiskFree      uint64    `json:"disk_free_bytes"`
 	PressureLevel string    `json:"pressure_level"`
 	PressureFree  float64   `json:"pressure_free"`
-	Load1         float64   `json:"load1"`
-	Load5         float64   `json:"load5"`
-	Load15        float64   `json:"load15"`
-	Cores         int       `json:"cores"`
+	// Negative load values mean unavailable (Windows); zero is a real reading.
+	Load1  float64 `json:"load1"`
+	Load5  float64 `json:"load5"`
+	Load15 float64 `json:"load15"`
+	Cores  int     `json:"cores"`
 	// PsiMemSome10 is Linux PSI memory "some avg10"; nil when unavailable.
 	PsiMemSome10 *float64 `json:"psi_mem_some10,omitempty"`
 }

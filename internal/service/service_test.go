@@ -1,15 +1,21 @@
 package service
 
 import (
+	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 )
 
 func TestServiceConfig(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix service or hook path contract; Windows has watch/refusal tests")
+	}
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	c := configForOS("/opt/driga", "darwin")
 	if c.Name != "run.driga.collector" || c.DisplayName != "driga collector" || c.Executable != "/opt/driga" || !reflect.DeepEqual(c.Arguments, []string{"collect"}) {
 		t.Fatalf("unexpected config: %+v", c)
@@ -27,8 +33,12 @@ func TestServiceConfig(t *testing.T) {
 }
 
 func TestServiceConfigLinux(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix service or hook path contract; Windows has watch/refusal tests")
+	}
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	t.Setenv("XDG_DATA_HOME", filepath.Join(home, "xdg-data"))
 	t.Setenv("XDG_STATE_HOME", filepath.Join(home, "xdg-state"))
 	c := configForOS("/opt/driga", "linux")
@@ -59,6 +69,7 @@ func TestServiceConfigLinux(t *testing.T) {
 
 func TestServiceCarriesConfigurationEnvironment(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	t.Setenv("DRIGA_CAPTURE_TEXT", "snippets")
 	t.Setenv("DRIGA_SUMMARIES_ENABLED", "true")
 	t.Setenv("DRIGA_INTERNAL", "1")
@@ -82,6 +93,7 @@ func TestServiceCarriesConfigurationEnvironment(t *testing.T) {
 // silently and every jump falls back to a resume command.
 func TestServiceCarriesPath(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	t.Setenv("PATH", "/opt/tools/bin:/usr/bin:/bin")
 	t.Setenv("TMUX_TMPDIR", "/run/user/tmux")
 	for _, goos := range []string{"darwin", "linux"} {

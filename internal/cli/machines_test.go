@@ -11,6 +11,7 @@ import (
 	"github.com/labstack/driga/internal/store"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -80,6 +81,10 @@ func TestProjectDotIsLocal(t *testing.T) {
 	}
 }
 func TestKillRefusesRemoteOrphan(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix path or action contract; Windows phase 1 has dedicated watch/refusal tests")
+	}
+
 	readEnv(t)
 	s := machineDB(t, "/code/api")
 	if e := s.Tx(context.Background(), func(tx *store.Tx) error { return tx.ReplaceOrphans(nil) }); e != nil {

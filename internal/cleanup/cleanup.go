@@ -7,16 +7,19 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/labstack/driga/internal/secfile"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"time"
 
 	"github.com/labstack/driga/internal/config"
 	"github.com/labstack/driga/internal/logfile"
 	"github.com/labstack/driga/internal/model"
+	"github.com/labstack/driga/internal/pathx"
 	"github.com/labstack/driga/internal/platform"
 	"github.com/labstack/driga/internal/signatures"
 	"github.com/labstack/driga/internal/store"
@@ -104,8 +107,7 @@ func inside(root, path string) bool {
 	if !filepath.IsAbs(root) || !filepath.IsAbs(path) {
 		return false
 	}
-	rel, err := filepath.Rel(root, path)
-	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+	return pathx.Within(path, root)
 }
 func resolved(path string) string {
 	p, err := filepath.EvalSymlinks(path)
@@ -295,12 +297,16 @@ func verify(ctx context.Context, e Env, c Candidate) (Candidate, error) {
 }
 func Verify(ctx context.Context, e Env, c Candidate) error { _, err := verify(ctx, e, c); return err }
 func Apply(ctx context.Context, e Env, c Candidate, opts ApplyOpts) (r Result, err error) {
+	if runtime.GOOS == "windows" {
+		return Result{}, platform.ErrWindowsAction
+	}
+
 	r = Result{ID: c.ID, DryRun: opts.DryRun}
 	// Prepare the audit sink before any destructive operation. CLI never writes SQLite.
-	if mkErr := os.MkdirAll(e.DataDir, 0700); mkErr != nil {
+	if mkErr := secfile.MkdirPrivate(e.DataDir); mkErr != nil {
 		return r, mkErr
 	}
-	log, openErr := os.OpenFile(filepath.Join(e.DataDir, "cleanup.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
+	log, openErr := secfile.OpenFile(filepath.Join(e.DataDir, "cleanup.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY)
 	if openErr != nil {
 		return r, openErr
 	}

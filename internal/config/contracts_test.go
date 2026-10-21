@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -10,6 +11,7 @@ import (
 
 func TestStrictConfiguration(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	for _, tc := range []struct{ body, key string }{
 		{"typo = true", "typo"}, {"[unknown]\n", "unknown"},
 		{"[fleet]\nlitsen = 'x'", "fleet.litsen"},
@@ -35,6 +37,7 @@ func TestStrictConfiguration(t *testing.T) {
 
 func TestEnvironmentConfiguration(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	p := filepath.Join(t.TempDir(), "config.toml")
 	if err := os.WriteFile(p, []byte("capture_text = 'titles'\n[summaries]\nenabled = false\n"), 0600); err != nil {
 		t.Fatal(err)
@@ -74,8 +77,13 @@ func TestUnknownEnvironmentEvenWithoutFile(t *testing.T) {
 }
 
 func TestConfigAndSpoolXDGPaths(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix path or action contract; Windows phase 1 has dedicated watch/refusal tests")
+	}
+
 	h := t.TempDir()
 	t.Setenv("HOME", h)
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	t.Setenv("DRIGA_CONFIG", "")
 	t.Setenv("DRIGA_SPOOL_DIR", "")
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(h, "config"))
@@ -120,7 +128,7 @@ func TestGeneratedEnvironmentExample(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(b) != EnvExample() {
+	if strings.ReplaceAll(string(b), "\r\n", "\n") != EnvExample() {
 		t.Fatal(".env.example is stale; run go generate ./internal/config")
 	}
 	names := map[string]bool{}
@@ -132,9 +140,14 @@ func TestGeneratedEnvironmentExample(t *testing.T) {
 			names[name] = true
 		}
 	}
-	for _, line := range strings.Split(string(b), "\n") {
-		if line != "" && !strings.HasPrefix(line, "#") {
-			t.Fatal("active template assignment", line)
+	// Git checkouts can use CRLF. Validate both forms, including blank lines.
+	lf := strings.ReplaceAll(string(b), "\r\n", "\n")
+	for _, template := range []string{lf, strings.ReplaceAll(lf, "\n", "\r\n")} {
+		for _, line := range strings.Split(template, "\n") {
+			line = strings.TrimSuffix(line, "\r")
+			if line != "" && !strings.HasPrefix(line, "#") {
+				t.Fatal("active template assignment", line)
+			}
 		}
 	}
 }

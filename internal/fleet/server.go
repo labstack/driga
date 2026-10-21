@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/labstack/driga/internal/secfile"
 	"io"
 	"net"
 	"net/http"
@@ -164,8 +165,11 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 	if err != nil {
 		return err
 	}
-	if !info.Mode().IsRegular() || info.Mode().Perm()&0044 != 0 {
+	if !info.Mode().IsRegular() {
 		return fmt.Errorf("fleet identity key is group/world readable; require mode 0600")
+	}
+	if err := privateKey(filepath.Join(fleetDir, "identity.key"), info); err != nil {
+		return err
 	}
 	if err := atomicPrivateWrite(filepath.Join(fleetDir, "listen"), []byte(ln.Addr().String()+"\n")); err != nil {
 		return err
@@ -527,11 +531,11 @@ func (s *Server) RefreshPresence() error {
 
 func (s *Server) touchHeartbeat() error {
 	path := filepath.Join(s.dataDir, "viewer.heartbeat")
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY, 0600)
+	f, err := secfile.OpenFile(path, os.O_CREATE|os.O_WRONLY)
 	if err != nil {
 		return err
 	}
-	err = f.Chmod(0600)
+	err = secfile.ProtectFile(f)
 	closeErr := f.Close()
 	now := s.now()
 	return errors.Join(err, closeErr, os.Chtimes(path, now, now))

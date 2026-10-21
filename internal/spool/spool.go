@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/labstack/driga/internal/secfile"
 	"io"
 	"math"
 	"os"
@@ -43,11 +44,11 @@ func AppendAll(dir string, evs []model.HookEvent) error {
 	if len(order) == 0 {
 		return nil
 	}
-	if err := os.MkdirAll(dir, 0700); err != nil {
+	if err := secfile.MkdirPrivate(dir); err != nil {
 		return err
 	}
 	for _, path := range order {
-		f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0600)
+		f, err := secfile.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE)
 		if err != nil {
 			return err
 		}

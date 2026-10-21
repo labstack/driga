@@ -1,7 +1,9 @@
 package hooks_test
 
 import (
+	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -9,6 +11,9 @@ import (
 )
 
 func TestCodexPermissionReportOnlyByteRoundTrip(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("hook installation is not supported on Windows in phase 1")
+	}
 	for _, before := range []string{"# bytes\nmodel = 'x' # keep\n[custom]\nvalue = 9007199254740993\n", "model='x'", ""} {
 		p := filepath.Join(t.TempDir(), "config.toml")
 		writeFixture(t, p, before)
@@ -29,8 +34,12 @@ func TestCodexPermissionReportOnlyByteRoundTrip(t *testing.T) {
 }
 
 func TestCodexInboxPositionalInstall(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("hook installation is not supported on Windows in phase 1")
+	}
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	t.Setenv("CODEX_HOME", filepath.Join(home, ".codex"))
 	out := runHooksCLI(t, "", "install", "codex", "--dry-run")
 	if !strings.Contains(out, "PermissionRequest") || strings.Contains(out, "hook claude") {

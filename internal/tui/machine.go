@@ -78,7 +78,7 @@ func (m *app) machineRows(add func(tabRow)) {
 			{"compressed", humanBytes(s.MemCompressed)},
 			{"swap", humanBytes(s.SwapUsed) + "/" + humanBytes(s.SwapTotal)},
 			{"pressure level", s.PressureLevel}, {"pressure free", fmt.Sprintf("%.1f%%", s.PressureFree)},
-			{"load (1/5/15)", fmt.Sprintf("%.1f / %.1f / %.1f", s.Load1, s.Load5, s.Load15)},
+			{"load (1/5/15)", view.FormatLoad(s.Load1, "%.1f") + " / " + view.FormatLoad(s.Load5, "%.1f") + " / " + view.FormatLoad(s.Load15, "%.1f")},
 			{"cores", strconv.Itoa(s.Cores)}, {"disk free", humanBytes(s.DiskFree)},
 		} {
 			add(tabRow{machine: host.MachineID, cells: []string{"", metric[0], "", metric[1], ""}})

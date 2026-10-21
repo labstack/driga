@@ -50,7 +50,8 @@ func TestFlowDetailJavaScriptUsesSharedDuration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cmd := exec.Command(runtime, "-e", string(harness)+"\n"+string(js))
+	cmd := exec.Command(runtime, "-")
+	cmd.Stdin = strings.NewReader(string(harness) + "\n" + string(js))
 	cmd.Env = []string{"PATH=" + t.TempDir(), "HOME=" + t.TempDir()}
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("detail: %v: %s", err, out)

@@ -52,8 +52,8 @@ func LoadOrCreateIdentity(dir string) (Identity, error) {
 		if !keyInfo.Mode().IsRegular() || !certInfo.Mode().IsRegular() {
 			return Identity{}, fmt.Errorf("fleet identity files must be regular files")
 		}
-		if keyInfo.Mode().Perm()&0044 != 0 {
-			return Identity{}, fmt.Errorf("fleet identity key is group/world readable; require mode 0600")
+		if err := privateKey(keyPath, keyInfo); err != nil {
+			return Identity{}, err
 		}
 		cert, err := tls.LoadX509KeyPair(certPath, keyPath)
 		if err != nil {

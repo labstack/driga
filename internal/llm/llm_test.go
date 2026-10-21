@@ -4,15 +4,21 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
 
 func fake(t *testing.T, body string) string {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix executable shell-script fixture")
+	}
+
 	t.Helper()
 	dir := t.TempDir()
 	t.Setenv("PATH", dir)
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	if err := os.WriteFile(filepath.Join(dir, "claude"), []byte("#!/bin/sh\n"+body), 0700); err != nil {
 		t.Fatal(err)
 	}

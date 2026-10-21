@@ -6,11 +6,8 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"os"
 	"os/exec"
-	"os/signal"
 	"runtime"
-	"syscall"
 	"time"
 
 	"github.com/labstack/driga/internal/chat"
@@ -27,7 +24,7 @@ type WebCmd struct {
 }
 
 func (c WebCmd) Run(g *Globals) error {
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	ctx, stop := notifyContext(context.Background())
 	defer stop()
 	return c.run(ctx, g)
 }

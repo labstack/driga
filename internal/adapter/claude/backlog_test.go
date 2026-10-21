@@ -25,6 +25,7 @@ func backlogEnv(t *testing.T) (adapter.Env, string) {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	return adapter.Env{Home: home, Now: time.Date(2026, 10, 18, 12, 20, 2, 0, time.UTC), Offsets: backlogOffsets{}},
 		filepath.Join(home, ".claude", "projects", "synthetic", "fallback.jsonl")
 }

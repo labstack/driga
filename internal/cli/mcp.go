@@ -6,8 +6,6 @@ import (
 	"encoding/json"
 	"log/slog"
 	"os"
-	"os/signal"
-	"syscall"
 	"time"
 
 	"github.com/labstack/driga/internal/collector"
@@ -31,7 +29,7 @@ func (MCPCmd) Help() string {
 
 // Run reserves stdout for the MCP transport and sends diagnostics to stderr.
 func (c MCPCmd) Run(g *Globals) error {
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	ctx, stop := notifyContext(context.Background())
 	defer stop()
 	policy := ""
 	if c.Chat {

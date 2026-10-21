@@ -8,11 +8,9 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/labstack/driga/internal/cleanup"
@@ -130,7 +128,7 @@ func (c CleanupCmd) Run(g *Globals) error {
 	if c.ID == "" && !c.All && (c.Yes || c.DryRun || c.IncludeIgnored) {
 		return invalidUsage("action flags require an id or --all")
 	}
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	ctx, stop := notifyContext(context.Background())
 	defer stop()
 	if c.ID == "" && !c.All {
 		envelope, err := cleanupRead(ctx, g, c.Kind, c.Sizes, c.Why)

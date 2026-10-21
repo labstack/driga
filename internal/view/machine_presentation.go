@@ -53,3 +53,11 @@ func MachineOtherApps(v MachineView) MachineApp {
 	}
 	return a
 }
+
+// FormatLoad preserves native numeric formatting and labels unavailable loads.
+func FormatLoad(load float64, format string) string {
+	if load < 0 {
+		return "unknown"
+	}
+	return fmt.Sprintf(format, load)
+}

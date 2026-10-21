@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/labstack/driga/internal/secfile"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -91,7 +92,7 @@ func saveTrust[T any](path string, entries []T) error {
 }
 
 func privateDir(dir string) error {
-	if err := os.MkdirAll(dir, 0700); err != nil {
+	if err := secfile.MkdirPrivate(dir); err != nil {
 		return err
 	}
 	info, err := os.Lstat(dir)
@@ -101,7 +102,7 @@ func privateDir(dir string) error {
 	if !info.IsDir() {
 		return fmt.Errorf("fleet directory %s is not a directory", dir)
 	}
-	return os.Chmod(dir, 0700)
+	return protectWindowsDir(dir)
 }
 
 // atomicPrivateWrite never exposes a partly written destination or follows a
@@ -110,11 +111,15 @@ func atomicPrivateWrite(path string, data []byte) error {
 	if err := privateDir(filepath.Dir(path)); err != nil {
 		return err
 	}
-	f, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+"-*")
+	f, err := secfile.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+"-*")
 	if err != nil {
 		return err
 	}
 	defer os.Remove(f.Name())
+	if err := makePrivateFile(f.Name()); err != nil {
+		f.Close()
+		return err
+	}
 	if _, err := f.Write(data); err != nil {
 		_ = f.Close()
 		return err

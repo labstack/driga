@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"github.com/labstack/driga/internal/secfile"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -215,18 +216,18 @@ func (m *app) poll() tea.Cmd {
 }
 
 func heartbeat(dir string, now time.Time) error {
-	if err := os.MkdirAll(dir, 0700); err != nil {
+	if err := secfile.MkdirPrivate(dir); err != nil {
 		return err
 	}
-	if err := os.Chmod(dir, 0700); err != nil {
+	if err := secfile.Protect(dir); err != nil {
 		return err
 	}
 	path := filepath.Join(dir, "viewer.heartbeat")
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY, 0600)
+	f, err := secfile.OpenFile(path, os.O_CREATE|os.O_WRONLY)
 	if err != nil {
 		return err
 	}
-	err = f.Chmod(0600)
+	err = secfile.ProtectFile(f)
 	closeErr := f.Close()
 	if err != nil {
 		return err

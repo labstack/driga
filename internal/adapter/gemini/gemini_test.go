@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"os"
+	recordpath "path"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -38,6 +40,7 @@ func setup(t *testing.T, data string) (adapter.Env, string) {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	t.Setenv("GEMINI_CLI_HOME", "")
 	root := filepath.Join(home, ".gemini", "tmp", "synthetic-project")
 	write(t, filepath.Join(root, ".project_root"), "/workspace/synthetic\n")
@@ -204,8 +207,8 @@ func TestGeminiFilesTouched(t *testing.T) {
 					env, _ := setup(t, header+user1+data)
 					s, _ := collect(t, New(), env)
 					want := path
-					if !filepath.IsAbs(want) {
-						want = filepath.Join(s.Cwd, want)
+					if !recordpath.IsAbs(want) {
+						want = recordpath.Join(s.Cwd, want)
 					}
 					if len(s.FilesTouched) != 1 || s.FilesTouched[0].Path != want || s.FilesTouched[0].TS.IsZero() {
 						t.Fatal(s.FilesTouched)
@@ -317,6 +320,10 @@ func TestGeminiCacheHitWithStoredOffsets(t *testing.T) {
 // A chat file removed between the directory scan and the read is skipped,
 // not a failed pass. A dangling link reproduces the vanished file exactly.
 func TestGeminiVanishedFileSkipped(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix symlink fixture; Windows watch tests require no Developer Mode or admin rights")
+	}
+
 	env, path := setup(t, header+user1)
 	if err := os.Symlink(filepath.Join(filepath.Dir(path), "deleted.jsonl"), filepath.Join(filepath.Dir(path), "session-a-vanished.jsonl")); err != nil {
 		t.Fatal(err)

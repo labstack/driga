@@ -2,6 +2,7 @@ package chat
 
 import (
 	"context"
+	"github.com/labstack/driga/internal/fleet"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -9,6 +10,10 @@ import (
 )
 
 func TestSocketAndFallback(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix permission-bit contract; Windows uses ACLs")
+	}
+
 	if runtime.GOOS == "windows" {
 		t.Skip("Unix socket permissions")
 	}
@@ -60,7 +65,13 @@ func TestSocketAndFallback(t *testing.T) {
 func TestSocketRefusesRegularFile(t *testing.T) {
 	b, _, _ := fixture(t, false)
 	dir := t.TempDir()
+	t.Setenv("LOCALAPPDATA", t.TempDir())
 	path := SocketPath(dir)
+	if runtime.GOOS == "windows" {
+		if err := fleet.EnsureSocketDir(path); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if err := os.WriteFile(path, []byte("keep"), 0600); err != nil {
 		t.Fatal(err)
 	}

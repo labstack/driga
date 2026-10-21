@@ -3,6 +3,7 @@ package codex_test
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -42,6 +43,7 @@ func setup(t *testing.T, data string) (adapter.Env, string) {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	t.Setenv("CODEX_HOME", "")
 	path := filepath.Join(home, ".codex", "sessions", "2026", "10", "18", filename)
 	write(t, path, data)
@@ -291,7 +293,11 @@ func TestDiscoveryBaselineAndHome(t *testing.T) {
 func TestTemporaryCwdAndVersion(t *testing.T) {
 	for _, cwd := range []string{"/private/tmp/example", "/tmp/example", filepath.Join(os.TempDir(), "example")} {
 		t.Run(cwd, func(t *testing.T) {
-			data := strings.ReplaceAll(strings.ReplaceAll(fixture(t), "/workspace/sample", cwd), "0.16.2", "9.0.0")
+			quoted, err := json.Marshal(cwd)
+			if err != nil {
+				t.Fatal(err)
+			}
+			data := strings.ReplaceAll(strings.ReplaceAll(fixture(t), "/workspace/sample", string(quoted[1:len(quoted)-1])), "0.16.2", "9.0.0")
 			env, _ := setup(t, data)
 			obs, w := collect(t, codex.New(), env)
 			if obs.Origin != "interactive/temporary" || warningCount(w, "untested_version") != 1 {

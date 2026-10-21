@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -82,6 +83,17 @@ func setup(t *testing.T) (Deps, *store.Store, *fakePlatform, *fakeAdapter) {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
+	if runtime.GOOS == "windows" {
+		// AF_UNIX has a small path limit; keep this per-test IPC root short.
+		appDir, err := os.MkdirTemp("", "dc-")
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = os.RemoveAll(appDir) })
+		t.Setenv("LOCALAPPDATA", appDir)
+	}
+	t.Setenv("APPDATA", filepath.Join(os.Getenv("HOME"), "AppData", "Roaming"))
 	t.Setenv("COPILOT_HOME", filepath.Join(home, ".copilot"))
 	t.Setenv("CODEX_HOME", filepath.Join(home, ".codex"))
 	t.Setenv("DRIGA_DATA_DIR", t.TempDir())

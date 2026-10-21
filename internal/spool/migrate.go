@@ -4,11 +4,13 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"github.com/labstack/driga/internal/fileid"
+	"github.com/labstack/driga/internal/secfile"
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
-	"syscall"
 
 	"github.com/labstack/driga/internal/model"
 )
@@ -29,7 +31,7 @@ func Migrate(old, dest string, load func(string) (model.Offset, error), save fun
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(dest, 0700); err != nil {
+	if err := secfile.MkdirPrivate(dest); err != nil {
 		return err
 	}
 	for _, entry := range entries {
@@ -51,7 +53,7 @@ func Migrate(old, dest string, load func(string) (model.Offset, error), save fun
 			return err
 		}
 		if _, err := os.Lstat(target); errors.Is(err, os.ErrNotExist) {
-			if err := linkLegacySpool(source, target); errors.Is(err, syscall.EXDEV) {
+			if err := linkLegacySpool(source, target); crossDevice(err) {
 				if err := copySpoolFile(source, target); err != nil {
 					return err
 				}
@@ -101,8 +103,16 @@ func Migrate(old, dest string, load func(string) (model.Offset, error), save fun
 		if !info.Mode().IsRegular() {
 			return fmt.Errorf("legacy spool target is not regular: %s", target)
 		}
-		next := model.Offset{Inode: info.Sys().(*syscall.Stat_t).Ino, Size: info.Size(), Mtime: info.ModTime()}
-		if prev.Inode == before.Sys().(*syscall.Stat_t).Ino && prev.Pos <= before.Size() {
+		targetID, err := spoolIdentity(target)
+		if err != nil {
+			return err
+		}
+		sourceID, err := spoolIdentity(source)
+		if err != nil {
+			return err
+		}
+		next := model.Offset{Inode: targetID, Size: info.Size(), Mtime: info.ModTime()}
+		if prev.Inode == sourceID && prev.Pos <= before.Size() {
 			next.Pos = prev.Pos
 		}
 		if err := save(targetName, next); err != nil {
@@ -116,10 +126,13 @@ func Migrate(old, dest string, load func(string) (model.Offset, error), save fun
 		}
 	}
 	note := []byte("Driga moved hook events to " + dest + ". Hooks resolve this path at runtime; no reinstall is needed.\nAny remaining diagnostic logs can be removed when no longer needed.\n")
-	return os.WriteFile(filepath.Join(old, "README"), note, 0600)
+	return secfile.WritePrivate(filepath.Join(old, "README"), note)
 }
 
 func syncDir(path string) error {
+	if runtime.GOOS == "windows" {
+		return nil
+	}
 	dir, err := os.Open(path)
 	if err != nil {
 		return err
@@ -148,7 +161,7 @@ func copySpoolFile(source, target string) error {
 		return err
 	}
 	defer in.Close()
-	out, err := os.CreateTemp(filepath.Dir(target), ".legacy-*")
+	out, err := secfile.CreateTemp(filepath.Dir(target), ".legacy-*")
 	if err != nil {
 		return err
 	}
@@ -162,4 +175,17 @@ func copySpoolFile(source, target string) error {
 		return err
 	}
 	return syncDir(filepath.Dir(target))
+}
+
+func spoolIdentity(path string) (uint64, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return 0, err
+	}
+	defer f.Close()
+	id, ok := fileid.Of(f)
+	if !ok {
+		return 0, fmt.Errorf("file identity unavailable: %s", path)
+	}
+	return id, nil
 }

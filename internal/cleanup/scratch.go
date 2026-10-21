@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -48,6 +49,9 @@ func roots(e Env) []string {
 	return []string{"/tmp", "/private/tmp", os.TempDir()}
 }
 func scratchCandidates(ctx context.Context, e Env, s snapshot) []Candidate {
+	if runtime.GOOS == "windows" {
+		return nil
+	}
 	cs := []Candidate{}
 	seen := map[string]bool{}
 	for _, session := range s.sessions {
@@ -71,6 +75,9 @@ func scratchCandidates(ctx context.Context, e Env, s snapshot) []Candidate {
 	return cs
 }
 func inspectScratch(ctx context.Context, e Env, s snapshot, c Candidate) (Candidate, error) {
+	if runtime.GOOS == "windows" {
+		return Candidate{}, platform.ErrWindowsAction
+	}
 	id := strings.TrimPrefix(c.ID, "scratch:")
 	if !validSessionID(id) {
 		return c, fmt.Errorf("invalid session id")

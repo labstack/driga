@@ -11,7 +11,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/labstack/driga/internal/adapter/copilot"
@@ -387,7 +386,7 @@ func permissionTool(message string) string {
 // bounded tail. Transcript failures must not interfere with the agent's hook.
 func permissionTranscript(path string) (string, json.RawMessage) {
 	// Nonblocking open also handles symlinks to FIFOs without waiting for a writer.
-	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NONBLOCK, 0)
+	f, err := openTranscript(path)
 	if err != nil {
 		return "", nil
 	}

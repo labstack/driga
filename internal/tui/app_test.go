@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -284,6 +285,10 @@ func TestOpenCmdFromTermProgram(t *testing.T) {
 	})
 }
 func TestHeartbeatTouched(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix permission-bit contract; Windows uses ACLs")
+	}
+
 	dir := filepath.Join(t.TempDir(), "data")
 	m := setup(t, fixture(), Options{DataDir: dir})
 	m, cmd := m.Update(tickMsg{})
@@ -484,6 +489,7 @@ func (snapshotPlatform) Alive(int32, time.Time) bool                            
 func TestLiveSnapshotSource(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
 	s, err := NewLiveSnapshotSource(collector.Deps{Cfg: config.Default(), Plat: snapshotPlatform{}, SpoolDir: filepath.Join(home, "spool")}, home, view.Filter{})
@@ -524,6 +530,7 @@ func TestLiveSnapshotSource(t *testing.T) {
 func TestInitialSnapshotLoadingMessage(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	s, err := NewLiveSnapshotSource(collector.Deps{Cfg: config.Default(), Plat: snapshotPlatform{}, SpoolDir: filepath.Join(home, "spool")}, home, view.Filter{})
 	if err != nil {
 		t.Fatal(err)

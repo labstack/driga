@@ -4,8 +4,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"github.com/labstack/driga/internal/config"
 	"os"
 	"path/filepath"
+	"runtime"
 )
 
 // maxSocketPath stays under macOS's 104-byte sun_path limit (Linux: 108).
@@ -15,6 +17,9 @@ const maxSocketPath = 100
 // fleet/fleet.sock in the data dir, or, when that path is too long for a Unix
 // socket, a short per-user directory keyed by a hash of dataDir.
 func ControlSocketPath(dataDir string) string {
+	if runtime.GOOS == "windows" {
+		return WatchSocketPath(dataDir, "fleet")
+	}
 	p := filepath.Join(dataDir, "fleet", "fleet.sock")
 	if len(p) <= maxSocketPath {
 		return p
@@ -33,6 +38,9 @@ func ControlSocketPath(dataDir string) string {
 // ensureSocketDir creates the socket's directory 0700 and refuses one that is
 // a symlink or not owned by this user (the shared temp dir case).
 func ensureSocketDir(sock string) error {
+	if runtime.GOOS == "windows" {
+		return ensureWindowsSocketDir(sock)
+	}
 	dir := filepath.Dir(sock)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
@@ -41,6 +49,9 @@ func ensureSocketDir(sock string) error {
 }
 
 func checkSocketDir(sock string) error {
+	if runtime.GOOS == "windows" {
+		return checkWindowsSocketDir(sock)
+	}
 	dir := filepath.Dir(sock)
 	info, err := os.Lstat(dir)
 	if err != nil {
@@ -65,3 +76,23 @@ func checkControlSocket(sock string) error {
 	}
 	return nil
 }
+
+// WatchSocketPath uses per-data-directory names under the Windows run directory,
+// falling back to a short per-user temporary directory for long profile paths.
+func WatchSocketPath(dataDir, kind string) string {
+	sum := sha256.Sum256([]byte(filepath.Clean(dataDir)))
+	root := os.Getenv("LOCALAPPDATA")
+	if root == "" {
+		root = filepath.Dir(config.DataDir())
+	}
+	name := kind + "-" + hex.EncodeToString(sum[:8]) + ".sock"
+	p := filepath.Join(root, "driga", "run", name)
+	if runtime.GOOS == "windows" && len(p) >= 108 {
+		return shortSocketPath(name)
+	}
+	return p
+}
+
+// EnsureSocketDir and CheckSocketDir share the private Windows IPC directory with chat.
+func EnsureSocketDir(sock string) error { return ensureSocketDir(sock) }
+func CheckSocketDir(sock string) error  { return checkSocketDir(sock) }

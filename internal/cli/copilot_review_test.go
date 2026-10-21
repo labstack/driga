@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -119,6 +120,7 @@ func TestCopilotVersionWarnings(t *testing.T) {
 	} {
 		t.Run(tc.version, func(t *testing.T) {
 			d, _ := doctorFixture(t)
+			d.OS = "linux"
 			old := newInboxRunner
 			t.Cleanup(func() { newInboxRunner = old })
 			newInboxRunner = func() inbox.Runner { return copilotVersionRunner{output: tc.version} }
@@ -135,18 +137,24 @@ func TestCopilotVersionWarnings(t *testing.T) {
 			if found != tc.warn {
 				t.Fatal(tc, checks)
 			}
-			var out bytes.Buffer
-			if err := (HooksInstallCmd{HooksOptions{Target: "copilot", DryRun: true}}).Run(&Globals{Stdout: &out}); err != nil {
-				t.Fatal(err)
-			}
-			if strings.Contains(out.String(), "Warning:") != tc.warn {
-				t.Fatal(tc, out.String())
-			}
+			t.Run("hook install", func(t *testing.T) {
+				if runtime.GOOS == "windows" {
+					t.Skip("hook installation is not supported on Windows in phase 1")
+				}
+				var out bytes.Buffer
+				if err := (HooksInstallCmd{HooksOptions{Target: "copilot", DryRun: true}}).Run(&Globals{Stdout: &out}); err != nil {
+					t.Fatal(err)
+				}
+				if strings.Contains(out.String(), "Warning:") != tc.warn {
+					t.Fatal(tc, out.String())
+				}
+			})
 		})
 	}
 }
 func TestCopilotSandboxAndNoEventsWarnings(t *testing.T) {
 	d, st := doctorFixture(t)
+	d.OS = "linux"
 	d.CopilotHome = filepath.Join(d.Home, "custom-copilot")
 	if err := os.MkdirAll(d.CopilotHome, 0700); err != nil {
 		t.Fatal(err)

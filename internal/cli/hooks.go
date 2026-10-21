@@ -5,10 +5,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/labstack/driga/internal/platform"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -36,7 +38,12 @@ type HooksOptions struct {
 type HooksInstallCmd struct{ HooksOptions }
 
 // Run previews and optionally applies installation changes.
-func (c HooksInstallCmd) Run(g *Globals) error { return c.HooksOptions.change(g, true) }
+func (c HooksInstallCmd) Run(g *Globals) error {
+	if runtime.GOOS == "windows" {
+		return platform.ErrWindowsAction
+	}
+	return c.HooksOptions.change(g, true)
+}
 
 // HooksUninstallCmd removes Driga's hooks after confirmation.
 type HooksUninstallCmd struct{ HooksOptions }

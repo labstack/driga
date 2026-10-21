@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -64,7 +65,12 @@ func TestClickableNotifierArguments(t *testing.T) {
 
 func TestNotifierLookupUsesInheritedPATH(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "terminal-notifier")
+	name := "terminal-notifier"
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+		t.Setenv("PATHEXT", ".EXE")
+	}
+	path := filepath.Join(dir, name)
 	if err := os.WriteFile(path, []byte("unused fixture"), 0700); err != nil {
 		t.Fatal(err)
 	}

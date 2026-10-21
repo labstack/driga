@@ -49,7 +49,11 @@ func (a claudeAdapter) Collect(ctx context.Context, env adapter.Env) ([]model.Se
 	if env.Now.IsZero() {
 		env.Now = time.Now()
 	}
-	registryPaths, err := filepath.Glob(filepath.Join(home, ".claude", "sessions", "*.json"))
+	claudeHome := os.Getenv("CLAUDE_CONFIG_DIR")
+	if claudeHome == "" {
+		claudeHome = filepath.Join(home, ".claude")
+	}
+	registryPaths, err := filepath.Glob(filepath.Join(claudeHome, "sessions", "*.json"))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -79,7 +83,7 @@ func (a claudeAdapter) Collect(ctx context.Context, env adapter.Env) ([]model.Se
 			observations = append(observations, o)
 		}
 	}
-	transcripts, err := filepath.Glob(filepath.Join(home, ".claude", "projects", "*", "*.jsonl"))
+	transcripts, err := filepath.Glob(filepath.Join(claudeHome, "projects", "*", "*.jsonl"))
 	if err != nil {
 		return nil, warnings, err
 	}

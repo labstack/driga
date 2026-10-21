@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"time"
 )
@@ -93,9 +94,12 @@ func (s *Server) listenControl(ctx context.Context) (net.Listener, error) {
 		return nil, err
 	}
 	ln := &controlListener{Listener: raw, done: make(chan struct{})}
-	if err := os.Chmod(path, 0600); err != nil {
-		raw.Close()
-		return nil, err
+	// Windows AF_UNIX access is guarded by the private parent DACL.
+	if runtime.GOOS != "windows" {
+		if err := os.Chmod(path, 0600); err != nil {
+			raw.Close()
+			return nil, err
+		}
 	}
 	go func() { <-ctx.Done(); _ = ln.Close() }()
 	go func() {
@@ -193,6 +197,11 @@ func (l *controlListener) Close() error {
 func Control(ctx context.Context, dataDir string, req ControlRequest) (ControlResponse, error) {
 	var resp ControlResponse
 	sock := ControlSocketPath(dataDir)
+	if runtime.GOOS == "windows" {
+		if err := ensureSocketDir(sock); err != nil {
+			return resp, err
+		}
+	}
 	if err := checkControlSocket(sock); err != nil {
 		return resp, err
 	}

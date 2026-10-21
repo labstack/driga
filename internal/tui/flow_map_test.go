@@ -5,6 +5,7 @@ import (
 	"github.com/labstack/driga/internal/flowtest"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/view"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -42,8 +43,15 @@ func TestFlowAttentionJumpAndCopy(t *testing.T) {
 		if cmd != nil {
 			cmd()
 		}
-		if !remote && calls != 2 || remote && calls != 0 {
+		wantCalls := 0
+		if !remote && runtime.GOOS != "windows" {
+			wantCalls = 2
+		}
+		if calls != wantCalls {
 			t.Fatal("unexpected jump execution", remote, calls)
+		}
+		if !remote && runtime.GOOS == "windows" && !strings.Contains(m.status, "not yet supported on Windows") {
+			t.Fatal(m.status)
 		}
 		if m.flowSelected().ID != 2 {
 			t.Fatal("jump did not select map row")

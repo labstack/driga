@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/labstack/driga/internal/secfile"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -195,10 +196,10 @@ func (w *writer) put(path string, b []byte, at time.Time) {
 	}
 	stored := strings.Join(parts, "/")
 	p := filepath.Join(w.dir, filepath.FromSlash(stored))
-	if w.err = os.MkdirAll(filepath.Dir(p), 0700); w.err != nil {
+	if w.err = secfile.MkdirPrivate(filepath.Dir(p)); w.err != nil {
 		return
 	}
-	if w.err = os.WriteFile(p, b, 0600); w.err != nil {
+	if w.err = secfile.WritePrivate(p, b); w.err != nil {
 		return
 	}
 	w.err = os.Chtimes(p, at, at)

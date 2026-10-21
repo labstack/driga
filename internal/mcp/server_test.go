@@ -52,6 +52,7 @@ func fixture(t *testing.T) (*store.Store, int64) {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	t.Setenv("XDG_STATE_HOME", filepath.Join(home, "state"))
 	t.Setenv("CODEX_HOME", filepath.Join(home, ".codex"))
 	t.Setenv("COPILOT_HOME", filepath.Join(home, ".copilot"))

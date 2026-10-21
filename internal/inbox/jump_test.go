@@ -31,7 +31,6 @@ func TestRunJumpOutsideTmux(t *testing.T) {
 	}{
 		{name: "explicit click activates without opt in", os: "darwin", procs: procs, want: [][]string{list, switchClient, selectPane, openApp}, wantProcs: true},
 		{name: "linux never activates", os: "linux", want: [][]string{list, switchClient, selectPane}},
-		{name: "windows never activates", os: "windows", want: [][]string{list, switchClient, selectPane}},
 		{name: "client without tty", os: "darwin", clients: "0 client ' with spaces \n", want: [][]string{list, switchClient, selectPane}},
 		{name: "no ancestor app", os: "darwin", procs: []model.Proc{{PID: 3, TTY: "/dev/ttys002", Exe: "/bin/zsh"}}, want: [][]string{list, switchClient, selectPane}, wantProcs: true},
 		{name: "process lookup unavailable", os: "darwin", procErr: true, want: [][]string{list, switchClient, selectPane}, wantProcs: true},

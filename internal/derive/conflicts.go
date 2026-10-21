@@ -1,9 +1,8 @@
 package derive
 
 import (
-	"path/filepath"
+	"github.com/labstack/driga/internal/pathx"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/labstack/driga/internal/model"
@@ -37,7 +36,7 @@ func Conflicts(sessions []model.Session, files map[int64][]model.FileTouch, pare
 			wt = s.Cwd
 		}
 		if wt != "" {
-			wt = filepath.Clean(wt)
+			wt = pathx.RecordedKey(wt)
 			if worktrees[wt] == nil {
 				worktrees[wt] = make(map[int64]conflictEdit)
 			}
@@ -48,13 +47,11 @@ func Conflicts(sessions []model.Session, files map[int64][]model.FileTouch, pare
 				continue
 			}
 			path := f.Path
-			if !filepath.IsAbs(path) {
-				path = filepath.Join(s.Cwd, path)
-			}
-			if !filepath.IsAbs(path) {
+			path = pathx.RecordedJoin(s.Cwd, path)
+			if !pathx.RecordedIsAbs(path) {
 				continue
 			}
-			path = filepath.Clean(path)
+			path = pathx.RecordedKey(path)
 			e := conflictEdit{id: s.ID, root: root, worktree: wt, at: f.TS}
 			if absoluteFiles[path] == nil {
 				absoluteFiles[path] = make(map[int64]conflictEdit)
@@ -66,17 +63,17 @@ func Conflicts(sessions []model.Session, files map[int64][]model.FileTouch, pare
 			}
 			if fileRepo == "" && repo != "" && wt != "" {
 				fileRepo, fileWT = repo, wt
-				rel, _ = filepath.Rel(wt, path)
+				rel, _ = pathx.RecordedRel(wt, path)
 			}
-			rel = filepath.Clean(rel)
-			if fileRepo == "" || fileWT == "" || rel == "." || filepath.IsAbs(rel) || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			rel = pathx.RecordedKey(rel)
+			if fileRepo == "" || fileWT == "" || rel == "." || pathx.RecordedIsAbs(rel) || !pathx.RecordedWithin(rel, ".") {
 				continue
 			}
-			key := conflictFileKey{repo: filepath.Clean(fileRepo), rel: rel, branch: s.Branch}
+			key := conflictFileKey{repo: pathx.RecordedKey(fileRepo), rel: pathx.RecordedKey(rel), branch: s.Branch}
 			if otherFiles[key] == nil {
 				otherFiles[key] = make(map[int64]conflictEdit)
 			}
-			e.worktree = filepath.Clean(fileWT)
+			e.worktree = pathx.RecordedKey(fileWT)
 			conflictLatest(otherFiles[key], e)
 		}
 	}
@@ -97,7 +94,7 @@ func Conflicts(sessions []model.Session, files map[int64][]model.FileTouch, pare
 			wts[e.worktree] = true
 		}
 		if len(edits) >= 2 && len(wts) >= 2 {
-			result = append(result, conflictFile("same_file_other_worktree", filepath.Join(key.repo, key.rel), edits, now))
+			result = append(result, conflictFile("same_file_other_worktree", pathx.RecordedKey(pathx.RecordedJoin(key.repo, key.rel)), edits, now))
 		}
 	}
 	sort.Slice(result, func(i, j int) bool {

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -20,6 +21,7 @@ func TestRemoteAckWithoutPermission(t *testing.T) {
 	dir := t.TempDir()
 	spoolDir := t.TempDir()
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	t.Setenv("DRIGA_DATA_DIR", dir)
 	t.Setenv("DRIGA_SPOOL_DIR", spoolDir)
 	t.Setenv("DRIGA_CONFIG", filepath.Join(t.TempDir(), "config.toml"))

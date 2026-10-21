@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -29,11 +30,16 @@ const flags = `Options:
   -r, --resume [value]                  Resume a conversation`
 
 func fakeCLI(t *testing.T, help, body string) (*Claude, string) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix executable shell-script fixture")
+	}
+
 	t.Helper()
 	dir := t.TempDir()
 	record := filepath.Join(dir, "record")
 	t.Setenv("PATH", dir)
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
 	t.Setenv("CODEX_HOME", t.TempDir())
 	t.Setenv("COPILOT_HOME", t.TempDir())

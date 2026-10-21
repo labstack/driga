@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -19,6 +20,7 @@ func doctorFixture(t *testing.T) (DoctorDeps, *store.Store) {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	t.Setenv("COPILOT_HOME", filepath.Join(home, ".copilot"))
 	t.Setenv("DRIGA_SPOOL_DIR", filepath.Join(home, "spool"))
 	t.Setenv("XDG_STATE_HOME", filepath.Join(home, "state"))
@@ -54,6 +56,10 @@ func requireCheck(t *testing.T, checks []Check, name, status, fix string) Check 
 }
 
 func TestDoctorNoDaemon(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix path or action contract; Windows phase 1 has dedicated watch/refusal tests")
+	}
+
 	d, _ := doctorFixture(t)
 	d.Store = nil
 	d.LockProbe = func(string) (bool, error) { return false, nil }
@@ -113,6 +119,10 @@ func TestDoctorIntake(t *testing.T) {
 }
 
 func TestDoctorStaleSource(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix path or action contract; Windows phase 1 has dedicated watch/refusal tests")
+	}
+
 	d, st := doctorFixture(t)
 	if err := st.Tx(context.Background(), func(tx *store.Tx) error { return tx.SetSourceOK("git", d.Now.Add(-16*time.Minute)) }); err != nil {
 		t.Fatal(err)
@@ -151,6 +161,10 @@ func TestDoctorUntestedVersion(t *testing.T) {
 }
 
 func TestDoctorCadenceAndRSS(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix path or action contract; Windows phase 1 has dedicated watch/refusal tests")
+	}
+
 	d, st := doctorFixture(t)
 	heartbeat := filepath.Join(d.DataDir, "viewer.heartbeat")
 	if err := os.WriteFile(heartbeat, nil, 0600); err != nil {
@@ -180,6 +194,10 @@ func TestDoctorCadenceAndRSS(t *testing.T) {
 }
 
 func TestDoctorPermissionsAndLockProbe(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix path or action contract; Windows phase 1 has dedicated watch/refusal tests")
+	}
+
 	d, _ := doctorFixture(t)
 	if err := os.Chmod(d.DataDir, 0755); err != nil {
 		t.Fatal(err)
@@ -227,6 +245,10 @@ func TestDoctorCollectorPaths(t *testing.T) {
 }
 
 func TestDoctorCommandWarningsAndFailures(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix path or action contract; Windows phase 1 has dedicated watch/refusal tests")
+	}
+
 	g, out := initFixture(t, "")
 	g.JSON = true
 	if err := (DoctorCmd{}).Run(g); err != nil {

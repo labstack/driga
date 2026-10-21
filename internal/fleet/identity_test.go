@@ -10,6 +10,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -29,6 +30,10 @@ func newIdentity(t *testing.T) (fleet.Identity, string) {
 }
 
 func TestIdentityCreatedOnceMode0600(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix permission-bit contract; Windows uses ACLs")
+	}
+
 	id, dir := newIdentity(t)
 	second, err := fleet.LoadOrCreateIdentity(dir)
 	if err != nil {
@@ -85,6 +90,10 @@ func TestIdentityCreatedOnceMode0600(t *testing.T) {
 }
 
 func TestServeRefusesReadableKey(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix permission-bit contract; Windows uses ACLs")
+	}
+
 	_, dir := newIdentity(t)
 	path := filepath.Join(dir, "identity.key")
 	for _, mode := range []os.FileMode{0640, 0604, 0644} {

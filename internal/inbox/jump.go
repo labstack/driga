@@ -110,6 +110,9 @@ func terminalApp(procs []model.Proc, tty string) string {
 // JumpCommands plans only proven local destinations. Callers must reject remote
 // items before execution. Resume commands remain copyable text, never executed.
 func JumpCommands(j *model.InboxJump, opts JumpOptions) ([][]string, error) {
+	if opts.OS == "windows" || opts.OS == "" && runtime.GOOS == "windows" {
+		return nil, platform.ErrWindowsAction
+	}
 	if j == nil {
 		return nil, fmt.Errorf("item has no jump")
 	}

@@ -3,6 +3,7 @@ package cli
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/labstack/driga/internal/config"
@@ -10,6 +11,10 @@ import (
 )
 
 func TestNotifierUsesStablePath(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix symlink fixture; Windows watch tests require no Developer Mode or admin rights")
+	}
+
 	readEnv(t)
 	exe, err := os.Executable()
 	if err != nil {
@@ -33,6 +38,10 @@ func TestNotifierUsesStablePath(t *testing.T) {
 // Homebrew links bin/driga to Cellar/driga/<version>/bin/driga. The service and
 // hooks must record the link, or brew upgrade leaves them on a deleted file.
 func TestStablePathPrefersPackageManagerLink(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix symlink fixture; Windows watch tests require no Developer Mode or admin rights")
+	}
+
 	root := t.TempDir()
 	cellar := filepath.Join(root, "Cellar", "driga", "1.8.0", "bin", "driga")
 	link := filepath.Join(root, "bin", "driga")

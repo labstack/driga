@@ -5,7 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"path/filepath"
+	"github.com/labstack/driga/internal/pathx"
 	"time"
 
 	"github.com/labstack/driga/internal/adapter"
@@ -211,8 +211,6 @@ func foldTool(o *model.SessionObs, block contentBlock, ts time.Time) {
 	if path == "" {
 		return
 	}
-	if !filepath.IsAbs(path) {
-		path = filepath.Join(o.Cwd, path)
-	}
+	path = pathx.RecordedJoin(o.Cwd, path)
 	o.FilesTouched = append(o.FilesTouched, model.FileTouch{Path: path, TS: ts})
 }

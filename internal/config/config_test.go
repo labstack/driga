@@ -44,6 +44,7 @@ func TestLoadMissingFileIsDefault(t *testing.T) {
 func TestLoadOverrides(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	p := filepath.Join(t.TempDir(), "c.toml")
 	body := "stalled_after = \"3m\"\nroots = [\"~/code\"]\ncapture_text = \"snippets\"\n[adapters.codex]\nenabled = false\n"
 	if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
@@ -79,6 +80,10 @@ func TestLoadRejectsBadCaptureText(t *testing.T) {
 }
 
 func TestPathsHonorEnv(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix path or action contract; Windows phase 1 has dedicated watch/refusal tests")
+	}
+
 	t.Setenv("DRIGA_DATA_DIR", "/x/data")
 	t.Setenv("DRIGA_SPOOL_DIR", "/x/spool")
 	t.Setenv("DRIGA_CONFIG", "/x/c.toml")
@@ -89,6 +94,7 @@ func TestPathsHonorEnv(t *testing.T) {
 	t.Setenv("DRIGA_SPOOL_DIR", "")
 	t.Setenv("DRIGA_CONFIG", "")
 	t.Setenv("HOME", "/h")
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("XDG_STATE_HOME", "")
 	wantData := "/h/Library/Application Support/driga"

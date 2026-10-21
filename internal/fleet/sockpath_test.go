@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -15,6 +16,10 @@ import (
 // macOS limits Unix socket paths to 104 bytes (Linux: 108); a long data dir
 // must not stop serving.
 func TestControlSocketPathFitsLimit(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix path or action contract; Windows phase 1 has dedicated watch/refusal tests")
+	}
+
 	short := "/srv/d"
 	if got := ControlSocketPath(short); got != filepath.Join(short, "fleet", "fleet.sock") {
 		t.Fatalf("short data dir should keep its socket: %s", got)
@@ -30,6 +35,10 @@ func TestControlSocketPathFitsLimit(t *testing.T) {
 }
 
 func TestControlListensWithLongDataDir(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix permission-bit contract; Windows uses ACLs")
+	}
+
 	dir := filepath.Join(t.TempDir(), strings.Repeat("d", 120))
 	if err := os.MkdirAll(filepath.Join(dir, "fleet"), 0o700); err != nil {
 		t.Fatal(err)
@@ -48,6 +57,10 @@ func TestControlListensWithLongDataDir(t *testing.T) {
 // Enroll must reach the collector through the same socket path the server
 // uses, including the short fallback for long data dirs.
 func TestEnrollReachesControlSocketWithLongDataDir(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix path or action contract; Windows phase 1 has dedicated watch/refusal tests")
+	}
+
 	dir := filepath.Join(t.TempDir(), strings.Repeat("e", 120))
 	sock := ControlSocketPath(dir)
 	if err := ensureSocketDir(sock); err != nil {
@@ -75,6 +88,10 @@ func TestEnrollReachesControlSocketWithLongDataDir(t *testing.T) {
 }
 
 func TestControlSocketShortWithLongTMPDIR(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix path or action contract; Windows phase 1 has dedicated watch/refusal tests")
+	}
+
 	t.Setenv("TMPDIR", filepath.Join(t.TempDir(), strings.Repeat("tmp", 50)))
 	for _, runtime := range []string{"", "/tmp", strings.Repeat("/runtime", 30)} {
 		t.Setenv("XDG_RUNTIME_DIR", runtime)
@@ -95,6 +112,10 @@ func TestControlRefusesSymlinkedDir(t *testing.T) {
 	testUnsafeControlDir(t, true)
 }
 func testUnsafeControlDir(t *testing.T, symlink bool) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix symlink fixture; Windows watch tests require no Developer Mode or admin rights")
+	}
+
 	t.Helper()
 	// chmod simulates an untrusted/shared directory without requiring chown.
 	base, err := os.MkdirTemp("/tmp", "driga-unsafe-")

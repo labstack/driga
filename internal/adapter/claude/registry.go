@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/labstack/driga/internal/pathx"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -87,29 +88,4 @@ func registryOrigin(r registryEntry) string {
 	return "interactive"
 }
 
-func temporaryCwd(cwd string) bool {
-	if cwd == "" {
-		return false
-	}
-	cwd = canonicalPath(cwd)
-	for _, root := range []string{os.TempDir(), "/tmp", "/private/tmp", "/var/tmp"} {
-		rel, err := filepath.Rel(canonicalPath(root), cwd)
-		if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-			return true
-		}
-	}
-	return false
-}
-
-func canonicalPath(path string) string {
-	if resolved, err := filepath.EvalSymlinks(path); err == nil {
-		return filepath.Clean(resolved)
-	}
-	// A logged cwd may already be gone. Resolve its existing ancestors
-	// while retaining the missing suffix as a clean path.
-	path = filepath.Clean(path)
-	if parent := filepath.Dir(path); parent != path {
-		return filepath.Join(canonicalPath(parent), filepath.Base(path))
-	}
-	return path
-}
+func temporaryCwd(cwd string) bool { return pathx.TemporaryRecorded(cwd) }

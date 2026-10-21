@@ -13,7 +13,11 @@ import (
 // Exercise the actual linker symbols, rather than only injecting CLI globals.
 func TestVersionStamping(t *testing.T) {
 	for _, stamped := range []bool{false, true} {
-		bin := filepath.Join(t.TempDir(), "driga")
+		name := "driga"
+		if runtime.GOOS == "windows" {
+			name += ".exe"
+		}
+		bin := filepath.Join(t.TempDir(), name)
 		args := []string{"build", "-trimpath", "-buildvcs=false", "-o", bin}
 		wantVersion, wantCommit, wantDate := "dev", "unknown", "unknown"
 		if stamped {

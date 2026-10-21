@@ -78,6 +78,10 @@ type AdapterConfig struct {
 func (c Config) CaptureSnippets() bool { return c.CaptureText == "snippets" }
 
 func home() string {
+	if runtime.GOOS == "windows" {
+		h, _ := os.UserHomeDir()
+		return h
+	}
 	if h := os.Getenv("HOME"); h != "" {
 		return h
 	}
@@ -90,7 +94,7 @@ func ExpandHome(p string) string {
 	if p == "~" {
 		return home()
 	}
-	if strings.HasPrefix(p, "~/") {
+	if strings.HasPrefix(p, "~/") || runtime.GOOS == "windows" && strings.HasPrefix(p, `~\`) {
 		return filepath.Join(home(), p[2:])
 	}
 	return p
@@ -100,6 +104,9 @@ func ExpandHome(p string) string {
 func Path() string {
 	if p := os.Getenv("DRIGA_CONFIG"); p != "" {
 		return p
+	}
+	if runtime.GOOS == "windows" {
+		return filepath.Join(windowsAppDir("APPDATA", "Roaming"), "driga", "config.toml")
 	}
 	if p := os.Getenv("XDG_CONFIG_HOME"); filepath.IsAbs(p) {
 		return filepath.Join(p, "driga", "config.toml")
@@ -113,6 +120,9 @@ func DataDir() string { return dataDirForOS(runtime.GOOS) }
 func dataDirForOS(goos string) string {
 	if p := os.Getenv("DRIGA_DATA_DIR"); p != "" {
 		return p
+	}
+	if goos == "windows" {
+		return filepath.Join(windowsAppDir("LOCALAPPDATA", "Local"), "driga")
 	}
 	if goos == "linux" {
 		if p := os.Getenv("XDG_DATA_HOME"); filepath.IsAbs(p) {
@@ -130,6 +140,9 @@ func spoolDirForOS(goos string) string {
 	if p := os.Getenv("DRIGA_SPOOL_DIR"); p != "" {
 		return p
 	}
+	if goos == "windows" {
+		return filepath.Join(windowsAppDir("LOCALAPPDATA", "Local"), "driga", "events")
+	}
 	if p := os.Getenv("XDG_STATE_HOME"); filepath.IsAbs(p) {
 		return filepath.Join(p, "driga", "events")
 	}
@@ -141,3 +154,10 @@ func spoolDirForOS(goos string) string {
 
 // LegacySpoolDir is only read by the collector migration.
 func LegacySpoolDir() string { return filepath.Join(home(), ".driga", "events") }
+
+func windowsAppDir(env, leaf string) string {
+	if p := os.Getenv(env); p != "" {
+		return p
+	}
+	return filepath.Join(home(), "AppData", leaf)
+}

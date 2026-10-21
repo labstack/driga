@@ -1,10 +1,8 @@
 package derive
 
 import (
-	"path"
-	"path/filepath"
+	"github.com/labstack/driga/internal/pathx"
 	"regexp"
-	"strings"
 
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/signatures"
@@ -88,7 +86,7 @@ func PlaceProcesses(procs []model.Proc, sessions []model.Session, sigs *signatur
 				bundle = AppBundle(cur.Exe)
 			}
 			if s, ok := live[cur.PID]; ok && placement.Attribution == nil {
-				placement.Attribution = &ProcAttribution{SessionID: s.ID, Project: path.Base(s.Cwd), Proof: "parent_chain"}
+				placement.Attribution = &ProcAttribution{SessionID: s.ID, Project: pathx.RecordedBase(s.Cwd), Proof: "parent_chain"}
 			}
 
 			if proven[cur.PID] {
@@ -125,7 +123,7 @@ func PlaceProcesses(procs []model.Proc, sessions []model.Session, sigs *signatur
 				}
 			}
 			if chosen != nil && chosen.ID != 0 {
-				placement.Attribution = &ProcAttribution{SessionID: chosen.ID, Project: path.Base(chosen.Cwd), Proof: "cwd_started_after"}
+				placement.Attribution = &ProcAttribution{SessionID: chosen.ID, Project: pathx.RecordedBase(chosen.Cwd), Proof: "cwd_started_after"}
 			}
 		}
 
@@ -144,10 +142,4 @@ func PlaceProcesses(procs []model.Proc, sessions []model.Session, sigs *signatur
 	return result
 }
 
-func bucketWithin(p, root string) bool {
-	if p == "" || root == "" {
-		return false
-	}
-	rel, err := filepath.Rel(root, p)
-	return err == nil && !filepath.IsAbs(rel) && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
-}
+func bucketWithin(p, root string) bool { return pathx.RecordedWithin(p, root) }

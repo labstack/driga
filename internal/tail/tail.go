@@ -6,9 +6,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/labstack/driga/internal/fileid"
 	"io"
 	"os"
-	"syscall"
 
 	"github.com/labstack/driga/internal/model"
 )
@@ -248,11 +248,14 @@ func fileOffset(f *os.File) (model.Offset, error) {
 	if err != nil {
 		return model.Offset{}, err
 	}
-	stat, ok := info.Sys().(*syscall.Stat_t)
+	id, ok := fileid.Of(info)
+	if !ok {
+		id, ok = fileid.Of(f)
+	}
 	if !ok {
 		return model.Offset{}, fmt.Errorf("inode unavailable for %s", f.Name())
 	}
-	return model.Offset{Inode: stat.Ino, Size: info.Size(), Mtime: info.ModTime()}, nil
+	return model.Offset{Inode: id, Size: info.Size(), Mtime: info.ModTime()}, nil
 }
 
 // lineStart searches backwards in bounded chunks, returning the byte after the

@@ -53,7 +53,7 @@ type MCPPileup struct {
 // fallback, with a measure label so totals never silently imply precision.
 func ProcessMemory(p model.Proc) (uint64, string) {
 	switch p.MemoryMeasure {
-	case "physical_footprint":
+	case "physical_footprint", "private_bytes":
 		return p.Footprint, p.MemoryMeasure
 	case "rss_swap":
 		return p.RSS + p.Swap, p.MemoryMeasure

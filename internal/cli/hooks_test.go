@@ -6,11 +6,16 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
 
 func TestHooksOTLPCLI(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix path or action contract; Windows phase 1 has dedicated watch/refusal tests")
+	}
+
 	g, out := initFixture(t, "y\n")
 	cmd := HooksInstallCmd{HooksOptions: HooksOptions{Agent: "claude", OTLP: true, Traces: true, DryRun: true}}
 	if err := cmd.Run(g); err != nil {
@@ -53,8 +58,13 @@ func TestHooksOTLPCLI(t *testing.T) {
 }
 
 func TestHooksInstallUsesUnresolvedExecutable(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix symlink fixture; Windows watch tests require no Developer Mode or admin rights")
+	}
+
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	t.Setenv("CODEX_HOME", filepath.Join(home, ".codex"))
 	t.Setenv("COPILOT_HOME", filepath.Join(home, ".copilot"))
 	t.Setenv("DRIGA_DATA_DIR", filepath.Join(home, "data"))
@@ -105,6 +115,10 @@ func TestHooksInstallUsesUnresolvedExecutable(t *testing.T) {
 }
 
 func TestHooksConfiguredEndpoint(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix path or action contract; Windows phase 1 has dedicated watch/refusal tests")
+	}
+
 	g, out := initFixture(t, "y\n")
 	if err := os.MkdirAll(filepath.Dir(os.Getenv("DRIGA_CONFIG")), 0700); err != nil {
 		t.Fatal(err)
@@ -137,6 +151,10 @@ func (r *editingPrompt) Read(b []byte) (int, error) {
 	return copy(b, "y\n"), nil
 }
 func TestHooksCLIRejectsEditAfterPreview(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix path or action contract; Windows phase 1 has dedicated watch/refusal tests")
+	}
+
 	g, _ := initFixture(t, "")
 	path := filepath.Join(os.Getenv("HOME"), ".claude", "settings.json")
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {

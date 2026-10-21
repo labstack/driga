@@ -95,7 +95,8 @@ func TestMachineDisclosureSurvivesRefresh(t *testing.T) {
  if(!rows[0].open || rows[1].open || rows[2].open) throw Error("machine/ranking expansion identity lost");
  rows[0].open=false;c.capture();rows[0].open=true;c.restore();if(rows[0].open) throw Error("closed disclosure reopened");
  `
-	cmd := exec.Command(node, "-e", string(js)+fixture)
+	cmd := exec.Command(node, "-")
+	cmd.Stdin = strings.NewReader(string(js) + fixture)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("machine disclosures: %v\n%s", err, out)
 	}

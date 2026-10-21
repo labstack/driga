@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/labstack/driga/internal/secfile"
 	"os"
 	"path/filepath"
 	"strings"
@@ -58,10 +59,10 @@ func (a *Claude) Run(ctx context.Context, r Request, emit func(Delta) error) err
 		return err
 	}
 	dir := filepath.Join(a.DataDir, "tmp")
-	if err := os.MkdirAll(dir, 0700); err != nil {
+	if err := secfile.MkdirPrivate(dir); err != nil {
 		return err
 	}
-	f, err := os.CreateTemp(dir, "chat-mcp-*.json")
+	f, err := secfile.CreateTemp(dir, "chat-mcp-*.json")
 	if err != nil {
 		return err
 	}

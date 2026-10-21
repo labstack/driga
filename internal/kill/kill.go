@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"runtime"
 	"sort"
 	"syscall"
 	"time"
@@ -26,7 +27,10 @@ type Result struct {
 // Tree checks the root's identity and expected descendant set, then sends
 // SIGTERM deepest first. A nonpositive wait uses the five-second default.
 func Tree(ctx context.Context, plat platform.Platform, o model.Orphan, expect []int32, force bool, wait time.Duration) (Result, error) {
-	return tree(ctx, plat, o, expect, force, wait, syscall.Kill)
+	if runtime.GOOS == "windows" {
+		return Result{}, platform.ErrWindowsAction
+	}
+	return tree(ctx, plat, o, expect, force, wait, signalProcess)
 }
 
 func tree(ctx context.Context, plat platform.Platform, o model.Orphan, expect []int32, force bool, wait time.Duration, signal func(int, syscall.Signal) error) (Result, error) {

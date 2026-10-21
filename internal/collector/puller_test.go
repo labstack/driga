@@ -20,11 +20,11 @@ func twoCollectors(t *testing.T) (*store.Store, string, string, Deps, context.Ca
 	b, _, _, _ := setup(t)
 	a.Now = nil
 	b.Now = nil
-	dirA, e := os.MkdirTemp("/tmp", "driga-a-")
+	dirA, e := os.MkdirTemp("", "driga-a-")
 	if e != nil {
 		t.Fatal(e)
 	}
-	dirB, e := os.MkdirTemp("/tmp", "driga-b-")
+	dirB, e := os.MkdirTemp("", "driga-b-")
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -133,7 +133,7 @@ func TestHookToViewerUnder5s(t *testing.T) {
 
 func TestViewerOnlyRemovePurgesAllRows(t *testing.T) {
 	d, _, _, _ := setup(t)
-	dir, e := os.MkdirTemp("/tmp", "driga-view-")
+	dir, e := os.MkdirTemp("", "driga-view-")
 	if e != nil {
 		t.Fatal(e)
 	}
