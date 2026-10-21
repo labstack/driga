@@ -10,8 +10,11 @@ import (
 )
 
 func windowsTerminalCommand(wt, cwd string) ([]string, error) {
-	if !pathx.WindowsStyle(cwd) || !pathx.RecordedIsAbs(cwd) || strings.ContainsAny(cwd, "\x00\r\n\"%!") {
-		return nil, fmt.Errorf("terminal requires an absolute Windows directory without expansion characters")
+	// Recorded directories may come from transcripts or fleet peers. wt.exe
+	// splits its arguments on ';' and cmd.exe /c re-parses the line, so refuse
+	// expansion and command characters instead of trying to escape them.
+	if !pathx.WindowsStyle(cwd) || !pathx.RecordedIsAbs(cwd) || strings.ContainsAny(cwd, "\x00\r\n\"%!;&|<>^()") {
+		return nil, fmt.Errorf("terminal requires an absolute Windows directory without expansion or command characters")
 	}
 	if wt != "" {
 		return []string{wt, "-d", cwd}, nil
