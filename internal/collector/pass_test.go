@@ -82,6 +82,7 @@ func setup(t *testing.T) (Deps, *store.Store, *fakePlatform, *fakeAdapter) {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	t.Setenv("COPILOT_HOME", filepath.Join(home, ".copilot"))
 	t.Setenv("CODEX_HOME", filepath.Join(home, ".codex"))
 	t.Setenv("DRIGA_DATA_DIR", t.TempDir())

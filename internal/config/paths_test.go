@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 )
@@ -8,6 +9,7 @@ import (
 func TestDataDirLinuxPaths(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	t.Setenv("DRIGA_DATA_DIR", "")
 	t.Setenv("XDG_DATA_HOME", "")
 	if got := dataDirForOS("linux"); got != filepath.Join(home, ".local/share/driga") {

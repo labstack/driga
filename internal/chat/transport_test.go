@@ -10,6 +10,10 @@ import (
 
 func TestSocketAndFallback(t *testing.T) {
 	if runtime.GOOS == "windows" {
+		t.Skip("Unix permission-bit contract; Windows uses ACLs")
+	}
+
+	if runtime.GOOS == "windows" {
 		t.Skip("Unix socket permissions")
 	}
 	b, _, _ := fixture(t, true)

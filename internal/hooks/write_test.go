@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -41,6 +42,10 @@ func TestWriteDiffRejectsChangedSettings(t *testing.T) {
 }
 
 func TestWriteDiffAtomicModeAndSymlink(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix symlink fixture; Windows watch tests require no Developer Mode or admin rights")
+	}
+
 	for _, link := range []bool{false, true} {
 		t.Run(map[bool]string{false: "regular", true: "symlink"}[link], func(t *testing.T) {
 			dir := t.TempDir()
@@ -96,6 +101,10 @@ func TestWriteDiffAtomicModeAndSymlink(t *testing.T) {
 }
 
 func TestWriteDiffRefusesRetargetedLink(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix symlink fixture; Windows watch tests require no Developer Mode or admin rights")
+	}
+
 	dir := t.TempDir()
 	path := filepath.Join(dir, "settings")
 	for _, name := range []string{"first", "second"} {

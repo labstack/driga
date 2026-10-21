@@ -1,10 +1,9 @@
 package derive
 
 import (
+	"github.com/labstack/driga/internal/pathx"
 	"path"
-	"path/filepath"
 	"regexp"
-	"strings"
 
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/signatures"
@@ -144,10 +143,4 @@ func PlaceProcesses(procs []model.Proc, sessions []model.Session, sigs *signatur
 	return result
 }
 
-func bucketWithin(p, root string) bool {
-	if p == "" || root == "" {
-		return false
-	}
-	rel, err := filepath.Rel(root, p)
-	return err == nil && !filepath.IsAbs(rel) && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
-}
+func bucketWithin(p, root string) bool { return pathx.Within(p, root) }

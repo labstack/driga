@@ -4,8 +4,6 @@ import (
 	"context"
 	"io"
 	"os"
-	"os/signal"
-	"syscall"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/labstack/driga/internal/chat"
@@ -26,7 +24,7 @@ func (c TopCmd) Run(g *Globals) error {
 	if err != nil {
 		return err
 	}
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	ctx, stop := notifyContext(context.Background())
 	defer stop()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()

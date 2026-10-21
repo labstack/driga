@@ -1,7 +1,7 @@
 package derive
 
 import (
-	"path/filepath"
+	"github.com/labstack/driga/internal/pathx"
 	"strings"
 	"time"
 
@@ -106,10 +106,4 @@ func projectSessionInRepo(s model.Session, repo model.Repo, wts []model.Worktree
 	return projectPathWithin(s.Cwd, repo.Path)
 }
 
-func projectPathWithin(path, root string) bool {
-	if path == "" || root == "" {
-		return false
-	}
-	rel, err := filepath.Rel(root, path)
-	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
-}
+func projectPathWithin(path, root string) bool { return pathx.Within(path, root) }

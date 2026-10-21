@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/labstack/driga/internal/pathx"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -92,9 +93,8 @@ func temporaryCwd(cwd string) bool {
 		return false
 	}
 	cwd = canonicalPath(cwd)
-	for _, root := range []string{os.TempDir(), "/tmp", "/private/tmp", "/var/tmp"} {
-		rel, err := filepath.Rel(canonicalPath(root), cwd)
-		if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+	for _, root := range pathx.TempRoots() {
+		if pathx.Within(cwd, canonicalPath(root)) {
 			return true
 		}
 	}

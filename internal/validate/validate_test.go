@@ -169,6 +169,7 @@ func validateFixture(t *testing.T, src string) {
 	t.Helper()
 	home := copyHome(t, src)
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	t.Setenv("CODEX_HOME", filepath.Join(home, ".codex"))
 	t.Setenv("DRIGA_DATA_DIR", t.TempDir())
 	t.Setenv("DRIGA_SPOOL_DIR", filepath.Join(home, ".driga/events"))
@@ -397,6 +398,7 @@ func TestHeldOutFleetTraces(t *testing.T) {
 	const root = "../../testdata/fixtures/fleet/heldout-v1/heldout/fleet-traces-synthetic"
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	t.Setenv("CODEX_HOME", filepath.Join(home, ".codex"))
 	t.Setenv("DRIGA_DATA_DIR", filepath.Join(home, "data"))
 	t.Setenv("DRIGA_SPOOL_DIR", filepath.Join(home, "spool"))

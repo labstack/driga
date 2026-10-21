@@ -3,8 +3,8 @@
 **See what your coding agents are doing, and what needs you.**
 
 Driga is a CLI, terminal UI, and local web dashboard for AI coding agent
-sessions on macOS and Linux. It brings agent activity, project status, an
-attention inbox, orphaned helpers, and machine health into one place.
+sessions on macOS and Linux. Windows: experimental (watch only).
+It brings agent activity, project status, an attention inbox, orphaned helpers, and machine health into one place.
 
 Driga is **alpha**. Agent formats and behavior can change; unknown or incomplete
 evidence is shown explicitly. Expect changes as the interfaces settle.
@@ -27,7 +27,9 @@ evidence is shown explicitly. Expect changes as the interfaces settle.
 
 Download the archive for your platform from
 [GitHub Releases](https://github.com/labstack/driga/releases). The release matrix
-covers macOS and Linux on amd64 and arm64. Check the archive against its
+covers macOS and Linux on amd64 and arm64. Windows watch builds require building
+from source; agent support has not yet been verified on Windows.
+Check the archive against its
 `SHA256SUMS`, unpack it, and put `driga` on PATH. The
 [release guide](docs/release.md#verify-and-install-a-release-archive) gives the
 verification and installation steps.

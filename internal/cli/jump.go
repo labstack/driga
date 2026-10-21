@@ -3,8 +3,10 @@ package cli
 import (
 	"context"
 	"fmt"
+	"github.com/labstack/driga/internal/platform"
 	"os"
 	"path/filepath"
+	"runtime"
 	"time"
 
 	"github.com/labstack/driga/internal/config"
@@ -17,7 +19,12 @@ type JumpCmd struct {
 	ID string `arg:"" help:"Inbox item ID."`
 }
 
-func (c JumpCmd) Run(g *Globals) error { return c.run(g, newInboxRunner(), "") }
+func (c JumpCmd) Run(g *Globals) error {
+	if runtime.GOOS == "windows" {
+		return platform.ErrWindowsAction
+	}
+	return c.run(g, newInboxRunner(), "")
+}
 
 func (c JumpCmd) run(g *Globals, runner inbox.Runner, goos string) error {
 	st, err := store.Open(filepath.Join(config.DataDir(), "driga.db"), store.ReadOnly)

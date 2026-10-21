@@ -41,6 +41,7 @@ func testEnv(t *testing.T) adapter.Env {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	t.Setenv("DRIGA_DATA_DIR", filepath.Join(home, "data"))
 	t.Setenv("DRIGA_SPOOL_DIR", filepath.Join(home, "spool"))
 	t.Setenv("DRIGA_CONFIG", filepath.Join(home, "config.toml"))

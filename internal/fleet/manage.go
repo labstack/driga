@@ -3,9 +3,9 @@ package fleet
 import (
 	"context"
 	"fmt"
+	"github.com/labstack/driga/internal/filelock"
 	"os"
 	"path/filepath"
-	"syscall"
 	"time"
 
 	"github.com/labstack/driga/internal/store"
@@ -24,7 +24,7 @@ func identityLock(dataDir string) (*os.File, error) {
 		f.Close()
 		return nil, err
 	}
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+	if err := filelock.Lock(f, true); err != nil {
 		f.Close()
 		return nil, fmt.Errorf("stop the collector before identity maintenance or purging: %w", err)
 	}

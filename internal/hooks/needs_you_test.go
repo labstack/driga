@@ -1,6 +1,7 @@
 package hooks_test
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -31,6 +32,7 @@ func TestCodexPermissionReportOnlyByteRoundTrip(t *testing.T) {
 func TestCodexInboxPositionalInstall(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	t.Setenv("CODEX_HOME", filepath.Join(home, ".codex"))
 	out := runHooksCLI(t, "", "install", "codex", "--dry-run")
 	if !strings.Contains(out, "PermissionRequest") || strings.Contains(out, "hook claude") {

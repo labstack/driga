@@ -3,6 +3,7 @@ package view
 import (
 	"errors"
 	"fmt"
+	"github.com/labstack/driga/internal/pathx"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -363,7 +364,7 @@ func inboxLocal(r Reader, f Filter, now time.Time) (InboxView, error) {
 
 func sessionProject(s model.Session, repos []model.Repo, path string) bool {
 	for _, repo := range repos {
-		if repo.Path == path && s.RepoID != nil && *s.RepoID == repo.ID {
+		if pathx.Equal(repo.Path, path) && s.RepoID != nil && *s.RepoID == repo.ID {
 			return true
 		}
 	}
@@ -434,7 +435,7 @@ func orphansLocal(r Reader, f Filter, now time.Time) (OrphansView, error) {
 			return v, err
 		}
 		for _, repo := range repos {
-			if repo.Path == f.Project {
+			if pathx.Equal(repo.Path, f.Project) {
 				wts, err = r.Worktrees(repo.ID)
 				if err != nil {
 					return v, err
@@ -583,13 +584,7 @@ func summaryLocal(r Reader, f Filter, now time.Time) (SummaryView, error) {
 	return v, nil
 }
 
-func within(path, root string) bool {
-	if path == "" || root == "" {
-		return false
-	}
-	rel, err := filepath.Rel(root, path)
-	return err == nil && !filepath.IsAbs(rel) && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
-}
+func within(path, root string) bool { return pathx.Within(path, root) }
 
 // sessionAge is zero when the start is unknown (a transcript seen without
 // registry metadata); renderers show that as "—" instead of a huge age.

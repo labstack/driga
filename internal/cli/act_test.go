@@ -5,6 +5,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -18,6 +19,10 @@ import (
 )
 
 func TestKillRefusesYoung(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix path or action contract; Windows phase 1 has dedicated watch/refusal tests")
+	}
+
 	readEnv(t)
 	readDB(t, func(tx *store.Tx) error {
 		return tx.ReplaceOrphans([]model.Orphan{{ID: "young", RootPID: 1, StartTime: time.Now().Add(-time.Minute), Young: true}})
@@ -55,6 +60,10 @@ func (p *cliSeqPlatform) ExternalPeers(context.Context, []int32) (map[int32]bool
 // Snapshot mode never accumulates two passes, so an unverified candidate is
 // verified on demand instead of being refused outright.
 func TestKillVerifiesUnverifiedOnDemand(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix path or action contract; Windows phase 1 has dedicated watch/refusal tests")
+	}
+
 	start := time.Unix(1700000000, 0)
 	tree := func(cpu float64) []model.Proc {
 		return []model.Proc{{PID: 4242, PPID: 1, StartTime: start, CPUSeconds: cpu, Cmdline: "helper"}}
@@ -184,6 +193,10 @@ func TestAckAllUnacked(t *testing.T) {
 }
 
 func TestActionArgumentsAndUnknownOrphan(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix path or action contract; Windows phase 1 has dedicated watch/refusal tests")
+	}
+
 	readEnv(t)
 	readDB(t, nil)
 	for _, args := range [][]string{{"inbox", "ack"}, {"inbox", "ack", "item", "--all"}, {"orphans", "kill"}, {"orphans", "kill", "missing"}, {"orphans", "kill", "missing", "--all"}} {
@@ -195,6 +208,10 @@ func TestActionArgumentsAndUnknownOrphan(t *testing.T) {
 }
 
 func TestKillConfirmation(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix path or action contract; Windows phase 1 has dedicated watch/refusal tests")
+	}
+
 	readEnv(t)
 	procs := []model.Proc{{PID: 1, Cmdline: "fixture", RSS: 1024}}
 	candidates := []model.Orphan{{ID: "protected", RootPID: 1, StartTime: time.Now().Add(-time.Hour), PIDs: []int32{1}, RSSTotal: 1024, Verified: true}}
@@ -219,6 +236,10 @@ func TestKillConfirmation(t *testing.T) {
 }
 
 func TestKillAllPromptsPerCandidate(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix path or action contract; Windows phase 1 has dedicated watch/refusal tests")
+	}
+
 	readEnv(t)
 	candidates := []model.Orphan{{ID: "one", RootPID: 1, Verified: true}, {ID: "two", RootPID: 1, Verified: true}, {ID: "young", Young: true, StartTime: time.Now().Add(-time.Minute)}}
 	var out, errout bytes.Buffer
@@ -256,6 +277,10 @@ func TestAckReceiptTimeout(t *testing.T) {
 }
 
 func TestKillAllSkipsRemote(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix path or action contract; Windows phase 1 has dedicated watch/refusal tests")
+	}
+
 	readEnv(t)
 	readDB(t, func(tx *store.Tx) error {
 		if err := tx.ReplaceOrphans([]model.Orphan{{ID: "local", RootPID: 4242, Verified: true}}); err != nil {

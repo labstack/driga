@@ -211,7 +211,7 @@ func (m *app) homeView() string {
 		} else if view.LoadLevel(sample.Load1, sample.Cores) == "warning" {
 			token = "warn"
 		}
-		machine = append(machine, mid.Render("load    ")+view.TokenStyle(token, m.opts.NoColor).Render(fmt.Sprintf("%.1f", sample.Load1))+dim.Render(fmt.Sprintf(" / %d cores", sample.Cores)), mid.Render("disk    ")+humanBytes(sample.DiskFree)+dim.Render(" free"))
+		machine = append(machine, mid.Render("load    ")+view.TokenStyle(token, m.opts.NoColor).Render(view.FormatLoad(sample.Load1, "%.1f"))+dim.Render(fmt.Sprintf(" / %d cores", sample.Cores)), mid.Render("disk    ")+humanBytes(sample.DiskFree)+dim.Render(" free"))
 	}
 	if len(machine) == 0 {
 		machine = append(machine, "Health unavailable")
@@ -476,7 +476,7 @@ func styledSpark(buckets []view.ActivityBucket, width int, load, noColor bool) s
 		value, valid, critical := 0.0, true, false
 		for _, b := range buckets[from:to] {
 			if load {
-				if b.Sample == nil {
+				if b.Sample == nil || load && b.Sample.Load1 < 0 {
 					valid = false
 					continue
 				}
@@ -521,7 +521,7 @@ func activityRow(buckets []view.ActivityBucket, width int, load, noColor bool) s
 		last := buckets[len(buckets)-1]
 		if load {
 			if last.Sample != nil {
-				current = fmt.Sprintf("%.1f", last.Sample.Load1)
+				current = view.FormatLoad(last.Sample.Load1, "%.1f")
 				if last.Sample.Cores > 0 && last.Sample.Load1 > float64(last.Sample.Cores) {
 					token = "crit"
 				}

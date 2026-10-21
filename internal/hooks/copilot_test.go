@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 func TestCopilotOwnedFile(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	t.Setenv("COPILOT_HOME", filepath.Join(home, "custom"))
 	t.Setenv("DRIGA_DATA_DIR", filepath.Join(home, "data"))
 	t.Setenv("DRIGA_SPOOL_DIR", filepath.Join(home, "spool"))
@@ -111,6 +113,10 @@ func TestCopilotOwnedFile(t *testing.T) {
 }
 
 func TestCopilotPreviewGuardsAndRepair(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix symlink fixture; Windows watch tests require no Developer Mode or admin rights")
+	}
+
 	path := filepath.Join(t.TempDir(), "hooks", "driga.json")
 	if _, err := hooks.CopilotInstall(path, "relative/driga", false, time.Now()); err == nil {
 		t.Fatal("accepted relative executable")

@@ -489,7 +489,7 @@ func templateFuncs() template.FuncMap {
 			for _, b := range buckets {
 				times = append(times, b.TS.Unix())
 				events = append(events, b.Events)
-				if b.Sample == nil {
+				if b.Sample == nil || b.Sample.Load1 < 0 {
 					loads = append(loads, nil)
 				} else {
 					loads = append(loads, b.Sample.Load1)

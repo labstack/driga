@@ -1,5 +1,3 @@
-//go:build !windows
-
 // Command driga watches every AI coding agent session on this machine.
 package main
 

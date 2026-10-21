@@ -9,8 +9,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/labstack/driga/internal/pathx"
 	"io/fs"
-	"net/url"
 	"os"
 	"path/filepath"
 	"time"
@@ -102,8 +102,7 @@ func Open(path string, mode Mode) (_ *Store, retErr error) {
 				return nil, err
 			}
 		}
-		u := url.URL{Scheme: "file", Path: abs}
-		dsn = u.String()
+		dsn = pathx.FileURL(abs)
 		if mode == ReadOnly {
 			dsn += "?mode=ro&_pragma=busy_timeout(5000)"
 		} else {

@@ -101,7 +101,7 @@ func privateDir(dir string) error {
 	if !info.IsDir() {
 		return fmt.Errorf("fleet directory %s is not a directory", dir)
 	}
-	return os.Chmod(dir, 0700)
+	return protectWindowsDir(dir)
 }
 
 // atomicPrivateWrite never exposes a partly written destination or follows a
@@ -115,6 +115,10 @@ func atomicPrivateWrite(path string, data []byte) error {
 		return err
 	}
 	defer os.Remove(f.Name())
+	if err := makePrivateFile(f.Name()); err != nil {
+		f.Close()
+		return err
+	}
 	if _, err := f.Write(data); err != nil {
 		_ = f.Close()
 		return err

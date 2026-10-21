@@ -42,6 +42,7 @@ func setup(t *testing.T, data string) (adapter.Env, string) {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	t.Setenv("CODEX_HOME", "")
 	path := filepath.Join(home, ".codex", "sessions", "2026", "10", "18", filename)
 	write(t, path, data)

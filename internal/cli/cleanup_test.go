@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -67,6 +68,10 @@ func TestCleanupApplyNeedsYes(t *testing.T) {
 	}
 }
 func TestCleanupAllSkipsNeedsReview(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix path or action contract; Windows phase 1 has dedicated watch/refusal tests")
+	}
+
 	readEnv(t)
 	var out bytes.Buffer
 	g := &Globals{Stdin: strings.NewReader(""), Stdout: &out}
@@ -93,6 +98,10 @@ func TestCleanupNoDatabaseDoesNotCollect(t *testing.T) {
 }
 
 func TestCleanupActionJSON(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix path or action contract; Windows phase 1 has dedicated watch/refusal tests")
+	}
+
 	readEnv(t)
 	cleanupFake(t)
 	readDB(t, nil)
@@ -139,6 +148,10 @@ func TestCleanupConfigShown(t *testing.T) {
 	}
 }
 func TestCleanupWhyListingOnly(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix path or action contract; Windows phase 1 has dedicated watch/refusal tests")
+	}
+
 	readEnv(t)
 	cleanupFake(t)
 	readDB(t, nil)
@@ -150,6 +163,10 @@ func TestCleanupWhyListingOnly(t *testing.T) {
 }
 
 func TestCleanupJSONFailureIsOneRecord(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix path or action contract; Windows phase 1 has dedicated watch/refusal tests")
+	}
+
 	readEnv(t)
 	cleanupFake(t)
 	readDB(t, nil)

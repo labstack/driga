@@ -37,6 +37,7 @@ func initFixture(t *testing.T, input string) (*Globals, *bytes.Buffer) {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	t.Setenv("CODEX_HOME", filepath.Join(home, ".codex"))
 	t.Setenv("COPILOT_HOME", filepath.Join(home, ".copilot"))
 	t.Setenv("DRIGA_CONFIG", filepath.Join(home, ".config", "driga", "config.toml"))
@@ -99,6 +100,10 @@ func TestInitAllSkipped(t *testing.T) {
 }
 
 func TestInitWritesPrivateCommentedConfig(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix permission-bit contract; Windows uses ACLs")
+	}
+
 	g, _ := initFixture(t, "y\ny\ny\nn\nn\n")
 	if err := os.MkdirAll(filepath.Join(os.Getenv("HOME"), "code", "repo", ".git"), 0700); err != nil {
 		t.Fatal(err)
@@ -210,6 +215,10 @@ func TestTask18CommandParsing(t *testing.T) {
 }
 
 func TestServiceLogsLast50(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix path or action contract; Windows phase 1 has dedicated watch/refusal tests")
+	}
+
 	if runtime.GOOS == "linux" {
 		t.Skip("linux reads collector logs from journalctl; see TestServiceLogsLinux")
 	}

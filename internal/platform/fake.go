@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/labstack/driga/internal/pathx"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/labstack/driga/internal/model"
@@ -92,8 +92,7 @@ func LoadFake(dir string) (*Fake, error) {
 
 func (f *Fake) OpenFiles(ctx context.Context, path string) (bool, error) {
 	for _, p := range f.openFiles {
-		rel, err := filepath.Rel(path, p)
-		if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		if pathx.Within(p, path) {
 			return true, ctx.Err()
 		}
 	}

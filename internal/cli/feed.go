@@ -3,10 +3,7 @@ package cli
 import (
 	"context"
 	"encoding/json"
-	"os"
-	"os/signal"
 	"path/filepath"
-	"syscall"
 	"time"
 
 	"github.com/labstack/driga/internal/config"
@@ -46,7 +43,7 @@ func (c FeedTailCmd) Run(g *Globals) error {
 	if seq == 0 {
 		seq = min - 1
 	}
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	ctx, stop := notifyContext(context.Background())
 	defer stop()
 	encoder := json.NewEncoder(commandOutput(g))
 	ticker := time.NewTicker(250 * time.Millisecond)

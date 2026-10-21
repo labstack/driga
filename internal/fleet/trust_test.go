@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"testing"
 	"time"
 
@@ -11,6 +12,10 @@ import (
 )
 
 func TestTrustFilesAtomic0600(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix permission-bit contract; Windows uses ACLs")
+	}
+
 	dir := filepath.Join(t.TempDir(), "fleet")
 	if got, err := fleet.LoadPeers(dir); err != nil || len(got) != 0 {
 		t.Fatal(got, err)

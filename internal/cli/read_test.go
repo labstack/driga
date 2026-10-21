@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -22,6 +23,7 @@ func readEnv(t *testing.T) {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	t.Setenv("CODEX_HOME", "")
 	t.Setenv("DRIGA_DATA_DIR", filepath.Join(home, "data"))
 	t.Setenv("DRIGA_SPOOL_DIR", filepath.Join(home, "spool"))
@@ -130,6 +132,9 @@ func TestSinceYesterday(t *testing.T) {
 }
 
 func TestReadFallsBackToSnapshot(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix service or hook path contract; Windows has watch/refusal tests")
+	}
 	readEnv(t)
 	for i := 0; i < 2; i++ {
 		out, errout := readRun(t, "--json")

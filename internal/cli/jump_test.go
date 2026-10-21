@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -96,6 +97,10 @@ func TestJumpCommand(t *testing.T) {
 }
 
 func TestJumpCLIAndRunnerFailure(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix path or action contract; Windows phase 1 has dedicated watch/refusal tests")
+	}
+
 	readEnv(t)
 	st := readDB(t, func(tx *store.Tx) error {
 		if err := tx.UpsertInboxItem(model.InboxItem{ID: "one", Kind: "waiting", TS: time.Now()}); err != nil {
@@ -133,6 +138,10 @@ func TestJumpCLIAndRunnerFailure(t *testing.T) {
 }
 
 func TestJumpMissingDatabaseDoesNotCollect(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix path or action contract; Windows phase 1 has dedicated watch/refusal tests")
+	}
+
 	readEnv(t)
 	var out, stderr bytes.Buffer
 	if code := run([]string{"jump", "gone"}, "test", strings.NewReader(""), &out, &stderr); code != 1 || !strings.Contains(stderr.String(), "no longer exists") {

@@ -3,11 +3,12 @@ package cli
 import (
 	"context"
 	"fmt"
+	"github.com/labstack/driga/internal/filelock"
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/labstack/driga/internal/collector"
@@ -91,10 +92,10 @@ func snapshotHint(w io.Writer, now time.Time) {
 	}
 	defer f.Close()
 	// Serialize simultaneous snapshot readers without taking the collector lock.
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+	if err := filelock.Lock(f, false); err != nil {
 		return
 	}
-	defer syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+	defer filelock.Unlock(f)
 	data, err := io.ReadAll(io.LimitReader(f, 64))
 	if err != nil || strings.TrimSpace(string(data)) == date {
 		return
@@ -110,6 +111,10 @@ func snapshotHint(w io.Writer, now time.Time) {
 		_, err = io.WriteString(f, date+"\n")
 	}
 	if err != nil {
+		return
+	}
+	if runtime.GOOS == "windows" {
+		fmt.Fprintln(w, "snapshot · no history — run 'driga collect' in a foreground terminal for history")
 		return
 	}
 	fmt.Fprintln(w, "snapshot · no history — run 'driga service install' for inbox & history")

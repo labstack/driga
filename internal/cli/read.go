@@ -3,12 +3,11 @@ package cli
 import (
 	"context"
 	"fmt"
+	"github.com/labstack/driga/internal/pathx"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"sort"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/labstack/driga/internal/collector"
@@ -106,7 +105,7 @@ func (c AgentCmd) Run(g *Globals) error {
 			}
 			ok := false
 			for _, repo := range repos {
-				if repo.Path == f.Project && v.Session.RepoID != nil && *v.Session.RepoID == repo.ID {
+				if pathx.Equal(repo.Path, f.Project) && v.Session.RepoID != nil && *v.Session.RepoID == repo.ID {
 					ok = true
 				}
 			}
@@ -159,7 +158,7 @@ func runRead(g *Globals, base view.Filter, project string, build readBuilder) er
 	if _, err := parseSince(g.Since, time.Now()); err != nil {
 		return err
 	}
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	ctx, stop := notifyContext(context.Background())
 	defer stop()
 	for {
 		if g.Watch > 0 {
@@ -329,10 +328,7 @@ func resolveProject(r view.Reader, input string) (string, error) {
 	}
 }
 
-func pathWithin(path, root string) bool {
-	rel, err := filepath.Rel(root, path)
-	return err == nil && !filepath.IsAbs(rel) && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
-}
+func pathWithin(path, root string) bool { return pathx.Within(path, root) }
 
 // FlowCmd reads a family; omitted ID selects the newest live interactive session.
 type FlowCmd struct {

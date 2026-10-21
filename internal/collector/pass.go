@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/labstack/driga/internal/pathx"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -1030,7 +1031,7 @@ func linkCodex(ss []model.Session, procs []model.Proc, plat platform.Platform) {
 			if sessionCwd == "" {
 				sessionCwd = gitscan.NormalizePath(s.Cwd)
 			}
-			if cwd(j) != sessionCwd {
+			if !pathx.Equal(cwd(j), sessionCwd) {
 				continue
 			}
 			if best == nil || p.StartTime.After(best.StartTime) || p.StartTime.Equal(best.StartTime) && p.PID < best.PID {
@@ -1071,7 +1072,7 @@ func mapRepos(tx *store.Tx, ss []model.Session) error {
 		best := -1
 		for _, w := range ws {
 			path := w.Path
-			if len(path) > best && (cwd == path || strings.HasPrefix(cwd, strings.TrimSuffix(path, string(filepath.Separator))+string(filepath.Separator))) {
+			if len(path) > best && pathx.Within(cwd, path) {
 				repo, worktree := w.RepoID, w.ID
 				s.RepoID, s.WorktreeID = &repo, &worktree
 				best = len(path)

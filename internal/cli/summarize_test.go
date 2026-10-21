@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -23,6 +24,10 @@ import (
 const claudeHelp = "-p, --print --safe-mode --no-session-persistence --tools --output-format --json-schema --model --max-budget-usd --name --setting-sources --strict-mcp-config --mcp-config --allowedTools --verbose --include-partial-messages --resume"
 
 func fakeClaude(t *testing.T, help, body string) string {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix symlink fixture; Windows watch tests require no Developer Mode or admin rights")
+	}
+
 	t.Helper()
 	dir := t.TempDir()
 	gitPath, err := exec.LookPath("git")

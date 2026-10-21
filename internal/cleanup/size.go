@@ -6,23 +6,13 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"syscall"
 	"time"
 )
-
-func sameDevice(a, b *syscall.Stat_t) bool { return a.Dev == b.Dev }
 
 // WalkSize counts regular-file bytes without following symlinks or mount points.
 // Deadline/cancellation produces a lower bound; callers display it with ≥.
 func WalkSize(ctx context.Context, path string) (size int64, capped bool, err error) {
-	return walkSize(ctx, path, deviceID)
-}
-func deviceID(info os.FileInfo) (uint64, bool) {
-	stat, ok := info.Sys().(*syscall.Stat_t)
-	if !ok {
-		return 0, false
-	}
-	return uint64(stat.Dev), true
+	return walkStatsWithPath(ctx, path, devicePath, nil)
 }
 
 // walkSize allows mount boundaries to be tested without mounting a real FS.
@@ -30,13 +20,17 @@ func walkSize(ctx context.Context, path string, device func(os.FileInfo) (uint64
 	return walkStats(ctx, path, device, nil)
 }
 func walkStats(ctx context.Context, path string, device func(os.FileInfo) (uint64, bool), visit func(os.FileInfo)) (size int64, capped bool, err error) {
+	return walkStatsWithPath(ctx, path, func(_ string, info os.FileInfo) (uint64, bool) { return device(info) }, visit)
+}
+
+func walkStatsWithPath(ctx context.Context, path string, device func(string, os.FileInfo) (uint64, bool), visit func(os.FileInfo)) (size int64, capped bool, err error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	info, err := os.Lstat(path)
 	if err != nil {
 		return 0, false, err
 	}
-	base, ok := device(info)
+	base, ok := device(path, info)
 	if !ok {
 		return 0, false, fmt.Errorf("filesystem device identity unavailable")
 	}
@@ -52,7 +46,7 @@ func walkStats(ctx context.Context, path string, device func(os.FileInfo) (uint6
 		if err != nil {
 			return err
 		}
-		stat, ok := device(info)
+		stat, ok := device(p, info)
 		if !ok {
 			return fmt.Errorf("filesystem device identity unavailable")
 		}
@@ -80,7 +74,7 @@ func Measure(ctx context.Context, c Candidate, now time.Time) (Candidate, error)
 	var err error
 	if c.Kind == History {
 		var buckets [3]int64
-		c.Size, c.SizeCapped, err = walkStats(ctx, c.Path, deviceID, func(info os.FileInfo) {
+		c.Size, c.SizeCapped, err = walkStatsWithPath(ctx, c.Path, devicePath, func(info os.FileInfo) {
 			age := now.Sub(info.ModTime())
 			bucket := 0
 			if age >= 30*24*time.Hour {

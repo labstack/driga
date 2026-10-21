@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/labstack/driga/internal/platform"
 	"io"
 	"os"
 	"os/exec"
@@ -285,6 +286,9 @@ func cachedNotifierLookup(lookup func(string) (string, error)) func() string {
 }
 
 func (d DesktopNotifier) Notify(ctx context.Context, n Notification) error {
+	if d.OS == "windows" || d.OS == "" && runtime.GOOS == "windows" {
+		return platform.ErrWindowsAction
+	}
 	if d.Runner == nil {
 		return nil
 	}

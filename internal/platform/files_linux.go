@@ -3,6 +3,7 @@ package platform
 import (
 	"context"
 	"errors"
+	"github.com/labstack/driga/internal/pathx"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -50,8 +51,7 @@ func (linuxPlatform) OpenFiles(ctx context.Context, path string) (bool, error) {
 				return false, err
 			}
 			target = strings.TrimSuffix(target, " (deleted)")
-			rel, err := filepath.Rel(path, target)
-			if err == nil && rel != ".." && !strings.HasPrefix(rel, "../") {
+			if pathx.Within(target, path) {
 				return true, nil
 			}
 		}

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -19,6 +20,10 @@ import (
 const askInit = `{"type":"system","subtype":"init","mcp_servers":[{"name":"driga","status":"connected"}]}`
 
 func TestAskArgs(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix permission-bit contract; Windows uses ACLs")
+	}
+
 	readEnv(t)
 	record := fakeClaude(t, claudeHelp, `
 prev=''

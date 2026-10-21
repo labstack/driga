@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -16,6 +17,10 @@ import (
 )
 
 func TestAppendDrainRoundTrip(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix permission-bit contract; Windows uses ACLs")
+	}
+
 	dir := filepath.Join(t.TempDir(), "events")
 	now := time.Date(2026, 10, 18, 23, 0, 0, 0, time.FixedZone("west", -7*3600))
 	events := []model.HookEvent{{TS: now, Adapter: "claude", SessionID: "one", Event: "Stop"}, {TS: now.Add(-48 * time.Hour), Adapter: "codex", SessionID: "two", Event: "notify"}}

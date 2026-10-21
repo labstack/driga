@@ -123,6 +123,7 @@ func (s *Set) appendFile(path string, data []byte, agent string) error {
 
 // Match returns the first matching signature, using exe only if cmdline is empty.
 func (s *Set) Match(cmdline, exe string) (Signature, bool) {
+	cmdline, exe = windowsSignatureInput(cmdline, exe)
 	if cmdline == "" {
 		cmdline = exe
 	}
@@ -181,6 +182,7 @@ func versionedName(exe string) (string, string) {
 // ProcessName labels an agent by signature and preserves a versioned executable's
 // version. Unclassified bare versions use the nearest meaningful directory.
 func (s *Set) ProcessName(cmdline, exe string) string {
+	cmdline, exe = windowsSignatureInput(cmdline, exe)
 	name, version := versionedName(exe)
 	if exe == "" {
 		token, _, _ := strings.Cut(cmdline, " ")
@@ -207,6 +209,7 @@ func (s *Set) ProcessName(cmdline, exe string) string {
 // MCPName labels known report-only MCP commands. These patterns deliberately do
 // not add helper/orphan signatures or authorize any process action.
 func (s *Set) MCPName(cmdline, exe string) (string, bool) {
+	cmdline, exe = windowsSignatureInput(cmdline, exe)
 	if cmdline == "" {
 		cmdline = exe
 	}

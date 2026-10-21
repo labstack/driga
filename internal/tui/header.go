@@ -114,7 +114,7 @@ func (m *app) header() string {
 	case "warning":
 		loadToken = "warn"
 	}
-	health := []string{headerGauge("mem", sample.MemUsed, sample.MemTotal, m.opts.NoColor), headerGauge("swap", sample.SwapUsed, sample.SwapTotal, m.opts.NoColor), "load " + view.TokenStyle(loadToken, m.opts.NoColor).Render(fmt.Sprintf("%.1f", sample.Load1)) + fmt.Sprintf("/%d", sample.Cores), "disk " + humanBytes(sample.DiskFree)}
+	health := []string{headerGauge("mem", sample.MemUsed, sample.MemTotal, m.opts.NoColor), headerGauge("swap", sample.SwapUsed, sample.SwapTotal, m.opts.NoColor), "load " + view.TokenStyle(loadToken, m.opts.NoColor).Render(view.FormatLoad(sample.Load1, "%.1f")) + fmt.Sprintf("/%d", sample.Cores), "disk " + humanBytes(sample.DiskFree)}
 	right := strings.Join(health, "   ")
 	identity = strings.Join(identityParts, " · ")
 	if lipgloss.Width(identity)+lipgloss.Width(right)+2 <= m.width {

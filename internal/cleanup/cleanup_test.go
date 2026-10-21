@@ -1,3 +1,5 @@
+//go:build !windows
+
 package cleanup
 
 import (
@@ -127,6 +129,7 @@ func fixture(t *testing.T) (Env, *fakePlatform, string, string) {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	t.Setenv("TMPDIR", t.TempDir())
 	t.Setenv("GIT_CONFIG_GLOBAL", "/dev/null")
 	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")

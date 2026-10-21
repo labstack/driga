@@ -4,13 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/labstack/driga/internal/platform"
 	"io"
 	"os"
 	"os/exec"
-	"os/signal"
 	"path/filepath"
 	"runtime"
-	"syscall"
 
 	ks "github.com/kardianos/service"
 	"github.com/labstack/driga/internal/service"
@@ -24,11 +23,15 @@ type ServiceCmd struct {
 
 // Run controls the user service or prints the last 50 collector log lines.
 func (c ServiceCmd) Run(g *Globals) error {
+	if runtime.GOOS == "windows" {
+		return platform.ErrWindowsAction
+	}
+
 	if c.Follow && c.Action != "logs" {
 		return errors.New("-f is only supported by service logs")
 	}
 	if c.Action == "logs" {
-		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		ctx, stop := notifyContext(context.Background())
 		defer stop()
 		name, args := serviceLogCommand(runtime.GOOS, c.Follow)
 		cmd := exec.CommandContext(ctx, name, args...)

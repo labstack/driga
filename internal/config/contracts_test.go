@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -10,6 +11,7 @@ import (
 
 func TestStrictConfiguration(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	for _, tc := range []struct{ body, key string }{
 		{"typo = true", "typo"}, {"[unknown]\n", "unknown"},
 		{"[fleet]\nlitsen = 'x'", "fleet.litsen"},
@@ -35,6 +37,7 @@ func TestStrictConfiguration(t *testing.T) {
 
 func TestEnvironmentConfiguration(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	p := filepath.Join(t.TempDir(), "config.toml")
 	if err := os.WriteFile(p, []byte("capture_text = 'titles'\n[summaries]\nenabled = false\n"), 0600); err != nil {
 		t.Fatal(err)
@@ -74,8 +77,13 @@ func TestUnknownEnvironmentEvenWithoutFile(t *testing.T) {
 }
 
 func TestConfigAndSpoolXDGPaths(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix path or action contract; Windows phase 1 has dedicated watch/refusal tests")
+	}
+
 	h := t.TempDir()
 	t.Setenv("HOME", h)
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	t.Setenv("DRIGA_CONFIG", "")
 	t.Setenv("DRIGA_SPOOL_DIR", "")
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(h, "config"))

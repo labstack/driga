@@ -10,6 +10,7 @@ import (
 
 func TestCollectorLogRotates(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	path := filepath.Join(t.TempDir(), "collector.log")
 	w := &logfile.Writer{Path: path}
 	chunk := bytes.Repeat([]byte("a"), 1<<20)

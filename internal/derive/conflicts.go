@@ -1,9 +1,9 @@
 package derive
 
 import (
+	"github.com/labstack/driga/internal/pathx"
 	"path/filepath"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/labstack/driga/internal/model"
@@ -37,7 +37,7 @@ func Conflicts(sessions []model.Session, files map[int64][]model.FileTouch, pare
 			wt = s.Cwd
 		}
 		if wt != "" {
-			wt = filepath.Clean(wt)
+			wt = pathx.Key(wt)
 			if worktrees[wt] == nil {
 				worktrees[wt] = make(map[int64]conflictEdit)
 			}
@@ -48,13 +48,13 @@ func Conflicts(sessions []model.Session, files map[int64][]model.FileTouch, pare
 				continue
 			}
 			path := f.Path
-			if !filepath.IsAbs(path) {
+			if !filepath.IsAbs(path) && !pathx.Within(path, string(filepath.Separator)) {
 				path = filepath.Join(s.Cwd, path)
 			}
-			if !filepath.IsAbs(path) {
+			if !filepath.IsAbs(path) && !pathx.Within(path, string(filepath.Separator)) {
 				continue
 			}
-			path = filepath.Clean(path)
+			path = pathx.Key(path)
 			e := conflictEdit{id: s.ID, root: root, worktree: wt, at: f.TS}
 			if absoluteFiles[path] == nil {
 				absoluteFiles[path] = make(map[int64]conflictEdit)
@@ -69,14 +69,14 @@ func Conflicts(sessions []model.Session, files map[int64][]model.FileTouch, pare
 				rel, _ = filepath.Rel(wt, path)
 			}
 			rel = filepath.Clean(rel)
-			if fileRepo == "" || fileWT == "" || rel == "." || filepath.IsAbs(rel) || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			if fileRepo == "" || fileWT == "" || rel == "." || filepath.IsAbs(rel) || !pathx.Within(rel, ".") {
 				continue
 			}
-			key := conflictFileKey{repo: filepath.Clean(fileRepo), rel: rel, branch: s.Branch}
+			key := conflictFileKey{repo: pathx.Key(fileRepo), rel: pathx.Key(rel), branch: s.Branch}
 			if otherFiles[key] == nil {
 				otherFiles[key] = make(map[int64]conflictEdit)
 			}
-			e.worktree = filepath.Clean(fileWT)
+			e.worktree = pathx.Key(fileWT)
 			conflictLatest(otherFiles[key], e)
 		}
 	}
@@ -97,7 +97,7 @@ func Conflicts(sessions []model.Session, files map[int64][]model.FileTouch, pare
 			wts[e.worktree] = true
 		}
 		if len(edits) >= 2 && len(wts) >= 2 {
-			result = append(result, conflictFile("same_file_other_worktree", filepath.Join(key.repo, key.rel), edits, now))
+			result = append(result, conflictFile("same_file_other_worktree", pathx.Key(filepath.Join(key.repo, key.rel)), edits, now))
 		}
 	}
 	sort.Slice(result, func(i, j int) bool {

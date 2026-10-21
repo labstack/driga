@@ -4,11 +4,12 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"github.com/labstack/driga/internal/fileid"
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
-	"syscall"
 
 	"github.com/labstack/driga/internal/model"
 )
@@ -51,7 +52,7 @@ func Migrate(old, dest string, load func(string) (model.Offset, error), save fun
 			return err
 		}
 		if _, err := os.Lstat(target); errors.Is(err, os.ErrNotExist) {
-			if err := linkLegacySpool(source, target); errors.Is(err, syscall.EXDEV) {
+			if err := linkLegacySpool(source, target); crossDevice(err) {
 				if err := copySpoolFile(source, target); err != nil {
 					return err
 				}
@@ -101,8 +102,16 @@ func Migrate(old, dest string, load func(string) (model.Offset, error), save fun
 		if !info.Mode().IsRegular() {
 			return fmt.Errorf("legacy spool target is not regular: %s", target)
 		}
-		next := model.Offset{Inode: info.Sys().(*syscall.Stat_t).Ino, Size: info.Size(), Mtime: info.ModTime()}
-		if prev.Inode == before.Sys().(*syscall.Stat_t).Ino && prev.Pos <= before.Size() {
+		targetID, err := spoolIdentity(target)
+		if err != nil {
+			return err
+		}
+		sourceID, err := spoolIdentity(source)
+		if err != nil {
+			return err
+		}
+		next := model.Offset{Inode: targetID, Size: info.Size(), Mtime: info.ModTime()}
+		if prev.Inode == sourceID && prev.Pos <= before.Size() {
 			next.Pos = prev.Pos
 		}
 		if err := save(targetName, next); err != nil {
@@ -120,6 +129,9 @@ func Migrate(old, dest string, load func(string) (model.Offset, error), save fun
 }
 
 func syncDir(path string) error {
+	if runtime.GOOS == "windows" {
+		return nil
+	}
 	dir, err := os.Open(path)
 	if err != nil {
 		return err
@@ -162,4 +174,17 @@ func copySpoolFile(source, target string) error {
 		return err
 	}
 	return syncDir(filepath.Dir(target))
+}
+
+func spoolIdentity(path string) (uint64, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return 0, err
+	}
+	defer f.Close()
+	id, ok := fileid.Of(f)
+	if !ok {
+		return 0, fmt.Errorf("file identity unavailable: %s", path)
+	}
+	return id, nil
 }

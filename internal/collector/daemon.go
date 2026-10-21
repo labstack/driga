@@ -4,13 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/labstack/driga/internal/filelock"
+	"github.com/labstack/driga/internal/platform"
 	"log/slog"
 	"net"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/labstack/driga/internal/chat"
@@ -54,8 +55,8 @@ func Running(dataDir string) bool {
 	if err != nil || pid <= 0 {
 		return false
 	}
-	err = syscall.Kill(pid, 0)
-	return err == nil || errors.Is(err, syscall.EPERM)
+	start, err := platform.ProcessStart(int32(pid))
+	return err == nil && platform.New().Alive(int32(pid), start)
 }
 
 // Lock takes the nonblocking collector writer lock and writes the owner's PID.
@@ -75,8 +76,8 @@ func Lock(dataDir string) (*os.File, error) {
 	if err := f.Chmod(0600); err != nil {
 		return failed(err)
 	}
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
-		if errors.Is(err, syscall.EWOULDBLOCK) || errors.Is(err, syscall.EAGAIN) {
+	if err := filelock.Lock(f, true); err != nil {
+		if filelock.Busy(err) {
 			var buf [32]byte
 			n, _ := f.ReadAt(buf[:], 0)
 			pid, _ := strconv.Atoi(strings.TrimSpace(string(buf[:n])))

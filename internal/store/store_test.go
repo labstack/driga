@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -358,6 +359,10 @@ func TestPruneRetention(t *testing.T) {
 }
 
 func TestFilePermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix permission-bit contract; Windows uses ACLs")
+	}
+
 	for _, existing := range []bool{false, true} {
 		t.Run(fmt.Sprint(existing), func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "data", "driga.db")

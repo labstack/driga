@@ -3,11 +3,16 @@ package claude
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
 
 func TestTemporaryCwdViaSymlinkedTempRoot(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix symlink fixture; Windows watch tests require no Developer Mode or admin rights")
+	}
+
 	// Use a custom OS temp root nested in the test's own temp dir (never the
 	// source tree). On macOS that is outside /tmp, so the built-in /tmp
 	// fallback cannot hide a failure to resolve the custom root.
@@ -75,6 +80,10 @@ func TestTemporaryCwdViaSymlinkedTempRoot(t *testing.T) {
 }
 
 func TestLinuxTempCwdVarTmp(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix path or action contract; Windows phase 1 has dedicated watch/refusal tests")
+	}
+
 	t.Setenv("TMPDIR", t.TempDir())
 	for _, cwd := range []string{"/var/tmp", "/var/tmp/driga-synthetic/session"} {
 		if !temporaryCwd(cwd) {

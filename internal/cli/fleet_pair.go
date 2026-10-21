@@ -11,10 +11,8 @@ import (
 	"github.com/labstack/driga/internal/store"
 	"github.com/labstack/driga/internal/view"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"text/tabwriter"
 	"time"
 
@@ -98,7 +96,7 @@ func pairPrompt(g *Globals, question string) func(string) bool {
 	}
 }
 func pairCommandContext() (context.Context, context.CancelFunc) {
-	return signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	return notifyContext(context.Background())
 }
 
 // FleetRevokeCmd immediately revokes a viewer by name or device ID.

@@ -15,6 +15,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -40,6 +41,7 @@ func serverFixtureBeforePass(t *testing.T, beforePass bool) (*Server, *store.Sto
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 	t.Setenv("HOME", dir)
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	t.Setenv("DRIGA_DATA_DIR", dir)
 	t.Setenv("DRIGA_SPOOL_DIR", filepath.Join(dir, "spool"))
 	t.Setenv("DRIGA_CONFIG", filepath.Join(dir, "config"))
@@ -541,6 +543,10 @@ func TestSnapshotAllReferencesAndPrivacy(t *testing.T) {
 }
 
 func TestControlJSONLinesAndModes(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix permission-bit contract; Windows uses ACLs")
+	}
+
 	s, _, id := serverFixture(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

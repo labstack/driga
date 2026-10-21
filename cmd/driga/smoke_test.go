@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -141,6 +142,10 @@ func field(data, key, want string) bool {
 }
 
 func TestSmoke(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix path or action contract; Windows phase 1 has dedicated watch/refusal tests")
+	}
+
 	if testing.Short() {
 		t.Skip("builds and runs the driga binary")
 	}

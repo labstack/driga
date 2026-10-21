@@ -79,7 +79,7 @@ func Render(w io.Writer, v any, opts RenderOpts) error {
 				events += b.Events
 				if b.Sample != nil {
 					samples++
-					load = fmt.Sprintf("%.1f", b.Sample.Load1)
+					load = FormatLoad(b.Sample.Load1, "%.1f")
 				}
 			}
 			fmt.Fprintf(tw, "%s\t60m\t%d/60\t%d\t%s\n", cell(originLabel(m.MachineID, m.MachineFresh)), samples, events, load)
@@ -233,7 +233,7 @@ func Render(w io.Writer, v any, opts RenderOpts) error {
 			s := h.Sample
 			fmt.Fprintln(tw, "Vitals detail")
 			fmt.Fprintln(tw, "MEMORY\tCOMPRESSED\tSWAP\tLOAD (1/5/15)\tCORES\tDISK FREE\tPRESSURE LEVEL / FREE")
-			fmt.Fprintf(tw, "%s/%s\t%s\t%s/%s\t%.1f/%.1f/%.1f\t%d\t%s\t%s / %.1f\n", humanBytes(s.MemUsed), humanBytes(s.MemTotal), humanBytes(s.MemCompressed), humanBytes(s.SwapUsed), humanBytes(s.SwapTotal), s.Load1, s.Load5, s.Load15, s.Cores, humanBytes(s.DiskFree), s.PressureLevel, s.PressureFree)
+			fmt.Fprintf(tw, "%s/%s\t%s\t%s/%s\t%s/%s/%s\t%d\t%s\t%s / %.1f\n", humanBytes(s.MemUsed), humanBytes(s.MemTotal), humanBytes(s.MemCompressed), humanBytes(s.SwapUsed), humanBytes(s.SwapTotal), FormatLoad(s.Load1, "%.1f"), FormatLoad(s.Load5, "%.1f"), FormatLoad(s.Load15, "%.1f"), s.Cores, humanBytes(s.DiskFree), s.PressureLevel, s.PressureFree)
 			fmt.Fprintln(tw, "Agent memory by role")
 			fmt.Fprintln(tw, "AGENT\tROLE\tMEM")
 			for _, r := range h.Memory {
@@ -421,7 +421,7 @@ func HealthText(sample model.MachineSample, loadFormat string) string {
 	if sample.TS.IsZero() {
 		return "health unavailable"
 	}
-	return fmt.Sprintf("swap %s/%s · load "+loadFormat+"/%d", humanBytes(sample.SwapUsed), humanBytes(sample.SwapTotal), sample.Load1, sample.Cores)
+	return fmt.Sprintf("swap %s/%s · load %s/%d", humanBytes(sample.SwapUsed), humanBytes(sample.SwapTotal), FormatLoad(sample.Load1, loadFormat), sample.Cores)
 }
 
 // FromSuffix is the shared short launch-surface wording for session surfaces.

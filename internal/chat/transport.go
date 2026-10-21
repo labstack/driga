@@ -6,22 +6,35 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/labstack/driga/internal/fleet"
 	"io"
 	"net"
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
 	"github.com/labstack/driga/internal/store"
 )
 
-func SocketPath(dataDir string) string { return filepath.Join(dataDir, "chat.sock") }
+func SocketPath(dataDir string) string {
+	if runtime.GOOS == "windows" {
+		return fleet.WatchSocketPath(dataDir, "chat")
+	}
+	return filepath.Join(dataDir, "chat.sock")
+}
 
 // Darwin's sockaddr_un is only 104 bytes. A private short alias resolves to
 // exactly the same socket inode in the data directory without changing cwd.
 func socketAddress(path string) (string, func(), error) {
+	if runtime.GOOS == "windows" {
+		if len(path) >= 100 {
+			return "", nil, errors.New("Windows local socket path exceeds 99 bytes; set DRIGA_DATA_DIR to a shorter private path")
+		}
+		return path, func() {}, nil
+	}
 	if len(path) < 100 {
 		return path, func() {}, nil
 	}
@@ -52,6 +65,11 @@ func Listen(ctx context.Context, dataDir string, b *Broker) (func(), error) {
 		return nil, err
 	}
 	path := SocketPath(dataDir)
+	if runtime.GOOS == "windows" {
+		if err := fleet.EnsureSocketDir(path); err != nil {
+			return nil, err
+		}
+	}
 	address, removeAlias, err := socketAddress(path)
 	if err != nil {
 		return nil, err
@@ -153,8 +171,13 @@ func Dial(ctx context.Context, dataDir string) (*Remote, error) {
 	if err != nil {
 		return nil, err
 	}
-	if info.Mode()&os.ModeSocket == 0 || info.Mode().Perm()&0077 != 0 {
+	if info.Mode()&os.ModeSocket == 0 || runtime.GOOS != "windows" && info.Mode().Perm()&0077 != 0 {
 		return nil, errors.New("chat socket must be owner-only")
+	}
+	if runtime.GOOS == "windows" {
+		if err := fleet.CheckSocketDir(path); err != nil {
+			return nil, err
+		}
 	}
 	address, removeAlias, err := socketAddress(path)
 	if err != nil {

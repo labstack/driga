@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"runtime"
+	"slices"
 	"strings"
 	"time"
 
@@ -106,6 +107,7 @@ func run(args []string, version string, stdin io.Reader, stdout, stderr io.Write
 		_ = (HookCmd{Adapter: args[1], Event: args[2], Payload: args[3:]}).Run(&Globals{Stdin: stdin})
 		return 0
 	}
+
 	var root Root
 	root.Version, root.Stdout, root.Stderr, root.Stdin = version, stdout, stderr, stdin
 	root.Commit, root.Date = "unknown", "unknown"
@@ -163,9 +165,17 @@ func run(args []string, version string, stdin io.Reader, stdout, stderr io.Write
 				panic(r)
 			}
 		}()
+		if runtime.GOOS == "windows" && slices.Contains(args, "cleanup") && slices.Contains(args, "--apply") {
+			report(platform.ErrWindowsAction, 2)
+			return 2
+		}
 		ctx, err := parser.Parse(args)
 		if err != nil {
 			report(err, 2)
+			return 2
+		}
+		if runtime.GOOS == "windows" && windowsUnsupported(ctx.Command(), root.Cleanup) {
+			report(platform.ErrWindowsAction, 2)
 			return 2
 		}
 		if root.JSON && !supportsJSON(ctx.Command()) {
@@ -218,3 +228,21 @@ type usageError struct{ error }
 
 func (usageError) ExitCode() int                    { return 2 }
 func invalidUsage(format string, args ...any) error { return usageError{fmt.Errorf(format, args...)} }
+
+func windowsUnsupported(command string, c CleanupCmd) bool {
+	words := strings.Fields(command)
+	if len(words) == 0 {
+		return false
+	}
+	switch words[0] {
+	case "service", "jump":
+		return true
+	case "hooks":
+		return len(words) > 1 && words[1] == "install"
+	case "orphans":
+		return len(words) > 1 && words[1] == "kill"
+	case "cleanup":
+		return c.ID != "" || c.All || c.Kind == "scratch"
+	}
+	return false
+}

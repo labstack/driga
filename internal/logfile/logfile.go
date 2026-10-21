@@ -3,12 +3,12 @@ package logfile
 
 import (
 	"errors"
+	"github.com/labstack/driga/internal/filelock"
 	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
-	"syscall"
 )
 
 const MaxSize int64 = 10 << 20
@@ -42,10 +42,10 @@ func (w *Writer) Write(p []byte) (int, error) {
 		return 0, err
 	}
 	defer f.Close()
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+	if err := filelock.Lock(f, false); err != nil {
 		return 0, err
 	}
-	defer syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+	defer filelock.Unlock(f)
 	info, err := f.Stat()
 	if err != nil {
 		return 0, err

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -42,6 +43,10 @@ func decodeSettings(t *testing.T, content string) map[string]any {
 }
 
 func TestClaudeInstallMergesPreservingExisting(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix permission-bit contract; Windows uses ACLs")
+	}
+
 	path := filepath.Join(t.TempDir(), "settings.json")
 	before := `{"counter":9007199254740993,"unknown":{"enabled":true},"hooks":{"PreToolUse":[{"matcher":"Edit","hooks":[{"type":"command","command":"other-tool"}]}],"Stop":[{"matcher":"existing","hooks":[{"type":"command","command":"echo stop"}]}]}}`
 	writeFixture(t, path, before)
@@ -146,6 +151,10 @@ func TestClaudeDryRunNoWrite(t *testing.T) {
 }
 
 func TestClaudeMissingFileCreates(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix permission-bit contract; Windows uses ACLs")
+	}
+
 	path := filepath.Join(t.TempDir(), ".claude", "settings.json")
 	if _, err := hooks.ClaudeInstall(path, "/opt/driga", false, testNow); err != nil {
 		t.Fatal(err)

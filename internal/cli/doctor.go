@@ -5,13 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/labstack/driga/internal/filelock"
 	"os"
 	"os/user"
 	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
-	"syscall"
 	"text/tabwriter"
 	"time"
 
@@ -64,6 +64,10 @@ type DoctorDeps struct {
 
 // Doctor checks stored evidence without collecting, writing, or controlling launchd.
 func Doctor(ctx context.Context, d DoctorDeps) []Check {
+	goos := d.OS
+	if goos == "" {
+		goos = runtime.GOOS
+	}
 	checks := []Check{}
 	copilotSeen := false
 	add := func(name, status, detail, fix string) { checks = append(checks, Check{name, status, detail, fix}) }
@@ -208,7 +212,7 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 			continue
 		}
 		var dirs []string
-		if name == "copilot" {
+		if name == "copilot" && goos != "windows" {
 			if warning := copilotVersionWarning(ctx); warning != "" {
 				add("version:copilot", "warn", warning, "upgrade Copilot CLI to 1.0.98 or newer")
 			}
@@ -241,7 +245,17 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 		}
 		switch name {
 		case "claude":
-			dirs = []string{filepath.Join(d.Home, ".claude", "sessions"), filepath.Join(d.Home, ".claude", "projects")}
+			claudeHome := os.Getenv("CLAUDE_CONFIG_DIR")
+			if claudeHome == "" {
+				claudeHome = filepath.Join(d.Home, ".claude")
+			}
+			dirs = []string{filepath.Join(claudeHome, "sessions"), filepath.Join(claudeHome, "projects")}
+		case "copilot":
+			copilotHome := d.CopilotHome
+			if copilotHome == "" {
+				copilotHome = filepath.Join(d.Home, ".copilot")
+			}
+			dirs = []string{filepath.Join(copilotHome, "session-state")}
 		case "codex":
 			dirs = []string{filepath.Join(codexHome, "sessions")}
 		case "gemini":
@@ -269,6 +283,10 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 			} else if err != nil && !errors.Is(err, store.ErrNotFound) {
 				add("version:"+name, "fail", err.Error(), "check database access")
 			}
+		}
+		if goos == "windows" {
+			add("hooks:"+name, "info", platform.ErrWindowsAction.Error(), "")
+			continue
 		}
 		switch name {
 		case "claude":
@@ -299,14 +317,21 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 		add("data_permissions", "fail", err.Error(), "check access to "+d.DataDir)
 	case !info.IsDir():
 		add("data_permissions", "fail", "data path is not a directory", "set DRIGA_DATA_DIR to a private directory")
+	case goos == "windows":
+		add("data_permissions", "info", "Windows ACLs apply; Unix mode bits are unavailable", "")
 	case info.Mode().Perm() != 0700:
 		add("data_permissions", "fail", fmt.Sprintf("directory permissions are %04o; expected 0700", info.Mode().Perm()), "chmod 700 "+d.DataDir)
 	default:
 		add("data_permissions", "ok", "0700", "")
 	}
-	goos := d.OS
-	if goos == "" {
-		goos = runtime.GOOS
+	if goos == "windows" {
+		for _, name := range []string{"service", "hooks install", "kill", "cleanup apply", "Claude scratch", "notifications", "terminal jump", "socket probers", "file probers"} {
+			add(name, "info", "not yet supported on Windows", "")
+		}
+		for i := range checks {
+			checks[i].Fix = strings.ReplaceAll(checks[i].Fix, "driga service install", "driga collect")
+			checks[i].Fix = strings.ReplaceAll(checks[i].Fix, "driga service restart", "restart foreground driga collect")
+		}
 	}
 	if goos == "linux" {
 		checks = append(checks, doctorLinuxChecks(d)...)
@@ -427,7 +452,7 @@ func doctorLinuxChecks(d DoctorDeps) []Check {
 
 func isCollectorProc(p model.Proc) bool {
 	if p.Exe != "" {
-		if filepath.Base(p.Exe) != "driga" {
+		if !strings.EqualFold(filepath.Base(p.Exe), "driga") && !strings.EqualFold(filepath.Base(p.Exe), "driga.exe") {
 			return false
 		}
 		// Process APIs may join argv without quoting paths containing spaces.
@@ -437,12 +462,16 @@ func isCollectorProc(p model.Proc) bool {
 		}
 	}
 	args, err := splitCommandWords(p.Cmdline)
-	return err == nil && len(args) >= 2 && filepath.Base(args[0]) == "driga" && args[1] == "collect"
+	return err == nil && len(args) >= 2 && (filepath.Base(args[0]) == "driga" || strings.EqualFold(filepath.Base(args[0]), "driga.exe")) && args[1] == "collect"
 }
 
 // probeCollectorLock does not create a file or modify its contents/permissions.
 func probeCollectorLock(dir string) (bool, error) {
-	f, err := os.Open(filepath.Join(dir, "driga.lock"))
+	flags := os.O_RDONLY
+	if runtime.GOOS == "windows" {
+		flags = os.O_RDWR
+	}
+	f, err := os.OpenFile(filepath.Join(dir, "driga.lock"), flags, 0)
 	if errors.Is(err, os.ErrNotExist) {
 		return false, nil
 	}
@@ -450,14 +479,14 @@ func probeCollectorLock(dir string) (bool, error) {
 		return false, err
 	}
 	defer f.Close()
-	err = syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
-	if errors.Is(err, syscall.EWOULDBLOCK) || errors.Is(err, syscall.EAGAIN) {
+	err = filelock.Lock(f, true)
+	if filelock.Busy(err) {
 		return true, nil
 	}
 	if err != nil {
 		return false, err
 	}
-	return false, syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+	return false, filelock.Unlock(f)
 }
 
 // DoctorCmd renders setup diagnostics and fails only for a failed check.
@@ -480,6 +509,9 @@ func (DoctorCmd) Run(g *Globals) error {
 		status, fix := "fail", "check database permissions and driga service logs"
 		if _, err := os.Stat(filepath.Join(d.DataDir, "driga.db")); errors.Is(err, os.ErrNotExist) {
 			status, fix = "warn", "driga service install"
+			if runtime.GOOS == "windows" {
+				fix = "driga collect"
+			}
 		}
 		checks = append(checks, Check{"database", status, openErr.Error(), fix})
 	}

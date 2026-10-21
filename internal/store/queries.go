@@ -126,8 +126,8 @@ func (tx *Tx) ReplaceProcs(procs []model.Proc) error {
 		return err
 	}
 	for _, p := range procs {
-		if err := tx.exec(`INSERT INTO procs (machine_id,pid,ppid,start_time,rss,cpu_seconds,cpu_percent,cmdline,exe,role,agent,session_id,cwd,tty,footprint,swap,memory_measure)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, tx.machineID, p.PID, p.PPID, unix(p.StartTime), p.RSS, p.CPUSeconds, p.CPUPercent, p.Cmdline, p.Exe, p.Role, p.Agent, p.SessionID, p.Cwd, p.TTY, p.Footprint, p.Swap, p.MemoryMeasure); err != nil {
+		if err := tx.exec(`INSERT INTO procs (machine_id,pid,ppid,start_time,rss,cpu_seconds,cpu_percent,cmdline,exe,role,agent,session_id,cwd,tty,footprint,swap,memory_measure,partial)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, tx.machineID, p.PID, p.PPID, unix(p.StartTime), p.RSS, p.CPUSeconds, p.CPUPercent, p.Cmdline, p.Exe, p.Role, p.Agent, p.SessionID, p.Cwd, p.TTY, p.Footprint, p.Swap, p.MemoryMeasure, p.Partial); err != nil {
 			return err
 		}
 	}
@@ -151,10 +151,10 @@ func (tx *Tx) SyncProcs(prev, procs []model.Proc) error {
 			continue
 		}
 		delete(old, p.PID)
-		if err := tx.exec(`INSERT INTO procs (machine_id,pid,ppid,start_time,rss,cpu_seconds,cpu_percent,cmdline,exe,role,agent,session_id,cwd,tty,footprint,swap,memory_measure)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(machine_id,pid) DO UPDATE SET ppid=excluded.ppid,start_time=excluded.start_time,
+		if err := tx.exec(`INSERT INTO procs (machine_id,pid,ppid,start_time,rss,cpu_seconds,cpu_percent,cmdline,exe,role,agent,session_id,cwd,tty,footprint,swap,memory_measure,partial)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(machine_id,pid) DO UPDATE SET ppid=excluded.ppid,start_time=excluded.start_time,
 		rss=excluded.rss,cpu_seconds=excluded.cpu_seconds,cpu_percent=excluded.cpu_percent,cmdline=excluded.cmdline,exe=excluded.exe,
-		role=excluded.role,agent=excluded.agent,session_id=excluded.session_id,cwd=excluded.cwd,tty=excluded.tty,footprint=excluded.footprint,swap=excluded.swap,memory_measure=excluded.memory_measure`, tx.machineID, p.PID, p.PPID, unix(p.StartTime), p.RSS, p.CPUSeconds, p.CPUPercent, p.Cmdline, p.Exe, p.Role, p.Agent, p.SessionID, p.Cwd, p.TTY, p.Footprint, p.Swap, p.MemoryMeasure); err != nil {
+		role=excluded.role,agent=excluded.agent,session_id=excluded.session_id,cwd=excluded.cwd,tty=excluded.tty,footprint=excluded.footprint,swap=excluded.swap,memory_measure=excluded.memory_measure,partial=excluded.partial`, tx.machineID, p.PID, p.PPID, unix(p.StartTime), p.RSS, p.CPUSeconds, p.CPUPercent, p.Cmdline, p.Exe, p.Role, p.Agent, p.SessionID, p.Cwd, p.TTY, p.Footprint, p.Swap, p.MemoryMeasure, p.Partial); err != nil {
 			return err
 		}
 	}
@@ -170,7 +170,7 @@ func (tx *Tx) SyncProcs(prev, procs []model.Proc) error {
 func sameStoredProc(a, b model.Proc) bool {
 	return a.PPID == b.PPID && unix(a.StartTime) == unix(b.StartTime) && a.RSS == b.RSS && a.CPUSeconds == b.CPUSeconds &&
 		a.CPUPercent == b.CPUPercent && a.Cmdline == b.Cmdline && a.Exe == b.Exe && a.Role == b.Role && a.Agent == b.Agent &&
-		a.SessionID == b.SessionID && a.Cwd == b.Cwd && a.TTY == b.TTY && a.Footprint == b.Footprint && a.Swap == b.Swap && a.MemoryMeasure == b.MemoryMeasure
+		a.SessionID == b.SessionID && a.Cwd == b.Cwd && a.TTY == b.TTY && a.Footprint == b.Footprint && a.Swap == b.Swap && a.MemoryMeasure == b.MemoryMeasure && a.Partial == b.Partial
 }
 
 // Procs returns the latest processes in PID order.
@@ -181,29 +181,29 @@ func (q *querier) Procs() ([]model.Proc, error) {
 // ProcsScoped returns selected machines' processes in PID and machine order.
 func (q *querier) ProcsScoped(scope Scope) ([]model.Proc, error) {
 	where, args := scope.where("machine_id")
-	return readMany(q, "SELECT machine_id,pid,ppid,start_time,rss,cpu_seconds,cpu_percent,cmdline,exe,role,agent,session_id,cwd,tty,footprint,swap,memory_measure FROM procs WHERE "+where+" ORDER BY pid,machine_id", args, func(s scanner) (model.Proc, error) {
+	return readMany(q, "SELECT machine_id,pid,ppid,start_time,rss,cpu_seconds,cpu_percent,cmdline,exe,role,agent,session_id,cwd,tty,footprint,swap,memory_measure,partial FROM procs WHERE "+where+" ORDER BY pid,machine_id", args, func(s scanner) (model.Proc, error) {
 		var p model.Proc
 		var start int64
-		err := s.Scan(&p.MachineID, &p.PID, &p.PPID, &start, &p.RSS, &p.CPUSeconds, &p.CPUPercent, &p.Cmdline, &p.Exe, &p.Role, &p.Agent, &p.SessionID, &p.Cwd, &p.TTY, &p.Footprint, &p.Swap, &p.MemoryMeasure)
+		err := s.Scan(&p.MachineID, &p.PID, &p.PPID, &start, &p.RSS, &p.CPUSeconds, &p.CPUPercent, &p.Cmdline, &p.Exe, &p.Role, &p.Agent, &p.SessionID, &p.Cwd, &p.TTY, &p.Footprint, &p.Swap, &p.MemoryMeasure, &p.Partial)
 		p.StartTime = fromUnix(start)
 		return p, err
 	})
 }
 
-const sampleColumns = "ts,mem_used,mem_compressed,mem_total,swap_used,swap_total,pressure_free,load1,load5,load15,disk_free,cores,psi_mem_some10,pressure_level"
+const sampleColumns = "ts,mem_used,mem_compressed,mem_total,swap_used,swap_total,pressure_free,load1,load5,load15,disk_free,cores,psi_mem_some10,pressure_level,commit_used,commit_limit"
 
 // InsertSample records a machine-health reading, replacing the same timestamp.
 func (tx *Tx) InsertSample(s model.MachineSample) error {
-	return tx.exec(`INSERT INTO machine_samples (machine_id,`+sampleColumns+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+	return tx.exec(`INSERT INTO machine_samples (machine_id,`+sampleColumns+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 	ON CONFLICT(machine_id,ts) DO UPDATE SET mem_used=excluded.mem_used,mem_compressed=excluded.mem_compressed,
 	mem_total=excluded.mem_total,swap_used=excluded.swap_used,swap_total=excluded.swap_total,pressure_free=excluded.pressure_free,
-	load1=excluded.load1,load5=excluded.load5,load15=excluded.load15,disk_free=excluded.disk_free,cores=excluded.cores,psi_mem_some10=excluded.psi_mem_some10,pressure_level=excluded.pressure_level`, tx.machineID, unix(s.TS), s.MemUsed, s.MemCompressed, s.MemTotal, s.SwapUsed, s.SwapTotal, s.PressureFree, s.Load1, s.Load5, s.Load15, s.DiskFree, s.Cores, s.PsiMemSome10, s.PressureLevel)
+	load1=excluded.load1,load5=excluded.load5,load15=excluded.load15,disk_free=excluded.disk_free,cores=excluded.cores,psi_mem_some10=excluded.psi_mem_some10,pressure_level=excluded.pressure_level,commit_used=excluded.commit_used,commit_limit=excluded.commit_limit`, tx.machineID, unix(s.TS), s.MemUsed, s.MemCompressed, s.MemTotal, s.SwapUsed, s.SwapTotal, s.PressureFree, s.Load1, s.Load5, s.Load15, s.DiskFree, s.Cores, s.PsiMemSome10, s.PressureLevel, s.CommitUsed, s.CommitLimit)
 }
 
 func scanSample(s scanner) (model.MachineSample, error) {
 	var m model.MachineSample
 	var ts int64
-	err := s.Scan(&m.MachineID, &ts, &m.MemUsed, &m.MemCompressed, &m.MemTotal, &m.SwapUsed, &m.SwapTotal, &m.PressureFree, &m.Load1, &m.Load5, &m.Load15, &m.DiskFree, &m.Cores, &m.PsiMemSome10, &m.PressureLevel)
+	err := s.Scan(&m.MachineID, &ts, &m.MemUsed, &m.MemCompressed, &m.MemTotal, &m.SwapUsed, &m.SwapTotal, &m.PressureFree, &m.Load1, &m.Load5, &m.Load15, &m.DiskFree, &m.Cores, &m.PsiMemSome10, &m.PressureLevel, &m.CommitUsed, &m.CommitLimit)
 	m.TS = fromUnix(ts)
 	return m, err
 }

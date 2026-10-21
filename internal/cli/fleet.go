@@ -4,10 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
-	"os/signal"
 	"path/filepath"
-	"syscall"
 
 	"github.com/labstack/driga/internal/collector"
 	"github.com/labstack/driga/internal/config"
@@ -37,7 +34,7 @@ func (c ServeCmd) Run(g *Globals) error {
 	if err != nil {
 		return err
 	}
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	ctx, stop := notifyContext(context.Background())
 	defer stop()
 	restore, err := collectorLogging()
 	if err != nil {

@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -22,6 +23,7 @@ func gitEnv(t *testing.T) {
 		t.Skip("git unavailable")
 	}
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
 	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
 	for _, key := range []string{"GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR"} {
@@ -135,6 +137,10 @@ func TestScanDetectsWorkingFileEditOnFull(t *testing.T) {
 }
 
 func TestDiscoverReposNormalizesPaths(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix symlink fixture; Windows watch tests require no Developer Mode or admin rights")
+	}
+
 	gitEnv(t)
 	base := t.TempDir()
 	p := initRepo(t, filepath.Join(base, "repo space ü"))
@@ -265,6 +271,10 @@ func TestScanOldestDirtyRenameAndDeletion(t *testing.T) {
 }
 
 func TestScanDirtySymlinkMtime(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix symlink fixture; Windows watch tests require no Developer Mode or admin rights")
+	}
+
 	gitEnv(t)
 	p := initRepo(t, filepath.Join(t.TempDir(), "repo"))
 	link := filepath.Join(p, "link")
