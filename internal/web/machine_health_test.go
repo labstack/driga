@@ -64,7 +64,7 @@ func TestMachineExpandableAppsAndEscaping(t *testing.T) {
 	if w.Code != 200 {
 		t.Fatal(w.Code, w.Body)
 	}
-	for _, part := range []string{"Top 10 apps by memory", "Top 10 apps by CPU", "<summary>Browser", "physical_footprint", "PID 43", "<dt>compressed</dt>", "session #", "parent_chain", "/bin/&lt;script&gt;"} {
+	for _, part := range []string{"Top 10 apps by memory", "includes compressed and swapped memory", "Top 10 apps by CPU", "<summary>Browser", "physical_footprint", "PID 43", "<dt>compressed</dt>", "session #", "parent_chain", "/bin/&lt;script&gt;"} {
 		if !strings.Contains(w.Body.String(), part) {
 			t.Fatalf("missing %q: %s", part, w.Body)
 		}

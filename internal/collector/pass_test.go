@@ -28,6 +28,7 @@ type fakePlatform struct {
 	cwdPIDs                     []int32
 	cwdCalls                    int
 	procCalls                   int
+	aliveCalls                  int
 	procCollect                 func(int) []model.Proc
 }
 
@@ -47,6 +48,7 @@ func (f *fakePlatform) Cwds(_ context.Context, pids []int32) (map[int32]string, 
 	return f.cwds, f.cwdErr
 }
 func (f *fakePlatform) Alive(pid int32, start time.Time) bool {
+	f.aliveCalls++
 	if f.dead {
 		return false
 	}

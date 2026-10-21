@@ -967,15 +967,40 @@ func linkCodex(ss []model.Session, procs []model.Proc, plat platform.Platform) {
 		}
 		return a.StartedAt.After(b.StartedAt)
 	})
+	// Liveness and resolved cwd belong to the process, not the pair: check each
+	// once per pass. Hundreds of ended sessions times thousands of processes
+	// otherwise cost a syscall and a symlink walk per pair.
+	alive := make(map[int]bool)
+	cwds := make(map[int]string)
+	live := func(j int) bool {
+		v, ok := alive[j]
+		if !ok {
+			v = plat.Alive(procs[j].PID, procs[j].StartTime)
+			alive[j] = v
+		}
+		return v
+	}
+	cwd := func(j int) string {
+		v, ok := cwds[j]
+		if !ok {
+			v = gitscan.NormalizePath(procs[j].Cwd)
+			cwds[j] = v
+		}
+		return v
+	}
 	for _, i := range order {
 		s := &ss[i]
 		var best *model.Proc
+		sessionCwd := ""
 		for j := range procs {
 			p := &procs[j]
-			if used[p.PID] || p.Agent != s.Adapter || (p.Role != "interactive" && p.Role != "headless") || p.Cwd == "" || p.StartTime.IsZero() || p.StartTime.After(s.StartedAt.Add(5*time.Second)) || !plat.Alive(p.PID, p.StartTime) {
+			if used[p.PID] || p.Agent != s.Adapter || (p.Role != "interactive" && p.Role != "headless") || p.Cwd == "" || p.StartTime.IsZero() || p.StartTime.After(s.StartedAt.Add(5*time.Second)) || !live(j) {
 				continue
 			}
-			if gitscan.NormalizePath(p.Cwd) != gitscan.NormalizePath(s.Cwd) {
+			if sessionCwd == "" {
+				sessionCwd = gitscan.NormalizePath(s.Cwd)
+			}
+			if cwd(j) != sessionCwd {
 				continue
 			}
 			if best == nil || p.StartTime.After(best.StartTime) || p.StartTime.Equal(best.StartTime) && p.PID < best.PID {

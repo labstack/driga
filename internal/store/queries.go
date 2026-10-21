@@ -605,6 +605,27 @@ func (q *querier) Meta(key string) (string, error) {
 	return value, err
 }
 
+// MetaPrefix returns every key starting with prefix, without the prefix, in
+// one range scan of the primary key.
+func (q *querier) MetaPrefix(prefix string) (map[string]string, error) {
+	rows, err := q.conn.QueryContext(q.ctx, "SELECT key, value FROM meta WHERE machine_id=? AND key>=? AND key<?", q.machineID, prefix, prefix+"\xff")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]string{}
+	for rows.Next() {
+		var k, v string
+		if err := rows.Scan(&k, &v); err != nil {
+			return nil, err
+		}
+		if strings.HasPrefix(k, prefix) {
+			out[k[len(prefix):]] = v
+		}
+	}
+	return out, rows.Err()
+}
+
 // SetMeta stores metadata. The machine identity is immutable after creation.
 // It is available on Store as well as Tx; use Tx inside a transaction callback.
 func (q *querier) SetMeta(key, value string) error {
