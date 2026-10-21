@@ -29,6 +29,9 @@ type CollectCmd struct {
 // Run loads collection sources and handles graceful termination signals.
 func (c CollectCmd) Run(g *Globals) error {
 	applyCollectorMemoryLimit()
+	if !c.Once {
+		applyCollectorParallelism()
+	}
 	cfg, err := config.Load(config.Path())
 	if err != nil {
 		return err

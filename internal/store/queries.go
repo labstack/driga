@@ -312,6 +312,22 @@ func (q *querier) SessionsScoped(filter SessionFilter, scope Scope) ([]model.Ses
 	return readMany(q, query+" ORDER BY last_activity_at DESC,id", args, scanSession)
 }
 
+// InboxSessionLabels returns only the identity and display fields needed by
+// alerts for pending inbox items. Ended sessions can still have pending
+// completions; unrelated sessions and their mixer JSON need not be loaded.
+func (q *querier) InboxSessionLabels(scope Scope) ([]model.Session, error) {
+	where, args := scope.where("machine_id")
+	args = append(args, unix(time.Time{}))
+	return readMany(q, `SELECT s.id,s.machine_id,s.title,s.cwd FROM
+		(SELECT DISTINCT machine_id,session_id FROM inbox_items WHERE `+where+`
+			AND ts>=? AND acked_at IS NULL AND ended_at IS NULL) i
+		JOIN sessions s ON s.machine_id=i.machine_id AND s.id=i.session_id`, args, func(s scanner) (model.Session, error) {
+		var m model.Session
+		err := s.Scan(&m.ID, &m.MachineID, &m.Title, &m.Cwd)
+		return m, err
+	})
+}
+
 // ReplaceSessionFiles merges adapter deltas, preserving each path's latest edit.
 // An empty delta leaves existing paths intact.
 func (tx *Tx) ReplaceSessionFiles(sessionID int64, files []model.FileTouch) error {

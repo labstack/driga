@@ -24,6 +24,15 @@ func TestCPUProfileStopsAfterDuration(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
+	for {
+		if fi, err := os.Stat(path + ".alloc"); err == nil && fi.Size() > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("allocation profile not written after its duration")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 	// A second profile can start, so the first one released the profiler.
 	again, err := startCPUProfile(filepath.Join(t.TempDir(), "again.pprof"), time.Hour)
 	if err != nil {
@@ -42,5 +51,8 @@ func TestCPUProfileStopFlushesEarly(t *testing.T) {
 	stop()
 	if fi, err := os.Stat(path); err != nil || fi.Size() == 0 {
 		t.Fatalf("profile not flushed on stop: %v", err)
+	}
+	if fi, err := os.Stat(path + ".alloc"); err != nil || fi.Size() == 0 {
+		t.Fatalf("allocation profile not flushed on stop: %v", err)
 	}
 }
