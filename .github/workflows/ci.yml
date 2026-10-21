@@ -1,0 +1,78 @@
+# Same isolation and action pins as release.yml.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  test:
+    name: Tests and build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      GOTOOLCHAIN: local
+      GOWORK: "off"
+      GOFLAGS: ""
+      GOEXPERIMENT: ""
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          check-latest: false
+          cache: false
+      # Tests must never see a real home, agent config or Driga data.
+      - name: Isolate test and build state
+        run: |
+          task_root=$(mktemp -d "$RUNNER_TEMP/driga-ci.XXXXXX")
+          mkdir -p "$task_root/home" "$task_root/data" "$task_root/spool"
+          {
+            echo "HOME=$task_root/home"
+            echo "CODEX_HOME=$task_root/home/.codex"
+            echo "GEMINI_CLI_HOME=$task_root/home/.gemini"
+            echo "XDG_CONFIG_HOME=$task_root/home/.config"
+            echo "XDG_DATA_HOME=$task_root/home/.local/share"
+            echo "XDG_STATE_HOME=$task_root/home/.local/state"
+            echo "DRIGA_DATA_DIR=$task_root/data"
+            echo "DRIGA_SPOOL_DIR=$task_root/spool"
+            echo "DRIGA_CONFIG=$task_root/config.toml"
+            echo "GOCACHE=$task_root/gocache"
+            echo "GOMODCACHE=$task_root/gomodcache"
+          } >> "$GITHUB_ENV"
+      - name: Format, vet and generated files
+        run: |
+          unformatted=$(gofmt -l cmd internal)
+          if [ -n "$unformatted" ]; then echo "gofmt needed:"; echo "$unformatted"; exit 1; fi
+          go vet ./...
+          go generate ./internal/config
+          git diff --exit-code -- .env.example
+      - name: Test on Linux
+        run: go test ./...
+      - name: Race test
+        env:
+          CGO_ENABLED: "1"
+        run: go test -race ./...
+      - name: Cross-build the cgo-free targets
+        env:
+          CGO_ENABLED: "0"
+        run: |
+          for target in darwin/arm64 darwin/amd64 linux/amd64 linux/arm64 windows/amd64; do
+            GOOS=${target%/*} GOARCH=${target#*/} go build -o /dev/null ./cmd/driga
+          done

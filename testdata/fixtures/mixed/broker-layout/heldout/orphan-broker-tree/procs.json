@@ -1,0 +1,68 @@
+[
+  {
+    "pid": 8100,
+    "ppid": 1,
+    "started_at": "2026-10-18T16:00:00Z",
+    "rss_bytes": 20971520,
+    "cpu_ms": 0,
+    "cpu_percent": 0,
+    "cmdline": "node /opt/heldout-tools/app-server-broker.mjs",
+    "exe": "",
+    "cwd": "{{FIXTURE_HOME}}/wetlands/grove-000"
+  },
+  {
+    "pid": 8101,
+    "ppid": 8100,
+    "started_at": "2026-10-18T16:00:00Z",
+    "rss_bytes": 12582912,
+    "cpu_ms": 0,
+    "cpu_percent": 0,
+    "cmdline": "codex app-server",
+    "exe": "",
+    "cwd": "{{FIXTURE_HOME}}/wetlands/grove-000"
+  },
+  {
+    "pid": 8102,
+    "ppid": 8101,
+    "started_at": "2026-10-18T17:00:00Z",
+    "rss_bytes": 3145728,
+    "cpu_ms": 0,
+    "cpu_percent": 0,
+    "cmdline": "worker-runtime",
+    "exe": "",
+    "cwd": "{{FIXTURE_HOME}}/wetlands/grove-000"
+  },
+  {
+    "pid": 8200,
+    "ppid": 1,
+    "started_at": "2026-10-18T17:58:00Z",
+    "rss_bytes": 1048576,
+    "cpu_ms": 0,
+    "cpu_percent": 0,
+    "cmdline": "claude mcp serve",
+    "exe": "",
+    "cwd": "{{FIXTURE_HOME}}/wetlands/grove-000"
+  },
+  {
+    "pid": 8300,
+    "ppid": 1,
+    "started_at": "2026-10-18T17:00:00Z",
+    "rss_bytes": 1048576,
+    "cpu_ms": 0,
+    "cpu_percent": 0,
+    "cmdline": "unrelated-indexer",
+    "exe": "",
+    "cwd": "{{FIXTURE_HOME}}/wetlands/grove-000"
+  },
+  {
+    "pid": 4000,
+    "ppid": 200,
+    "started_at": "2026-10-18T16:59:40Z",
+    "rss_bytes": 74448896,
+    "cpu_ms": 3000,
+    "cpu_percent": 0,
+    "cmdline": "claude",
+    "exe": "/opt/heldout/bin/claude",
+    "cwd": "{{FIXTURE_HOME}}/wetlands/grove-000"
+  }
+]

@@ -1,0 +1,13 @@
+{
+  "sessions": [
+    {
+      "external_id": "living-neighbor",
+      "label": "idle"
+    }
+  ],
+  "orphans": [
+    "8100:1792339200",
+    "8200:1792346280"
+  ],
+  "conflicts": []
+}

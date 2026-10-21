@@ -1,0 +1,49 @@
+ driga   test-host · ● live · daemon   05:00:00   mem ███░░░ 50%
+swap ███░░░ 50%   load 0.0/4   disk 12.0G
+0 Home   1 Agents 1   2 Projects 0   3 Inbox 1   4 Orphans 1   [5 Machine]
+6 Cleanup 0   7 Flow   8 Chat
+────────────────────────────────────────────────────────────────────────────────
+  METRIC / APP / PROCESS  CPU/#  MEASURE / HOST / ATTRIBUTION      MEM          
+  agents 2.0G of 4.0G (50%) · 70.0% CPU · 1 processes · 3 MCP servers ·         
+  pressure critical · swap 1.0G/2.0G · disk 12.0G free                          
+  Memory measure: physical_footprint · footprint includes compressed and        
+  swapped memory, so apps can add up to more than RAM                           
+  Sessions by cost                                                              
+› ▾ claude · fixture · s… 70.0%  physical_footprint                2.0G         
+    42 worker             70.0%  started by fixture · session #251 2.0G         
+  Started from Editor                                                           
+  Agent processes without a session                                             
+  MCP servers and helper processes                                              
+  codegraph mcp  3 servers · 300.0M · observed growth ↑ 0.75/h since 02:20 · 1 …
+  codegraph mcp pile-up   3      codex app-server PID 10 · 31h0m0s 300.0M       
+  ▸ Other apps · 1.0G (rss)                                                     
+  Machine vitals                                                                
+  memory                         4.0G/8.0G                                      
+  compressed                     1.0G                                           
+  swap                           1.0G/2.0G                                      
+  pressure level                 critical                                       
+  pressure free                  0.0%                                           
+  load (1/5/15)                  0.0 / 0.0 / 0.0                                
+  cores                          4                                              
+  disk free                      12.0G                                          
+  Agent memory by role                                                          
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+
+0 Home · m machine · enter detail · / filter · s sort · g group by project
+o open terminal · esc back · ? help · q quit

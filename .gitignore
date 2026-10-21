@@ -1,0 +1,7 @@
+/driga
+/dist/
+*.db*
+.env
+.env*
+!.env.example
+.playwright-mcp/

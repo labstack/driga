@@ -1,0 +1,84 @@
+{
+  "Agents": [
+    {
+      "Adapter": "claude",
+      "ID": "living-neighbor",
+      "Version": "2.1.97",
+      "Status": "idle",
+      "Edit": "",
+      "Repo": 0,
+      "Worktree": 0,
+      "ActivityAge": 0,
+      "Crashed": false,
+      "PIDReuse": false,
+      "Hosted": false,
+      "Completed": false
+    }
+  ],
+  "Repos": 1,
+  "WorktreesPerRepo": 1,
+  "Crashes": false,
+  "PartialLines": false,
+  "Rotations": false,
+  "LongIdle": false,
+  "Seed": 906,
+  "Now": "2026-10-18T18:00:00Z",
+  "Layout": "wetlands",
+  "Procs": [
+    {
+      "pid": 8100,
+      "ppid": 1,
+      "started_at": "2026-10-18T16:00:00Z",
+      "rss_bytes": 20971520,
+      "cpu_ms": 0,
+      "cpu_percent": 0,
+      "cmdline": "node /opt/heldout-tools/app-server-broker.mjs",
+      "exe": "",
+      "cwd": ""
+    },
+    {
+      "pid": 8101,
+      "ppid": 8100,
+      "started_at": "2026-10-18T16:00:00Z",
+      "rss_bytes": 12582912,
+      "cpu_ms": 0,
+      "cpu_percent": 0,
+      "cmdline": "codex app-server",
+      "exe": "",
+      "cwd": ""
+    },
+    {
+      "pid": 8102,
+      "ppid": 8101,
+      "started_at": "2026-10-18T17:00:00Z",
+      "rss_bytes": 3145728,
+      "cpu_ms": 0,
+      "cpu_percent": 0,
+      "cmdline": "worker-runtime",
+      "exe": "",
+      "cwd": ""
+    },
+    {
+      "pid": 8200,
+      "ppid": 1,
+      "started_at": "2026-10-18T17:58:00Z",
+      "rss_bytes": 1048576,
+      "cpu_ms": 0,
+      "cpu_percent": 0,
+      "cmdline": "claude mcp serve",
+      "exe": "",
+      "cwd": ""
+    },
+    {
+      "pid": 8300,
+      "ppid": 1,
+      "started_at": "2026-10-18T17:00:00Z",
+      "rss_bytes": 1048576,
+      "cpu_ms": 0,
+      "cpu_percent": 0,
+      "cmdline": "unrelated-indexer",
+      "exe": "",
+      "cwd": ""
+    }
+  ]
+}

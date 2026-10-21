@@ -1,0 +1,54 @@
+name: Bug report
+description: Driga shows, says or does something different from what its code, tests or docs establish.
+type: Bug
+labels: ["bug"]
+title: "fix: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Never paste prompts, transcripts, tokens or session IDs you would not publish. Driga's own output follows your `capture_text` setting; check it before pasting.
+        Anything that exposes credentials or another person's data: report it privately to the maintainers, not here.
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Surface
+      description: Where the behaviour is wrong.
+      options:
+        - collector — discovery, state labels, spool, service
+        - inbox — needs-you items, alerts, jump
+        - cli — commands, JSON output, exit codes
+        - tui — driga top
+        - web — driga web console
+        - mcp — tools for agents
+        - hooks — install, uninstall, hook commands
+        - fleet — pairing, serve, remote machines
+        - cleanup or orphans
+        - docs, packaging or CI
+        - not sure
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - macOS
+        - Linux
+        - other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: driga version
+      description: Output of `driga version`.
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what you expected
+      description: Steps to reproduce if you have them. `driga doctor` output helps.
+    validations:
+      required: true

@@ -1,0 +1,14 @@
+{
+  "sampled_at": "2026-10-18T18:00:00Z",
+  "mem_used_bytes": 6442450944,
+  "mem_compressed_bytes": 0,
+  "mem_total_bytes": 17179869184,
+  "swap_used_bytes": 0,
+  "swap_total_bytes": 2147483648,
+  "disk_free_bytes": 85899345920,
+  "pressure_free": 65,
+  "load1": 0.5,
+  "load5": 0,
+  "load15": 0,
+  "cores": 8
+}

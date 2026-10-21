@@ -1,0 +1,10 @@
+{
+  "sessionId": "vm-claude-busy",
+  "cwd": "{{FIXTURE_HOME}}/home/vm-user/workspaces/service-a",
+  "kind": "interactive",
+  "entrypoint": "cli",
+  "version": "2.1.95",
+  "startedAt": "2026-10-18T16:59:40Z",
+  "status": "busy",
+  "statusUpdatedAt": "2026-10-18T17:59:40Z"
+}

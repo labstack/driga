@@ -1,0 +1,7 @@
+# Blank issues stay on: refactors, design decisions and operational notes are
+# real work here and neither form fits them without distortion.
+blank_issues_enabled: true
+contact_links:
+  - name: What is being worked on
+    url: https://github.com/labstack/driga/milestones
+    about: Open milestones and their issues. Check here before filing.

@@ -1,0 +1,11 @@
+{
+  "cwd": "{{FIXTURE_HOME}}/home/linnea/src/研究 grove/grove-001-branch-001",
+  "entrypoint": "cli",
+  "kind": "interactive",
+  "name": "Heldout synthetic session",
+  "sessionId": "linux-quiet",
+  "startedAt": "2026-10-18T16:30:00Z",
+  "status": "busy",
+  "statusUpdatedAt": "2026-10-18T17:30:00Z",
+  "version": "2.1.95"
+}

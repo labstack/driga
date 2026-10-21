@@ -1,0 +1,47 @@
+[
+  {
+    "pid": 700,
+    "ppid": 1,
+    "started_at": "2026-10-18T12:00:00Z",
+    "cmdline": "/usr/lib/systemd/systemd --user",
+    "exe": "/usr/lib/systemd/systemd"
+  },
+  {
+    "pid": 7100,
+    "ppid": 700,
+    "started_at": "2026-10-18T16:59:40Z",
+    "cmdline": "claude",
+    "exe": "/opt/agent/bin/claude",
+    "cwd": "{{FIXTURE_HOME}}/home/vm-user/workspaces/service-a",
+    "rss_bytes": 67108864,
+    "cpu_ms": 2000
+  },
+  {
+    "pid": 7200,
+    "ppid": 700,
+    "started_at": "2026-10-18T16:59:40Z",
+    "cmdline": "codex",
+    "exe": "/opt/agent/bin/codex",
+    "cwd": "{{FIXTURE_HOME}}/home/vm-user/workspaces/service-b",
+    "rss_bytes": 50331648,
+    "cpu_ms": 3000
+  },
+  {
+    "pid": 7300,
+    "ppid": 700,
+    "started_at": "2026-10-18T16:00:00Z",
+    "cmdline": "node /opt/plugin/app-server-broker.mjs",
+    "exe": "/usr/bin/node",
+    "cwd": "{{FIXTURE_HOME}}/home/vm-user/workspaces/service-a",
+    "rss_bytes": 8388608
+  },
+  {
+    "pid": 7301,
+    "ppid": 7300,
+    "started_at": "2026-10-18T16:00:00Z",
+    "cmdline": "codex app-server",
+    "exe": "/opt/agent/bin/codex",
+    "cwd": "{{FIXTURE_HOME}}/home/vm-user/workspaces/service-a",
+    "rss_bytes": 12582912
+  }
+]

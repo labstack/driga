@@ -1,0 +1,16 @@
+{
+  "sessions": [
+    {
+      "external_id": "vm-claude-busy",
+      "label": "working"
+    },
+    {
+      "external_id": "vm-codex-turn",
+      "label": "working"
+    }
+  ],
+  "orphans": [
+    "7300:1792339200"
+  ],
+  "conflicts": []
+}

@@ -1,0 +1,11 @@
+{
+  "cwd": "{{FIXTURE_HOME}}/orchards/grove-000",
+  "entrypoint": "cli",
+  "kind": "interactive",
+  "name": "Heldout synthetic session",
+  "sessionId": "future-cedar",
+  "startedAt": "2026-10-18T16:59:40Z",
+  "status": "idle",
+  "statusUpdatedAt": "2026-10-18T17:59:40Z",
+  "version": "9.8.7-preview"
+}

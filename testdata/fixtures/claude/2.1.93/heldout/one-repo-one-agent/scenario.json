@@ -1,0 +1,28 @@
+{
+  "Agents": [
+    {
+      "Adapter": "claude",
+      "ID": "cedar-solo",
+      "Version": "2.1.93",
+      "Status": "busy",
+      "Edit": "src/leaf.go",
+      "Repo": 0,
+      "Worktree": 0,
+      "ActivityAge": 0,
+      "Crashed": false,
+      "PIDReuse": false,
+      "Hosted": false,
+      "Completed": false
+    }
+  ],
+  "Repos": 1,
+  "WorktreesPerRepo": 1,
+  "Crashes": false,
+  "PartialLines": false,
+  "Rotations": false,
+  "LongIdle": false,
+  "Seed": 901,
+  "Now": "2026-10-18T18:00:00Z",
+  "Layout": "studios/cedar grove",
+  "Procs": null
+}

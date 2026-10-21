@@ -1,0 +1,33 @@
+╭─ Needs you · machine-wide ───────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ NEEDS YOU 1                                                                                                                              │
+│ ◆ 5m  Permission check  Permission · Bash                                                                                                │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Session map ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ 88m · 10:32–now · head = verdict as of                                                                                                   │
+│ 152m earlier · 0 asks                                                                                                                    │
+│ ›Driga flow map · … ▶ working   ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░▄▅▆▇█▂▃▄▅▆▇█▂▃▄▅▆▇█▂▃▄▅▆▇┿┿┿┿┿┿┿┿┿┿┿┿┿┿┿┿┿┿┿┿┿┿━━▶ 5s ago          │
+│                             cpu                                        ▁▂▂▃▄▄▅▆▆▇ ▁▂▂▃▄▄▅▆▆▇ ▁▂▂▃▄▄▅▆▆  ▁▂▂▃▄▄▅▆▆▇ ▁▂▂▃█                 │
+│  Implement geometry ▶ working                                                                  ╰░░░░░░░░░░░░◆════░░░┿━━▶ 5s ago          │
+│  Review CSP         ● finished                                                                  ╰░░░░░░░░░░░░░░░░░░░●──● 5s ago          │
+│  Permission check   ◆ needs you                                                                  ╰░░░░░░░░░░░░░░░░░◆═══◆ 5s ago          │
+│  Quiet remote anal… ? unknown                                                                     ╰░░░░░░░░░░░░░░░░░─┈┈? 5s ago          │
+│ +12 quiet threads · enter to expand                                                                                                      │
+│ ▁ growth / CPU · ┿ tool · ◆ wait · ○ prompt · ● end · ░ no data                                                                          │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Session detail · signal mixer ──────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ Driga flow map · from Editor · claude                                                                                                    │
+│ ▶ working · as of 5s ago                                                                                                                 │
+│ why: stored hooks and process verdict                                                                                                    │
+│ running 8h0m0s                                                                                                                           │
+│ tool calls 100 · retained window                                                                                                         │
+│ verdict working · 3 of 4 agree                                                                                                           │
+│ hooks: tool result                                                                                                                       │
+│ process: alive · CPU 2.5%                                                                                                                │
+│ Copy resume: claude --resume 'eight-hour-lead'                                                                                           │
+│ last growth 3.9 KB · 0s ago                                                                                                              │
+│ Recent events · this session family                                                                                                      │
+│ 11:59:00 otlp:tool_result                                                                                                                │
+│ 11:59:01 otlp:tool_result                                                                                                                │
+│ 11:59:02 otlp:tool_result                                                                                                                │
+│ 11:59:03 otlp:tool_result                                                                                                                │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯

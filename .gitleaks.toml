@@ -1,0 +1,8 @@
+# Default rules, plus the scrubber's own test fixtures: fake PEM blocks such as
+# "-----BEGIN PRIVATE KEY-----\nYWJj..." exist to prove they are redacted.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "scrubber redaction fixtures"
+paths = ['''^internal/scrub/scrub_test\.go$''']

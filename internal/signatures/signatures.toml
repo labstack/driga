@@ -1,0 +1,111 @@
+# First match wins. Keep specific modes before generic interactive entries.
+# Every pattern starts at the executable token, never at an arbitrary argument.
+
+[[signature]]
+name = "copilot-headless"
+agent = "copilot"
+role = "headless"
+match = ['^(?:[^[:space:]]*/)?(?:copilot|node[[:space:]]+[^[:space:]]*/@github/copilot/npm-loader\.js)[[:space:]]+(?:[^[:space:]]+[[:space:]]+)*(?:-p|--prompt)([[:space:]]|=|$)']
+
+[[signature]]
+name = "copilot-interactive"
+agent = "copilot"
+role = "interactive"
+match = ['^(?:[^[:space:]]*/)?(?:copilot|node[[:space:]]+[^[:space:]]*/@github/copilot/npm-loader\.js)([[:space:]]|$)']
+
+[[signature]]
+name = "driga-internal"
+agent = "claude"
+role = "internal"
+match = ['^(?:[^[:space:]]*/)?claude[[:space:]]+(?:[^[:space:]]+[[:space:]]+)*--name[[:space:]]+driga-internal([[:space:]]|$)']
+
+[[signature]]
+name = "agy-interactive"
+agent = "agy"
+role = "interactive"
+match = ['^(?:[^[:space:]]*/)?agy([[:space:]]|$)']
+
+[[signature]]
+name = "gemini-interactive"
+agent = "gemini"
+role = "interactive"
+match = [
+  '^(?:[^[:space:]]*/)?gemini([[:space:]]|$)',
+  '^(?:[^[:space:]]*/)?node[[:space:]]+[^[:space:]]*/@google/gemini-cli/[^[:space:]]*/index\.js([[:space:]]|$)',
+]
+
+[[signature]]
+name = "desktop-app"
+role = "app"
+app_bundle = true
+match = ['''^["']?(?:/(?:[^/[:space:]"']+/)*|~/)Applications/[^/]+\.app/Contents/MacOS/[^/[:space:]"']+["']?([[:space:]]|$)''']
+
+[[signature]]
+name = "claude-mcp"
+agent = "claude"
+role = "helper"
+match = ['^(?:[^[:space:]]*/)?claude[[:space:]]+mcp[[:space:]]+serve([[:space:]]|$)']
+
+[[signature]]
+name = "claude-headless"
+agent = "claude"
+role = "headless"
+match = ['^(?:[^[:space:]]*/)?claude[[:space:]]+(?:[^[:space:]]+[[:space:]]+)*(?:-p|--print)([[:space:]]|$)']
+
+[[signature]]
+name = "codex-exec"
+agent = "codex"
+role = "headless"
+match = ['^(?:[^[:space:]]*/)?codex[[:space:]]+exec([[:space:]]|$)']
+
+[[signature]]
+name = "codex-app-server-daemon"
+host_name = "codex app-server"
+agent = "codex"
+role = "service"
+match = ['^[^[:space:]]*/\.codex/packages/app-server-daemon/(?:[^[:space:]]*/)?codex[[:space:]]+app-server([[:space:]]|$)']
+
+[[signature]]
+name = "codex-app-server"
+host_name = "codex app-server"
+agent = "codex"
+role = "host"
+match = ['^(?:[^[:space:]]*/)?codex[[:space:]]+app-server([[:space:]]|$)']
+
+[[signature]]
+name = "codex-app-server-broker"
+agent = "codex"
+role = "helper"
+match = [
+  '^(?:[^[:space:]]*/)?node[[:space:]]+(?:[^[:space:]]*/)?app-server-broker\.mjs([[:space:]]|$)',
+  '^(?:[^[:space:]]*/)?app-server-broker\.mjs([[:space:]]|$)',
+]
+
+[[signature]]
+name = "generic-mcp-launcher"
+role = "helper"
+match = [
+  '^(?:[^[:space:]]*/)?(?:npx|uvx|bunx)[[:space:]]+(?:[^[:space:]]+[[:space:]]+)*[^[:space:]]*mcp[^[:space:]]*([[:space:]]|$)',
+  '^(?:[^[:space:]]*/)?pipx[[:space:]]+run[[:space:]]+(?:[^[:space:]]+[[:space:]]+)*[^[:space:]]*mcp[^[:space:]]*([[:space:]]|$)',
+]
+
+[[signature]]
+name = "claude-interactive"
+agent = "claude"
+role = "interactive"
+match = ['^(?:[^[:space:]]*/)?claude([[:space:]]|$)']
+
+[[signature]]
+name = "codex-interactive"
+agent = "codex"
+role = "interactive"
+match = ['^(?:[^[:space:]]*/)?codex([[:space:]]|$)']
+
+# Read-only Machine reports; these never confer orphan/cleanup eligibility.
+[[mcp_server]]
+name = "maestro mcp"
+match = ['^(?:[^[:space:]]*/)?java[[:space:]]+.*maestro\.cli\.AppKt[[:space:]]+mcp([[:space:]]|$)']
+
+[[mcp_server]]
+name = "codegraph mcp"
+match = ['^(?:[^[:space:]]*/)?node[[:space:]]+[^[:space:]]*/(?:@[^/[:space:]]*/)?codegraph/(?:[^[:space:]]*/)*(?:index|server|mcp)\.[cm]?js([[:space:]]|$)']

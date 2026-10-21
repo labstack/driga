@@ -1,0 +1,15 @@
+{
+  "sessions": [
+    {
+      "external_id": "future-cedar",
+      "label": "idle"
+    },
+    {
+      "external_id": "future-river",
+      "label": "idle",
+      "heuristic": true
+    }
+  ],
+  "orphans": [],
+  "conflicts": []
+}

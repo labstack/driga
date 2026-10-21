@@ -1,0 +1,6 @@
+[
+  {"event":"userPromptSubmitted","occurred_at":"2026-10-20T15:22:05.061Z"},
+  {"event":"sessionStart","occurred_at":"2026-10-20T15:22:05.133Z","source":"new"},
+  {"event":"errorOccurred","occurred_at":"2026-10-20T15:23:00Z"},
+  {"event":"sessionEnd","occurred_at":"2026-10-20T15:24:06.319Z","reason":"user_exit"}
+]

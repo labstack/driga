@@ -1,0 +1,1207 @@
+{
+  "sessions": [
+    {
+      "external_id": "canopy-000",
+      "label": "working"
+    },
+    {
+      "external_id": "tributary-000",
+      "label": "working"
+    },
+    {
+      "external_id": "delta-000",
+      "label": "working"
+    },
+    {
+      "external_id": "canopy-001",
+      "label": "working"
+    },
+    {
+      "external_id": "tributary-001",
+      "label": "working"
+    },
+    {
+      "external_id": "delta-001",
+      "label": "working"
+    },
+    {
+      "external_id": "canopy-002",
+      "label": "working"
+    },
+    {
+      "external_id": "tributary-002",
+      "label": "working"
+    },
+    {
+      "external_id": "delta-002",
+      "label": "working"
+    },
+    {
+      "external_id": "canopy-003",
+      "label": "working"
+    },
+    {
+      "external_id": "tributary-003",
+      "label": "working"
+    },
+    {
+      "external_id": "delta-003",
+      "label": "working"
+    },
+    {
+      "external_id": "canopy-004",
+      "label": "working"
+    },
+    {
+      "external_id": "tributary-004",
+      "label": "working"
+    },
+    {
+      "external_id": "delta-004",
+      "label": "working"
+    },
+    {
+      "external_id": "canopy-005",
+      "label": "working"
+    },
+    {
+      "external_id": "tributary-005",
+      "label": "working"
+    },
+    {
+      "external_id": "delta-005",
+      "label": "working"
+    },
+    {
+      "external_id": "canopy-006",
+      "label": "working"
+    },
+    {
+      "external_id": "tributary-006",
+      "label": "working"
+    },
+    {
+      "external_id": "delta-006",
+      "label": "working"
+    },
+    {
+      "external_id": "canopy-007",
+      "label": "working"
+    },
+    {
+      "external_id": "tributary-007",
+      "label": "working"
+    },
+    {
+      "external_id": "delta-007",
+      "label": "working"
+    },
+    {
+      "external_id": "canopy-008",
+      "label": "working"
+    },
+    {
+      "external_id": "tributary-008",
+      "label": "working"
+    },
+    {
+      "external_id": "delta-008",
+      "label": "working"
+    },
+    {
+      "external_id": "canopy-009",
+      "label": "working"
+    },
+    {
+      "external_id": "tributary-009",
+      "label": "working"
+    },
+    {
+      "external_id": "delta-009",
+      "label": "working"
+    },
+    {
+      "external_id": "canopy-010",
+      "label": "working"
+    },
+    {
+      "external_id": "tributary-010",
+      "label": "working"
+    },
+    {
+      "external_id": "delta-010",
+      "label": "working"
+    },
+    {
+      "external_id": "canopy-011",
+      "label": "working"
+    },
+    {
+      "external_id": "tributary-011",
+      "label": "working"
+    },
+    {
+      "external_id": "delta-011",
+      "label": "working"
+    },
+    {
+      "external_id": "canopy-012",
+      "label": "working"
+    },
+    {
+      "external_id": "tributary-012",
+      "label": "working"
+    },
+    {
+      "external_id": "delta-012",
+      "label": "working"
+    },
+    {
+      "external_id": "canopy-013",
+      "label": "working"
+    },
+    {
+      "external_id": "tributary-013",
+      "label": "working"
+    },
+    {
+      "external_id": "delta-013",
+      "label": "working"
+    },
+    {
+      "external_id": "canopy-014",
+      "label": "working"
+    },
+    {
+      "external_id": "tributary-014",
+      "label": "working"
+    },
+    {
+      "external_id": "delta-014",
+      "label": "working"
+    },
+    {
+      "external_id": "canopy-015",
+      "label": "working"
+    },
+    {
+      "external_id": "tributary-015",
+      "label": "working"
+    },
+    {
+      "external_id": "delta-015",
+      "label": "working"
+    },
+    {
+      "external_id": "canopy-016",
+      "label": "working"
+    },
+    {
+      "external_id": "tributary-016",
+      "label": "working"
+    },
+    {
+      "external_id": "delta-016",
+      "label": "working"
+    },
+    {
+      "external_id": "canopy-017",
+      "label": "working"
+    },
+    {
+      "external_id": "tributary-017",
+      "label": "working"
+    },
+    {
+      "external_id": "delta-017",
+      "label": "working"
+    },
+    {
+      "external_id": "canopy-018",
+      "label": "working"
+    },
+    {
+      "external_id": "tributary-018",
+      "label": "working"
+    },
+    {
+      "external_id": "delta-018",
+      "label": "working"
+    },
+    {
+      "external_id": "canopy-019",
+      "label": "working"
+    },
+    {
+      "external_id": "tributary-019",
+      "label": "working"
+    },
+    {
+      "external_id": "delta-019",
+      "label": "working"
+    },
+    {
+      "external_id": "canopy-020",
+      "label": "working"
+    },
+    {
+      "external_id": "tributary-020",
+      "label": "working"
+    },
+    {
+      "external_id": "delta-020",
+      "label": "working"
+    },
+    {
+      "external_id": "canopy-021",
+      "label": "working"
+    },
+    {
+      "external_id": "tributary-021",
+      "label": "working"
+    },
+    {
+      "external_id": "delta-021",
+      "label": "working"
+    },
+    {
+      "external_id": "canopy-022",
+      "label": "working"
+    },
+    {
+      "external_id": "tributary-022",
+      "label": "working"
+    },
+    {
+      "external_id": "delta-022",
+      "label": "working"
+    },
+    {
+      "external_id": "canopy-023",
+      "label": "working"
+    },
+    {
+      "external_id": "tributary-023",
+      "label": "working"
+    },
+    {
+      "external_id": "delta-023",
+      "label": "working"
+    },
+    {
+      "external_id": "canopy-024",
+      "label": "working"
+    },
+    {
+      "external_id": "tributary-024",
+      "label": "working"
+    },
+    {
+      "external_id": "delta-024",
+      "label": "working"
+    },
+    {
+      "external_id": "canopy-025",
+      "label": "working"
+    },
+    {
+      "external_id": "tributary-025",
+      "label": "working"
+    },
+    {
+      "external_id": "delta-025",
+      "label": "working"
+    },
+    {
+      "external_id": "canopy-026",
+      "label": "working"
+    },
+    {
+      "external_id": "tributary-026",
+      "label": "working"
+    },
+    {
+      "external_id": "delta-026",
+      "label": "working"
+    },
+    {
+      "external_id": "canopy-027",
+      "label": "working"
+    },
+    {
+      "external_id": "tributary-027",
+      "label": "working"
+    },
+    {
+      "external_id": "delta-027",
+      "label": "working"
+    },
+    {
+      "external_id": "canopy-028",
+      "label": "working"
+    },
+    {
+      "external_id": "tributary-028",
+      "label": "working"
+    },
+    {
+      "external_id": "delta-028",
+      "label": "working"
+    },
+    {
+      "external_id": "canopy-029",
+      "label": "working"
+    },
+    {
+      "external_id": "tributary-029",
+      "label": "working"
+    },
+    {
+      "external_id": "delta-029",
+      "label": "working"
+    },
+    {
+      "external_id": "canopy-030",
+      "label": "working"
+    },
+    {
+      "external_id": "tributary-030",
+      "label": "working"
+    },
+    {
+      "external_id": "delta-030",
+      "label": "working"
+    },
+    {
+      "external_id": "canopy-031",
+      "label": "working"
+    },
+    {
+      "external_id": "tributary-031",
+      "label": "working"
+    },
+    {
+      "external_id": "delta-031",
+      "label": "working"
+    },
+    {
+      "external_id": "canopy-032",
+      "label": "working"
+    },
+    {
+      "external_id": "tributary-032",
+      "label": "working"
+    },
+    {
+      "external_id": "delta-032",
+      "label": "working"
+    },
+    {
+      "external_id": "canopy-033",
+      "label": "working"
+    },
+    {
+      "external_id": "tributary-033",
+      "label": "working"
+    },
+    {
+      "external_id": "delta-033",
+      "label": "working"
+    },
+    {
+      "external_id": "canopy-034",
+      "label": "working"
+    },
+    {
+      "external_id": "tributary-034",
+      "label": "working"
+    },
+    {
+      "external_id": "delta-034",
+      "label": "working"
+    },
+    {
+      "external_id": "canopy-035",
+      "label": "working"
+    },
+    {
+      "external_id": "tributary-035",
+      "label": "working"
+    },
+    {
+      "external_id": "delta-035",
+      "label": "working"
+    },
+    {
+      "external_id": "canopy-036",
+      "label": "working"
+    },
+    {
+      "external_id": "tributary-036",
+      "label": "working"
+    },
+    {
+      "external_id": "delta-036",
+      "label": "working"
+    },
+    {
+      "external_id": "canopy-037",
+      "label": "working"
+    },
+    {
+      "external_id": "tributary-037",
+      "label": "working"
+    },
+    {
+      "external_id": "delta-037",
+      "label": "working"
+    },
+    {
+      "external_id": "canopy-038",
+      "label": "working"
+    },
+    {
+      "external_id": "tributary-038",
+      "label": "working"
+    },
+    {
+      "external_id": "delta-038",
+      "label": "working"
+    },
+    {
+      "external_id": "canopy-039",
+      "label": "working"
+    },
+    {
+      "external_id": "tributary-039",
+      "label": "working"
+    },
+    {
+      "external_id": "delta-039",
+      "label": "working"
+    },
+    {
+      "external_id": "canopy-040",
+      "label": "working"
+    },
+    {
+      "external_id": "tributary-040",
+      "label": "working"
+    },
+    {
+      "external_id": "delta-040",
+      "label": "working"
+    },
+    {
+      "external_id": "canopy-041",
+      "label": "working"
+    },
+    {
+      "external_id": "tributary-041",
+      "label": "working"
+    },
+    {
+      "external_id": "delta-041",
+      "label": "working"
+    },
+    {
+      "external_id": "canopy-042",
+      "label": "working"
+    },
+    {
+      "external_id": "tributary-042",
+      "label": "working"
+    },
+    {
+      "external_id": "delta-042",
+      "label": "working"
+    },
+    {
+      "external_id": "canopy-043",
+      "label": "working"
+    },
+    {
+      "external_id": "tributary-043",
+      "label": "working"
+    },
+    {
+      "external_id": "delta-043",
+      "label": "working"
+    },
+    {
+      "external_id": "canopy-044",
+      "label": "working"
+    },
+    {
+      "external_id": "tributary-044",
+      "label": "working"
+    },
+    {
+      "external_id": "delta-044",
+      "label": "working"
+    },
+    {
+      "external_id": "canopy-045",
+      "label": "working"
+    },
+    {
+      "external_id": "tributary-045",
+      "label": "working"
+    },
+    {
+      "external_id": "delta-045",
+      "label": "working"
+    },
+    {
+      "external_id": "canopy-046",
+      "label": "working"
+    },
+    {
+      "external_id": "tributary-046",
+      "label": "working"
+    },
+    {
+      "external_id": "delta-046",
+      "label": "working"
+    },
+    {
+      "external_id": "canopy-047",
+      "label": "working"
+    },
+    {
+      "external_id": "tributary-047",
+      "label": "working"
+    },
+    {
+      "external_id": "delta-047",
+      "label": "working"
+    },
+    {
+      "external_id": "canopy-048",
+      "label": "working"
+    },
+    {
+      "external_id": "tributary-048",
+      "label": "working"
+    },
+    {
+      "external_id": "delta-048",
+      "label": "working"
+    },
+    {
+      "external_id": "canopy-049",
+      "label": "working"
+    },
+    {
+      "external_id": "tributary-049",
+      "label": "working"
+    },
+    {
+      "external_id": "delta-049",
+      "label": "working"
+    }
+  ],
+  "orphans": [],
+  "conflicts": [
+    {
+      "kind": "same_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-000"
+    },
+    {
+      "kind": "same_file",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-000/src/shared.go"
+    },
+    {
+      "kind": "same_file_other_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-000/src/shared.go"
+    },
+    {
+      "kind": "same_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-001"
+    },
+    {
+      "kind": "same_file",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-001/src/shared.go"
+    },
+    {
+      "kind": "same_file_other_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-001/src/shared.go"
+    },
+    {
+      "kind": "same_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-002"
+    },
+    {
+      "kind": "same_file",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-002/src/shared.go"
+    },
+    {
+      "kind": "same_file_other_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-002/src/shared.go"
+    },
+    {
+      "kind": "same_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-003"
+    },
+    {
+      "kind": "same_file",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-003/src/shared.go"
+    },
+    {
+      "kind": "same_file_other_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-003/src/shared.go"
+    },
+    {
+      "kind": "same_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-004"
+    },
+    {
+      "kind": "same_file",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-004/src/shared.go"
+    },
+    {
+      "kind": "same_file_other_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-004/src/shared.go"
+    },
+    {
+      "kind": "same_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-005"
+    },
+    {
+      "kind": "same_file",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-005/src/shared.go"
+    },
+    {
+      "kind": "same_file_other_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-005/src/shared.go"
+    },
+    {
+      "kind": "same_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-006"
+    },
+    {
+      "kind": "same_file",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-006/src/shared.go"
+    },
+    {
+      "kind": "same_file_other_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-006/src/shared.go"
+    },
+    {
+      "kind": "same_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-007"
+    },
+    {
+      "kind": "same_file",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-007/src/shared.go"
+    },
+    {
+      "kind": "same_file_other_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-007/src/shared.go"
+    },
+    {
+      "kind": "same_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-008"
+    },
+    {
+      "kind": "same_file",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-008/src/shared.go"
+    },
+    {
+      "kind": "same_file_other_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-008/src/shared.go"
+    },
+    {
+      "kind": "same_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-009"
+    },
+    {
+      "kind": "same_file",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-009/src/shared.go"
+    },
+    {
+      "kind": "same_file_other_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-009/src/shared.go"
+    },
+    {
+      "kind": "same_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-010"
+    },
+    {
+      "kind": "same_file",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-010/src/shared.go"
+    },
+    {
+      "kind": "same_file_other_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-010/src/shared.go"
+    },
+    {
+      "kind": "same_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-011"
+    },
+    {
+      "kind": "same_file",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-011/src/shared.go"
+    },
+    {
+      "kind": "same_file_other_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-011/src/shared.go"
+    },
+    {
+      "kind": "same_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-012"
+    },
+    {
+      "kind": "same_file",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-012/src/shared.go"
+    },
+    {
+      "kind": "same_file_other_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-012/src/shared.go"
+    },
+    {
+      "kind": "same_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-013"
+    },
+    {
+      "kind": "same_file",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-013/src/shared.go"
+    },
+    {
+      "kind": "same_file_other_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-013/src/shared.go"
+    },
+    {
+      "kind": "same_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-014"
+    },
+    {
+      "kind": "same_file",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-014/src/shared.go"
+    },
+    {
+      "kind": "same_file_other_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-014/src/shared.go"
+    },
+    {
+      "kind": "same_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-015"
+    },
+    {
+      "kind": "same_file",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-015/src/shared.go"
+    },
+    {
+      "kind": "same_file_other_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-015/src/shared.go"
+    },
+    {
+      "kind": "same_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-016"
+    },
+    {
+      "kind": "same_file",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-016/src/shared.go"
+    },
+    {
+      "kind": "same_file_other_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-016/src/shared.go"
+    },
+    {
+      "kind": "same_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-017"
+    },
+    {
+      "kind": "same_file",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-017/src/shared.go"
+    },
+    {
+      "kind": "same_file_other_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-017/src/shared.go"
+    },
+    {
+      "kind": "same_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-018"
+    },
+    {
+      "kind": "same_file",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-018/src/shared.go"
+    },
+    {
+      "kind": "same_file_other_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-018/src/shared.go"
+    },
+    {
+      "kind": "same_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-019"
+    },
+    {
+      "kind": "same_file",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-019/src/shared.go"
+    },
+    {
+      "kind": "same_file_other_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-019/src/shared.go"
+    },
+    {
+      "kind": "same_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-020"
+    },
+    {
+      "kind": "same_file",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-020/src/shared.go"
+    },
+    {
+      "kind": "same_file_other_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-020/src/shared.go"
+    },
+    {
+      "kind": "same_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-021"
+    },
+    {
+      "kind": "same_file",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-021/src/shared.go"
+    },
+    {
+      "kind": "same_file_other_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-021/src/shared.go"
+    },
+    {
+      "kind": "same_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-022"
+    },
+    {
+      "kind": "same_file",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-022/src/shared.go"
+    },
+    {
+      "kind": "same_file_other_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-022/src/shared.go"
+    },
+    {
+      "kind": "same_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-023"
+    },
+    {
+      "kind": "same_file",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-023/src/shared.go"
+    },
+    {
+      "kind": "same_file_other_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-023/src/shared.go"
+    },
+    {
+      "kind": "same_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-024"
+    },
+    {
+      "kind": "same_file",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-024/src/shared.go"
+    },
+    {
+      "kind": "same_file_other_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-024/src/shared.go"
+    },
+    {
+      "kind": "same_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-025"
+    },
+    {
+      "kind": "same_file",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-025/src/shared.go"
+    },
+    {
+      "kind": "same_file_other_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-025/src/shared.go"
+    },
+    {
+      "kind": "same_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-026"
+    },
+    {
+      "kind": "same_file",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-026/src/shared.go"
+    },
+    {
+      "kind": "same_file_other_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-026/src/shared.go"
+    },
+    {
+      "kind": "same_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-027"
+    },
+    {
+      "kind": "same_file",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-027/src/shared.go"
+    },
+    {
+      "kind": "same_file_other_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-027/src/shared.go"
+    },
+    {
+      "kind": "same_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-028"
+    },
+    {
+      "kind": "same_file",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-028/src/shared.go"
+    },
+    {
+      "kind": "same_file_other_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-028/src/shared.go"
+    },
+    {
+      "kind": "same_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-029"
+    },
+    {
+      "kind": "same_file",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-029/src/shared.go"
+    },
+    {
+      "kind": "same_file_other_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-029/src/shared.go"
+    },
+    {
+      "kind": "same_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-030"
+    },
+    {
+      "kind": "same_file",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-030/src/shared.go"
+    },
+    {
+      "kind": "same_file_other_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-030/src/shared.go"
+    },
+    {
+      "kind": "same_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-031"
+    },
+    {
+      "kind": "same_file",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-031/src/shared.go"
+    },
+    {
+      "kind": "same_file_other_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-031/src/shared.go"
+    },
+    {
+      "kind": "same_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-032"
+    },
+    {
+      "kind": "same_file",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-032/src/shared.go"
+    },
+    {
+      "kind": "same_file_other_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-032/src/shared.go"
+    },
+    {
+      "kind": "same_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-033"
+    },
+    {
+      "kind": "same_file",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-033/src/shared.go"
+    },
+    {
+      "kind": "same_file_other_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-033/src/shared.go"
+    },
+    {
+      "kind": "same_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-034"
+    },
+    {
+      "kind": "same_file",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-034/src/shared.go"
+    },
+    {
+      "kind": "same_file_other_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-034/src/shared.go"
+    },
+    {
+      "kind": "same_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-035"
+    },
+    {
+      "kind": "same_file",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-035/src/shared.go"
+    },
+    {
+      "kind": "same_file_other_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-035/src/shared.go"
+    },
+    {
+      "kind": "same_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-036"
+    },
+    {
+      "kind": "same_file",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-036/src/shared.go"
+    },
+    {
+      "kind": "same_file_other_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-036/src/shared.go"
+    },
+    {
+      "kind": "same_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-037"
+    },
+    {
+      "kind": "same_file",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-037/src/shared.go"
+    },
+    {
+      "kind": "same_file_other_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-037/src/shared.go"
+    },
+    {
+      "kind": "same_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-038"
+    },
+    {
+      "kind": "same_file",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-038/src/shared.go"
+    },
+    {
+      "kind": "same_file_other_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-038/src/shared.go"
+    },
+    {
+      "kind": "same_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-039"
+    },
+    {
+      "kind": "same_file",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-039/src/shared.go"
+    },
+    {
+      "kind": "same_file_other_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-039/src/shared.go"
+    },
+    {
+      "kind": "same_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-040"
+    },
+    {
+      "kind": "same_file",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-040/src/shared.go"
+    },
+    {
+      "kind": "same_file_other_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-040/src/shared.go"
+    },
+    {
+      "kind": "same_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-041"
+    },
+    {
+      "kind": "same_file",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-041/src/shared.go"
+    },
+    {
+      "kind": "same_file_other_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-041/src/shared.go"
+    },
+    {
+      "kind": "same_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-042"
+    },
+    {
+      "kind": "same_file",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-042/src/shared.go"
+    },
+    {
+      "kind": "same_file_other_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-042/src/shared.go"
+    },
+    {
+      "kind": "same_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-043"
+    },
+    {
+      "kind": "same_file",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-043/src/shared.go"
+    },
+    {
+      "kind": "same_file_other_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-043/src/shared.go"
+    },
+    {
+      "kind": "same_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-044"
+    },
+    {
+      "kind": "same_file",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-044/src/shared.go"
+    },
+    {
+      "kind": "same_file_other_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-044/src/shared.go"
+    },
+    {
+      "kind": "same_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-045"
+    },
+    {
+      "kind": "same_file",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-045/src/shared.go"
+    },
+    {
+      "kind": "same_file_other_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-045/src/shared.go"
+    },
+    {
+      "kind": "same_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-046"
+    },
+    {
+      "kind": "same_file",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-046/src/shared.go"
+    },
+    {
+      "kind": "same_file_other_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-046/src/shared.go"
+    },
+    {
+      "kind": "same_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-047"
+    },
+    {
+      "kind": "same_file",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-047/src/shared.go"
+    },
+    {
+      "kind": "same_file_other_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-047/src/shared.go"
+    },
+    {
+      "kind": "same_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-048"
+    },
+    {
+      "kind": "same_file",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-048/src/shared.go"
+    },
+    {
+      "kind": "same_file_other_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-048/src/shared.go"
+    },
+    {
+      "kind": "same_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-049"
+    },
+    {
+      "kind": "same_file",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-049/src/shared.go"
+    },
+    {
+      "kind": "same_file_other_worktree",
+      "path": "{{FIXTURE_HOME}}/estuary/checkouts/grove-049/src/shared.go"
+    }
+  ]
+}

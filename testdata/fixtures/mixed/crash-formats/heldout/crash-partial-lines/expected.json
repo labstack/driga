@@ -1,0 +1,22 @@
+{
+  "sessions": [
+    {
+      "external_id": "crash-registry",
+      "label": "dead"
+    },
+    {
+      "external_id": "crash-midturn",
+      "label": "dead"
+    },
+    {
+      "external_id": "crash-completed",
+      "label": "finished"
+    },
+    {
+      "external_id": "reused-registry",
+      "label": "dead"
+    }
+  ],
+  "orphans": [],
+  "conflicts": []
+}

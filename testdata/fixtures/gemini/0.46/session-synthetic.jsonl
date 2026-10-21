@@ -1,0 +1,6 @@
+{"sessionId":"synthetic-session","projectHash":"synthetic-project","kind":"main","startTime":"2026-10-18T12:00:00Z","lastUpdated":"2026-10-18T12:00:00Z"}
+{"id":"u1","type":"user","timestamp":"2026-10-18T12:00:01Z","content":"Synthetic request"}
+{"id":"g1","type":"gemini","timestamp":"2026-10-18T12:00:02Z","content":"Synthetic answer"}
+{"$set":{"summary":"Synthetic title"}}
+{"id":"u2","type":"user","timestamp":"2026-10-18T12:00:03Z","content":"Synthetic next request"}
+{"$rewindTo":"u2"}

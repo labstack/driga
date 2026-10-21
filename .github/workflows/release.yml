@@ -1,0 +1,110 @@
+name: Release checks and packaging
+
+on:
+  push:
+    tags: ["v[1-9][0-9][0-9][0-9].*.*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  check-and-package:
+    # Dispatch on the release tag to retry. No PR trigger or credentials.
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      GOTOOLCHAIN: local
+      GOWORK: "off"
+      GOFLAGS: ""
+      GOEXPERIMENT: ""
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate calendar version tag
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          if [[ ! $TAG =~ ^v[1-9][0-9]{3}\.([1-9]|1[0-2])\.(0|[1-9][0-9]{0,18})(-alpha)?$ ]]; then
+            echo 'Expected vYYYY.M.REVISION[-alpha]' >&2
+            exit 1
+          fi
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          check-latest: false
+          cache: false
+      - name: Isolate test and build state
+        run: |
+          task_root=$(mktemp -d "$RUNNER_TEMP/driga-release.XXXXXX")
+          mkdir -p "$task_root/home" "$task_root/data" "$task_root/spool"
+          {
+            echo "HOME=$task_root/home"
+            echo "CODEX_HOME=$task_root/home/.codex"
+            echo "GEMINI_CLI_HOME=$task_root/home/.gemini"
+            echo "XDG_CONFIG_HOME=$task_root/home/.config"
+            echo "XDG_DATA_HOME=$task_root/home/.local/share"
+            echo "XDG_STATE_HOME=$task_root/home/.local/state"
+            echo "DRIGA_DATA_DIR=$task_root/data"
+            echo "DRIGA_SPOOL_DIR=$task_root/spool"
+            echo "DRIGA_CONFIG=$task_root/config.toml"
+            echo "GOCACHE=$task_root/gocache"
+            echo "GOMODCACHE=$task_root/gomodcache"
+          } >> "$GITHUB_ENV"
+      - name: Verify release source
+        run: git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+      - name: Format and vet
+        run: |
+          test -z "$(gofmt -l .)"
+          go vet ./...
+      - name: Test on Linux (including binary smoke test)
+        run: go test ./...
+      - name: Race test
+        env:
+          CGO_ENABLED: "1"
+        run: go test -race ./...
+      - name: Package the cgo-free matrix and verify checksums
+        env:
+          TAG: ${{ github.ref_name }}
+        run: scripts/release.sh "$TAG"
+      - name: Record optional SBOM coverage
+        run: |
+          if command -v syft > /dev/null; then
+            scripts/release-evidence.sh sbom dist
+          else
+            echo "::warning::SBOM not generated; preinstall syft 1.33.0 and rerun before distribution"
+            echo "SBOM: unavailable (syft 1.33.0 not provisioned)" >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Record source, build, and checksums
+        run: |
+          (cd dist && shasum -a 256 -c SHA256SUMS)
+          {
+            echo '### Qualified packaging output (publication remains manual)'
+            echo '```json'
+            cat dist/build-info.json
+            echo '```'
+            echo '```text'
+            cat dist/SHA256SUMS
+            echo '```'
+            echo 'Review docs/release.md before distribution. This workflow does not sign or publish.'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: driga-${{ github.ref_name }}-${{ github.sha }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30
+    # No signing secrets are consumed here. Offline signing is a separate step
+    # using scripts/release-evidence.sh and an approved managed key mount.
+    # Build metadata and checksums are retained with the artifact.

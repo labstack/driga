@@ -1,0 +1,22 @@
+{
+  "Now": "2026-10-18T18:00:00Z",
+  "Layout": "home/vm-user/workspaces",
+  "Repos": 2,
+  "WorktreesPerRepo": 1,
+  "Seed": 1753,
+  "Agents": [
+    {
+      "Adapter": "claude",
+      "ID": "vm-claude-busy",
+      "Version": "2.1.95",
+      "Status": "busy",
+      "Repo": 0
+    },
+    {
+      "Adapter": "codex",
+      "ID": "vm-codex-turn",
+      "Version": "0.16.92",
+      "Repo": 1
+    }
+  ]
+}
