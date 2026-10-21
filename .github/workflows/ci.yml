@@ -46,8 +46,6 @@ jobs:
           mkdir -p "$task_root/home" "$task_root/data" "$task_root/spool"
           {
             echo "HOME=$task_root/home"
-            echo "CLAUDE_CONFIG_DIR=$task_root/home/.claude"
-            echo "COPILOT_HOME=$task_root/home/.copilot"
             echo "CODEX_HOME=$task_root/home/.codex"
             echo "GEMINI_CLI_HOME=$task_root/home/.gemini"
             echo "XDG_CONFIG_HOME=$task_root/home/.config"
