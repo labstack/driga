@@ -46,7 +46,9 @@ func (m *app) jumpInbox(r tabRow) tea.Cmd {
 			if run != nil {
 				err = run(args)
 			} else {
-				err = exec.CommandContext(ctx, args[0], args[1:]...).Run()
+				cmd := exec.CommandContext(ctx, args[0], args[1:]...)
+				inbox.ConfigureCommand(cmd)
+				err = cmd.Run()
 			}
 			if err != nil {
 				break

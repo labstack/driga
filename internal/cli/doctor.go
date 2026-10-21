@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	ks "github.com/kardianos/service"
 	"github.com/labstack/driga/internal/filelock"
 	"github.com/labstack/driga/internal/secfile"
 	"os"
@@ -47,20 +48,22 @@ type DoctorReader interface {
 
 // DoctorDeps supplies all environment and collection state for diagnostics.
 type DoctorDeps struct {
-	OS             string // Optional OS override for offline diagnostics.
-	ProcRoot       string // Optional procfs root; defaults to /proc.
-	LingerDir      string // Optional linger marker directory.
-	UID            int
-	Username       string
-	DataDir        string
-	Store          DoctorReader
-	Config         config.Config
-	Home           string
-	CodexHome      string // Optional override; defaults to Home/.codex.
-	CopilotHome    string // Optional override; defaults to Home/.copilot.
-	Now            time.Time
-	LockProbe      func(dataDir string) (held bool, err error)
-	NotifierLookup func() string // Optional cached notifier lookup for fixtures.
+	OS                 string // Optional OS override for offline diagnostics.
+	ProcRoot           string // Optional procfs root; defaults to /proc.
+	LingerDir          string // Optional linger marker directory.
+	UID                int
+	Username           string
+	DataDir            string
+	Store              DoctorReader
+	Config             config.Config
+	Home               string
+	CodexHome          string // Optional override; defaults to Home/.codex.
+	CopilotHome        string // Optional override; defaults to Home/.copilot.
+	Now                time.Time
+	LockProbe          func(dataDir string) (held bool, err error)
+	NotifierLookup     func() string          // Optional cached notifier lookup for fixtures.
+	ServiceState       func() (string, error) // Windows Task Scheduler, read-only.
+	NotificationStatus func() (string, error) // Windows Runtime, no registration/display.
 }
 
 // Doctor checks stored evidence without collecting, writing, or controlling launchd.
@@ -213,7 +216,7 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 			continue
 		}
 		var dirs []string
-		if name == "copilot" && goos != "windows" {
+		if name == "copilot" {
 			if warning := copilotVersionWarning(ctx); warning != "" {
 				add("version:copilot", "warn", warning, "upgrade Copilot CLI to 1.0.98 or newer")
 			}
@@ -285,13 +288,13 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 				add("version:"+name, "fail", err.Error(), "check database access")
 			}
 		}
-		if goos == "windows" {
-			add("hooks:"+name, "info", platform.ErrWindowsAction.Error(), "")
-			continue
-		}
 		switch name {
 		case "claude":
-			events, err := hooks.ClaudeStatus(filepath.Join(d.Home, ".claude", "settings.json"))
+			claudeHome := filepath.Join(d.Home, ".claude")
+			if goos == "windows" && os.Getenv("CLAUDE_CONFIG_DIR") != "" {
+				claudeHome = os.Getenv("CLAUDE_CONFIG_DIR")
+			}
+			events, err := hooks.ClaudeStatus(filepath.Join(claudeHome, "settings.json"))
 			if err != nil {
 				add("hooks:claude", "fail", err.Error(), "driga hooks install --agent claude")
 			} else if len(events) < 4 {
@@ -330,13 +333,29 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 		add("data_permissions", "ok", "0700", "")
 	}
 	if goos == "windows" {
-		for _, name := range []string{"service", "hooks install", "kill", "cleanup apply", "Claude scratch", "notifications", "terminal jump", "socket probers", "file probers"} {
+		for _, name := range []string{"kill", "cleanup apply", "Claude scratch", "socket probers", "file probers"} {
 			add(name, "info", "not yet supported on Windows", "")
 		}
-		for i := range checks {
-			checks[i].Fix = strings.ReplaceAll(checks[i].Fix, "driga service install", "driga collect")
-			checks[i].Fix = strings.ReplaceAll(checks[i].Fix, "driga service restart", "restart foreground driga collect")
+		state := "per-user Task Scheduler (not queried)"
+		if d.ServiceState != nil {
+			var err error
+			state, err = d.ServiceState()
+			if err != nil && !errors.Is(err, ks.ErrNotInstalled) {
+				state = "Task Scheduler unavailable: " + err.Error()
+			}
 		}
+		add("service", "info", state, "driga service status")
+		add("hooks install", "info", "Claude/Codex/Copilot (preview before write)", "driga hooks install --dry-run")
+		add("terminal jump", "info", "Windows Terminal on PATH; otherwise cmd.exe start (new window)", "")
+		notifications := "native WinRT plain toast (not queried)"
+		if d.NotificationStatus != nil {
+			var err error
+			notifications, err = d.NotificationStatus()
+			if err != nil {
+				notifications = "notifications unavailable: " + err.Error()
+			}
+		}
+		add("notifications", "info", notifications, "check Windows notification settings; driga inbox")
 	}
 	if goos == "linux" {
 		checks = append(checks, doctorLinuxChecks(d)...)
@@ -504,6 +523,20 @@ func (DoctorCmd) Run(g *Globals) error {
 		return err
 	}
 	d := DoctorDeps{DataDir: config.DataDir(), Config: cfg, Home: config.ExpandHome("~"), CodexHome: os.Getenv("CODEX_HOME"), CopilotHome: os.Getenv("COPILOT_HOME"), Now: time.Now(), LockProbe: probeCollectorLock}
+	if runtime.GOOS == "windows" {
+		d.NotificationStatus = inbox.WindowsNotificationStatus
+		d.ServiceState = func() (string, error) {
+			bin, err := os.Executable()
+			if err != nil {
+				return "", err
+			}
+			s, err := service.New(bin)
+			if err != nil {
+				return "", err
+			}
+			return s.(interface{ TaskState() (string, error) }).TaskState()
+		}
+	}
 	st, openErr := store.Open(filepath.Join(d.DataDir, "driga.db"), store.ReadOnly)
 	if openErr == nil {
 		defer st.Close()
@@ -514,9 +547,6 @@ func (DoctorCmd) Run(g *Globals) error {
 		status, fix := "fail", "check database permissions and driga service logs"
 		if _, err := os.Stat(filepath.Join(d.DataDir, "driga.db")); errors.Is(err, os.ErrNotExist) {
 			status, fix = "warn", "driga service install"
-			if runtime.GOOS == "windows" {
-				fix = "driga collect"
-			}
 		}
 		checks = append(checks, Check{"database", status, openErr.Error(), fix})
 	}

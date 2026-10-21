@@ -235,10 +235,6 @@ func windowsUnsupported(command string, c CleanupCmd) bool {
 		return false
 	}
 	switch words[0] {
-	case "service", "jump":
-		return true
-	case "hooks":
-		return len(words) > 1 && words[1] == "install"
 	case "orphans":
 		return len(words) > 1 && words[1] == "kill"
 	case "cleanup":

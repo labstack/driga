@@ -37,7 +37,9 @@ major-version rules. Install from release archives or build a source checkout.
 - Use Bash, Python 3.9+, Git, `shasum`, and exactly the Go version in `go.mod`.
   Dependencies must be cached for offline builds; the scripts install no tools.
 - Run formatting, vet, tests, race tests, and a cgo-free build. Review skipped
-  platform checks and exercise macOS and Linux before publishing.
+  platform checks and exercise macOS, Linux, and Windows before publishing.
+  On Windows verify per-user task installation/logon/restart, hook delivery,
+  terminal launch, and plain toast delivery with a real agent session.
 - Driga is licensed under Apache-2.0. Packaging requires `LICENSE` and ships
   `NOTICE` and bundled font/JavaScript license notices.
 - Optional SBOM generation needs preinstalled **Syft 1.33.0**. Optional signing
@@ -131,20 +133,22 @@ compatibility before changing installed versions.
 
 ## Reproduce the archives
 
-The shipped matrix is macOS (`darwin`) and Linux, each on amd64 and arm64. Windows
-amd64/arm64 command binaries are compiled into a disposable intermediate directory
-only. Their platform-specific entry point prints the stamped build identity and
-an unsupported-platform error, then exits 1 without accessing data. This compiles
-the command, not the Unix-dependent internal packages or a working Windows CLI.
-Archives are `driga_<version>_<os>_<arch>.tar.gz` and contain `driga`, `README.md`,
-`LICENSE`, `NOTICE`, and bundled asset license notices.
+The shipped matrix is macOS (`darwin`), Linux, and experimental Windows, each on
+amd64 and arm64. macOS/Linux archives are
+`driga_<version>_<os>_<arch>.tar.gz`; Windows archives are
+`driga_<version>_windows_<arch>.zip`. Each contains `driga` (or `driga.exe`),
+`README.md`, `LICENSE`, `NOTICE`, `third-party/vendor-LICENSES.txt`, and
+`third-party/fonts-LICENSE.txt`. All six targets appear in `build-info.json` and
+`SHA256SUMS`; there are no compile-only targets. SBOM generation covers ZIPs too.
 
 Builds use `CGO_ENABLED=0`, `-mod=readonly`, `-trimpath`, `-buildvcs=false`,
 `-ldflags "-s -w -X main.version=... -X main.commit=... -X main.date=..."`,
 GOAMD64=v1 and GOARM64=v8.0. User GOFLAGS and GOEXPERIMENT are cleared, workspaces
 and automatic toolchain downloads are disabled. Archive contents have sorted
 names, fixed permissions, zero owners, commit-time tar mtimes, and zero gzip
-mtime with no filename. Rebuild the same tag using the same toolchain, source,
+mtime with no filename. ZIP entries use commit-time UTC DOS timestamps
+(two-second resolution, clamped to 1980), fixed Unix mode attributes and deflate
+level 9. Rebuild the same tag using the same toolchain, source,
 dependency checksums, and Python/zlib versions, then compare archive hashes.
 Optional SBOMs and signatures may carry tool-generated metadata and are outside
 the byte-reproducible archive claim.
@@ -184,6 +188,13 @@ install -m 0755 release-unpacked/driga "$HOME/.local/bin/driga"
 
 Keep Git and `~/.local/bin` on PATH and the installed binary at a stable absolute path
 before configuring hooks or a service. Retain the archive and its LICENSE.
+
+On Windows, use `Get-FileHash -Algorithm SHA256` to compare the ZIP's hash with
+its exact entry in the authenticated `SHA256SUMS`, then extract the ZIP with
+Explorer or `Expand-Archive`. Put `driga.exe` in a stable directory on PATH and
+run `driga version --json`, then `driga service install` and `driga doctor`.
+PowerShell here is an optional installation shell; Driga does not invoke it for
+tasks, alerts or terminal launch. Windows remains experimental (phase 2).
 
 ## Install from source and Homebrew template
 

@@ -3,6 +3,7 @@ package inbox
 import (
 	"context"
 	"fmt"
+	"os/exec"
 	"runtime"
 	"strconv"
 	"strings"
@@ -13,11 +14,12 @@ import (
 )
 
 type JumpOptions struct {
-	DrigaPath string
-	Tmux      string
-	Terminal  bool
-	OS        string
-	Procs     func(context.Context) ([]model.Proc, error) // Optional process snapshot override for fixtures.
+	DrigaPath      string
+	Tmux           string
+	Terminal       bool
+	OS             string
+	Procs          func(context.Context) ([]model.Proc, error) // Optional process snapshot override for fixtures.
+	TerminalLookup func(string) (string, error)                // Optional Windows Terminal lookup for fixtures.
 }
 
 // RunJump follows a local destination. Callers must reject remote items first.
@@ -110,11 +112,30 @@ func terminalApp(procs []model.Proc, tty string) string {
 // JumpCommands plans only proven local destinations. Callers must reject remote
 // items before execution. Resume commands remain copyable text, never executed.
 func JumpCommands(j *model.InboxJump, opts JumpOptions) ([][]string, error) {
-	if opts.OS == "windows" || opts.OS == "" && runtime.GOOS == "windows" {
-		return nil, platform.ErrWindowsAction
-	}
 	if j == nil {
 		return nil, fmt.Errorf("item has no jump")
+	}
+	if opts.OS == "windows" || opts.OS == "" && runtime.GOOS == "windows" {
+		if j.Kind != "resume" && j.Kind != "terminal" && j.Kind != "machine" {
+			return nil, fmt.Errorf("item has no Windows terminal destination")
+		}
+		cwd := j.Cwd
+		if cwd == "" {
+			return nil, fmt.Errorf("item has no Windows working directory")
+		}
+		lookup := opts.TerminalLookup
+		if lookup == nil {
+			lookup = exec.LookPath
+		}
+		wt, lookupErr := lookup("wt.exe")
+		if lookupErr != nil {
+			wt = ""
+		}
+		command, err := windowsTerminalCommand(wt, cwd)
+		if err != nil {
+			return nil, err
+		}
+		return [][]string{command}, nil
 	}
 	switch j.Kind {
 	case "machine":

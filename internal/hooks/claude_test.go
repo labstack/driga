@@ -50,7 +50,7 @@ func TestClaudeInstallMergesPreservingExisting(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "settings.json")
 	before := `{"counter":9007199254740993,"unknown":{"enabled":true},"hooks":{"PreToolUse":[{"matcher":"Edit","hooks":[{"type":"command","command":"other-tool"}]}],"Stop":[{"matcher":"existing","hooks":[{"type":"command","command":"echo stop"}]}]}}`
 	writeFixture(t, path, before)
-	d, err := hooks.ClaudeInstall(path, "/opt/driga", false, testNow)
+	d, err := hooks.ClaudeInstall(path, testBinary("/opt/driga"), false, testNow)
 	if err != nil || !d.Changed || d.Path != path || d.Before != before || d.After != readFixture(t, path) {
 		t.Fatalf("install = %+v, %v", d, err)
 	}
@@ -81,15 +81,12 @@ func TestClaudeInstallMergesPreservingExisting(t *testing.T) {
 }
 
 func TestClaudeInstallIdempotent(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("hook installation is not supported on Windows in phase 1")
-	}
 	path := filepath.Join(t.TempDir(), "settings.json")
-	first, err := hooks.ClaudeInstall(path, "/old/driga", false, testNow)
+	first, err := hooks.ClaudeInstall(path, testBinary("/old/driga"), false, testNow)
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := hooks.ClaudeInstall(path, "/new/driga", false, testNow.Add(time.Second))
+	second, err := hooks.ClaudeInstall(path, testBinary("/new/driga"), false, testNow.Add(time.Second))
 	if err != nil || second.Changed || second.Before != first.After || second.After != first.After {
 		t.Fatalf("repeat = %+v, %v", second, err)
 	}
@@ -132,14 +129,11 @@ func TestClaudeUninstallRemovesOnlyDriga(t *testing.T) {
 }
 
 func TestClaudeDryRunNoWrite(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("hook installation is not supported on Windows in phase 1")
-	}
 	dir := t.TempDir()
 	path := filepath.Join(dir, "settings.json")
 	before := `{"theme":"dark"}`
 	writeFixture(t, path, before)
-	d, err := hooks.ClaudeInstall(path, "/opt/driga", true, testNow)
+	d, err := hooks.ClaudeInstall(path, testBinary("/opt/driga"), true, testNow)
 	if err != nil || !d.Changed || readFixture(t, path) != before {
 		t.Fatalf("dry run = %+v, %v", d, err)
 	}
@@ -148,7 +142,7 @@ func TestClaudeDryRunNoWrite(t *testing.T) {
 		t.Fatal("dry run wrote backup")
 	}
 	missing := filepath.Join(dir, "missing", "settings.json")
-	if _, err := hooks.ClaudeInstall(missing, "/opt/driga", true, testNow); err != nil {
+	if _, err := hooks.ClaudeInstall(missing, testBinary("/opt/driga"), true, testNow); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Dir(missing)); !os.IsNotExist(err) {
@@ -162,7 +156,7 @@ func TestClaudeMissingFileCreates(t *testing.T) {
 	}
 
 	path := filepath.Join(t.TempDir(), ".claude", "settings.json")
-	if _, err := hooks.ClaudeInstall(path, "/opt/driga", false, testNow); err != nil {
+	if _, err := hooks.ClaudeInstall(path, testBinary("/opt/driga"), false, testNow); err != nil {
 		t.Fatal(err)
 	}
 	info, _ := os.Stat(path)
@@ -177,12 +171,9 @@ func TestClaudeMissingFileCreates(t *testing.T) {
 }
 
 func TestClaudeQuotedBinaryAndPartialInstall(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("hook installation is not supported on Windows in phase 1")
-	}
 	path := filepath.Join(t.TempDir(), "settings.json")
 	writeFixture(t, path, `{"hooks":{"Stop":[{"hooks":[{"command":"driga hook claude Stop"}]}]}}`)
-	d, err := hooks.ClaudeInstall(path, "/opt/a user's tools/driga", false, testNow)
+	d, err := hooks.ClaudeInstall(path, testBinary("/opt/a user's tools/driga"), false, testNow)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -191,7 +182,11 @@ func TestClaudeQuotedBinaryAndPartialInstall(t *testing.T) {
 		t.Fatal("duplicated installed event")
 	}
 	command := h["SessionStart"].([]any)[0].(map[string]any)["hooks"].([]any)[0].(map[string]any)["command"].(string)
-	if !strings.HasPrefix(command, "'/opt/a user") || !strings.HasSuffix(command, " hook claude SessionStart") {
+	if runtime.GOOS == "windows" {
+		if command != testBinary("/opt/a user's tools/driga") {
+			t.Fatalf("bad exec path: %q", command)
+		}
+	} else if !strings.HasPrefix(command, "'/opt/a user") || !strings.HasSuffix(command, " hook claude SessionStart") {
 		t.Fatalf("unquoted binary: %q", command)
 	}
 	if _, err := hooks.ClaudeUninstall(path, false); err != nil {
@@ -207,7 +202,7 @@ func TestClaudeInvalidSettingsNoWrite(t *testing.T) {
 		t.Run(before, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "settings.json")
 			writeFixture(t, path, before)
-			if _, err := hooks.ClaudeInstall(path, "/opt/driga", false, testNow); err == nil {
+			if _, err := hooks.ClaudeInstall(path, testBinary("/opt/driga"), false, testNow); err == nil {
 				t.Fatal("expected invalid settings error")
 			}
 			if readFixture(t, path) != before {
@@ -228,9 +223,6 @@ func TestDiffUnified(t *testing.T) {
 }
 
 func TestClaudePreservesUnrelatedBytes(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("hook installation is not supported on Windows in phase 1")
-	}
 	for _, before := range []string{`{"z":  2, "a" : { "x" : 1 }}`, "{\n\t\"z\": 2,\n\t\"a\": 1\n}\n", "{  }", "{}\n"} {
 		for _, otlp := range []bool{false, true} {
 			path := filepath.Join(t.TempDir(), "settings.json")
@@ -240,7 +232,7 @@ func TestClaudePreservesUnrelatedBytes(t *testing.T) {
 			if otlp {
 				d, err = hooks.ClaudeInstallOTLP(path, true, false, testNow)
 			} else {
-				d, err = hooks.ClaudeInstall(path, "/opt/driga", false, testNow)
+				d, err = hooks.ClaudeInstall(path, testBinary("/opt/driga"), false, testNow)
 			}
 			if err != nil {
 				t.Fatal(err)
@@ -264,12 +256,9 @@ func TestClaudePreservesUnrelatedBytes(t *testing.T) {
 }
 
 func TestClaudeDuplicateManagedKeyFallsBack(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("hook installation is not supported on Windows in phase 1")
-	}
 	path := filepath.Join(t.TempDir(), "settings.json")
 	writeFixture(t, path, `{"hooks":{},"hooks":{},"unknown": 2}`)
-	d, err := hooks.ClaudeInstall(path, "/opt/driga", true, testNow)
+	d, err := hooks.ClaudeInstall(path, testBinary("/opt/driga"), true, testNow)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -280,4 +269,12 @@ func TestClaudeDuplicateManagedKeyFallsBack(t *testing.T) {
 	if len(h) != 4 {
 		t.Fatalf("hooks not installed: %s", d.After)
 	}
+}
+
+// Executable fixtures are absolute on the host; no fixture binary is executed.
+func testBinary(unix string) string {
+	if runtime.GOOS == "windows" {
+		return `C:` + strings.ReplaceAll(unix, "/", `\`) + ".exe"
+	}
+	return unix
 }

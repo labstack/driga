@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -23,6 +24,7 @@ import (
 	"github.com/labstack/driga/internal/inbox"
 	"github.com/labstack/driga/internal/kill"
 	"github.com/labstack/driga/internal/model"
+	"github.com/labstack/driga/internal/pathx"
 	"github.com/labstack/driga/internal/platform"
 	"github.com/labstack/driga/internal/spool"
 	"github.com/labstack/driga/internal/store"
@@ -902,6 +904,10 @@ func (m *app) ack(items []model.InboxItem) tea.Cmd {
 }
 
 func openCommand(template, term, cwd string) []string {
+	if template == "" && runtime.GOOS == "windows" && pathx.WindowsStyle(cwd) {
+		args, _ := inbox.WindowsTerminalCommand(cwd)
+		return args
+	}
 	if template == "" {
 		switch term {
 		case "Apple_Terminal":
@@ -938,6 +944,7 @@ func (m *app) execute(args []string, attach bool) tea.Cmd {
 	ctx := m.opts.Context
 	return func() tea.Msg {
 		cmd := exec.CommandContext(ctx, args[0], args[1:]...)
+		inbox.ConfigureCommand(cmd)
 		if attach {
 			return tea.ExecProcess(cmd, func(err error) tea.Msg { return actionMsg{status: command, err: err} })()
 		}

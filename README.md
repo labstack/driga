@@ -3,7 +3,7 @@
 **See what your coding agents are doing, and what needs you.**
 
 Driga is a CLI, terminal UI, and local web dashboard for AI coding agent
-sessions on macOS and Linux. Windows: experimental (watch only).
+sessions on macOS and Linux. Windows: experimental (phase 2: always on).
 It brings agent activity, project status, an attention inbox, orphaned helpers, and machine health into one place.
 
 Driga is **alpha**. Agent formats and behavior can change; unknown or incomplete
@@ -27,8 +27,8 @@ evidence is shown explicitly. Expect changes as the interfaces settle.
 
 Download the archive for your platform from
 [GitHub Releases](https://github.com/labstack/driga/releases). The release matrix
-covers macOS and Linux on amd64 and arm64. Windows watch builds require building
-from source; agent support has not yet been verified on Windows.
+covers macOS, Linux, and Windows on amd64 and arm64. Windows archives are ZIPs
+containing `driga.exe`; real-agent Windows support is still being verified.
 Check the archive against its
 `SHA256SUMS`, unpack it, and put `driga` on PATH. The
 [release guide](docs/release.md#verify-and-install-a-release-archive) gives the
@@ -45,6 +45,24 @@ Keep Git on PATH and the installed binary at a stable absolute path before
 setting up hooks or a service. CalVer tags use the year as their major number;
 Go module major-version rules prevent `go install ...@<tag>` with this module
 path. Use an archive or a source checkout.
+
+## Windows (experimental)
+
+Windows 10 1809+ and Windows 11 have native snapshots, foreground collection,
+read commands, TUI/web/MCP, OTLP intake and fleet interfaces. Phase 2 adds:
+
+- A per-user Task Scheduler collector at logon: `driga service install`,
+  `uninstall`, `start`, `stop`, `status`, `restart`, and `logs [-f]`; no elevation.
+- Previewed Claude, Codex and Copilot hook installation with absolute executable paths.
+- Native plain toast alerts (no PowerShell); doctor reports availability.
+- Terminal jumps/open in Windows Terminal, falling back to a new Command Prompt.
+
+Logs live at `%LOCALAPPDATA%\driga\logs\collector.log`. Keep `driga.exe` at a
+stable path before installing. Killing orphan processes, cleanup application,
+Claude scratch discovery and socket/file probes remain unavailable. Toast clicks
+and focusing an existing terminal are not implemented. Windows remains experimental
+until real agent sessions, logon/restart and notifications are verified on hardware.
+See [Windows setup details](docs/usage.md#windows-experimental).
 
 ## Quick start
 

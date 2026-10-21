@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/labstack/driga/internal/platform"
 	"io"
 	"os"
 	"os/exec"
@@ -29,8 +28,13 @@ type Runner interface {
 // CommandRunner is wired only at production entry points. Fixtures inject a runner.
 type CommandRunner struct{}
 
+// ConfigureCommand applies native command-line rules to generated terminal
+// commands. Other commands are left to os/exec's normal argv handling.
+func ConfigureCommand(cmd *exec.Cmd) { configureCommand(cmd) }
+
 func (CommandRunner) Run(ctx context.Context, name string, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
+	configureCommand(cmd)
 	cmd.WaitDelay = 50 * time.Millisecond
 	cmd.Env = append(os.Environ(), "DRIGA_INTERNAL=1")
 	// Bounded stdout; stderr is never exposed (it can contain agent text).
@@ -263,6 +267,7 @@ type Notifier interface {
 	Notify(context.Context, Notification) error
 }
 type DesktopNotifier struct {
+	Toast     func(context.Context, string) error // Native Windows backend; fixtures inject a recorder.
 	Runner    Runner
 	OS        string
 	DrigaPath string
@@ -287,7 +292,14 @@ func cachedNotifierLookup(lookup func(string) (string, error)) func() string {
 
 func (d DesktopNotifier) Notify(ctx context.Context, n Notification) error {
 	if d.OS == "windows" || d.OS == "" && runtime.GOOS == "windows" {
-		return platform.ErrWindowsAction
+		if d.Toast == nil {
+			return fmt.Errorf("notifications unavailable: native Windows toast backend not configured")
+		}
+		payload, err := toastPayload(n)
+		if err != nil {
+			return err
+		}
+		return d.Toast(ctx, payload)
 	}
 	if d.Runner == nil {
 		return nil

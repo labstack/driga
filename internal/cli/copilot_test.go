@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -74,9 +73,6 @@ func TestCopilotCaptureFailOpen(t *testing.T) {
 }
 
 func TestCopilotHooksCLIAndDoctor(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Unix service or hook path contract; Windows has watch/refusal tests")
-	}
 	hookTestEnv(t)
 	home := os.Getenv("HOME")
 	t.Setenv("COPILOT_HOME", filepath.Join(home, "copilot-custom"))

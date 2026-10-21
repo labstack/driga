@@ -19,5 +19,6 @@ func (unavailableInboxRunner) Run(context.Context, string, ...string) ([]byte, e
 // They must never query a real agent CLI, tmux server or notification centre.
 func TestMain(m *testing.M) {
 	newInboxRunner = func() inbox.Runner { return unavailableInboxRunner{} }
+	nativeToast = func(context.Context, string) error { return exec.ErrNotFound }
 	os.Exit(m.Run())
 }

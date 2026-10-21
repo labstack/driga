@@ -18,14 +18,14 @@ func TestWindowsUnsupportedCommands(t *testing.T) {
 	for key, value := range map[string]string{"HOME": root, "USERPROFILE": root, "APPDATA": root, "LOCALAPPDATA": root, "DRIGA_CONFIG": filepath.Join(root, "config.toml"), "DRIGA_DATA_DIR": filepath.Join(root, "data"), "DRIGA_SPOOL_DIR": filepath.Join(root, "events")} {
 		t.Setenv(key, value)
 	}
-	for _, args := range [][]string{{"service", "install"}, {"hooks", "install"}, {"orphans", "kill", "id"}, {"cleanup", "id", "--yes"}, {"jump", "id"}} {
+	for _, args := range [][]string{{"orphans", "kill", "id"}, {"cleanup", "id", "--yes"}} {
 		var out, errout bytes.Buffer
 		if code := run(args, "test", strings.NewReader(""), &out, &errout); code != 2 || !strings.Contains(errout.String(), "not yet supported on Windows") {
 			t.Fatalf("%v: %d %s", args, code, errout.String())
 		}
 	}
 	checks := Doctor(context.Background(), DoctorDeps{OS: "windows", Home: root, DataDir: filepath.Join(root, "data"), Now: time.Now(), LockProbe: func(string) (bool, error) { return false, nil }})
-	for _, name := range []string{"service", "hooks install", "kill", "cleanup apply", "notifications", "terminal jump", "socket probers", "file probers"} {
+	for _, name := range []string{"kill", "cleanup apply", "socket probers", "file probers"} {
 		found := false
 		for _, c := range checks {
 			if c.Name == name && strings.Contains(c.Detail, "not yet supported on Windows") {
@@ -34,6 +34,17 @@ func TestWindowsUnsupportedCommands(t *testing.T) {
 		}
 		if !found {
 			t.Fatal("missing doctor check", name)
+		}
+	}
+	for _, name := range []string{"service", "hooks install", "notifications", "terminal jump"} {
+		found := false
+		for _, c := range checks {
+			if c.Name == name && !strings.Contains(c.Detail, "not yet supported") {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatal("missing phase 2 doctor check", name)
 		}
 	}
 }

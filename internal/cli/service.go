@@ -4,15 +4,19 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/labstack/driga/internal/platform"
 	"github.com/labstack/driga/internal/secfile"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
+	"strings"
+	"time"
 
 	ks "github.com/kardianos/service"
+	"github.com/labstack/driga/internal/collector"
+	"github.com/labstack/driga/internal/config"
 	"github.com/labstack/driga/internal/service"
 )
 
@@ -24,16 +28,15 @@ type ServiceCmd struct {
 
 // Run controls the user service or prints the last 50 collector log lines.
 func (c ServiceCmd) Run(g *Globals) error {
-	if runtime.GOOS == "windows" {
-		return platform.ErrWindowsAction
-	}
-
 	if c.Follow && c.Action != "logs" {
 		return errors.New("-f is only supported by service logs")
 	}
 	if c.Action == "logs" {
 		ctx, stop := notifyContext(context.Background())
 		defer stop()
+		if runtime.GOOS == "windows" {
+			return streamServiceLog(ctx, service.LogPath(), c.Follow, commandOutput(g))
+		}
 		name, args := serviceLogCommand(runtime.GOOS, c.Follow)
 		cmd := exec.CommandContext(ctx, name, args...)
 		cmd.Stdout, cmd.Stderr = commandOutput(g), g.Stderr
@@ -94,6 +97,20 @@ func (c ServiceCmd) Run(g *Globals) error {
 	case "restart":
 		err = s.Restart()
 	case "status":
+		if task, ok := s.(interface{ TaskState() (string, error) }); ok {
+			state, stateErr := task.TaskState()
+			if stateErr != nil && !errors.Is(stateErr, ks.ErrNotInstalled) {
+				return stateErr
+			}
+			held, err := probeCollectorLock(config.DataDir())
+			if err != nil {
+				return err
+			}
+			pidText, _ := os.ReadFile(filepath.Join(config.DataDir(), "driga.lock"))
+			pid, _ := strconv.Atoi(strings.TrimSpace(string(pidText)))
+			_, err = fmt.Fprintf(commandOutput(g), "task: %s; collector: lock held=%t, pid=%d, alive=%t\n", state, held, pid, collector.Running(config.DataDir()))
+			return err
+		}
 		status, statusErr := s.Status()
 		if statusErr != nil && !errors.Is(statusErr, ks.ErrNotInstalled) {
 			return statusErr
@@ -118,6 +135,56 @@ func (c ServiceCmd) Run(g *Globals) error {
 	}
 	_, err = fmt.Fprintln(commandOutput(g), "collector:", c.Action)
 	return err
+}
+
+// Native log tail for Windows; no dependency on Unix tail or PowerShell.
+func streamServiceLog(ctx context.Context, path string, follow bool, out io.Writer) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil {
+		return err
+	}
+	start := max(int64(0), info.Size()-(256<<10))
+	b, err := io.ReadAll(io.NewSectionReader(f, start, info.Size()-start))
+	if err != nil {
+		return err
+	}
+	lines := strings.SplitAfter(string(b), "\n")
+	if len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+	if _, err := io.WriteString(out, strings.Join(lines[max(0, len(lines)-50):], "")); err != nil {
+		return err
+	}
+	if !follow {
+		return nil
+	}
+	pos := info.Size()
+	tick := time.NewTicker(250 * time.Millisecond)
+	defer tick.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-tick.C:
+		}
+		info, err = f.Stat()
+		if err != nil {
+			return err
+		}
+		if info.Size() < pos {
+			pos = 0
+		}
+		n, err := io.Copy(out, io.NewSectionReader(f, pos, max(0, info.Size()-pos)))
+		pos += n
+		if err != nil {
+			return err
+		}
+	}
 }
 
 func commandOutput(g *Globals) io.Writer {
