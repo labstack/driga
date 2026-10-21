@@ -214,7 +214,7 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 					m.FirstSeen = now
 				}
 				m.Hostname, _ = os.Hostname()
-				m.OS, m.Arch = runtime.GOOS, runtime.GOARCH
+				m.OS, m.Arch = platform.ProcessOS(d.Plat), runtime.GOARCH
 				m.Cores, m.MemTotal, m.LastSeen = sample.Cores, sample.MemTotal, now
 				if err := tx.UpsertMachine(m); err != nil {
 					return err
@@ -301,7 +301,7 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 		if err := observeSessions(tx, work, ss, procs, previousProcs, procsOK, now); err != nil {
 			return err
 		}
-		idx := derive.NewProcIndex(procs)
+		idx := derive.NewProcIndexForOS(procs, platform.ProcessOS(d.Plat))
 		// Inbox grouping needs parent IDs before labels consume the unseen items.
 		parents := derive.LinkParents(ss, idx)
 		if err := explicitParents(tx, ss, parents); err != nil {

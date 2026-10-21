@@ -17,9 +17,16 @@ type ProcIndex struct {
 	windows  bool
 }
 
-// NewProcIndex builds an index without retaining the caller's slice.
+// NewProcIndex builds an index of live local processes without retaining the
+// caller's slice. Recorded and fleet samples must use NewProcIndexForOS.
 func NewProcIndex(procs []model.Proc) ProcIndex {
-	return newProcIndex(procs, runtime.GOOS == "windows")
+	return NewProcIndexForOS(procs, runtime.GOOS)
+}
+
+// NewProcIndexForOS uses the process source's OS, independent of the viewer.
+// An absent OS retains the legacy Unix topology used by older recordings.
+func NewProcIndexForOS(procs []model.Proc, sourceOS string) ProcIndex {
+	return newProcIndex(procs, sourceOS == "windows")
 }
 
 func newProcIndex(procs []model.Proc, windows bool) ProcIndex {

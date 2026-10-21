@@ -51,6 +51,9 @@ func winTicks(f windows.Filetime) uint64 { return uint64(f.HighDateTime)<<32 | u
 func winInspect(pid int32) (winDetails, error) {
 	h, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(pid))
 	if err != nil {
+		if errors.Is(err, windows.ERROR_INVALID_PARAMETER) && pid > 0 {
+			return winDetails{}, errWinProcessGone
+		}
 		return winDetails{}, err
 	}
 	defer windows.CloseHandle(h)
@@ -59,7 +62,7 @@ func winInspect(pid int32) (winDetails, error) {
 		return winDetails{}, err
 	}
 	if code != 259 {
-		return winDetails{}, fmt.Errorf("process exited")
+		return winDetails{}, errWinProcessGone
 	}
 	var start, exit, kernel, user windows.Filetime
 	if err := windows.GetProcessTimes(h, &start, &exit, &kernel, &user); err != nil {

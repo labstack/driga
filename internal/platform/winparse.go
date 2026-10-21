@@ -3,6 +3,7 @@ package platform
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"time"
 	"unicode/utf16"
@@ -16,6 +17,12 @@ type winEntry struct {
 	PID, PPID int32
 	Exe       string
 }
+
+// A stale Toolhelp entry can outlive the process, especially while another
+// caller holds its handle. Only a confirmed exit may be omitted; query failures
+// must retain a partial entry so action identity checks still fail closed.
+var errWinProcessGone = errors.New("Windows process exited")
+
 type winDetails struct {
 	Start, Kernel, User uint64
 	RSS, Private        uint64
@@ -63,6 +70,9 @@ func (p winPlatform) Procs(ctx context.Context) ([]model.Proc, error) {
 		}
 		proc := model.Proc{PID: e.PID, PPID: e.PPID, Exe: e.Exe, Partial: true}
 		d, err := p.inspect(e.PID)
+		if errors.Is(err, errWinProcessGone) {
+			continue
+		}
 		if err == nil {
 			proc.StartTime = winTime(d.Start)
 			proc.CPUSeconds = float64(d.Kernel)/1e7 + float64(d.User)/1e7

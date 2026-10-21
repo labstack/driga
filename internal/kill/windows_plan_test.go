@@ -19,11 +19,14 @@ func TestWindowsTreeChangeGuard(t *testing.T) {
 	}{
 		{"same", want, false},
 		{"exited", want[:1], false},
+		{"all exited", nil, false},
 		{"new child", append(append([]model.Proc{}, want...), model.Proc{PID: 102, PPID: 101, StartTime: start}), true},
 		{"reused child", []model.Proc{want[0], {PID: 101, PPID: 100, StartTime: start.Add(time.Second)}}, true},
+		{"reused child within one clock tick", []model.Proc{want[0], {PID: 101, PPID: 100, StartTime: start.Add(100 * time.Nanosecond)}}, true},
 		{"unknown child", []model.Proc{want[0], {PID: 101, PPID: 100}}, true},
 		{"reparented", []model.Proc{want[0], {PID: 101, PPID: 60, StartTime: start}}, true},
 		{"new child after root exits", []model.Proc{want[1], {PID: 102, PPID: 101, StartTime: start}}, true},
+		{"new child after parent exits", []model.Proc{want[0], {PID: 102, PPID: 101, StartTime: start}}, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := windowsTreeChanged(want, tc.ps); (got != "") != tc.changed {

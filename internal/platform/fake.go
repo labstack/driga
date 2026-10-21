@@ -19,6 +19,7 @@ import (
 type Fake struct {
 	procs   []model.Proc
 	machine model.MachineSample
+	os      string
 	sockets map[int32]bool
 	peers   map[int32][]int32
 	// subreaper comes from an optional subreaper.json {"uid":N} plus a
@@ -61,9 +62,14 @@ func LoadFake(dir string) (*Fake, error) {
 	if err := read("procs.json", &f.procs, false); err != nil {
 		return nil, err
 	}
-	if err := read("machine.json", &f.machine, true); err != nil {
+	var machine struct {
+		model.MachineSample
+		OS string `json:"os"`
+	}
+	if err := read("machine.json", &machine, true); err != nil {
 		return nil, err
 	}
+	f.machine, f.os = machine.MachineSample, machine.OS
 	if err := read("sockets.json", &f.sockets, true); err != nil {
 		return nil, err
 	}
@@ -89,6 +95,10 @@ func LoadFake(dir string) (*Fake, error) {
 	f.uid, f.procRoot = sub.UID, filepath.Join(dir, "proc")
 	return f, nil
 }
+
+// ProcessOS returns fixture provenance, never the replay host's OS. Older
+// fixtures without an OS retain the legacy Unix parent relationships.
+func (f *Fake) ProcessOS() string { return f.os }
 
 func (f *Fake) OpenFiles(ctx context.Context, path string) (bool, error) {
 	for _, p := range f.openFiles {

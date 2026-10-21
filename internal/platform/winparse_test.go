@@ -118,3 +118,34 @@ func TestWindowsPartialAndCancellation(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestWindowsSnapshotRetainsUnknownButOmitsExitedProcesses(t *testing.T) {
+	// Toolhelp still lists a terminated child while an open handle keeps its
+	// process object around. Before this fix the second pass emitted PID 42
+	// with a zero start, making the kill guard report a false identity change.
+	exited := false
+	const ticks = 116444736000000000 + 12345678
+	p := winPlatform{
+		snapshot: func() ([]winEntry, error) {
+			return []winEntry{{PID: 42, PPID: 7}, {PID: 43, PPID: 7}}, nil
+		},
+		inspect: func(pid int32) (winDetails, error) {
+			if pid == 43 {
+				return winDetails{}, errors.New("access denied")
+			}
+			if exited {
+				return winDetails{}, errWinProcessGone
+			}
+			return winDetails{Start: ticks}, nil
+		},
+	}
+	before, err := p.Procs(context.Background())
+	if err != nil || len(before) != 2 || !before[0].StartTime.Equal(winTime(ticks)) {
+		t.Fatalf("before: %+v %v", before, err)
+	}
+	exited = true
+	after, err := p.Procs(context.Background())
+	if err != nil || len(after) != 1 || after[0].PID != 43 || !after[0].Partial || !after[0].StartTime.IsZero() {
+		t.Fatalf("after: %+v %v", after, err)
+	}
+}

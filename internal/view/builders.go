@@ -56,6 +56,19 @@ func procTree(s model.Session, idx derive.ProcIndex) []model.Proc {
 	return append([]model.Proc{p}, idx.Descendants(s.PID)...)
 }
 
+func recordedProcIndex(r Reader, procs []model.Proc) (derive.ProcIndex, error) {
+	ms, err := r.Machines()
+	if err != nil {
+		return derive.ProcIndex{}, err
+	}
+	for _, m := range ms {
+		if m.MachineID == r.MachineID() {
+			return derive.NewProcIndexForOS(procs, m.OS), nil
+		}
+	}
+	return derive.NewProcIndexForOS(procs, ""), nil
+}
+
 // Agents builds families in activity order, retaining children next to parents.
 func agentsLocal(r Reader, f AgentFilter, now time.Time) (AgentsView, error) {
 	v := AgentsView{Rows: []AgentRow{}}
@@ -71,7 +84,10 @@ func agentsLocal(r Reader, f AgentFilter, now time.Time) (AgentsView, error) {
 	if err != nil {
 		return v, err
 	}
-	idx := derive.NewProcIndex(procs)
+	idx, err := recordedProcIndex(r, procs)
+	if err != nil {
+		return v, err
+	}
 	items, err := r.Inbox(time.Time{}, false)
 	if err != nil {
 		return v, err
@@ -180,7 +196,11 @@ func agentLocal(r Reader, id int64, now time.Time) (AgentView, error) {
 	if err != nil {
 		return v, err
 	}
-	for _, proc := range procTree(s, derive.NewProcIndex(procs)) {
+	idx, err := recordedProcIndex(r, procs)
+	if err != nil {
+		return v, err
+	}
+	for _, proc := range procTree(s, idx) {
 		v.Procs = append(v.Procs, ProcRow{MachineID: r.MachineID(), Proc: proc})
 	}
 	events, err := r.Events(s.Adapter, s.ExternalID, now.Add(-24*time.Hour))
@@ -505,7 +525,10 @@ func machineLocal(r Reader, f Filter, now time.Time) (MachineView, error) {
 		if err != nil {
 			return v, err
 		}
-		idx := derive.NewProcIndex(procs)
+		idx, err := recordedProcIndex(r, procs)
+		if err != nil {
+			return v, err
+		}
 		for _, s := range ss {
 			for _, p := range procTree(s, idx) {
 				allowed[p.PID] = true
