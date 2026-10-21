@@ -63,12 +63,28 @@ sandbox; run them on the host.
 - State what you ran and any skipped or failing checks.
 - Scrub personal paths, session text, and credentials from contributed fixtures.
 
-## Releases
+## Releasing (maintainers)
 
-Driga is in alpha. Release tags use `vYYYY.M.REVISION-alpha`, with revision zero
-at the start of each UTC month. See [docs/release.md](docs/release.md) for
-validation, packaging, and publication. The packaging workflow runs on
-GitHub-hosted Ubuntu and leaves publication to a maintainer.
+```sh
+scripts/release.sh
+```
+
+Driga is in alpha. The script creates the next `vYYYY.M.REVISION-alpha` tag,
+starting at revision zero each UTC month. GitHub marks it as a prerelease;
+Homebrew and Scoop publish the same alpha version.
+
+This requires a clean, checked, up-to-date `main`. It checks formatting, runs
+`go vet ./...` and `go test ./...` with isolated agent and Driga state, then
+atomically publishes a metadata-only fast-forward release commit plus its tag
+to `origin`. The release identity needs permission to fast-forward `main`.
+A branch policy that refuses the update aborts publication without leaving a
+tag behind. Wait for the previous release run to finish before cutting another.
+
+The tag workflow reuses CI, signs and notarizes macOS binaries, publishes the
+GitHub Release, and updates Homebrew and Scoop. Configure the required secrets
+and publication targets in [docs/release.md](docs/release.md). Repair a failed
+publication with the next revision; never replace a release or rerun an already
+published tag.
 
 ## Reporting security issues
 

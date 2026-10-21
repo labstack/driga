@@ -1,0 +1,138 @@
+version: 2
+
+project_name: driga
+
+release:
+  prerelease: true
+  make_latest: false
+
+builds:
+  - id: driga
+    main: ./cmd/driga
+    binary: driga
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - >-
+        -s -w
+        -X main.version={{ .Version }}
+        -X main.commit={{ .FullCommit }}
+        -X main.date={{ .CommitDate }}
+
+archives:
+  - id: driga
+    ids:
+      - driga
+    name_template: "driga_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    files:
+      - README.md
+      - LICENSE
+      - NOTICE
+      - src: internal/web/static/vendor/LICENSES.txt
+        dst: third-party/vendor-LICENSES.txt
+      - src: internal/web/static/fonts/LICENSE.txt
+        dst: third-party/fonts-LICENSE.txt
+
+nfpms:
+  - id: driga
+    ids:
+      - driga
+    package_name: driga
+    file_name_template: "driga_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    vendor: LabStack
+    homepage: https://github.com/labstack/driga
+    maintainer: LabStack <support@labstack.com>
+    description: "Watch every AI coding agent session on a machine: state, project, branch, memory, an attention inbox, and file conflicts."
+    license: Apache-2.0
+    bindir: /usr/bin
+    formats:
+      - deb
+      - rpm
+
+checksum:
+  name_template: "driga_{{ .Version }}_checksums.txt"
+  algorithm: sha256
+
+notarize:
+  macos:
+    # A release always signs: isEnvSet alone was fail-open, because an absent
+    # GitHub secret arrives as an empty string, that helper reads empty as
+    # unset, and a skipped notarize pipe is not an error — so a missing
+    # certificate published unsigned Darwin binaries and exited 0. A snapshot
+    # signs only when the credentials are actually present, which keeps the
+    # non-publishing signed snapshot testable and leaves PR snapshots unsigned.
+    - enabled: '{{ or (not .IsSnapshot) (isEnvSet "MACOS_SIGN_P12") }}'
+      ids:
+        - driga
+      sign:
+        certificate: "{{ .Env.MACOS_SIGN_P12 }}"
+        password: "{{ .Env.MACOS_SIGN_PASSWORD }}"
+      notarize:
+        issuer_id: "{{ .Env.MACOS_NOTARY_ISSUER_ID }}"
+        key_id: "{{ .Env.MACOS_NOTARY_KEY_ID }}"
+        key: "{{ .Env.MACOS_NOTARY_KEY }}"
+        wait: true
+        timeout: 20m
+
+homebrew_casks:
+  - name: driga
+    skip_upload: false
+    ids:
+      - driga
+    binaries:
+      - driga
+    url:
+      template: "https://github.com/labstack/driga/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
+    commit_msg_template: "chore: update driga to {{ .Tag }}"
+    directory: Casks
+    homepage: https://github.com/labstack/driga
+    description: "Watch every AI coding agent session on a machine: state, project, branch, memory, an attention inbox, and file conflicts."
+    repository:
+      owner: labstack
+      name: homebrew-tap
+      branch: main
+      token: "{{ .Env.PACKAGE_REPOS_TOKEN }}"
+    commit_author:
+      name: driga-release
+      email: support@labstack.com
+
+scoops:
+  - name: driga
+    skip_upload: false
+    ids:
+      - driga
+    url_template: "https://github.com/labstack/driga/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
+    commit_msg_template: "chore: update driga to {{ .Tag }}"
+    homepage: https://github.com/labstack/driga
+    description: "Watch every AI coding agent session on a machine: state, project, branch, memory, an attention inbox, and file conflicts."
+    license: Apache-2.0
+    repository:
+      owner: labstack
+      name: scoop-bucket
+      branch: main
+      token: "{{ .Env.PACKAGE_REPOS_TOKEN }}"
+    commit_author:
+      name: driga-release
+      email: support@labstack.com
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"

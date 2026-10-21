@@ -1,7 +1,7 @@
-# Same isolation and action pins as release.yml.
 name: CI
 
 on:
+  workflow_call:
   push:
     branches: [main]
   pull_request:
@@ -32,6 +32,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -45,6 +46,8 @@ jobs:
           mkdir -p "$task_root/home" "$task_root/data" "$task_root/spool"
           {
             echo "HOME=$task_root/home"
+            echo "CLAUDE_CONFIG_DIR=$task_root/home/.claude"
+            echo "COPILOT_HOME=$task_root/home/.copilot"
             echo "CODEX_HOME=$task_root/home/.codex"
             echo "GEMINI_CLI_HOME=$task_root/home/.gemini"
             echo "XDG_CONFIG_HOME=$task_root/home/.config"
@@ -58,7 +61,7 @@ jobs:
           } >> "$GITHUB_ENV"
       - name: Format, vet and generated files
         run: |
-          unformatted=$(gofmt -l cmd internal)
+          unformatted=$(gofmt -l .)
           if [ -n "$unformatted" ]; then echo "gofmt needed:"; echo "$unformatted"; exit 1; fi
           go vet ./...
           go generate ./internal/config
@@ -80,6 +83,21 @@ jobs:
           for target in darwin/arm64 darwin/amd64 linux/amd64 linux/arm64 windows/amd64; do
             GOOS=${target%/*} GOARCH=${target#*/} go build -o /dev/null ./cmd/driga
           done
+
+      - name: Validate GoReleaser configuration
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
+        with:
+          distribution: goreleaser
+          version: v2.18.0
+          args: check
+      - name: Build release snapshot
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
+        with:
+          distribution: goreleaser
+          version: v2.18.0
+          args: release --snapshot --clean --skip=publish,sign,notarize
+      - name: Inspect release snapshot
+        run: scripts/verify-release-dist.sh dist
 
   windows:
     name: Windows tests

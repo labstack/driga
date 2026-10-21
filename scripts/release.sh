@@ -1,137 +1,203 @@
 #!/usr/bin/env bash
-# Local packaging only. Never creates tags, releases, or network installs.
 set -euo pipefail
 
-die() {
-	printf 'release: %s\n' "$*" >&2
-	exit 1
+# The former packaging command accepted a tag and --dry-run. Never silently
+# turn those old invocations into a real tag publication.
+if [ "$#" -ne 0 ]; then
+  echo "usage: scripts/release.sh (no arguments; creates and pushes the next release tag)" >&2
+  exit 1
+fi
+
+validate_release_checkout() {
+  local release_branch
+  release_branch=$(git rev-parse --abbrev-ref HEAD)
+  if [ "$release_branch" != "main" ]; then
+    echo "release must run from main." >&2
+    return 1
+  fi
+  if [ -n "$(git status --porcelain --untracked-files=all)" ]; then
+    echo "release requires a clean worktree (including untracked files)." >&2
+    return 1
+  fi
 }
-dry_run=false
-if [[ ${1:-} == --dry-run ]]; then
-	dry_run=true
-	shift
-fi
-[[ $# == 1 ]] || die 'usage: scripts/release.sh [--dry-run] vYYYY.M.REVISION[-alpha]'
-tag=$1
-# Calendar versions: unpadded month, revision zero at each UTC month boundary.
-python3 - "$tag" <<'PYVERSION'
-import re, sys
-pattern = r'^v[1-9][0-9]{3}\.([1-9]|1[0-2])\.(0|[1-9][0-9]{0,18})(-alpha)?$'
-if not re.fullmatch(pattern, sys.argv[1]):
-    sys.exit('release: expected vYYYY.M.REVISION[-alpha] (month 1–12, no leading zeros)')
-PYVERSION
 
-root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
-cd "$root"
-commit=$(git rev-parse HEAD)
-dirty=$(git status --porcelain --untracked-files=all)
-if [[ $dry_run == false ]]; then
-	[[ -z $dirty ]] || die 'refusing dirty tree (including untracked files); use --dry-run for local testing'
-	[[ $(git rev-parse --verify "refs/tags/$tag^{commit}") == "$commit" ]] || die 'tag must exist and point at HEAD'
-	[[ -s LICENSE ]] || die 'missing top-level LICENSE; maintainer must choose one before distribution'
-	[[ ! -e dist ]] || die 'dist already exists; retain previous artifacts elsewhere before building'
-	output=$root/dist
-	mkdir "$output"
-else
-	output=$(mktemp -d "${TMPDIR:-/tmp}/driga-release-dry-run.XXXXXX")
-	printf 'DRY RUN — NON-DISTRIBUTABLE; dirty tree, tag and license gates bypassed.\n' >&2
-	[[ -z $dirty ]] || commit=$commit-dirty
-fi
-work=$(mktemp -d "${TMPDIR:-/tmp}/driga-release-work.XXXXXX")
-trap 'rm -rf "$work"' EXIT
-
-export LC_ALL=C TZ=UTC
-export CGO_ENABLED=0 GOTOOLCHAIN=local GOWORK=off GOFLAGS='' GOEXPERIMENT=''
-export GOAMD64=v1 GOARM64=v8.0
-required_go=$(awk '$1 == "go" {print $2}' go.mod)
-[[ $(go env GOVERSION) == "go$required_go" ]] || die "requires Go $required_go (go.mod), without automatic toolchain installation"
-epoch=$(git show -s --format=%ct HEAD)
-build_date=$(
-	python3 - "$epoch" <<'PY'
-from datetime import datetime, timezone
-import sys
-print(datetime.fromtimestamp(int(sys.argv[1]), timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'))
-PY
-)
-version=${tag#v}
-ldflags="-s -w -X main.version=$version -X main.commit=$commit -X main.date=$build_date"
-for target in darwin/arm64 darwin/amd64 linux/amd64 linux/arm64 windows/amd64 windows/arm64; do
-	target_os=${target%/*}
-	target_arch=${target#*/}
-	suffix=''
-	[[ $target_os != windows ]] || suffix=.exe
-	printf 'Building %s (%s)\n' "$target" "$version" >&2
-	GOOS=$target_os GOARCH=$target_arch go build -mod=readonly -trimpath -buildvcs=false \
-		-ldflags "$ldflags" -o "$work/driga_${target_os}_${target_arch}${suffix}" ./cmd/driga
-done
-
-if [[ $dry_run == false ]]; then
-	[[ $(git rev-parse HEAD) == "$commit" && -z $(git status --porcelain --untracked-files=all) ]] || die 'source changed during the build; refusing to package'
-	[[ $(git rev-parse --verify "refs/tags/$tag^{commit}") == "$commit" ]] || die 'release tag changed during the build'
-fi
-
-# Python's standard library avoids GNU/BSD tar differences. Normalize every
-# header, file mode, owner, timestamp, member order, and the gzip filename/mtime.
-python3 - "$work" "$output" "$version" "$commit" "$build_date" "$epoch" "$dry_run" "$ldflags" <<'PY'
-import gzip, io, json, pathlib, subprocess, sys, tarfile, zipfile
-work, output = map(pathlib.Path, sys.argv[1:3])
-version, commit, date, epoch, dry_run, ldflags = sys.argv[3:]
-targets = ['darwin/arm64', 'darwin/amd64', 'linux/amd64', 'linux/arm64', 'windows/amd64', 'windows/arm64']
-for target in targets:
-    os_name, arch = target.split('/')
-    binary = 'driga.exe' if os_name == 'windows' else 'driga'
-    suffix = '.exe' if os_name == 'windows' else ''
-    files = {
-        binary: (work / f'driga_{os_name}_{arch}{suffix}').read_bytes(),
-        'README.md': pathlib.Path('README.md').read_bytes(),
-        'third-party/vendor-LICENSES.txt': pathlib.Path('internal/web/static/vendor/LICENSES.txt').read_bytes(),
-        'third-party/fonts-LICENSE.txt': pathlib.Path('internal/web/static/fonts/LICENSE.txt').read_bytes(),
-    }
-    if pathlib.Path('LICENSE').is_file():
-        files['LICENSE'] = pathlib.Path('LICENSE').read_bytes()
-    if pathlib.Path('NOTICE').is_file():
-        files['NOTICE'] = pathlib.Path('NOTICE').read_bytes()
-    if dry_run == 'true':
-        files['NON-DISTRIBUTABLE.txt'] = b'DRY RUN ONLY. Unreviewed source; tag and license gates bypassed. Do not distribute.\n'
-    if os_name == 'windows':
-        from datetime import datetime, timezone
-        # ZIP uses UTC DOS timestamps (two-second resolution, >= 1980).
-        stamp = datetime.fromtimestamp(max(315532800, int(epoch)), timezone.utc)
-        timestamp = (stamp.year, stamp.month, stamp.day, stamp.hour, stamp.minute, stamp.second // 2 * 2)
-        archive = output / f'driga_{version}_{os_name}_{arch}.zip'
-        with zipfile.ZipFile(archive, 'x', compression=zipfile.ZIP_DEFLATED, compresslevel=9) as zip:
-            for name, data in sorted(files.items()):
-                info = zipfile.ZipInfo(name, timestamp)
-                info.create_system = 3
-                info.external_attr = (0o100755 if name == binary else 0o100644) << 16
-                info.compress_type = zipfile.ZIP_DEFLATED
-                zip.writestr(info, data, compresslevel=9)
-    else:
-        archive = output / f'driga_{version}_{os_name}_{arch}.tar.gz'
-        with archive.open('xb') as raw, gzip.GzipFile(filename='', mode='wb', fileobj=raw, mtime=0, compresslevel=9) as gz:
-            with tarfile.open(fileobj=gz, mode='w', format=tarfile.USTAR_FORMAT) as tar:
-                for name, data in sorted(files.items()):
-                    info = tarfile.TarInfo(name)
-                    info.size, info.mtime = len(data), int(epoch)
-                    info.mode = 0o755 if name == binary else 0o644
-                    info.uid = info.gid = 0
-                    info.uname = info.gname = ''
-                    tar.addfile(info, io.BytesIO(data))
-
-record = {
-    'schema': 1, 'version': version, 'commit': commit, 'date': date,
-    'go_version': subprocess.check_output(['go', 'env', 'GOVERSION'], text=True).strip(),
-    'source': 'https://github.com/labstack/driga', 'dry_run': dry_run == 'true',
-    'targets': targets, 'compile_only': [],
-    'build': {'CGO_ENABLED': '0', 'GOAMD64': 'v1', 'GOARM64': 'v8.0',
-              'flags': ['-mod=readonly', '-trimpath', '-buildvcs=false', '-ldflags', ldflags]},
+release_tag=""
+release_tag_created=0
+cleanup_failed_release() {
+  local release_status=$?
+  trap - EXIT
+  if [ "$release_status" -ne 0 ] && [ "$release_tag_created" -eq 1 ]; then
+    git tag -d "$release_tag" >/dev/null 2>&1 || true
+  fi
+  exit "$release_status"
 }
-(output / 'build-info.json').write_text(json.dumps(record, indent=2, sort_keys=True) + '\n')
-PY
+trap cleanup_failed_release EXIT
 
+validate_release_checkout
+release_head=$(git rev-parse HEAD)
+git fetch origin --tags main
+if [ "$release_head" != "$(git rev-parse origin/main)" ]; then
+  echo "release must run from an up-to-date main (HEAD must equal origin/main)." >&2
+  exit 1
+fi
+
+if ! unformatted=$(gofmt -l .); then
+  echo "gofmt could not read the tree." >&2
+  exit 1
+fi
+if [ -n "$unformatted" ]; then
+  printf 'Unformatted files:\n%s\n' "$unformatted" >&2
+  exit 1
+fi
+
+# Verification must never read a maintainer's agent histories or Driga state.
+# Keep the existing Go caches while moving application state into a disposable home.
 (
-	cd "$output"
-	shasum -a 256 driga_*.tar.gz driga_*.zip build-info.json >SHA256SUMS
-	shasum -a 256 -c SHA256SUMS
+  export GOMODCACHE="${GOMODCACHE:-$(go env GOMODCACHE)}"
+  export GOCACHE="${GOCACHE:-$(go env GOCACHE)}"
+  task_root=$(mktemp -d)
+  trap 'rm -rf "$task_root"' EXIT
+  export HOME="$task_root/home"
+  export CODEX_HOME="$HOME/.codex" CLAUDE_CONFIG_DIR="$HOME/.claude"
+  export COPILOT_HOME="$HOME/.copilot" GEMINI_CLI_HOME="$HOME/.gemini"
+  export XDG_CONFIG_HOME="$HOME/.config" XDG_DATA_HOME="$HOME/.local/share"
+  export XDG_STATE_HOME="$HOME/.local/state"
+  export DRIGA_DATA_DIR="$task_root/data" DRIGA_SPOOL_DIR="$task_root/spool"
+  export DRIGA_CONFIG="$task_root/config.toml"
+  mkdir -p "$HOME" "$DRIGA_DATA_DIR" "$DRIGA_SPOOL_DIR"
+  go vet ./...
+  go test ./...
 )
-printf 'DIST_DIR=%s\n' "$output"
+
+validate_release_checkout
+if [ "$(git rev-parse HEAD)" != "$release_head" ]; then
+  echo "release HEAD changed while checks were running." >&2
+  exit 1
+fi
+
+# Refresh both branch and tag state after checks. The push below also leases
+# main to this exact commit, closing the race between this fetch and publish.
+git fetch origin --tags main
+if [ "$release_head" != "$(git rev-parse origin/main)" ]; then
+  echo "origin/main advanced while release checks were running; retry from updated main." >&2
+  exit 1
+fi
+
+# increment_decimal adds one to an arbitrarily wide non-negative decimal string,
+# carrying by hand so no value is ever narrowed to a machine integer.
+increment_decimal() {
+  local digits=$1 carry=1 index result=""
+  for ((index = ${#digits} - 1; index >= 0; index--)); do
+    local sum=$(( ${digits:index:1} + carry ))
+    result="$(( sum % 10 ))${result}"
+    carry=$(( sum / 10 ))
+  done
+  if [ "$carry" -gt 0 ]; then
+    result="${carry}${result}"
+  fi
+  printf '%s\n' "$result"
+}
+
+# Only one release may be in flight. GitHub orders queued runs by when they start
+# waiting, not by when their tags were created, so two tags created close
+# together can publish out of order: the newer one lands first and the older is
+# then correctly refused at publish time — a release nobody gets. Refusing to
+# create the next tag while the previous one is still running removes the race
+# rather than adjudicating it.
+#
+# The question is whether the previous run has FINISHED, not whether it
+# published. A run that failed before publication is exactly the case the
+# contract fixes under the next revision, so waiting for a release it will never
+# create would block that fix forever.
+#
+# The check is skipped only when origin is not a GitHub remote, which no real
+# release is. Set DRIGA_RELEASE_REPOSITORY to name the repository explicitly.
+require_previous_release_terminal() {
+  local repository=$1 previous="" candidate previous_commit run_status
+  while IFS= read -r candidate; do
+    if [[ "$candidate" =~ ^v[1-9][0-9]{3}\.([1-9]|1[0-2])\.(0|[1-9][0-9]{0,18})(-alpha)?$ ]]; then
+      previous=$candidate
+      break
+    fi
+  done <<< "$(git tag --list 'v*' --sort=-v:refname)"
+  if [ -z "$previous" ]; then
+    return 0
+  fi
+  if ! command -v gh >/dev/null 2>&1; then
+    echo "gh is required to confirm that the ${previous} release run has finished; install it and authenticate with repository read access" >&2
+    return 1
+  fi
+  previous_commit=$(git rev-parse --verify "refs/tags/${previous}^{commit}")
+  # Any nonzero exit refuses: an outage is not evidence that nothing is running.
+  if ! run_status=$(gh api "repos/${repository}/actions/workflows/release.yml/runs?head_sha=${previous_commit}&per_page=1" --jq '.workflow_runs[0].status // ""'); then
+    echo "cannot read the ${previous} release run; refusing to create the next tag without knowing whether it is still publishing." >&2
+    return 1
+  fi
+  if [ -n "$run_status" ] && [ "$run_status" != "completed" ]; then
+    echo "the ${previous} release run is ${run_status}; wait for it to finish before creating the next tag." >&2
+    return 1
+  fi
+}
+
+github_repository_slug() {
+  local remote=$1
+  case "$remote" in
+    https://github.com/*) printf '%s\n' "${remote#https://github.com/}" | sed 's/\.git$//' ;;
+    git@github.com:*) printf '%s\n' "${remote#git@github.com:}" | sed 's/\.git$//' ;;
+    *) printf '\n' ;;
+  esac
+}
+
+release_repository=${DRIGA_RELEASE_REPOSITORY:-$(github_repository_slug "$(git remote get-url origin)")}
+if [ -n "$release_repository" ]; then
+  require_previous_release_terminal "$release_repository"
+fi
+
+release_calendar=$(date -u +%Y:%m)
+if [[ ! "$release_calendar" =~ ^[0-9]{4}:(0[1-9]|1[0-2])$ ]]; then
+  echo "could not determine the UTC release month." >&2
+  exit 1
+fi
+release_year=${release_calendar%%:*}
+release_month_padded=${release_calendar##*:}
+release_month=$((10#$release_month_padded))
+release_period="${release_year}.${release_month}"
+release_tags=$(git tag --list "v${release_period}.*" --sort=-v:refname)
+release_period_pattern=${release_period//./\\.}
+release_last=""
+while IFS= read -r release_candidate; do
+  if [[ "$release_candidate" =~ ^v${release_period_pattern}\.(0|[1-9][0-9]{0,18})(-alpha)?$ ]]; then
+    release_last=$release_candidate
+    break
+  fi
+done <<< "$release_tags"
+if [ -z "$release_last" ]; then
+  release_number=0
+else
+  # Incremented as decimal text, not with Bash arithmetic: arithmetic is signed
+  # 64-bit and the grammar admits revisions wider than that, which would wrap to
+  # a negative number and be tagged. Exhaustion is a twenty-digit result, which
+  # is the only value the contract cannot express.
+  release_base=${release_last%-alpha}
+  release_number=$(increment_decimal "${release_base##*.}")
+  if [ "${#release_number}" -gt 19 ]; then
+    echo "revision space for ${release_period} is exhausted at ${release_last}." >&2
+    exit 1
+  fi
+fi
+release_tag="v${release_period}.${release_number}-alpha"
+release_commit=$(printf 'chore(release): %s\n' "$release_tag" | git commit-tree "${release_head}^{tree}" -p "$release_head")
+
+echo "tagging $release_tag"
+git tag --no-sign "$release_tag" "$release_commit"
+release_tag_created=1
+git push --atomic \
+  --force-with-lease="refs/heads/main:${release_head}" \
+  origin \
+  "${release_commit}:refs/heads/main" \
+  "refs/tags/${release_tag}:refs/tags/${release_tag}"
+release_tag_created=0
+if ! git update-ref -m "release $release_tag" refs/heads/main "$release_commit" "$release_head"; then
+  echo "published $release_tag, but local main did not advance; fetch origin/main before continuing." >&2
+fi
+echo "published $release_tag"
