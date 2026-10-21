@@ -58,8 +58,10 @@ fi
   task_root=$(mktemp -d)
   trap 'rm -rf "$task_root"' EXIT
   export HOME="$task_root/home"
-  export CODEX_HOME="$HOME/.codex" CLAUDE_CONFIG_DIR="$HOME/.claude"
-  export COPILOT_HOME="$HOME/.copilot" GEMINI_CLI_HOME="$HOME/.gemini"
+  # Like CI: Claude and Copilot homes follow the disposable HOME. An explicit
+  # override would win over each test's own HOME and hide its fixtures.
+  unset CLAUDE_CONFIG_DIR COPILOT_HOME
+  export CODEX_HOME="$HOME/.codex" GEMINI_CLI_HOME="$HOME/.gemini"
   export XDG_CONFIG_HOME="$HOME/.config" XDG_DATA_HOME="$HOME/.local/share"
   export XDG_STATE_HOME="$HOME/.local/state"
   export DRIGA_DATA_DIR="$task_root/data" DRIGA_SPOOL_DIR="$task_root/spool"
