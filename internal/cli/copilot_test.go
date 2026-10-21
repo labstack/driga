@@ -106,7 +106,7 @@ func TestCopilotHooksCLIAndDoctor(t *testing.T) {
 	d.CopilotHome = filepath.Dir(filepath.Dir(path))
 	t.Setenv("COPILOT_HOME", d.CopilotHome)
 	requireCheck(t, Doctor(context.Background(), d), "hooks:copilot", "ok", "")
-	if _, err := hooks.CopilotInstall(path, "/old/driga", false, time.Now()); err != nil {
+	if _, err := hooks.CopilotInstall(path, filepath.Join(t.TempDir(), "old", "driga"), false, time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	c := requireCheck(t, Doctor(context.Background(), d), "hooks:copilot", "warn", "driga hooks install copilot")

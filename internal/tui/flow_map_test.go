@@ -16,7 +16,9 @@ func TestFlowAttentionJumpAndCopy(t *testing.T) {
 		calls := 0
 		m := setup(t, fixture(), Options{Tmux: "/tmp/fixture,1,0", Exec: func(args []string) error {
 			calls++
-			if args[0] != "tmux" {
+			if runtime.GOOS == "windows" {
+				requireFixtureTerminal(t, args)
+			} else if args[0] != "tmux" {
 				t.Fatal(args)
 			}
 			return nil
@@ -31,12 +33,12 @@ func TestFlowAttentionJumpAndCopy(t *testing.T) {
 			machine = "peer"
 		}
 		m.flow.Children[0].MachineID = machine
-		m.flow.Attention.Waits = []view.InboxRow{{MachineID: machine, Title: "Need approval", InboxItem: model.InboxItem{MachineID: machine, SessionID: 2, Kind: "waiting", TS: flowtest.Now.Add(-time.Minute), Jump: &model.InboxJump{Kind: "tmux", Server: "/tmp/fixture", Target: "dev:1.2", Command: "tmux attach -t 'dev:1.2'"}}}}
+		m.flow.Attention.Waits = []view.InboxRow{{MachineID: machine, Title: "Need approval", InboxItem: model.InboxItem{MachineID: machine, SessionID: 2, Kind: "waiting", TS: flowtest.Now.Add(-time.Minute), Jump: fixtureLocalJump(t, model.InboxJump{Kind: "tmux", Server: "/tmp/fixture", Target: "dev:1.2", Command: "tmux attach -t 'dev:1.2'"})}}}
 		m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 		if !m.flowAttention {
 			t.Fatal("tab did not focus attention")
 		}
-		if !strings.Contains(m.flowView(), "Copy resume: tmux attach") {
+		if text := m.flowView(); !strings.Contains(text, "Copy resume:") || !strings.Contains(text, "tmux attach") {
 			t.Fatal("resume not in details")
 		}
 		_, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
@@ -44,13 +46,16 @@ func TestFlowAttentionJumpAndCopy(t *testing.T) {
 			cmd()
 		}
 		wantCalls := 0
-		if !remote && runtime.GOOS != "windows" {
+		if !remote {
 			wantCalls = 2
+			if runtime.GOOS == "windows" {
+				wantCalls = 1
+			}
 		}
 		if calls != wantCalls {
 			t.Fatal("unexpected jump execution", remote, calls)
 		}
-		if !remote && runtime.GOOS == "windows" && !strings.Contains(m.status, "not yet supported on Windows") {
+		if !strings.Contains(m.status, "tmux attach") {
 			t.Fatal(m.status)
 		}
 		if m.flowSelected().ID != 2 {

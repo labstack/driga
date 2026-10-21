@@ -95,7 +95,7 @@ func NewMCPServer(g *Globals, capture ...string) *sdk.Server {
 			return view.Envelope{}, err
 		}
 		return read(ctx, drigamcp.Query{CachedMachines: true}, func(r view.Reader, _ view.Filter, now time.Time) (any, error) {
-			return Doctor(ctx, DoctorDeps{DataDir: config.DataDir(), Config: cfg, Home: config.ExpandHome("~"), CodexHome: os.Getenv("CODEX_HOME"), CopilotHome: os.Getenv("COPILOT_HOME"), Now: now, Store: r.(DoctorReader), LockProbe: probeCollectorLock}), nil
+			return runtimeDoctor(ctx, cfg, now, r.(DoctorReader)), nil
 		})
 	}
 	// Neither the SDK logger nor snapshot hints may write to protocol stdout.

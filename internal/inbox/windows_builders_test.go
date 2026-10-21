@@ -12,22 +12,27 @@ import (
 )
 
 func TestWindowsTerminalCommand(t *testing.T) {
-	if got := windowsTerminalLine(`C:\work 界`); got != `cmd.exe /c start "" /D "C:\work 界" cmd.exe` {
+	if got := windowsTerminalLine(`C:\work&界`); got != `cmd.exe /c start "" /D "C:\work&界" cmd.exe` {
 		t.Fatal(got)
 	}
 	for _, tc := range []struct {
 		wt   string
 		want []string
 	}{
-		{`C:\WindowsApps\wt.exe`, []string{`C:\WindowsApps\wt.exe`, "-d", `C:\work 界`}},
-		{"", []string{"cmd.exe", "/c", "start", "", "/D", `C:\work 界`, "cmd.exe"}},
+		{`C:\WindowsApps\wt.exe`, []string{`C:\WindowsApps\wt.exe`, "-d", `C:\work & 界`}},
+		{"", []string{"cmd.exe", "/c", "start", "", "/D", `C:\work & 界`, "cmd.exe"}},
 	} {
-		got, err := windowsTerminalCommand(tc.wt, `C:\work 界`)
+		got, err := windowsTerminalCommand(tc.wt, `C:\work & 界`)
 		if err != nil || !reflect.DeepEqual(got, tc.want) {
 			t.Fatal(got, err)
 		}
 	}
-	for _, bad := range []string{"relative", `C:relative`, "C:\\a\n", `C:\%PATH%`, `C:\a;new-tab calc`, `C:\a&calc`, `C:\a|calc`, `C:\a^b`, `C:\a>out`, `C:\a(b)`} {
+	for _, ok := range []string{`C:\Program Files (x86)\app`, `C:\R&D\work`, `C:\a^b`} {
+		if _, err := windowsTerminalCommand("", ok); err != nil {
+			t.Fatal("refused", ok, err)
+		}
+	}
+	for _, bad := range []string{"relative", `C:relative`, "C:\\a\n", `C:\%PATH%`, `C:\a;new-tab calc`, `C:\a;b`} {
 		if _, err := windowsTerminalCommand("", bad); err == nil {
 			t.Fatal("accepted", bad)
 		}
@@ -40,7 +45,7 @@ func TestWindowsSessionJumpOnlyOpensWorkingDirectory(t *testing.T) {
 		calls = append(calls, append([]string{name}, args...))
 		return nil, nil
 	})
-	j := &model.InboxJump{Kind: "resume", Cwd: `C:\work 界`, Command: `never execute this & del *`}
+	j := &model.InboxJump{Kind: "resume", Cwd: `C:\work & 界`, Command: `never execute this & del *`}
 	opts := JumpOptions{OS: "windows", TerminalLookup: func(name string) (string, error) {
 		if name != "wt.exe" {
 			t.Fatal(name)

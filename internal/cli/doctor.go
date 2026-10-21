@@ -513,16 +513,11 @@ func probeCollectorLock(dir string) (bool, error) {
 	return false, filelock.Unlock(f)
 }
 
-// DoctorCmd renders setup diagnostics and fails only for a failed check.
-type DoctorCmd struct{}
-
-// Run reads existing daemon data without falling back to a collection snapshot.
-func (DoctorCmd) Run(g *Globals) error {
-	cfg, err := config.Load(config.Path())
-	if err != nil {
-		return err
-	}
-	d := DoctorDeps{DataDir: config.DataDir(), Config: cfg, Home: config.ExpandHome("~"), CodexHome: os.Getenv("CODEX_HOME"), CopilotHome: os.Getenv("COPILOT_HOME"), Now: time.Now(), LockProbe: probeCollectorLock}
+// runtimeDoctor gives CLI and MCP diagnostics the same read-only probes.
+// Creating a service handle and querying its state never installs a task;
+// notification status never registers an identity or displays an alert.
+func runtimeDoctor(ctx context.Context, cfg config.Config, now time.Time, reader DoctorReader) []Check {
+	d := DoctorDeps{DataDir: config.DataDir(), Config: cfg, Home: config.ExpandHome("~"), CodexHome: os.Getenv("CODEX_HOME"), CopilotHome: os.Getenv("COPILOT_HOME"), Now: now, Store: reader, LockProbe: probeCollectorLock}
 	if runtime.GOOS == "windows" {
 		d.NotificationStatus = inbox.WindowsNotificationStatus
 		d.ServiceState = func() (string, error) {
@@ -537,15 +532,29 @@ func (DoctorCmd) Run(g *Globals) error {
 			return s.(interface{ TaskState() (string, error) }).TaskState()
 		}
 	}
-	st, openErr := store.Open(filepath.Join(d.DataDir, "driga.db"), store.ReadOnly)
+	return Doctor(ctx, d)
+}
+
+// DoctorCmd renders setup diagnostics and fails only for a failed check.
+type DoctorCmd struct{}
+
+// Run reads existing daemon data without falling back to a collection snapshot.
+func (DoctorCmd) Run(g *Globals) error {
+	cfg, err := config.Load(config.Path())
+	if err != nil {
+		return err
+	}
+	dataDir := config.DataDir()
+	var reader DoctorReader
+	st, openErr := store.Open(filepath.Join(dataDir, "driga.db"), store.ReadOnly)
 	if openErr == nil {
 		defer st.Close()
-		d.Store = st
+		reader = st
 	}
-	checks := Doctor(context.Background(), d)
+	checks := runtimeDoctor(context.Background(), cfg, time.Now(), reader)
 	if openErr != nil {
 		status, fix := "fail", "check database permissions and driga service logs"
-		if _, err := os.Stat(filepath.Join(d.DataDir, "driga.db")); errors.Is(err, os.ErrNotExist) {
+		if _, err := os.Stat(filepath.Join(dataDir, "driga.db")); errors.Is(err, os.ErrNotExist) {
 			status, fix = "warn", "driga service install"
 		}
 		checks = append(checks, Check{"database", status, openErr.Error(), fix})

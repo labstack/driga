@@ -10,11 +10,12 @@ import (
 )
 
 func windowsTerminalCommand(wt, cwd string) ([]string, error) {
-	// Recorded directories may come from transcripts or fleet peers. wt.exe
-	// splits its arguments on ';' and cmd.exe /c re-parses the line, so refuse
-	// expansion and command characters instead of trying to escape them.
-	if !pathx.WindowsStyle(cwd) || !pathx.RecordedIsAbs(cwd) || strings.ContainsAny(cwd, "\x00\r\n\"%!;&|<>^()") {
-		return nil, fmt.Errorf("terminal requires an absolute Windows directory without expansion or command characters")
+	// Recorded directories may come from transcripts or fleet peers. The
+	// cmd.exe route quotes the directory (windowsTerminalLine), which leaves
+	// only expansion characters to refuse; wt.exe also splits its arguments on
+	// ';', so a directory containing one could start another command.
+	if !pathx.WindowsStyle(cwd) || !pathx.RecordedIsAbs(cwd) || strings.ContainsAny(cwd, "\x00\r\n\"%!;") {
+		return nil, fmt.Errorf("terminal requires an absolute Windows directory without expansion characters or ';'")
 	}
 	if wt != "" {
 		return []string{wt, "-d", cwd}, nil
