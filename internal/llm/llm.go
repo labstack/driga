@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/labstack/driga/internal/secfile"
 	"io"
 	"os"
 	"os/exec"
@@ -45,7 +46,7 @@ func Probe(ctx context.Context) (Claude, error) {
 		cmd.Env = internalEnv()
 		// Node can exit before a piped stdout drains, truncating --help;
 		// a regular file receives everything.
-		f, err := os.CreateTemp("", "driga-claude-probe-*")
+		f, err := secfile.CreateTemp("", "driga-claude-probe-*")
 		if err != nil {
 			return nil, err
 		}

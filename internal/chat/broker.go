@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/labstack/driga/internal/secfile"
 	"os"
 	"path/filepath"
 	"strings"
@@ -310,7 +311,7 @@ func (b *Broker) directory(scope Context) (string, error) {
 		}
 	}
 	dir := filepath.Join(b.opts.DataDir, "chat")
-	return dir, os.MkdirAll(dir, 0700)
+	return dir, secfile.MkdirPrivate(dir)
 }
 func preamble(scope Context) string {
 	raw, _ := json.Marshal(scope)

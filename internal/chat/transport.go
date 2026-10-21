@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/labstack/driga/internal/fleet"
+	"github.com/labstack/driga/internal/secfile"
 	"io"
 	"net"
 	"net/http"
@@ -30,8 +31,8 @@ func SocketPath(dataDir string) string {
 // exactly the same socket inode in the data directory without changing cwd.
 func socketAddress(path string) (string, func(), error) {
 	if runtime.GOOS == "windows" {
-		if len(path) >= 100 {
-			return "", nil, errors.New("Windows local socket path exceeds 99 bytes; set DRIGA_DATA_DIR to a shorter private path")
+		if len(path) >= 108 {
+			return "", nil, errors.New("Windows local socket path exceeds 107 bytes; use a shorter TEMP path")
 		}
 		return path, func() {}, nil
 	}
@@ -58,10 +59,10 @@ func socketAddress(path string) (string, func(), error) {
 // Listen is owned by the collector lock holder. Never replace a live socket or
 // a regular file. The private parent prevents access during listen/chmod.
 func Listen(ctx context.Context, dataDir string, b *Broker) (func(), error) {
-	if err := os.MkdirAll(dataDir, 0700); err != nil {
+	if err := secfile.MkdirPrivate(dataDir); err != nil {
 		return nil, err
 	}
-	if err := os.Chmod(dataDir, 0700); err != nil {
+	if err := secfile.Protect(dataDir); err != nil {
 		return nil, err
 	}
 	path := SocketPath(dataDir)
@@ -100,9 +101,12 @@ func Listen(ctx context.Context, dataDir string, b *Broker) (func(), error) {
 		removeAlias()
 		return nil, err
 	}
-	if err := os.Chmod(path, 0600); err != nil {
-		l.Close()
-		return nil, err
+	// AF_UNIX access on Windows is guarded by the private parent DACL.
+	if runtime.GOOS != "windows" {
+		if err := os.Chmod(path, 0600); err != nil {
+			l.Close()
+			return nil, err
+		}
 	}
 	server := &http.Server{Handler: handler(b), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 10 * time.Second, IdleTimeout: time.Minute, BaseContext: func(net.Listener) context.Context { return ctx }}
 	done := make(chan struct{})
@@ -167,6 +171,11 @@ type Remote struct {
 
 func Dial(ctx context.Context, dataDir string) (*Remote, error) {
 	path := SocketPath(dataDir)
+	if runtime.GOOS == "windows" {
+		if err := fleet.EnsureSocketDir(path); err != nil {
+			return nil, err
+		}
+	}
 	info, err := os.Stat(path)
 	if err != nil {
 		return nil, err

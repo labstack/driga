@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/labstack/driga/internal/pathx"
+	"github.com/labstack/driga/internal/secfile"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -87,17 +88,17 @@ func Open(path string, mode Mode) (_ *Store, retErr error) {
 		dataDir = filepath.Dir(abs)
 		if mode == ReadWrite {
 			dir := filepath.Dir(abs)
-			if err := os.MkdirAll(dir, 0700); err != nil {
+			if err := secfile.MkdirPrivate(dir); err != nil {
 				return nil, err
 			}
-			if err := os.Chmod(dir, 0700); err != nil {
+			if err := secfile.Protect(dir); err != nil {
 				return nil, err
 			}
-			f, err := os.OpenFile(abs, os.O_CREATE|os.O_RDWR, 0600)
+			f, err := secfile.OpenFile(abs, os.O_CREATE|os.O_RDWR)
 			if err != nil {
 				return nil, err
 			}
-			chmodErr := f.Chmod(0600)
+			chmodErr := secfile.ProtectFile(f)
 			if err := errors.Join(chmodErr, f.Close()); err != nil {
 				return nil, err
 			}

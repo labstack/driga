@@ -140,9 +140,14 @@ func TestGeneratedEnvironmentExample(t *testing.T) {
 			names[name] = true
 		}
 	}
-	for _, line := range strings.Split(string(b), "\n") {
-		if line != "" && !strings.HasPrefix(line, "#") {
-			t.Fatal("active template assignment", line)
+	// Git checkouts can use CRLF. Validate both forms, including blank lines.
+	lf := strings.ReplaceAll(string(b), "\r\n", "\n")
+	for _, template := range []string{lf, strings.ReplaceAll(lf, "\n", "\r\n")} {
+		for _, line := range strings.Split(template, "\n") {
+			line = strings.TrimSuffix(line, "\r")
+			if line != "" && !strings.HasPrefix(line, "#") {
+				t.Fatal("active template assignment", line)
+			}
 		}
 	}
 }

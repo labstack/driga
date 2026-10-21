@@ -3,6 +3,7 @@ package cleanup
 import (
 	"context"
 	"fmt"
+	"github.com/labstack/driga/internal/secfile"
 	"os"
 	"path/filepath"
 )
@@ -62,7 +63,7 @@ func trash(ctx context.Context, e Env, c Candidate, opts ApplyOpts, r Result) (R
 	}
 	for _, dir := range []string{files, infoDir} {
 		if dir != "" {
-			if err := os.MkdirAll(dir, 0700); err != nil {
+			if err := secfile.MkdirPrivate(dir); err != nil {
 				return r, fmt.Errorf("trash unavailable: %w", err)
 			}
 		}

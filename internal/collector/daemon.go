@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/labstack/driga/internal/filelock"
 	"github.com/labstack/driga/internal/platform"
+	"github.com/labstack/driga/internal/secfile"
 	"log/slog"
 	"net"
 	"os"
@@ -62,18 +63,18 @@ func Running(dataDir string) bool {
 // Lock takes the nonblocking collector writer lock and writes the owner's PID.
 // Closing the returned file releases it; the lock file must not be removed.
 func Lock(dataDir string) (*os.File, error) {
-	if err := os.MkdirAll(dataDir, 0700); err != nil {
+	if err := secfile.MkdirPrivate(dataDir); err != nil {
 		return nil, err
 	}
-	if err := os.Chmod(dataDir, 0700); err != nil {
+	if err := secfile.Protect(dataDir); err != nil {
 		return nil, err
 	}
-	f, err := os.OpenFile(filepath.Join(dataDir, "driga.lock"), os.O_CREATE|os.O_RDWR, 0600)
+	f, err := secfile.OpenFile(filepath.Join(dataDir, "driga.lock"), os.O_CREATE|os.O_RDWR)
 	if err != nil {
 		return nil, err
 	}
 	failed := func(err error) (*os.File, error) { f.Close(); return nil, err }
-	if err := f.Chmod(0600); err != nil {
+	if err := secfile.ProtectFile(f); err != nil {
 		return failed(err)
 	}
 	if err := filelock.Lock(f, true); err != nil {

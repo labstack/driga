@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/labstack/driga/internal/pathx"
+	"github.com/labstack/driga/internal/secfile"
 	"os"
 	"path/filepath"
 	"sort"
@@ -249,10 +250,10 @@ func readOnce(ctx context.Context, g *Globals, base view.Filter, project string,
 
 func touchHeartbeat() error {
 	dir := config.DataDir()
-	if err := os.MkdirAll(dir, 0700); err != nil {
+	if err := secfile.MkdirPrivate(dir); err != nil {
 		return err
 	}
-	f, err := os.OpenFile(filepath.Join(dir, "viewer.heartbeat"), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
+	f, err := secfile.OpenFile(filepath.Join(dir, "viewer.heartbeat"), os.O_CREATE|os.O_WRONLY|os.O_TRUNC)
 	if err != nil {
 		return err
 	}

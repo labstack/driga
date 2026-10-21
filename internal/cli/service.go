@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/labstack/driga/internal/platform"
+	"github.com/labstack/driga/internal/secfile"
 	"io"
 	"os"
 	"os/exec"
@@ -59,17 +60,17 @@ func (c ServiceCmd) Run(g *Globals) error {
 		if runtime.GOOS == "darwin" {
 			// launchd opens these streams before the collector starts.
 			dir := filepath.Dir(service.LogPath())
-			if err := os.MkdirAll(dir, 0700); err != nil {
+			if err := secfile.MkdirPrivate(dir); err != nil {
 				return err
 			}
-			if err := os.Chmod(dir, 0700); err != nil {
+			if err := secfile.Protect(dir); err != nil {
 				return err
 			}
-			f, err := os.OpenFile(service.LogPath(), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
+			f, err := secfile.OpenFile(service.LogPath(), os.O_CREATE|os.O_APPEND|os.O_WRONLY)
 			if err != nil {
 				return err
 			}
-			if err := errors.Join(f.Chmod(0600), f.Close()); err != nil {
+			if err := errors.Join(secfile.ProtectFile(f), f.Close()); err != nil {
 				return err
 			}
 		}

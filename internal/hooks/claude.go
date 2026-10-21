@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/labstack/driga/internal/secfile"
 	"io"
 	"os"
 	"path/filepath"
@@ -468,7 +469,7 @@ func writeDiff(d Diff, dryRun bool, now time.Time) error {
 		// Keep each original, even when two writes fall in the same second.
 		for stamp := now.Unix(); ; stamp++ {
 			backup := fmt.Sprintf("%s.driga-bak-%d", d.Path, stamp)
-			f, err := os.OpenFile(backup, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+			f, err := secfile.OpenFile(backup, os.O_WRONLY|os.O_CREATE|os.O_EXCL)
 			if errors.Is(err, os.ErrExist) {
 				continue
 			}
@@ -482,10 +483,10 @@ func writeDiff(d Diff, dryRun bool, now time.Time) error {
 			}
 			break
 		}
-	} else if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+	} else if err := secfile.MkdirPrivate(filepath.Dir(path)); err != nil {
 		return err
 	}
-	f, err := os.CreateTemp(filepath.Dir(path), ".driga-settings-*")
+	f, err := secfile.CreateTemp(filepath.Dir(path), ".driga-settings-*")
 	if err != nil {
 		return err
 	}

@@ -4,6 +4,7 @@ package logfile
 import (
 	"errors"
 	"github.com/labstack/driga/internal/filelock"
+	"github.com/labstack/driga/internal/secfile"
 	"io"
 	"log/slog"
 	"os"
@@ -35,7 +36,7 @@ type Writer struct {
 func (w *Writer) Write(p []byte) (int, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	if err := os.MkdirAll(filepath.Dir(w.Path), 0700); err != nil {
+	if err := secfile.MkdirPrivate(filepath.Dir(w.Path)); err != nil {
 		return 0, err
 	}
 	flags := os.O_CREATE | os.O_APPEND | os.O_RDWR
@@ -44,7 +45,7 @@ func (w *Writer) Write(p []byte) (int, error) {
 		// The file lock serializes seeking and writing with other Writers.
 		flags &^= os.O_APPEND
 	}
-	f, err := os.OpenFile(w.Path, flags, 0600)
+	f, err := secfile.OpenFile(w.Path, flags)
 	if err != nil {
 		return 0, err
 	}
@@ -62,7 +63,7 @@ func (w *Writer) Write(p []byte) (int, error) {
 		p = p[len(p)-int(MaxSize):]
 	}
 	if info.Size()+int64(len(p)) > MaxSize {
-		old, err := os.OpenFile(w.Path+".1", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
+		old, err := secfile.OpenFile(w.Path+".1", os.O_CREATE|os.O_TRUNC|os.O_WRONLY)
 		if err != nil {
 			return 0, err
 		}

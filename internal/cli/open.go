@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/labstack/driga/internal/filelock"
+	"github.com/labstack/driga/internal/secfile"
 	"io"
 	"os"
 	"path/filepath"
@@ -80,13 +81,13 @@ func snapshotHint(w io.Writer, now time.Time) {
 	dir := config.DataDir()
 	path := filepath.Join(dir, "hint")
 	date := now.Format("2006-01-02")
-	if err := os.MkdirAll(dir, 0700); err != nil {
+	if err := secfile.MkdirPrivate(dir); err != nil {
 		return
 	}
-	if err := os.Chmod(dir, 0700); err != nil {
+	if err := secfile.Protect(dir); err != nil {
 		return
 	}
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0600)
+	f, err := secfile.OpenFile(path, os.O_CREATE|os.O_RDWR)
 	if err != nil {
 		return
 	}
@@ -100,7 +101,7 @@ func snapshotHint(w io.Writer, now time.Time) {
 	if err != nil || strings.TrimSpace(string(data)) == date {
 		return
 	}
-	err = f.Chmod(0600)
+	err = secfile.ProtectFile(f)
 	if err == nil {
 		err = f.Truncate(0)
 	}

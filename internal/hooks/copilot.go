@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/labstack/driga/internal/secfile"
 	"os"
 	"path/filepath"
 	"time"
@@ -115,10 +116,10 @@ func writeOwnedDiff(d Diff) error {
 	if d.After == "" {
 		return os.Remove(d.Path)
 	}
-	if err := os.MkdirAll(filepath.Dir(d.Path), 0700); err != nil {
+	if err := secfile.MkdirPrivate(filepath.Dir(d.Path)); err != nil {
 		return err
 	}
-	f, err := os.CreateTemp(filepath.Dir(d.Path), ".driga-hooks-*")
+	f, err := secfile.CreateTemp(filepath.Dir(d.Path), ".driga-hooks-*")
 	if err != nil {
 		return err
 	}

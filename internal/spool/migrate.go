@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/labstack/driga/internal/fileid"
+	"github.com/labstack/driga/internal/secfile"
 	"io"
 	"os"
 	"path/filepath"
@@ -30,7 +31,7 @@ func Migrate(old, dest string, load func(string) (model.Offset, error), save fun
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(dest, 0700); err != nil {
+	if err := secfile.MkdirPrivate(dest); err != nil {
 		return err
 	}
 	for _, entry := range entries {
@@ -125,7 +126,7 @@ func Migrate(old, dest string, load func(string) (model.Offset, error), save fun
 		}
 	}
 	note := []byte("Driga moved hook events to " + dest + ". Hooks resolve this path at runtime; no reinstall is needed.\nAny remaining diagnostic logs can be removed when no longer needed.\n")
-	return os.WriteFile(filepath.Join(old, "README"), note, 0600)
+	return secfile.WritePrivate(filepath.Join(old, "README"), note)
 }
 
 func syncDir(path string) error {
@@ -160,7 +161,7 @@ func copySpoolFile(source, target string) error {
 		return err
 	}
 	defer in.Close()
-	out, err := os.CreateTemp(filepath.Dir(target), ".legacy-*")
+	out, err := secfile.CreateTemp(filepath.Dir(target), ".legacy-*")
 	if err != nil {
 		return err
 	}

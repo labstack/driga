@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/labstack/driga/internal/secfile"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -302,10 +303,10 @@ func Apply(ctx context.Context, e Env, c Candidate, opts ApplyOpts) (r Result, e
 
 	r = Result{ID: c.ID, DryRun: opts.DryRun}
 	// Prepare the audit sink before any destructive operation. CLI never writes SQLite.
-	if mkErr := os.MkdirAll(e.DataDir, 0700); mkErr != nil {
+	if mkErr := secfile.MkdirPrivate(e.DataDir); mkErr != nil {
 		return r, mkErr
 	}
-	log, openErr := os.OpenFile(filepath.Join(e.DataDir, "cleanup.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
+	log, openErr := secfile.OpenFile(filepath.Join(e.DataDir, "cleanup.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY)
 	if openErr != nil {
 		return r, openErr
 	}

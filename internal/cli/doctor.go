@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/labstack/driga/internal/filelock"
+	"github.com/labstack/driga/internal/secfile"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -318,7 +319,11 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 	case !info.IsDir():
 		add("data_permissions", "fail", "data path is not a directory", "set DRIGA_DATA_DIR to a private directory")
 	case goos == "windows":
-		add("data_permissions", "info", "Windows ACLs apply; Unix mode bits are unavailable", "")
+		if err := secfile.CheckPrivate(d.DataDir); err != nil {
+			add("data_permissions", "fail", err.Error(), "set DRIGA_DATA_DIR to a private directory")
+		} else {
+			add("data_permissions", "ok", "private Windows DACL", "")
+		}
 	case info.Mode().Perm() != 0700:
 		add("data_permissions", "fail", fmt.Sprintf("directory permissions are %04o; expected 0700", info.Mode().Perm()), "chmod 700 "+d.DataDir)
 	default:
