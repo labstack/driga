@@ -165,7 +165,7 @@ func snapshotRows[T any](ctx context.Context, tx *sql.Tx, table, machine, suffix
 				raw := new(sql.NullString)
 				dest[i] = raw
 				finish = append(finish, func() error { field.SetString(raw.String); return nil })
-			case f.typ.Kind() == reflect.Slice || f.typ.Kind() == reflect.Pointer && f.typ.Elem().Kind() == reflect.Struct:
+			case f.typ.Kind() == reflect.Slice || f.typ.Kind() == reflect.Map || f.typ.Kind() == reflect.Pointer && f.typ.Elem().Kind() == reflect.Struct:
 				raw := new(string)
 				dest[i] = raw
 				finish = append(finish, func() error { return json.Unmarshal([]byte(*raw), field.Addr().Interface()) })

@@ -100,11 +100,3 @@ func CPUPercent(prev, cur model.Proc, dt time.Duration) float64 {
 type SubreaperFinder interface {
 	UserSubreaper() (int32, bool)
 }
-
-// ErrWindowsAction marks actions deferred beyond Windows watch support.
-var ErrWindowsAction error = windowsActionError{}
-
-type windowsActionError struct{}
-
-func (windowsActionError) Error() string { return "not yet supported on Windows" }
-func (windowsActionError) ExitCode() int { return 2 }

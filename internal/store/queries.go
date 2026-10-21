@@ -516,8 +516,12 @@ func (tx *Tx) ReplaceOrphans(orphans []model.Orphan) error {
 		if err != nil {
 			return err
 		}
-		if err := tx.exec(`INSERT INTO orphans (machine_id,id,root_pid,start_time,signature,proc_count,rss_total,cwd,young,verified,evidence,pids,first_seen)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`, tx.machineID, o.ID, o.RootPID, unix(o.StartTime), o.Signature, o.ProcCount, o.RSSTotal, o.Cwd, o.Young, o.Verified, string(evidence), string(pids), unix(o.FirstSeen)); err != nil {
+		starts, err := json.Marshal(o.ProcessStarts)
+		if err != nil {
+			return err
+		}
+		if err := tx.exec(`INSERT INTO orphans (machine_id,id,root_pid,start_time,signature,proc_count,rss_total,cwd,young,verified,evidence,pids,first_seen,process_starts)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, tx.machineID, o.ID, o.RootPID, unix(o.StartTime), o.Signature, o.ProcCount, o.RSSTotal, o.Cwd, o.Young, o.Verified, string(evidence), string(pids), unix(o.FirstSeen), string(starts)); err != nil {
 			return err
 		}
 	}
@@ -532,18 +536,21 @@ func (q *querier) Orphans() ([]model.Orphan, error) {
 // OrphansScoped returns selected machines' orphan trees in ID and machine order.
 func (q *querier) OrphansScoped(scope Scope) ([]model.Orphan, error) {
 	where, args := scope.where("machine_id")
-	return readMany(q, "SELECT machine_id,id,root_pid,start_time,signature,proc_count,rss_total,cwd,young,verified,evidence,pids,first_seen FROM orphans WHERE "+where+" ORDER BY id,machine_id", args, func(s scanner) (model.Orphan, error) {
+	return readMany(q, "SELECT machine_id,id,root_pid,start_time,signature,proc_count,rss_total,cwd,young,verified,evidence,pids,first_seen,process_starts FROM orphans WHERE "+where+" ORDER BY id,machine_id", args, func(s scanner) (model.Orphan, error) {
 		var o model.Orphan
 		var start, first int64
-		var evidence, pids string
-		if err := s.Scan(&o.MachineID, &o.ID, &o.RootPID, &start, &o.Signature, &o.ProcCount, &o.RSSTotal, &o.Cwd, &o.Young, &o.Verified, &evidence, &pids, &first); err != nil {
+		var evidence, pids, starts string
+		if err := s.Scan(&o.MachineID, &o.ID, &o.RootPID, &start, &o.Signature, &o.ProcCount, &o.RSSTotal, &o.Cwd, &o.Young, &o.Verified, &evidence, &pids, &first, &starts); err != nil {
 			return o, err
 		}
 		o.StartTime, o.FirstSeen = fromUnix(start), fromUnix(first)
 		if err := json.Unmarshal([]byte(evidence), &o.Evidence); err != nil {
 			return o, err
 		}
-		err := json.Unmarshal([]byte(pids), &o.PIDs)
+		if err := json.Unmarshal([]byte(pids), &o.PIDs); err != nil {
+			return o, err
+		}
+		err := json.Unmarshal([]byte(starts), &o.ProcessStarts)
 		return o, err
 	})
 }

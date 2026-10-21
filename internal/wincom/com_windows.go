@@ -46,6 +46,18 @@ func Initialize() (func(), error) {
 	return func() { combase.NewProc("RoUninitialize").Call(); runtime.UnlockOSThread() }, nil
 }
 
+// InitializeSTA is required by the Shell's IFileOperation interface. It must
+// not share the MTA initialization used by Task Scheduler and WinRT toasts.
+func InitializeSTA() (func(), error) {
+	runtime.LockOSThread()
+	h, _, _ := ole32.NewProc("CoInitializeEx").Call(0, 2) // COINIT_APARTMENTTHREADED
+	if err := Check(h); err != nil {
+		runtime.UnlockOSThread()
+		return nil, err
+	}
+	return func() { ole32.NewProc("CoUninitialize").Call(); runtime.UnlockOSThread() }, nil
+}
+
 var securityOnce sync.Once
 var securityError error
 

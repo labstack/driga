@@ -91,7 +91,7 @@ func (e Env) now() time.Time {
 func runGit(ctx context.Context, dir string, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", dir}, args...)...)
 	cmd.Env = append(os.Environ(), "GIT_OPTIONAL_LOCKS=0", "GIT_TERMINAL_PROMPT=0")
-	out, err := cmd.CombinedOutput()
+	out, err := platform.ChildOutput(cmd, true)
 	if err != nil {
 		return nil, fmt.Errorf("git -C %q %v: %w: %s", dir, args, err, strings.TrimSpace(string(out)))
 	}
@@ -297,10 +297,6 @@ func verify(ctx context.Context, e Env, c Candidate) (Candidate, error) {
 }
 func Verify(ctx context.Context, e Env, c Candidate) error { _, err := verify(ctx, e, c); return err }
 func Apply(ctx context.Context, e Env, c Candidate, opts ApplyOpts) (r Result, err error) {
-	if runtime.GOOS == "windows" {
-		return Result{}, platform.ErrWindowsAction
-	}
-
 	r = Result{ID: c.ID, DryRun: opts.DryRun}
 	// Prepare the audit sink before any destructive operation. CLI never writes SQLite.
 	if mkErr := secfile.MkdirPrivate(e.DataDir); mkErr != nil {
@@ -343,6 +339,27 @@ func Apply(ctx context.Context, e Env, c Candidate, opts ApplyOpts) (r Result, e
 		}
 		if fresh.merged && fresh.Branch != "" {
 			r.Commands = append(r.Commands, []string{"git", "-C", fresh.Repo, "branch", "-d", "--", fresh.Branch})
+		}
+		if runtime.GOOS == "windows" {
+			gitCommands := r.Commands[1:]
+			r, err = trash(ctx, e, fresh, opts, r)
+			if err != nil {
+				return r, err
+			}
+			r.Commands = append(r.Commands, gitCommands...)
+			if opts.DryRun {
+				return r, nil
+			}
+			for i, cmd := range gitCommands {
+				if _, gitErr := e.git(ctx, cmd[2], cmd[3:]...); gitErr != nil {
+					if i == 0 {
+						r.Warnings = append(r.Warnings, fmt.Sprintf("worktree recycled; prune failed: %v", gitErr))
+					} else {
+						r.Warnings = append(r.Warnings, fmt.Sprintf("kept branch %s: %v", fresh.Branch, gitErr))
+					}
+				}
+			}
+			return r, nil
 		}
 		if opts.DryRun {
 			return r, nil

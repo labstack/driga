@@ -53,9 +53,7 @@ func Probe(ctx context.Context) (Claude, error) {
 		defer os.Remove(f.Name())
 		defer f.Close()
 		cmd.Stdout, cmd.Stderr = f, f
-		reap := platform.OwnChild(cmd)
-		defer reap()
-		runErr := cmd.Run()
+		runErr := platform.RunChild(cmd)
 		if _, err := f.Seek(0, io.SeekStart); err != nil {
 			return nil, err
 		}
@@ -135,14 +133,12 @@ func (c Claude) RunIn(ctx context.Context, dir string, args []string, stdin stri
 	cmd := exec.CommandContext(ctx, c.path, args...)
 	cmd.Dir = dir
 	cmd.WaitDelay = 2 * time.Second
-	reap := platform.OwnChild(cmd)
-	defer reap()
 	cmd.Env = internalEnv()
 	cmd.Stdin = strings.NewReader(stdin)
 	cmd.Stdout = stdout
 	stderr := limitedBuffer{limit: 64 << 10}
 	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
+	if err := platform.RunChild(cmd); err != nil {
 		return fmt.Errorf("claude: %w: %s", err, strings.TrimSpace(stderr.String()))
 	}
 	return nil

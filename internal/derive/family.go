@@ -1,6 +1,7 @@
 package derive
 
 import (
+	"runtime"
 	"sort"
 	"time"
 
@@ -13,20 +14,35 @@ type ProcIndex struct {
 	procs    map[int32]model.Proc
 	children map[int32][]int32
 	pids     []int32
+	windows  bool
 }
 
 // NewProcIndex builds an index without retaining the caller's slice.
 func NewProcIndex(procs []model.Proc) ProcIndex {
-	idx := ProcIndex{procs: make(map[int32]model.Proc), children: make(map[int32][]int32)}
+	return newProcIndex(procs, runtime.GOOS == "windows")
+}
+
+func newProcIndex(procs []model.Proc, windows bool) ProcIndex {
+	idx := ProcIndex{procs: make(map[int32]model.Proc), children: make(map[int32][]int32), windows: windows}
 	for _, p := range procs {
 		idx.procs[p.PID] = p
 	}
 	for pid, p := range idx.procs {
 		idx.pids = append(idx.pids, pid)
-		idx.children[p.PPID] = append(idx.children[p.PPID], pid)
+		if !windows || idx.windowsParent(p) {
+			idx.children[p.PPID] = append(idx.children[p.PPID], pid)
+		}
 	}
 	sort.Slice(idx.pids, func(i, j int) bool { return idx.pids[i] < idx.pids[j] })
 	return idx
+}
+
+// Windows preserves the creator's PID after exit. A later process with that
+// PID is unrelated. Unknown ages retain topology for presentation, but cannot
+// establish orphan proof or authorize an action.
+func (idx ProcIndex) windowsParent(child model.Proc) bool {
+	parent, ok := idx.Get(child.PPID)
+	return ok && (parent.StartTime.IsZero() || child.StartTime.IsZero() || !parent.StartTime.After(child.StartTime))
 }
 
 // Get returns the sampled process with pid.
@@ -39,6 +55,9 @@ func (idx ProcIndex) Ancestors(pid int32) []int32 {
 	for {
 		p, ok := idx.Get(pid)
 		if !ok || p.PPID <= 0 || seen[p.PPID] {
+			return result
+		}
+		if idx.windows && !idx.windowsParent(p) {
 			return result
 		}
 		pid = p.PPID

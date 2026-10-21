@@ -117,7 +117,21 @@ func FindOrphans(idx ProcIndex, sessions []model.Session, sigs *signatures.Set, 
 		if spawned && owner != 0 {
 			ownerDead = !liveIDs[owner]
 		}
-		if r.PPID != 1 && (options.subreaper <= 1 || r.PPID != options.subreaper) && !ownerDead {
+		parentEvidence := ""
+		if idx.windows {
+			if r.StartTime.IsZero() {
+				continue
+			}
+			parent, present := idx.Get(r.PPID)
+			switch {
+			case !present:
+				parentEvidence = "parent process gone"
+			case !parent.StartTime.IsZero() && parent.StartTime.After(r.StartTime):
+				parentEvidence = "parent PID reused (parent started after child)"
+			default:
+				continue
+			}
+		} else if r.PPID != 1 && (options.subreaper <= 1 || r.PPID != options.subreaper) && !ownerDead {
 			continue
 		}
 		idle := true
@@ -169,10 +183,13 @@ func FindOrphans(idx ProcIndex, sessions []model.Session, sigs *signatures.Set, 
 		if existed && !old.FirstSeen.IsZero() {
 			o.FirstSeen = old.FirstSeen
 		}
-		if r.PPID == 1 {
+		if parentEvidence != "" {
+			o.Evidence = append(o.Evidence, parentEvidence)
+		}
+		if !idx.windows && r.PPID == 1 {
 			o.Evidence = append(o.Evidence, "ppid=1")
 		}
-		if options.subreaper > 1 && r.PPID == options.subreaper {
+		if !idx.windows && options.subreaper > 1 && r.PPID == options.subreaper {
 			o.Evidence = append(o.Evidence, "reparented to systemd --user")
 		}
 		if matched != "" {
@@ -197,6 +214,15 @@ func FindOrphans(idx ProcIndex, sessions []model.Session, sigs *signatures.Set, 
 		for _, p := range tree {
 			o.RSSTotal += p.RSS
 			o.PIDs = append(o.PIDs, p.PID)
+			if idx.windows {
+				if o.ProcessStarts == nil {
+					o.ProcessStarts = make(map[int32]time.Time)
+				}
+				o.ProcessStarts[p.PID] = p.StartTime
+				if p.StartTime.IsZero() {
+					probed = false
+				}
+			}
 		}
 		o.ProcCount = len(o.PIDs)
 		if probed {
@@ -204,6 +230,13 @@ func FindOrphans(idx ProcIndex, sessions []model.Session, sigs *signatures.Set, 
 			o.Evidence = append(o.Evidence, idleEvidence)
 			o.Verified = existed && old.StartTime.Equal(o.StartTime) &&
 				slices.Equal(old.PIDs, o.PIDs) && slices.Contains(old.Evidence, idleEvidence)
+			if idx.windows {
+				for pid, start := range o.ProcessStarts {
+					if !start.Equal(old.ProcessStarts[pid]) {
+						o.Verified = false
+					}
+				}
+			}
 		}
 		candidates[pid] = o
 	}

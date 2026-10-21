@@ -30,8 +30,17 @@ func (p *seqPlatform) Alive(int32, time.Time) bool                             {
 
 type seqProber struct{ *seqPlatform }
 
-func (p seqProber) ExternalPeers(context.Context, []int32) (map[int32]bool, error) {
-	return p.peers, nil
+func (p seqProber) ExternalPeers(_ context.Context, pids []int32) (map[int32]bool, error) {
+	result := make(map[int32]bool)
+	if !p.probe {
+		for _, pid := range pids {
+			result[pid] = false
+		}
+	}
+	for pid, active := range p.peers {
+		result[pid] = active
+	}
+	return result, nil
 }
 
 func verifyFixture(cpuAfter float64) (model.Orphan, [][]model.Proc) {
@@ -80,5 +89,18 @@ func TestVerifyIdleRequiresSocketProber(t *testing.T) {
 	var p platform.Platform = &seqPlatform{snaps: snaps}
 	if ok, _, err := VerifyIdle(context.Background(), p, o, []int32{101}, time.Millisecond); err != nil || ok {
 		t.Fatalf("unprobed tree accepted: %v %v", ok, err)
+	}
+}
+
+func TestWindowsVerifyIdleRejectsReusedChildAndMissingProbe(t *testing.T) {
+	for _, reused := range []bool{false, true} {
+		o, snaps := verifyFixture(1)
+		if reused {
+			snaps[1][1].StartTime = snaps[1][1].StartTime.Add(time.Second)
+		}
+		p := seqProber{&seqPlatform{snaps: snaps, probe: true}}
+		if ok, reason, err := verifyIdle(context.Background(), p, o, []int32{101}, time.Millisecond, true); err != nil || ok || reason == "" {
+			t.Fatalf("reused=%t: ok=%t reason=%q err=%v", reused, ok, reason, err)
+		}
 	}
 }

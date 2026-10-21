@@ -245,9 +245,52 @@ ends or the collector stops early, it also writes an allocation profile to
 ## Windows (experimental)
 
 Windows 10 1809+ / Windows 11 support the same read interfaces, foreground
-collector, optional OTLP intake, MCP, web and fleet. Real-agent Windows behavior
-still needs hardware validation. Orphan killing, cleanup application, Claude
-scratch paths and socket/file probes remain unavailable.
+collector, optional OTLP intake, MCP, web and fleet. Phase 3 is feature-complete
+pending real-machine verification; Windows remains experimental.
+
+`driga kill <id>` (also `driga orphans kill <id>`) and the TUI action use the
+same driga-proven orphan candidates and confirmations as Unix. Windows orphans
+have a missing parent or a parent whose start time proves PID reuse; Windows
+does not reparent them to init or a Linux subreaper. Every tree member's kernel
+start time is pinned in the stored candidate and checked again before action.
+Changed trees abort, including changes during the grace period or before force.
+Old candidates without member identities require collection and listing again.
+
+For observed orphan trees, the graceful step posts `WM_CLOSE` only to that PID's
+top-level windows. Process snapshots cannot prove console-group membership, so
+Driga never attaches to an arbitrary console or broadcasts a control event.
+After the usual five-second grace, `--force` uses `TerminateProcess` through an
+identity-checked handle, with the same second confirmation as Unix. Headless
+processes without windows may need `--force`. Children launched by Driga (Chat,
+LLM probes and collector Git probes) enter a non-breakaway, kill-on-close job
+before their initial thread runs. On cancellation, a driga-created console
+group sharing its console can safely receive `CTRL_BREAK`; otherwise Driga
+tries `WM_CLOSE`. Closing the job also ends any remaining descendants.
+
+Socket evidence uses `GetExtendedTcpTable` (`TCP_TABLE_OWNER_PID_ALL`) and
+`GetExtendedUdpTable`, for IPv4 and IPv6. TCP listeners/connections and bound
+UDP endpoints prevent an idle verdict; table errors remain unknown. UDP owner
+tables do not expose peers, so a bound endpoint is conservatively treated as a
+listener. Open-file inspection remains unknown: no reliable unprivileged API
+is available for the directory-wide check, and Driga never guesses.
+
+Cleanup retains the same candidate checks, preview, confirmation, ignored-file
+review and `cleanup.log` audit trail. On Windows, verified linked worktrees go
+to the Recycle Bin through `IFileOperation` on a COM STA, with recycling, undo
+and silent/no-error-UI flags. The operation vetoes permanent deletion, checks
+the Shell's per-item recycling result, then prunes Git worktree metadata and
+optionally deletes a merged branch. Restore files through the Recycle Bin;
+Git metadata/branch restoration is separate. Agent history remains report-only.
+Claude scratch discovery and cleanup stay refused: repository fixtures do not
+establish Claude's Windows scratch layout, and open-file checks are unavailable.
+`doctor` explains these two fail-closed limits. No Unix temp layout is assumed.
+
+Real-machine checks still include agent attribution, logon/restart, notifications,
+console/window shutdown, job descendants, socket ownership and Recycle Bin restore.
+The native API contracts follow Microsoft's
+[console group rules](https://learn.microsoft.com/en-us/windows/console/generateconsolectrlevent),
+[IP Helper tables](https://learn.microsoft.com/en-us/windows/win32/api/iphlpapi/nf-iphlpapi-getextendedtcptable)
+and [IFileOperation flags](https://learn.microsoft.com/en-us/windows/win32/api/shobjidl_core/nf-shobjidl_core-ifileoperation-setoperationflags).
 
 `driga service install` registers `\Driga\<current-user-SID>\Driga collector`
 and starts it. The task runs `driga.exe collect` with internal scheduler flags,

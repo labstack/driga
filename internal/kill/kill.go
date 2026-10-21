@@ -16,24 +16,25 @@ import (
 	"github.com/labstack/driga/internal/platform"
 )
 
-// Result records successful SIGTERMs and processes still alive after the wait.
-// Survivors are also sent SIGKILL when force is enabled.
+// Result records graceful attempts and processes still alive after the wait.
+// Force escalates to SIGKILL on Unix or TerminateProcess on Windows.
 type Result struct {
 	Signaled, Survivors []int32
 	Aborted             bool
 	Reason              string
 }
 
-// Tree checks the root's identity and expected descendant set, then sends
-// SIGTERM deepest first. A nonpositive wait uses the five-second default.
+// Tree checks identities and expected descendants, then attempts graceful
+// shutdown deepest first. A nonpositive wait uses the five-second default.
 func Tree(ctx context.Context, plat platform.Platform, o model.Orphan, expect []int32, force bool, wait time.Duration) (Result, error) {
-	if runtime.GOOS == "windows" {
-		return Result{}, platform.ErrWindowsAction
-	}
-	return tree(ctx, plat, o, expect, force, wait, signalProcess)
+	return runTree(ctx, plat, o, expect, force, wait, signalIdentity, runtime.GOOS == "windows")
 }
 
 func tree(ctx context.Context, plat platform.Platform, o model.Orphan, expect []int32, force bool, wait time.Duration, signal func(int, syscall.Signal) error) (Result, error) {
+	return runTree(ctx, plat, o, expect, force, wait, func(p model.Proc, sig syscall.Signal) error { return signal(int(p.PID), sig) }, false)
+}
+
+func runTree(ctx context.Context, plat platform.Platform, o model.Orphan, expect []int32, force bool, wait time.Duration, signal func(model.Proc, syscall.Signal) error, windows bool) (Result, error) {
 	abort := func(reason string) (Result, error) { return Result{Aborted: true, Reason: reason}, nil }
 	if err := ctx.Err(); err != nil {
 		return Result{}, err
@@ -77,6 +78,23 @@ func tree(ctx context.Context, plat platform.Platform, o model.Orphan, expect []
 		protected[pid] = true
 	}
 	targets := append(desc, root)
+	if windows {
+		for _, p := range targets {
+			if p.StartTime.IsZero() || o.ProcessStarts[p.PID].IsZero() {
+				return abort("tree process identity unavailable; collect and list again")
+			}
+			if !p.StartTime.Equal(o.ProcessStarts[p.PID]) {
+				return abort("orphan member start time changed (PID reused)")
+			}
+		}
+		if reason := windowsTreeChanged(targets, procs); reason != "" {
+			return abort(reason)
+		}
+		parent, present := idx.Get(root.PPID)
+		if present && (parent.StartTime.IsZero() || !parent.StartTime.After(root.StartTime)) {
+			return abort("orphan parent is still alive or unknown")
+		}
+	}
 	for _, p := range targets {
 		if p.PID <= 1 || protected[p.PID] {
 			return abort(fmt.Sprintf("refusing to signal protected PID %d", p.PID))
@@ -99,6 +117,9 @@ func tree(ctx context.Context, plat platform.Platform, o model.Orphan, expect []
 			}
 		}
 	}
+	if _, ok := plat.(platform.SocketProber); windows && !ok {
+		return abort("socket peer inspection unavailable")
+	}
 	depth := make(map[int32]int, len(targets))
 	for _, p := range targets {
 		depth[p.PID] = len(idx.Ancestors(p.PID))
@@ -111,14 +132,30 @@ func tree(ctx context.Context, plat platform.Platform, o model.Orphan, expect []
 	})
 	var result Result
 	var errs []error
+	checkTree := func() (string, error) {
+		if !windows {
+			return "", nil
+		}
+		current, err := plat.Procs(ctx)
+		if err != nil {
+			return "", err
+		}
+		return windowsTreeChanged(targets, current), nil
+	}
 	for _, p := range targets {
 		if err := ctx.Err(); err != nil {
 			return result, errors.Join(append(errs, err)...)
 		}
+		if reason, err := checkTree(); err != nil {
+			return result, err
+		} else if reason != "" {
+			result.Aborted, result.Reason = true, reason
+			return result, errors.Join(errs...)
+		}
 		if !plat.Alive(p.PID, p.StartTime) {
 			continue
 		}
-		if err := signal(int(p.PID), syscall.SIGTERM); err != nil {
+		if err := signal(p, syscall.SIGTERM); err != nil {
 			if !errors.Is(err, syscall.ESRCH) {
 				errs = append(errs, fmt.Errorf("SIGTERM %d: %w", p.PID, err))
 			}
@@ -131,6 +168,12 @@ func tree(ctx context.Context, plat platform.Platform, o model.Orphan, expect []
 	}
 	deadline := time.Now().Add(wait)
 	for {
+		if reason, err := checkTree(); err != nil {
+			return result, err
+		} else if reason != "" {
+			result.Aborted, result.Reason = true, reason
+			return result, errors.Join(errs...)
+		}
 		result.Survivors = nil
 		for _, p := range targets {
 			if plat.Alive(p.PID, p.StartTime) {
@@ -155,10 +198,16 @@ func tree(ctx context.Context, plat platform.Platform, o model.Orphan, expect []
 			}
 			p, _ := idx.Get(pid)
 			// Recheck identity so a reused survivor PID cannot be escalated.
+			if reason, err := checkTree(); err != nil {
+				return result, err
+			} else if reason != "" {
+				result.Aborted, result.Reason = true, reason
+				return result, errors.Join(errs...)
+			}
 			if !plat.Alive(pid, p.StartTime) {
 				continue
 			}
-			if err := signal(int(pid), syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
+			if err := signal(p, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
 				errs = append(errs, fmt.Errorf("SIGKILL %d: %w", pid, err))
 			}
 		}
