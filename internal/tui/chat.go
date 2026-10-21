@@ -2,7 +2,7 @@ package tui
 
 import (
 	"fmt"
-	"path/filepath"
+	"github.com/labstack/driga/internal/pathx"
 	"strings"
 	"time"
 
@@ -271,7 +271,7 @@ func (m *app) chatContextLine() string {
 		chips = append(chips, chip+"]")
 	}
 	if project != "" {
-		chips = append(chips, "[project · "+clean(filepath.Base(project))+"]")
+		chips = append(chips, "[project · "+clean(pathx.RecordedBase(project))+"]")
 	}
 	return strings.Join(chips, " ")
 }

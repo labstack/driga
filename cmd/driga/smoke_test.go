@@ -60,7 +60,7 @@ func (n node) cmd(ctx context.Context, args ...string) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, n.bin, args...)
 	home := n.path("home")
 	cmd.Env = append(os.Environ(),
-		"HOME="+home, "CODEX_HOME="+filepath.Join(home, ".codex"), "COPILOT_HOME="+filepath.Join(home, ".copilot"), "GEMINI_CLI_HOME=",
+		"HOME="+home, "USERPROFILE="+home, "APPDATA="+filepath.Join(home, "AppData", "Roaming"), "LOCALAPPDATA="+filepath.Join(home, "AppData", "Local"), "CLAUDE_CONFIG_DIR=", "CODEX_HOME="+filepath.Join(home, ".codex"), "COPILOT_HOME="+filepath.Join(home, ".copilot"), "GEMINI_CLI_HOME=",
 		// Linux service logs and trash resolve through XDG; keep them isolated too.
 		"XDG_STATE_HOME="+filepath.Join(home, ".local", "state"), "XDG_DATA_HOME="+filepath.Join(home, ".local", "share"),
 		"XDG_CONFIG_HOME="+filepath.Join(home, ".config"),

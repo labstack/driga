@@ -141,7 +141,8 @@ func TestInboxJavaScript(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cmd := exec.Command(runtime, "-e", string(js)+"\n"+string(harness))
+	cmd := exec.Command(runtime, "-")
+	cmd.Stdin = strings.NewReader(string(js) + "\n" + string(harness))
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("inbox behavior: %v\n%s", err, out)
 	}

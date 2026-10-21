@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -16,11 +17,15 @@ import (
 	"time"
 
 	"github.com/labstack/driga/internal/model"
+	"github.com/labstack/driga/internal/pathx"
 )
 
 // NormalizePath resolves absolute paths and symlinks, including existing parents
 // of paths that have disappeared or have not yet been created.
 func NormalizePath(p string) string {
+	if foreignPath(p) {
+		return p
+	}
 	abs, err := filepath.Abs(p)
 	if err != nil {
 		return filepath.Clean(p)
@@ -44,12 +49,16 @@ func NormalizePath(p string) string {
 	}
 }
 
+func foreignPath(p string) bool {
+	return pathx.RecordedIsAbs(p) && pathx.WindowsStyle(p) != (runtime.GOOS == "windows")
+}
+
 // DiscoverRepos finds repositories above cwds and at most depth levels below
 // roots. Linked worktrees resolve to their main repository, without running Git.
 func DiscoverRepos(cwds, roots []string, depth int, exclude []string) ([]string, error) {
 	found := make(map[string]bool)
 	for _, cwd := range cwds {
-		if cwd == "" {
+		if cwd == "" || foreignPath(cwd) {
 			continue
 		}
 		for p := NormalizePath(cwd); ; p = filepath.Dir(p) {

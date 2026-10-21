@@ -81,6 +81,9 @@ func TestClaudeInstallMergesPreservingExisting(t *testing.T) {
 }
 
 func TestClaudeInstallIdempotent(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("hook installation is not supported on Windows in phase 1")
+	}
 	path := filepath.Join(t.TempDir(), "settings.json")
 	first, err := hooks.ClaudeInstall(path, "/old/driga", false, testNow)
 	if err != nil {
@@ -129,6 +132,9 @@ func TestClaudeUninstallRemovesOnlyDriga(t *testing.T) {
 }
 
 func TestClaudeDryRunNoWrite(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("hook installation is not supported on Windows in phase 1")
+	}
 	dir := t.TempDir()
 	path := filepath.Join(dir, "settings.json")
 	before := `{"theme":"dark"}`
@@ -171,6 +177,9 @@ func TestClaudeMissingFileCreates(t *testing.T) {
 }
 
 func TestClaudeQuotedBinaryAndPartialInstall(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("hook installation is not supported on Windows in phase 1")
+	}
 	path := filepath.Join(t.TempDir(), "settings.json")
 	writeFixture(t, path, `{"hooks":{"Stop":[{"hooks":[{"command":"driga hook claude Stop"}]}]}}`)
 	d, err := hooks.ClaudeInstall(path, "/opt/a user's tools/driga", false, testNow)
@@ -219,6 +228,9 @@ func TestDiffUnified(t *testing.T) {
 }
 
 func TestClaudePreservesUnrelatedBytes(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("hook installation is not supported on Windows in phase 1")
+	}
 	for _, before := range []string{`{"z":  2, "a" : { "x" : 1 }}`, "{\n\t\"z\": 2,\n\t\"a\": 1\n}\n", "{  }", "{}\n"} {
 		for _, otlp := range []bool{false, true} {
 			path := filepath.Join(t.TempDir(), "settings.json")
@@ -252,6 +264,9 @@ func TestClaudePreservesUnrelatedBytes(t *testing.T) {
 }
 
 func TestClaudeDuplicateManagedKeyFallsBack(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("hook installation is not supported on Windows in phase 1")
+	}
 	path := filepath.Join(t.TempDir(), "settings.json")
 	writeFixture(t, path, `{"hooks":{},"hooks":{},"unknown": 2}`)
 	d, err := hooks.ClaudeInstall(path, "/opt/driga", true, testNow)

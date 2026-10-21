@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	recordpath "path"
 	"path/filepath"
 	"reflect"
 	"runtime"
@@ -206,8 +207,8 @@ func TestGeminiFilesTouched(t *testing.T) {
 					env, _ := setup(t, header+user1+data)
 					s, _ := collect(t, New(), env)
 					want := path
-					if !filepath.IsAbs(want) {
-						want = filepath.Join(s.Cwd, want)
+					if !recordpath.IsAbs(want) {
+						want = recordpath.Join(s.Cwd, want)
 					}
 					if len(s.FilesTouched) != 1 || s.FilesTouched[0].Path != want || s.FilesTouched[0].TS.IsZero() {
 						t.Fatal(s.FilesTouched)

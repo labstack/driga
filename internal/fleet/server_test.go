@@ -23,6 +23,7 @@ import (
 
 	"github.com/labstack/driga/internal/config"
 	"github.com/labstack/driga/internal/model"
+	"github.com/labstack/driga/internal/pathx"
 	"github.com/labstack/driga/internal/spool"
 	"github.com/labstack/driga/internal/store"
 )
@@ -35,13 +36,15 @@ func serverFixtureBeforePass(t *testing.T, beforePass bool) (*Server, *store.Sto
 	t.Helper()
 	// Unix socket paths have a small OS limit; Go's per-test directory embeds
 	// the test name and can exceed it on macOS.
-	dir, err := os.MkdirTemp("/tmp", "driga-fleet-")
+	dir, err := os.MkdirTemp("", "driga-fleet-")
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 	t.Setenv("HOME", dir)
 	t.Setenv("USERPROFILE", os.Getenv("HOME"))
+	t.Setenv("LOCALAPPDATA", dir)
+	t.Setenv("APPDATA", filepath.Join(os.Getenv("HOME"), "AppData", "Roaming"))
 	t.Setenv("DRIGA_DATA_DIR", dir)
 	t.Setenv("DRIGA_SPOOL_DIR", filepath.Join(dir, "spool"))
 	t.Setenv("DRIGA_CONFIG", filepath.Join(dir, "config"))
@@ -110,7 +113,7 @@ func TestSnapshotCursorMatchesTx(t *testing.T) {
 	appendRows(t, st, 1, time.Now())
 	// Pin a WAL read before the concurrent commit, then use the exact snapshot
 	// builder used by the endpoint on that transaction.
-	db, err := sql.Open("sqlite", "file:"+filepath.Join(s.dataDir, "driga.db")+"?mode=ro")
+	db, err := sql.Open("sqlite", pathx.FileURL(filepath.Join(s.dataDir, "driga.db"))+"?mode=ro")
 	if err != nil {
 		t.Fatal(err)
 	}

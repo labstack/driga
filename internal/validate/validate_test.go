@@ -23,6 +23,7 @@ import (
 	"github.com/labstack/driga/internal/derive"
 	"github.com/labstack/driga/internal/fixturegen"
 	"github.com/labstack/driga/internal/fleet"
+	"github.com/labstack/driga/internal/pathx"
 	"github.com/labstack/driga/internal/platform"
 	"github.com/labstack/driga/internal/signatures"
 	"github.com/labstack/driga/internal/store"
@@ -289,10 +290,12 @@ func validateFixture(t *testing.T, src string) {
 	// conflict paths in fixture-home-token form so /var and /private/var agree.
 	tokenHome, _ := filepath.EvalSymlinks(home)
 	tokenize := func(p string) string {
-		if tokenHome != "" {
-			p = strings.ReplaceAll(p, tokenHome, fixturegen.HomeToken)
+		for _, root := range []string{tokenHome, home} {
+			if rel, err := pathx.RecordedRel(root, p); err == nil {
+				return fixturegen.HomeToken + "/" + rel
+			}
 		}
-		return strings.ReplaceAll(p, home, fixturegen.HomeToken)
+		return p
 	}
 	for _, c := range append(cv.Current, cv.Recent...) {
 		got.Conflicts = append(got.Conflicts, conflictLabel{c.Kind, tokenize(c.Path)})

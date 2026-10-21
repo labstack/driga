@@ -16,6 +16,7 @@ import (
 
 	"github.com/labstack/driga/internal/config"
 	"github.com/labstack/driga/internal/model"
+	"github.com/labstack/driga/internal/pathx"
 	"github.com/labstack/driga/internal/view"
 	_ "modernc.org/sqlite"
 )
@@ -56,10 +57,8 @@ func openAgySchemaDB(path string) (*sql.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	u := url.URL{Scheme: "file", Path: abs}
 	q := url.Values{"mode": {"ro"}, "immutable": {"0"}, "_pragma": {"busy_timeout(100)", "query_only(1)"}}
-	u.RawQuery = q.Encode()
-	db, err := sql.Open("sqlite", u.String())
+	db, err := sql.Open("sqlite", pathx.FileURL(abs)+"?"+q.Encode())
 	if err != nil {
 		return nil, err
 	}

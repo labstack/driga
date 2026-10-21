@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -140,7 +141,11 @@ func TestFlowWorkerKeysAndMouse(t *testing.T) {
 		t.Fatal("click did not select worker")
 	}
 	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
-	if m.detail || !strings.Contains(m.status, "codex resume") {
+	wantStatus := "codex resume"
+	if runtime.GOOS == "windows" {
+		wantStatus = "not yet supported on Windows"
+	}
+	if m.detail || !strings.Contains(m.status, wantStatus) {
 		t.Fatal("Enter did not plan selected session jump", m.status)
 	}
 }

@@ -24,6 +24,16 @@ func readEnv(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", os.Getenv("HOME"))
+	if runtime.GOOS == "windows" {
+		// Keep the per-test IPC directory below the AF_UNIX path limit.
+		appDir, err := os.MkdirTemp("", "dr-")
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = os.RemoveAll(appDir) })
+		t.Setenv("LOCALAPPDATA", appDir)
+	}
+	t.Setenv("APPDATA", filepath.Join(os.Getenv("HOME"), "AppData", "Roaming"))
 	t.Setenv("CODEX_HOME", "")
 	t.Setenv("DRIGA_DATA_DIR", filepath.Join(home, "data"))
 	t.Setenv("DRIGA_SPOOL_DIR", filepath.Join(home, "spool"))

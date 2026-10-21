@@ -106,4 +106,4 @@ func projectSessionInRepo(s model.Session, repo model.Repo, wts []model.Worktree
 	return projectPathWithin(s.Cwd, repo.Path)
 }
 
-func projectPathWithin(path, root string) bool { return pathx.Within(path, root) }
+func projectPathWithin(path, root string) bool { return pathx.RecordedWithin(path, root) }

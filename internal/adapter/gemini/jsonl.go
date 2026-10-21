@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"path/filepath"
+	"github.com/labstack/driga/internal/pathx"
 	"time"
 
 	"github.com/labstack/driga/internal/adapter"
@@ -263,13 +263,13 @@ func (f conversation) observation(path, cwd string, snippets bool) model.Session
 				continue
 			}
 			p := t.path
-			if !filepath.IsAbs(p) {
+			if !pathx.RecordedIsAbs(p) {
 				if cwd == "" {
 					continue
 				}
-				p = filepath.Join(cwd, p)
+				p = pathx.RecordedJoin(cwd, p)
 			}
-			o.FilesTouched = append(o.FilesTouched, model.FileTouch{Path: filepath.Clean(p), TS: m.ts})
+			o.FilesTouched = append(o.FilesTouched, model.FileTouch{Path: p, TS: m.ts})
 		}
 	}
 	return o

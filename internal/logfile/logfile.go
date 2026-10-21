@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 )
 
@@ -37,7 +38,13 @@ func (w *Writer) Write(p []byte) (int, error) {
 	if err := os.MkdirAll(filepath.Dir(w.Path), 0700); err != nil {
 		return 0, err
 	}
-	f, err := os.OpenFile(w.Path, os.O_CREATE|os.O_APPEND|os.O_RDWR, 0600)
+	flags := os.O_CREATE | os.O_APPEND | os.O_RDWR
+	if runtime.GOOS == "windows" {
+		// O_APPEND drops FILE_WRITE_DATA on Windows, which Truncate needs.
+		// The file lock serializes seeking and writing with other Writers.
+		flags &^= os.O_APPEND
+	}
+	f, err := os.OpenFile(w.Path, flags, 0600)
 	if err != nil {
 		return 0, err
 	}
@@ -64,6 +71,11 @@ func (w *Writer) Write(p []byte) (int, error) {
 			return 0, err
 		}
 		if err := f.Truncate(0); err != nil {
+			return 0, err
+		}
+	}
+	if runtime.GOOS == "windows" {
+		if _, err := f.Seek(0, io.SeekEnd); err != nil {
 			return 0, err
 		}
 	}

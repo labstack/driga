@@ -46,7 +46,11 @@ func equal[T any](t *testing.T, want, got T, err error) {
 }
 
 func TestMigrateAndRoundTrip(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "data ?#", "driga.db")
+	name := "data ?#"
+	if runtime.GOOS == "windows" {
+		name = "data # ü"
+	}
+	path := filepath.Join(t.TempDir(), name, "driga.db")
 	s := openTest(t, path, ReadWrite)
 	now := time.Date(2026, 10, 18, 12, 0, 0, 123456789, time.UTC)
 	if len(s.MachineID()) != 36 {

@@ -88,28 +88,4 @@ func registryOrigin(r registryEntry) string {
 	return "interactive"
 }
 
-func temporaryCwd(cwd string) bool {
-	if cwd == "" {
-		return false
-	}
-	cwd = canonicalPath(cwd)
-	for _, root := range pathx.TempRoots() {
-		if pathx.Within(cwd, canonicalPath(root)) {
-			return true
-		}
-	}
-	return false
-}
-
-func canonicalPath(path string) string {
-	if resolved, err := filepath.EvalSymlinks(path); err == nil {
-		return filepath.Clean(resolved)
-	}
-	// A logged cwd may already be gone. Resolve its existing ancestors
-	// while retaining the missing suffix as a clean path.
-	path = filepath.Clean(path)
-	if parent := filepath.Dir(path); parent != path {
-		return filepath.Join(canonicalPath(parent), filepath.Base(path))
-	}
-	return path
-}
+func temporaryCwd(cwd string) bool { return pathx.TemporaryRecorded(cwd) }

@@ -128,7 +128,7 @@ func TestGeneratedEnvironmentExample(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(b) != EnvExample() {
+	if strings.ReplaceAll(string(b), "\r\n", "\n") != EnvExample() {
 		t.Fatal(".env.example is stale; run go generate ./internal/config")
 	}
 	names := map[string]bool{}

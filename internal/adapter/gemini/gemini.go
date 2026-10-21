@@ -14,6 +14,7 @@ import (
 
 	"github.com/labstack/driga/internal/adapter"
 	"github.com/labstack/driga/internal/model"
+	"github.com/labstack/driga/internal/pathx"
 	"github.com/labstack/driga/internal/tail"
 )
 
@@ -135,7 +136,7 @@ func (a *geminiAdapter) Collect(ctx context.Context, env adapter.Env) ([]model.S
 		}
 		cwdBytes, err := os.ReadFile(filepath.Join(project, ".project_root"))
 		cwd := strings.TrimSpace(string(cwdBytes))
-		if err != nil || !filepath.IsAbs(cwd) {
+		if err != nil || !pathx.RecordedIsAbs(cwd) {
 			cwd = ""
 		}
 		obs := f.observation(path, cwd, env.CaptureSnippets)

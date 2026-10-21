@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"net/url"
+	"github.com/labstack/driga/internal/pathx"
 	"os"
 	"strings"
 
@@ -20,8 +20,7 @@ func openCatalog(ctx context.Context, path string) (*sql.DB, []adapter.Warning) 
 	if _, err := os.Stat(path); err != nil {
 		return unavailable(err)
 	}
-	u := url.URL{Scheme: "file", Path: path, RawQuery: "mode=ro&immutable=0"}
-	db, err := sql.Open("sqlite", u.String())
+	db, err := sql.Open("sqlite", pathx.FileURL(path)+"?mode=ro&immutable=0")
 	if err != nil {
 		return unavailable(err)
 	}

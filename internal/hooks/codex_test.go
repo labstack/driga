@@ -57,6 +57,9 @@ func TestCodexInstallWhenUnset(t *testing.T) {
 // permission hook: the hook is a separate table, so install appends it and
 // leaves the foreign notify bytes alone, and uninstall restores the original.
 func TestCodexInstallKeepsForeignNotify(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("hook installation is not supported on Windows in phase 1")
+	}
 	for _, value := range []string{`["x", "y"]`, `[]`, `"custom"`, `["/opt/driga", "hook", "codex", "different"]`} {
 		t.Run(value, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "config.toml")
@@ -154,6 +157,9 @@ func runHooksCLI(t *testing.T, input string, args ...string) string {
 }
 
 func TestHooksCLIConfirmationAndStatus(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("hook installation is not supported on Windows in phase 1")
+	}
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", os.Getenv("HOME"))
@@ -197,6 +203,9 @@ func TestHooksCLIConfirmationAndStatus(t *testing.T) {
 }
 
 func TestHooksCLICodexForeignNotify(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("hook installation is not supported on Windows in phase 1")
+	}
 	home, codexHome := t.TempDir(), t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", os.Getenv("HOME"))

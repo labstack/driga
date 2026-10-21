@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/labstack/driga/internal/pathx"
-	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -46,7 +45,7 @@ func projectName(s model.Session, repos []model.Repo) string {
 	if s.Cwd == "" {
 		return ""
 	}
-	return filepath.Base(s.Cwd)
+	return pathx.RecordedBase(s.Cwd)
 }
 
 func procTree(s model.Session, idx derive.ProcIndex) []model.Proc {
@@ -364,7 +363,7 @@ func inboxLocal(r Reader, f Filter, now time.Time) (InboxView, error) {
 
 func sessionProject(s model.Session, repos []model.Repo, path string) bool {
 	for _, repo := range repos {
-		if pathx.Equal(repo.Path, path) && s.RepoID != nil && *s.RepoID == repo.ID {
+		if pathx.RecordedEqual(repo.Path, path) && s.RepoID != nil && *s.RepoID == repo.ID {
 			return true
 		}
 	}
@@ -398,7 +397,7 @@ func conflictsLocal(r Reader, f Filter, now time.Time) (ConflictsView, error) {
 	worktreeOf := func(path string) (string, string, string) {
 		for _, w := range wts {
 			if within(path, w.Path) {
-				rel, _ := filepath.Rel(w.Path, path)
+				rel, _ := pathx.RecordedRel(w.Path, path)
 				return paths[w.RepoID], w.Path, rel
 			}
 		}
@@ -435,7 +434,7 @@ func orphansLocal(r Reader, f Filter, now time.Time) (OrphansView, error) {
 			return v, err
 		}
 		for _, repo := range repos {
-			if pathx.Equal(repo.Path, f.Project) {
+			if pathx.RecordedEqual(repo.Path, f.Project) {
 				wts, err = r.Worktrees(repo.ID)
 				if err != nil {
 					return v, err
@@ -584,7 +583,7 @@ func summaryLocal(r Reader, f Filter, now time.Time) (SummaryView, error) {
 	return v, nil
 }
 
-func within(path, root string) bool { return pathx.Within(path, root) }
+func within(path, root string) bool { return pathx.RecordedWithin(path, root) }
 
 // sessionAge is zero when the start is unknown (a transcript seen without
 // registry metadata); renderers show that as "—" instead of a huge age.

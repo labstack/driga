@@ -4,7 +4,6 @@ package pathx
 
 import (
 	"path"
-	"path/filepath"
 	"runtime"
 	"strings"
 )
@@ -18,7 +17,7 @@ func keyForOS(p, goos string) string {
 		return ""
 	}
 	if goos != "windows" {
-		return filepath.Clean(p)
+		return path.Clean(p)
 	}
 	p = strings.ReplaceAll(p, `\`, "/")
 	if strings.HasPrefix(p, "//?/") {
@@ -59,6 +58,12 @@ func withinForOS(p, root, goos string) bool {
 		}
 		return p == root || strings.HasPrefix(p, strings.TrimSuffix(root, "/")+"/")
 	}
-	rel, err := filepath.Rel(root, p)
-	return err == nil && !filepath.IsAbs(rel) && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+	p, root = path.Clean(p), path.Clean(root)
+	if path.IsAbs(p) != path.IsAbs(root) {
+		return false
+	}
+	if root == "." {
+		return p != ".." && !strings.HasPrefix(p, "../")
+	}
+	return p == root || strings.HasPrefix(p, strings.TrimSuffix(root, "/")+"/")
 }

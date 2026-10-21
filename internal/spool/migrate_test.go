@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"syscall"
 	"testing"
 	"time"
@@ -13,6 +14,9 @@ import (
 )
 
 func TestLegacyMigrationRetainsInFlightWriter(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("unlinking an open Unix hook writer is not supported on Windows in phase 1")
+	}
 	old, dest := t.TempDir(), t.TempDir()
 	name := "20261019.jsonl"
 	f, err := os.OpenFile(filepath.Join(old, name), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)

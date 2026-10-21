@@ -92,7 +92,7 @@ func LoadFake(dir string) (*Fake, error) {
 
 func (f *Fake) OpenFiles(ctx context.Context, path string) (bool, error) {
 	for _, p := range f.openFiles {
-		if pathx.Within(p, path) {
+		if pathx.RecordedWithin(p, path) {
 			return true, ctx.Err()
 		}
 	}

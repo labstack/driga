@@ -56,7 +56,8 @@ func TestFlowObservedJavaScript(t *testing.T) {
 	code := "eval(" + strconv.Quote(string(js)) + "); eval(" + strconv.Quote(string(harness)) + ");"
 	var cmd *exec.Cmd
 	if runtime, err := exec.LookPath("node"); err == nil {
-		cmd = exec.Command(runtime, "-e", code)
+		cmd = exec.Command(runtime, "-")
+		cmd.Stdin = strings.NewReader(code)
 	} else {
 		t.Skip("JavaScript runner unavailable")
 	}

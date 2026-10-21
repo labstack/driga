@@ -46,7 +46,7 @@ func TestServeOffOpensNoPort(t *testing.T) {
 
 func TestCollectorServesCommittedSpoolChanges(t *testing.T) {
 	d, _, _, _ := setup(t)
-	dir, err := os.MkdirTemp("/tmp", "driga-collector-")
+	dir, err := os.MkdirTemp("", "driga-collector-")
 	if err != nil {
 		t.Fatal(err)
 	}

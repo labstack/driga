@@ -25,6 +25,9 @@ func (f jumpRunner) Run(ctx context.Context, name string, args ...string) ([]byt
 }
 
 func TestJumpCommand(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("terminal jump is not supported on Windows in phase 1")
+	}
 	for _, tc := range []struct {
 		name, goos, tmux string
 		clients          string

@@ -119,7 +119,22 @@ func protectWindowsDir(dir string) error {
 		return err
 	}
 	if !windows.EqualSid(owner, u.User.Sid) {
-		return fmt.Errorf("private directory must be owned by this user")
+		// Elevated tokens may create directories owned by their default owner
+		// group (Administrators). Accept only this token's exact default owner,
+		// then explicitly assign the user as owner along with the private DACL.
+		var size uint32
+		token := windows.GetCurrentProcessToken()
+		if err := windows.GetTokenInformation(token, windows.TokenOwner, nil, 0, &size); err != windows.ERROR_INSUFFICIENT_BUFFER {
+			return fmt.Errorf("read token default owner: %w", err)
+		}
+		buf := make([]byte, size)
+		if err := windows.GetTokenInformation(token, windows.TokenOwner, &buf[0], size, &size); err != nil {
+			return err
+		}
+		defaultOwner := *(**windows.SID)(unsafe.Pointer(&buf[0]))
+		if !windows.EqualSid(owner, defaultOwner) {
+			return fmt.Errorf("private directory must be owned by this user")
+		}
 	}
 	desired, err := privateSocketSD()
 	if err != nil {
@@ -129,7 +144,7 @@ func protectWindowsDir(dir string) error {
 	if err != nil {
 		return err
 	}
-	return windows.SetNamedSecurityInfo(dir, windows.SE_FILE_OBJECT, windows.DACL_SECURITY_INFORMATION|windows.PROTECTED_DACL_SECURITY_INFORMATION, nil, nil, acl, nil)
+	return windows.SetNamedSecurityInfo(dir, windows.SE_FILE_OBJECT, windows.OWNER_SECURITY_INFORMATION|windows.DACL_SECURITY_INFORMATION|windows.PROTECTED_DACL_SECURITY_INFORMATION, u.User.Sid, nil, acl, nil)
 }
 func privateKey(path string, _ os.FileInfo) error { return checkPrivateWindowsObject(path, false) }
 

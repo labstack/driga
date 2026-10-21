@@ -80,10 +80,6 @@ func TestTemporaryCwdViaSymlinkedTempRoot(t *testing.T) {
 }
 
 func TestLinuxTempCwdVarTmp(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Unix path or action contract; Windows phase 1 has dedicated watch/refusal tests")
-	}
-
 	t.Setenv("TMPDIR", t.TempDir())
 	for _, cwd := range []string{"/var/tmp", "/var/tmp/driga-synthetic/session"} {
 		if !temporaryCwd(cwd) {
