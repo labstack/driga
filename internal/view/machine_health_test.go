@@ -179,3 +179,33 @@ func TestMachineAttributionUsesKnownCheckoutRoot(t *testing.T) {
 		}
 	}
 }
+
+func TestRenderMachineAgentsFirst(t *testing.T) {
+	v := shareFixture(t, true, true)
+	var b bytes.Buffer
+	if err := Render(&b, v, RenderOpts{NoColor: true}); err != nil {
+		t.Fatal(err)
+	}
+	text := b.String()
+	if !strings.HasPrefix(text, "agents ") || strings.Index(text, "Sessions by cost") < 0 || strings.Index(text, "Other apps") < strings.Index(text, "Sessions by cost") {
+		t.Fatal(text)
+	}
+	for _, want := range []string{"started by", "Agent processes without a session", "Likely agent work (shared with editor)", "Agent memory by role"} {
+		if !strings.Contains(text, want) {
+			t.Error("missing", want, text)
+		}
+	}
+}
+func TestMCPTrendMarkerObservedGrowth(t *testing.T) {
+	text := MCPTrendMarker(derive.MCPTrend{State: "leaking", RatePerHour: 2, FirstSample: time.Unix(1, 0)})
+	if !strings.Contains(text, "observed growth") || strings.Contains(text, "leak") {
+		t.Fatal(text)
+	}
+}
+func TestMCPCommandSummaryHelperLabel(t *testing.T) {
+	for _, tc := range []struct{ name, label string }{{"weather-mcp", "2 servers"}, {"mcp server", "2 servers"}, {"tsserver.js", "2 helper processes"}, {"notmcp", "2 helper processes"}} {
+		if got := MCPCommandSummary(derive.MCPCommand{Name: tc.name, Count: 2}); !strings.Contains(got, tc.label) {
+			t.Fatal(got)
+		}
+	}
+}

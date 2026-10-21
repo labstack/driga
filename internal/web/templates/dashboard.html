@@ -270,30 +270,35 @@
 </article>{{end}}{{end}}
 </section>
 <section data-pane tabindex="0" class="pane">
-<div class="pt"><b>resource readings</b><span>latest stored samples</span></div>{{template "gauges" .}}
+<div class="pt"><b>agent resource readings</b><span>latest stored samples</span></div>
 {{range .Machine.Machines}}
-<article aria-label="Whole machine apps">
+<article aria-label="Agent costs" data-machine-id="{{.MachineID}}">
 <h3>{{.MachineName}} · Machine</h3>
-<p class="muted">OS pressure: {{.Sample.PressureLevel}} · Memory measures are labelled per process.</p>
-<dl class="metrics"><div><dt>compressed</dt><dd>{{bytes .Sample.MemCompressed}}</dd></div></dl>
-<section aria-label="MCP servers"><h4>MCP servers</h4>
+<p>{{machineSummary .}}</p><p class="note">Memory measure: {{.AgentShare.MemoryMeasure}} · {{footprintNote}}</p>
+{{if not .OtherApps.ID}}<p class="muted">Older peer: agent buckets unavailable; Other apps shows the supplied top-memory totals.</p>{{end}}
+<section data-machine-rank="sessions" data-machine-id="{{.MachineID}}"><h4>Sessions by cost</h4>
+{{range topSessionCosts .SessionCosts}}<details data-machine-app="session-{{.SessionID}}"><summary>session #{{.SessionID}} · {{.Adapter}} · {{.Project}} · {{bytes .Memory}} · {{printf "%.1f" .CPUPercent}}% CPU{{if .StartedFrom}} · started from {{.StartedFrom}}{{end}}</summary>
+{{range .Processes}}{{template "machine-process" .}}{{end}}</details>{{else}}<p class="empty">No live session costs.</p>{{end}}
+</section>
+<section data-machine-rank="agent" data-machine-id="{{.MachineID}}"><h4>Agent processes without a session</h4>
+{{range .AgentNoSession}}{{template "machine-app" .}}{{end}}
+<section aria-label="MCP servers"><h4>MCP servers and helper processes</h4>
 {{range .MCPServers.Commands}}<details><summary>{{mcpSummary .}}</summary><pre>{{mcpDetails .}}</pre></details>{{end}}
 {{range .MCPServers.Pileups}}<article class="item">
 <strong>{{.Name}} pile-up · {{.Count}} processes · {{bytes .Memory}} ({{.MemoryMeasure}}){{with mcpTrend .MCPCommand}} · {{.}}{{end}}</strong>
 <p>Host: {{.Host.Name}} · PID {{.Host.PID}} · age {{duration .Host.Age}} · {{.Host.Cwd}}</p>
 <p class="muted">Host started {{stamp .Host.StartedAt}} · oldest {{stamp .OldestStart}} · newest {{stamp .NewestStart}}</p>
 <pre>{{mcpDetails .MCPCommand}}</pre><p>{{.Advice}}</p>
-</article>{{else}}<p class="empty">No MCP pile-ups.</p>{{end}}
-</section>
-<div data-machine-rank="memory" data-machine-id="{{.MachineID}}"><h4>Top 10 apps by memory</h4><p class="note">{{footprintNote}}</p>{{range .TopMemory}}{{template "machine-app" .}}{{else}}<p class="empty">No process readings.</p>{{end}}</div>
+</article>{{else}}<p class="empty">No MCP pile-ups.</p>{{end}}</section></section>
+{{if .LikelyAgent}}<section data-machine-rank="likely" data-machine-id="{{.MachineID}}"><h4>Likely agent work (shared with editor)</h4>{{range .LikelyAgent}}{{template "machine-app" .}}{{end}}</section>{{end}}
+<div data-machine-rank="other" data-machine-id="{{.MachineID}}">{{$other := machineOtherApps .}}<details data-machine-app="other"><summary>Other apps · {{bytes $other.Memory}} ({{$other.MemoryMeasure}}) · {{printf "%.1f" $other.CPUPercent}}% CPU</summary>
+<div data-machine-rank="memory" data-machine-id="{{.MachineID}}"><h4>Top 10 apps by memory</h4>{{range .TopMemory}}{{template "machine-app" .}}{{else}}<p class="empty">No process readings.</p>{{end}}</div>
 <div data-machine-rank="cpu" data-machine-id="{{.MachineID}}"><h4>Top 10 apps by CPU</h4>{{range .TopCPU}}{{template "machine-app" .}}{{else}}<p class="empty">No process readings.</p>{{end}}</div>
+</details></div>
+<h4>Machine vitals</h4><p>OS pressure: {{.Sample.PressureLevel}} · swap {{bytes .Sample.SwapUsed}}/{{bytes .Sample.SwapTotal}} · disk {{bytes .Sample.DiskFree}} free</p>
+<dl class="metrics"><div><dt>memory</dt><dd>{{bytes .Sample.MemUsed}}/{{bytes .Sample.MemTotal}}</dd></div><div><dt>compressed</dt><dd>{{bytes .Sample.MemCompressed}}</dd></div><div><dt>pressure free</dt><dd>{{printf "%.1f" .Sample.PressureFree}}%</dd></div><div><dt>load (1/5/15)</dt><dd>{{.Sample.Load1}} / {{.Sample.Load5}} / {{.Sample.Load15}}</dd></div><div><dt>cores</dt><dd>{{.Sample.Cores}}</dd></div></dl>
+<h4>Agent memory by role</h4>{{range .Memory}}<div class="item item-top"><span>{{.Agent}} / {{.Role}}</span><strong>{{bytes .RSS}}</strong></div>{{else}}<p class="muted">No process memory readings.</p>{{end}}
 </article>{{end}}
-<h3>Agent memory
-</h3>{{range .Machine.Memory}}
-<div data-row tabindex="-1" class="item item-top"><span>{{.MachineName}} · {{.Agent}} / {{.Role}}</span><strong>{{bytes .RSS}}</strong>
-</div>{{else}}
-<p class="muted">No process memory readings.
-</p>{{end}}
 </section>{{end}}
 
 {{define "cleanup"}}
@@ -323,7 +328,7 @@
 
 {{define "machine-app"}}
 <details class="item machine-app" data-machine-app="{{.ID}}"><summary>{{.Name}} · {{bytes .Memory}} ({{.MemoryMeasure}}) · {{printf "%.1f" .CPUPercent}}% CPU</summary>
-{{range .Processes}}<div class="item"><p>PID {{.PID}} · <code>{{.Exe}}</code> · {{bytes .Memory}} ({{.MemoryMeasure}}) · {{printf "%.1f" .CPUPercent}}% CPU</p>
-{{with .Attribution}}<p class="muted">← {{.Project}} · session #{{.SessionID}} · proof: {{.Proof}}</p>{{else}}<p class="muted">Unattributed</p>{{end}}
-</div>{{end}}</details>
+{{range .Processes}}{{template "machine-process" .}}{{end}}</details>
 {{end}}
+{{define "machine-process"}}<div class="item"><p>PID {{.PID}} · <code>{{.Exe}}</code> · {{bytes .Memory}} ({{.MemoryMeasure}}) · {{printf "%.1f" .CPUPercent}}% CPU</p>
+<p class="muted">{{attributionText .Attribution}}{{with .Attribution}} · proof: {{.Proof}}{{end}}</p></div>{{end}}

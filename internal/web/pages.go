@@ -391,10 +391,14 @@ func (p *pageData) prepare() {
 
 func templateFuncs() template.FuncMap {
 	return template.FuncMap{
-		"footprintNote": func() string { return view.FootprintNote },
-		"mcpSummary":    view.MCPCommandSummary,
-		"mcpTrend":      view.MCPCommandTrendMarker,
-		"mcpDetails":    view.MCPCommandDetails,
+		"footprintNote":    func() string { return view.FootprintNote },
+		"machineSummary":   view.MachineSummary,
+		"machineOtherApps": view.MachineOtherApps,
+		"attributionText":  view.AttributionText,
+		"topSessionCosts":  func(costs []view.SessionCost) []view.SessionCost { return costs[:min(10, len(costs))] },
+		"mcpSummary":       view.MCPCommandSummary,
+		"mcpTrend":         view.MCPCommandTrendMarker,
+		"mcpDetails":       view.MCPCommandDetails,
 		"inboxKey": func(row view.InboxRow) string {
 			key, _ := json.Marshal([]string{row.MachineID, row.ID})
 			return string(key)

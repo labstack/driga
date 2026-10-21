@@ -17,20 +17,21 @@ import (
 )
 
 type tabRow struct {
-	mcpCommand *derive.MCPCommand
-	pileup     *derive.MCPPileup
-	app        *view.MachineApp
-	attention  *view.Attention
-	cleanup    *cleanup.Candidate
-	machine    string
-	stale      bool
-	key        string
-	cells      []string
-	agent      int64
-	project    int64
-	cwd        string
-	inbox      *model.InboxItem
-	orphan     *model.Orphan
+	machineText string
+	mcpCommand  *derive.MCPCommand
+	pileup      *derive.MCPPileup
+	app         *view.MachineApp
+	attention   *view.Attention
+	cleanup     *cleanup.Candidate
+	machine     string
+	stale       bool
+	key         string
+	cells       []string
+	agent       int64
+	project     int64
+	cwd         string
+	inbox       *model.InboxItem
+	orphan      *model.Orphan
 }
 
 func (m *app) tabVisible(tab int) bool {

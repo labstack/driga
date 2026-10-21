@@ -57,7 +57,14 @@ func memoryPressureInbox(tx *store.Tx, s model.MachineSample, now time.Time, pro
 	if err := tx.ScanMCPMinutes(now, func(s model.MCPMinute) error { trends.Add(s); return nil }); err != nil {
 		return err
 	}
-	summary := memoryPressureSummary(processSamples, now, trends.Trends())
+	// Sessions are read only once the alert is due, never on every pass.
+	var sessions []model.Session
+	if len(processSamples) > 0 {
+		if sessions, err = tx.Sessions(store.SessionFilter{}); err != nil {
+			return err
+		}
+	}
+	summary := memoryPressureSummaryWithMemory(processSamples, sessions, now, trends.Trends(), s.MemUsed)
 	active, err := tx.Meta("machine:pressure_active")
 	if err != nil && !errors.Is(err, store.ErrNotFound) {
 		return err
@@ -81,10 +88,48 @@ func memoryPressureInbox(tx *store.Tx, s model.MachineSample, now time.Time, pro
 	return tx.SetMeta("machine:pressure_active", "1")
 }
 
-func memoryPressureSummary(samples [][]model.Proc, now time.Time, trends []derive.MCPTrend) string {
-	summary := "Critical memory pressure for two samples. Driga can show the largest apps by memory and CPU in Machine."
+// memoryPressureSummary uses the sampled process total when no OS reading is
+// available. The inbox supplies the actual machine memory in use below.
+func memoryPressureSummary(samples [][]model.Proc, sessions []model.Session, now time.Time, trends []derive.MCPTrend) string {
+	var total uint64
 	if len(samples) > 0 {
-		servers := derive.MCPServers(samples[0], nil, now)
+		for _, p := range samples[0] {
+			if !p.Zombie {
+				memory, _ := derive.ProcessMemory(p)
+				total += memory
+			}
+		}
+	}
+	return memoryPressureSummaryWithMemory(samples, sessions, now, trends, total)
+}
+func memoryPressureSummaryWithMemory(samples [][]model.Proc, sessions []model.Session, now time.Time, trends []derive.MCPTrend, machineMemory uint64) string {
+	var memory uint64
+	servers := derive.MCPServerView{}
+	if len(samples) > 0 {
+		servers = derive.MCPServers(samples[0], nil, now)
+	}
+	if len(samples) > 0 {
+		for _, p := range derive.PlaceProcesses(samples[0], sessions, nil) {
+			if p.Bucket == derive.BucketSession || p.Bucket == derive.BucketAgent {
+				memory += p.Memory
+			}
+		}
+	}
+	summary := "Critical memory pressure for two samples. "
+	if memory == 0 {
+		summary += fmt.Sprintf("Agents hold none of the %.1f GiB in use; other apps are the cause.", float64(machineMemory)/(1<<30))
+	} else {
+		count := 0
+		for _, c := range servers.Commands {
+			count += c.Count
+		}
+		pct := float64(0)
+		if machineMemory > 0 {
+			pct = 100 * float64(memory) / float64(machineMemory)
+		}
+		summary += fmt.Sprintf("Agents hold %.1f GiB of %.1f GiB in use (%.0f%%), %d MCP servers.", float64(memory)/(1<<30), float64(machineMemory)/(1<<30), pct, count)
+	}
+	if len(samples) > 0 {
 		derive.ApplyMCPTrends(&servers, trends)
 		if len(servers.Pileups) > 0 {
 			p := servers.Pileups[0]
@@ -105,7 +150,7 @@ func memoryPressureSummary(samples [][]model.Proc, now time.Time, trends []deriv
 			if interval < 1 {
 				cadence = fmt.Sprintf("%.0f sec", interval*60)
 			}
-			summary += fmt.Sprintf(" Largest MCP leak: %s PID %d adds about 1 %s every %s, none closed since %s (observed through %s; window starts %s; %.2g/h). Restart the named host app/session.", t.Host.Name, t.Host.PID, t.Name, cadence, t.FirstSample.In(time.Local).Format("15:04"), t.LastSample.Format(time.RFC3339), t.FirstSample.Format(time.RFC3339), t.RatePerHour)
+			summary += fmt.Sprintf(" Largest observed growth: %s PID %d adds about 1 %s every %s, none closed since %s (observed through %s; window starts %s; %.2g/h). Restart the named host app/session.", t.Host.Name, t.Host.PID, t.Name, cadence, t.FirstSample.In(time.Local).Format("15:04"), t.LastSample.Format(time.RFC3339), t.FirstSample.Format(time.RFC3339), t.RatePerHour)
 		}
 	}
 	return summary

@@ -40,7 +40,7 @@ func (m *app) openDetail(r tabRow) {
 		for _, p := range a.Processes {
 			fmt.Fprintf(&buf, "PID %d · %s · %s (%s) · %.1f%% CPU\n", p.PID, clean(p.Exe), humanBytes(p.Memory), p.MemoryMeasure, p.CPUPercent)
 			if p.Attribution != nil {
-				fmt.Fprintf(&buf, "  ← %s · session #%d · proof: %s\n", clean(p.Attribution.Project), p.Attribution.SessionID, p.Attribution.Proof)
+				fmt.Fprintf(&buf, "  %s · proof: %s\n", clean(view.AttributionText(p.Attribution)), p.Attribution.Proof)
 			} else {
 				fmt.Fprintln(&buf, "  unattributed")
 			}
