@@ -25,9 +25,6 @@ func (f jumpRunner) Run(ctx context.Context, name string, args ...string) ([]byt
 }
 
 func TestJumpCommand(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("terminal jump is not supported on Windows in phase 1")
-	}
 	for _, tc := range []struct {
 		name, goos, tmux string
 		clients          string
@@ -50,6 +47,9 @@ func TestJumpCommand(t *testing.T) {
 		{name: "missing", err: "no longer exists"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			if tc.goos == "" {
+				tc.goos = "linux"
+			}
 			readEnv(t)
 			t.Setenv("TMUX", tc.tmux)
 			if err := os.WriteFile(config.Path(), []byte("[inbox]\njump_terminal = "+map[bool]string{true: "true", false: "false"}[tc.optIn]+"\n"), 0600); err != nil {
@@ -100,16 +100,17 @@ func TestJumpCommand(t *testing.T) {
 }
 
 func TestJumpCLIAndRunnerFailure(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Unix path or action contract; Windows phase 1 has dedicated watch/refusal tests")
-	}
 
 	readEnv(t)
 	st := readDB(t, func(tx *store.Tx) error {
 		if err := tx.UpsertInboxItem(model.InboxItem{ID: "one", Kind: "waiting", TS: time.Now()}); err != nil {
 			return err
 		}
-		return tx.SetInboxJump("one", &model.InboxJump{Kind: "tmux", Server: "/tmp/fake", Target: "dev:1.2", Command: "tmux attach"})
+		j := &model.InboxJump{Kind: "tmux", Server: "/tmp/fake", Target: "dev:1.2", Command: "tmux attach"}
+		if runtime.GOOS == "windows" {
+			j = &model.InboxJump{Kind: "resume", Cwd: t.TempDir(), Command: "codex resume one"}
+		}
+		return tx.SetInboxJump("one", j)
 	})
 	old := newInboxRunner
 	t.Cleanup(func() { newInboxRunner = old })
@@ -128,9 +129,12 @@ func TestJumpCLIAndRunnerFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := st.Tx(context.Background(), func(tx *store.Tx) error {
-		return tx.SetInboxJump("one", &model.InboxJump{Kind: "resume", Command: "codex resume 'one'"})
+		return tx.SetInboxJump("one", &model.InboxJump{Kind: "resume", Command: "codex resume 'one'", Cwd: t.TempDir()})
 	}); err != nil {
 		t.Fatal(err)
+	}
+	newInboxRunner = func() inbox.Runner {
+		return jumpRunner(func(context.Context, string, ...string) ([]byte, error) { return nil, nil })
 	}
 	readRun(t, "jump", "one")
 	out.Reset()
@@ -141,9 +145,6 @@ func TestJumpCLIAndRunnerFailure(t *testing.T) {
 }
 
 func TestJumpMissingDatabaseDoesNotCollect(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Unix path or action contract; Windows phase 1 has dedicated watch/refusal tests")
-	}
 
 	readEnv(t)
 	var out, stderr bytes.Buffer

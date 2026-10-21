@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 
@@ -159,7 +160,11 @@ func (InitCmd) Run(g *Globals) error {
 			}
 		}
 	}
-	fmt.Fprintln(out, "Service installation creates a per-user LaunchAgent and starts background collection for inbox and history. Logs: ~/Library/Logs/driga/collector.log. Undo: driga service uninstall.")
+	if runtime.GOOS == "windows" {
+		fmt.Fprintln(out, "Service installation creates a per-user Task Scheduler logon task and starts background collection for inbox and history. Logs: %LOCALAPPDATA%\\driga\\logs\\collector.log. Undo: driga service uninstall.")
+	} else {
+		fmt.Fprintln(out, "Service installation creates a per-user LaunchAgent and starts background collection for inbox and history. Logs: ~/Library/Logs/driga/collector.log. Undo: driga service uninstall.")
+	}
 	yes, err = ask("Install and start the collector service?")
 	if err != nil {
 		return err

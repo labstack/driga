@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -64,7 +65,11 @@ func CodexInstall(configPath, driga string, dryRun bool, now time.Time) (Diff, e
 	// original byte.
 	_, hadNotify := settings["notify"]
 	notify, _ := toml.Marshal(map[string]any{"notify": []string{driga, "hook", "codex", "notify"}})
-	block := "\n# driga needs-you begin\n[[hooks.PermissionRequest]]\n[[hooks.PermissionRequest.hooks]]\ntype = 'command'\ncommand = " + strconv.Quote(shellQuote(driga)+" hook codex PermissionRequest") + "\ntimeout = 3\n# driga needs-you end\n"
+	command, err := hookCommand(driga, "codex", "PermissionRequest", runtime.GOOS)
+	if err != nil {
+		return d, err
+	}
+	block := "\n# driga needs-you begin\n[[hooks.PermissionRequest]]\n[[hooks.PermissionRequest.hooks]]\ntype = 'command'\ncommand = " + strconv.Quote(command) + "\ntimeout = 3\n# driga needs-you end\n"
 	prefix := string(notify)
 	if hadNotify {
 		prefix = ""
@@ -101,7 +106,7 @@ func CodexUninstall(configPath string, dryRun bool) (Diff, error) {
 				if len(hs) == 1 {
 					h, _ := hs[0].(map[string]any)
 					cmd, _ := h["command"].(string)
-					p, rest, ok := shellProgram(cmd)
+					p, rest, ok := hookProgram(cmd)
 					if ok && ours(p, currentBinary()) && rest == " hook codex PermissionRequest" && h["type"] == "command" && h["timeout"] == int64(3) && len(h) == 3 && len(g) == 1 {
 						after := d.Before[:pos]
 						if strings.Contains(d.Before[pos:], "# driga notify added\n") && codexNotifyOurs(settings["notify"], currentBinary()) {

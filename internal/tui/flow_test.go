@@ -116,9 +116,15 @@ func TestFlowWidthsAndPulse(t *testing.T) {
 	}
 }
 func TestFlowWorkerKeysAndMouse(t *testing.T) {
-	m := setup(t, fixture(), Options{}).(*app)
+	calls := 0
+	m := setup(t, fixture(), Options{Exec: func(args []string) error {
+		calls++
+		requireFixtureTerminal(t, args)
+		return nil
+	}}).(*app)
 	m.tab = flowTab
 	m.flow = flowFixture()
+	m.flow.Children[0].Jump = fixtureLocalJump(t, *m.flow.Children[0].Jump)
 	m.width = 160
 	m.height = 44
 	m.loaded = true
@@ -140,12 +146,15 @@ func TestFlowWorkerKeysAndMouse(t *testing.T) {
 	if m.cursors[flowTab] != 1 {
 		t.Fatal("click did not select worker")
 	}
-	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
-	wantStatus := "codex resume"
-	if runtime.GOOS == "windows" {
-		wantStatus = "not yet supported on Windows"
+	_, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if cmd != nil {
+		cmd()
 	}
-	if m.detail || !strings.Contains(m.status, wantStatus) {
+	wantCalls := 0
+	if runtime.GOOS == "windows" {
+		wantCalls = 1
+	}
+	if calls != wantCalls || m.detail || !strings.Contains(m.status, "codex resume") {
 		t.Fatal("Enter did not plan selected session jump", m.status)
 	}
 }

@@ -55,17 +55,14 @@ PY
 )
 version=${tag#v}
 ldflags="-s -w -X main.version=$version -X main.commit=$commit -X main.date=$build_date"
-for target in darwin/arm64 darwin/amd64 linux/amd64 linux/arm64; do
+for target in darwin/arm64 darwin/amd64 linux/amd64 linux/arm64 windows/amd64 windows/arm64; do
 	target_os=${target%/*}
 	target_arch=${target#*/}
+	suffix=''
+	[[ $target_os != windows ]] || suffix=.exe
 	printf 'Building %s (%s)\n' "$target" "$version" >&2
 	GOOS=$target_os GOARCH=$target_arch go build -mod=readonly -trimpath -buildvcs=false \
-		-ldflags "$ldflags" -o "$work/driga_${target_os}_${target_arch}" ./cmd/driga
-done
-# Windows remains a compile check only; it is not a supported shipped platform.
-for target_arch in amd64 arm64; do
-	GOOS=windows GOARCH=$target_arch go build -mod=readonly -trimpath -buildvcs=false \
-		-ldflags "$ldflags" -o "$work/driga_windows_${target_arch}.exe" ./cmd/driga
+		-ldflags "$ldflags" -o "$work/driga_${target_os}_${target_arch}${suffix}" ./cmd/driga
 done
 
 if [[ $dry_run == false ]]; then
@@ -76,14 +73,16 @@ fi
 # Python's standard library avoids GNU/BSD tar differences. Normalize every
 # header, file mode, owner, timestamp, member order, and the gzip filename/mtime.
 python3 - "$work" "$output" "$version" "$commit" "$build_date" "$epoch" "$dry_run" "$ldflags" <<'PY'
-import gzip, io, json, pathlib, subprocess, sys, tarfile
+import gzip, io, json, pathlib, subprocess, sys, tarfile, zipfile
 work, output = map(pathlib.Path, sys.argv[1:3])
 version, commit, date, epoch, dry_run, ldflags = sys.argv[3:]
-targets = ['darwin/arm64', 'darwin/amd64', 'linux/amd64', 'linux/arm64']
+targets = ['darwin/arm64', 'darwin/amd64', 'linux/amd64', 'linux/arm64', 'windows/amd64', 'windows/arm64']
 for target in targets:
     os_name, arch = target.split('/')
+    binary = 'driga.exe' if os_name == 'windows' else 'driga'
+    suffix = '.exe' if os_name == 'windows' else ''
     files = {
-        'driga': (work / f'driga_{os_name}_{arch}').read_bytes(),
+        binary: (work / f'driga_{os_name}_{arch}{suffix}').read_bytes(),
         'README.md': pathlib.Path('README.md').read_bytes(),
         'third-party/vendor-LICENSES.txt': pathlib.Path('internal/web/static/vendor/LICENSES.txt').read_bytes(),
         'third-party/fonts-LICENSE.txt': pathlib.Path('internal/web/static/fonts/LICENSE.txt').read_bytes(),
@@ -94,21 +93,36 @@ for target in targets:
         files['NOTICE'] = pathlib.Path('NOTICE').read_bytes()
     if dry_run == 'true':
         files['NON-DISTRIBUTABLE.txt'] = b'DRY RUN ONLY. Unreviewed source; tag and license gates bypassed. Do not distribute.\n'
-    archive = output / f'driga_{version}_{os_name}_{arch}.tar.gz'
-    with archive.open('xb') as raw, gzip.GzipFile(filename='', mode='wb', fileobj=raw, mtime=0, compresslevel=9) as gz:
-        with tarfile.open(fileobj=gz, mode='w', format=tarfile.USTAR_FORMAT) as tar:
+    if os_name == 'windows':
+        from datetime import datetime, timezone
+        # ZIP uses UTC DOS timestamps (two-second resolution, >= 1980).
+        stamp = datetime.fromtimestamp(max(315532800, int(epoch)), timezone.utc)
+        timestamp = (stamp.year, stamp.month, stamp.day, stamp.hour, stamp.minute, stamp.second // 2 * 2)
+        archive = output / f'driga_{version}_{os_name}_{arch}.zip'
+        with zipfile.ZipFile(archive, 'x', compression=zipfile.ZIP_DEFLATED, compresslevel=9) as zip:
             for name, data in sorted(files.items()):
-                info = tarfile.TarInfo(name)
-                info.size, info.mtime = len(data), int(epoch)
-                info.mode = 0o755 if name == 'driga' else 0o644
-                info.uid = info.gid = 0
-                info.uname = info.gname = ''
-                tar.addfile(info, io.BytesIO(data))
+                info = zipfile.ZipInfo(name, timestamp)
+                info.create_system = 3
+                info.external_attr = (0o100755 if name == binary else 0o100644) << 16
+                info.compress_type = zipfile.ZIP_DEFLATED
+                zip.writestr(info, data, compresslevel=9)
+    else:
+        archive = output / f'driga_{version}_{os_name}_{arch}.tar.gz'
+        with archive.open('xb') as raw, gzip.GzipFile(filename='', mode='wb', fileobj=raw, mtime=0, compresslevel=9) as gz:
+            with tarfile.open(fileobj=gz, mode='w', format=tarfile.USTAR_FORMAT) as tar:
+                for name, data in sorted(files.items()):
+                    info = tarfile.TarInfo(name)
+                    info.size, info.mtime = len(data), int(epoch)
+                    info.mode = 0o755 if name == binary else 0o644
+                    info.uid = info.gid = 0
+                    info.uname = info.gname = ''
+                    tar.addfile(info, io.BytesIO(data))
+
 record = {
     'schema': 1, 'version': version, 'commit': commit, 'date': date,
     'go_version': subprocess.check_output(['go', 'env', 'GOVERSION'], text=True).strip(),
     'source': 'https://github.com/labstack/driga', 'dry_run': dry_run == 'true',
-    'targets': targets, 'compile_only': ['windows/amd64', 'windows/arm64'],
+    'targets': targets, 'compile_only': [],
     'build': {'CGO_ENABLED': '0', 'GOAMD64': 'v1', 'GOARM64': 'v8.0',
               'flags': ['-mod=readonly', '-trimpath', '-buildvcs=false', '-ldflags', ldflags]},
 }
@@ -117,7 +131,7 @@ PY
 
 (
 	cd "$output"
-	shasum -a 256 driga_*.tar.gz build-info.json >SHA256SUMS
+	shasum -a 256 driga_*.tar.gz driga_*.zip build-info.json >SHA256SUMS
 	shasum -a 256 -c SHA256SUMS
 )
 printf 'DIST_DIR=%s\n' "$output"

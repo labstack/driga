@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/labstack/driga/internal/platform"
 	"io"
 	"os"
 	"os/exec"
@@ -39,9 +38,6 @@ type HooksInstallCmd struct{ HooksOptions }
 
 // Run previews and optionally applies installation changes.
 func (c HooksInstallCmd) Run(g *Globals) error {
-	if runtime.GOOS == "windows" {
-		return platform.ErrWindowsAction
-	}
 	return c.HooksOptions.change(g, true)
 }
 
@@ -130,6 +126,9 @@ func (c HooksOptions) agent() (string, error) {
 
 func hookPaths() (claude, codex string, err error) {
 	home := os.Getenv("HOME")
+	if runtime.GOOS == "windows" {
+		home = config.ExpandHome("~")
+	}
 	if home == "" {
 		home, err = os.UserHomeDir()
 		if err != nil {
@@ -140,7 +139,11 @@ func hookPaths() (claude, codex string, err error) {
 	if codexHome == "" {
 		codexHome = filepath.Join(home, ".codex")
 	}
-	return filepath.Join(home, ".claude", "settings.json"), filepath.Join(codexHome, "config.toml"), nil
+	claudeHome := filepath.Join(home, ".claude")
+	if runtime.GOOS == "windows" && os.Getenv("CLAUDE_CONFIG_DIR") != "" {
+		claudeHome = os.Getenv("CLAUDE_CONFIG_DIR")
+	}
+	return filepath.Join(claudeHome, "settings.json"), filepath.Join(codexHome, "config.toml"), nil
 }
 
 func copilotHookPath() string {

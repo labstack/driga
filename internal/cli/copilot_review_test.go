@@ -6,7 +6,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -138,9 +137,6 @@ func TestCopilotVersionWarnings(t *testing.T) {
 				t.Fatal(tc, checks)
 			}
 			t.Run("hook install", func(t *testing.T) {
-				if runtime.GOOS == "windows" {
-					t.Skip("hook installation is not supported on Windows in phase 1")
-				}
 				var out bytes.Buffer
 				if err := (HooksInstallCmd{HooksOptions{Target: "copilot", DryRun: true}}).Run(&Globals{Stdout: &out}); err != nil {
 					t.Fatal(err)

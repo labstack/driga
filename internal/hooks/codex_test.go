@@ -24,7 +24,7 @@ func TestCodexInstallWhenUnset(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.toml")
 	before := "# keep in backup\nmodel = 'example'\n[custom]\ncount = 9007199254740993\n"
 	writeFixture(t, path, before)
-	d, err := hooks.CodexInstall(path, "/opt/tools with spaces/driga", false, testNow)
+	d, err := hooks.CodexInstall(path, testBinary("/opt/tools with spaces/driga"), false, testNow)
 	if err != nil || !d.Changed || d.Before != before || d.After != readFixture(t, path) {
 		t.Fatalf("install = %+v, %v", d, err)
 	}
@@ -43,7 +43,7 @@ func TestCodexInstallWhenUnset(t *testing.T) {
 	if info.Mode().Perm() != 0640 {
 		t.Fatalf("mode = %v", info.Mode())
 	}
-	d, err = hooks.CodexInstall(path, "/new/driga", false, testNow.Add(time.Second))
+	d, err = hooks.CodexInstall(path, testBinary("/new/driga"), false, testNow.Add(time.Second))
 	if err != nil || d.Changed || d.Before != d.After {
 		t.Fatalf("repeat = %+v, %v", d, err)
 	}
@@ -57,15 +57,12 @@ func TestCodexInstallWhenUnset(t *testing.T) {
 // permission hook: the hook is a separate table, so install appends it and
 // leaves the foreign notify bytes alone, and uninstall restores the original.
 func TestCodexInstallKeepsForeignNotify(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("hook installation is not supported on Windows in phase 1")
-	}
 	for _, value := range []string{`["x", "y"]`, `[]`, `"custom"`, `["/opt/driga", "hook", "codex", "different"]`} {
 		t.Run(value, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "config.toml")
 			before := "# preserve me\nnotify = " + value + "\n"
 			writeFixture(t, path, before)
-			d, err := hooks.CodexInstall(path, "/opt/driga", false, testNow)
+			d, err := hooks.CodexInstall(path, testBinary("/opt/driga"), false, testNow)
 			if err != nil || !d.Changed || !strings.HasPrefix(d.After, before) || !strings.Contains(d.After, "[[hooks.PermissionRequest]]") || readFixture(t, path) != d.After {
 				t.Fatalf("install = %+v, %v", d, err)
 			}
@@ -112,7 +109,7 @@ func TestCodexDryRunAndMissingFile(t *testing.T) {
 	}
 
 	path := filepath.Join(t.TempDir(), ".codex", "config.toml")
-	d, err := hooks.CodexInstall(path, "/opt/driga", true, testNow)
+	d, err := hooks.CodexInstall(path, testBinary("/opt/driga"), true, testNow)
 	if err != nil || !d.Changed {
 		t.Fatalf("dry install = %+v, %v", d, err)
 	}
@@ -122,7 +119,7 @@ func TestCodexDryRunAndMissingFile(t *testing.T) {
 	if _, err := hooks.CodexUninstall(path, false); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := hooks.CodexInstall(path, "/opt/driga", false, testNow); err != nil {
+	if _, err := hooks.CodexInstall(path, testBinary("/opt/driga"), false, testNow); err != nil {
 		t.Fatal(err)
 	}
 	file, _ := os.Stat(path)
@@ -134,6 +131,9 @@ func TestCodexDryRunAndMissingFile(t *testing.T) {
 
 func runHooksCLI(t *testing.T, input string, args ...string) string {
 	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(os.Getenv("HOME"), ".claude"))
+	}
 	t.Setenv("COPILOT_HOME", filepath.Join(os.Getenv("HOME"), ".copilot"))
 	// Installers probe agent CLIs (copilot --version); never reach real ones.
 	t.Setenv("PATH", t.TempDir())
@@ -157,9 +157,6 @@ func runHooksCLI(t *testing.T, input string, args ...string) string {
 }
 
 func TestHooksCLIConfirmationAndStatus(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("hook installation is not supported on Windows in phase 1")
-	}
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", os.Getenv("HOME"))
@@ -203,9 +200,6 @@ func TestHooksCLIConfirmationAndStatus(t *testing.T) {
 }
 
 func TestHooksCLICodexForeignNotify(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("hook installation is not supported on Windows in phase 1")
-	}
 	home, codexHome := t.TempDir(), t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", os.Getenv("HOME"))

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -74,9 +73,6 @@ func TestCopilotCaptureFailOpen(t *testing.T) {
 }
 
 func TestCopilotHooksCLIAndDoctor(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Unix service or hook path contract; Windows has watch/refusal tests")
-	}
 	hookTestEnv(t)
 	home := os.Getenv("HOME")
 	t.Setenv("COPILOT_HOME", filepath.Join(home, "copilot-custom"))
@@ -110,7 +106,7 @@ func TestCopilotHooksCLIAndDoctor(t *testing.T) {
 	d.CopilotHome = filepath.Dir(filepath.Dir(path))
 	t.Setenv("COPILOT_HOME", d.CopilotHome)
 	requireCheck(t, Doctor(context.Background(), d), "hooks:copilot", "ok", "")
-	if _, err := hooks.CopilotInstall(path, "/old/driga", false, time.Now()); err != nil {
+	if _, err := hooks.CopilotInstall(path, filepath.Join(t.TempDir(), "old", "driga"), false, time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	c := requireCheck(t, Doctor(context.Background(), d), "hooks:copilot", "warn", "driga hooks install copilot")

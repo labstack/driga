@@ -19,14 +19,27 @@ sbom)
 	syft version -o json | python3 -c 'import json,sys; sys.exit(0 if json.load(sys.stdin)["version"].removeprefix("v") == "1.33.0" else "requires syft 1.33.0")'
 	work=$(mktemp -d "${TMPDIR:-/tmp}/driga-sbom.XXXXXX")
 	trap 'rm -rf "$work"' EXIT
-	for archive in driga_*.tar.gz; do
-		sbom=${archive%.tar.gz}.spdx.json
+	shopt -s nullglob # Older qualified outputs may contain only tar archives.
+	for archive in driga_*.tar.gz driga_*.zip; do
+		base=${archive%.tar.gz}
+		base=${base%.zip}
+		sbom=$base.spdx.json
 		[[ ! -e $sbom ]] || die "refusing to replace $sbom"
-		tar -xzf "$archive" -C "$work" driga
-		SYFT_CHECK_FOR_APP_UPDATE=false syft scan "file:$work/driga" -o "spdx-json=$output/$sbom"
+		binary=driga
+		if [[ $archive == *.zip ]]; then
+			binary=driga.exe
+			python3 - "$archive" "$work/$binary" <<'PYZIP'
+import pathlib, sys, zipfile
+with zipfile.ZipFile(sys.argv[1]) as archive:
+    pathlib.Path(sys.argv[2]).write_bytes(archive.read('driga.exe'))
+PYZIP
+		else
+			tar -xzf "$archive" -C "$work" driga
+		fi
+		SYFT_CHECK_FOR_APP_UPDATE=false syft scan "file:$work/$binary" -o "spdx-json=$output/$sbom"
 	done
 	# Include SBOMs in the manifest that is subsequently signed.
-	shasum -a 256 driga_*.tar.gz build-info.json driga_*.spdx.json >"$work/SHA256SUMS"
+	shasum -a 256 driga_*.tar.gz driga_*.zip build-info.json driga_*.spdx.json >"$work/SHA256SUMS"
 	mv "$work/SHA256SUMS" SHA256SUMS
 	shasum -a 256 -c SHA256SUMS
 	;;

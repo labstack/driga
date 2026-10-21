@@ -8,7 +8,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"time"
 
@@ -112,10 +111,6 @@ func snapshotHint(w io.Writer, now time.Time) {
 		_, err = io.WriteString(f, date+"\n")
 	}
 	if err != nil {
-		return
-	}
-	if runtime.GOOS == "windows" {
-		fmt.Fprintln(w, "snapshot · no history — run 'driga collect' in a foreground terminal for history")
 		return
 	}
 	fmt.Fprintln(w, "snapshot · no history — run 'driga service install' for inbox & history")

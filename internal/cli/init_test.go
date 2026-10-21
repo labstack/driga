@@ -215,9 +215,6 @@ func TestTask18CommandParsing(t *testing.T) {
 }
 
 func TestServiceLogsLast50(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Unix path or action contract; Windows phase 1 has dedicated watch/refusal tests")
-	}
 
 	if runtime.GOOS == "linux" {
 		t.Skip("linux reads collector logs from journalctl; see TestServiceLogsLinux")

@@ -17,6 +17,7 @@ import (
 )
 
 var newInboxRunner = func() inbox.Runner { return inbox.CommandRunner{} }
+var nativeToast = inbox.WindowsToast
 
 // NewDeps builds the production sources shared by collector and snapshot commands.
 func NewDeps(cfg config.Config) (collector.Deps, error) {
@@ -29,5 +30,5 @@ func NewDeps(cfg config.Config) (collector.Deps, error) {
 	if err != nil {
 		return collector.Deps{}, err
 	}
-	return collector.Deps{Cfg: cfg, Plat: platform.New(), Adapters: []adapter.Adapter{claude.New(), codex.New(), gemini.New()}, Sigs: sigs, Git: gitscan.NewScanner(4), SpoolDir: config.SpoolDir(), Now: time.Now, State: collector.NewState(), InboxRunner: runner, Notifier: inbox.DesktopNotifier{Runner: runner, DrigaPath: stablePath(exe)}}, nil
+	return collector.Deps{Cfg: cfg, Plat: platform.New(), Adapters: []adapter.Adapter{claude.New(), codex.New(), gemini.New()}, Sigs: sigs, Git: gitscan.NewScanner(4), SpoolDir: config.SpoolDir(), Now: time.Now, State: collector.NewState(), InboxRunner: runner, Notifier: inbox.DesktopNotifier{Runner: runner, DrigaPath: stablePath(exe), Toast: nativeToast}}, nil
 }

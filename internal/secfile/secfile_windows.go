@@ -51,8 +51,42 @@ func OpenFile(path string, flag int) (*os.File, error) {
 	if err := Protect(path); err != nil {
 		return nil, err
 	}
-	// Do not recreate a file deleted between creation/protection and open.
-	return os.OpenFile(path, flag&^(os.O_CREATE|os.O_EXCL), 0600)
+	// Keep delete sharing for the lifetime of the writer, not just creation.
+	// Legacy spool migration can unlink a hard-linked day file while a hook
+	// finishes appending through its existing handle.
+	p, err := windows.UTF16PtrFromString(path)
+	if err != nil {
+		return nil, err
+	}
+	access := uint32(windows.GENERIC_READ)
+	switch flag & (os.O_WRONLY | os.O_RDWR) {
+	case os.O_WRONLY:
+		access = windows.GENERIC_WRITE
+	case os.O_RDWR:
+		access = windows.GENERIC_READ | windows.GENERIC_WRITE
+	}
+	if flag&os.O_APPEND != 0 {
+		if flag&os.O_TRUNC == 0 {
+			access &^= windows.GENERIC_WRITE
+		}
+		access |= windows.FILE_APPEND_DATA | windows.FILE_WRITE_ATTRIBUTES | windows.FILE_WRITE_EA | windows.STANDARD_RIGHTS_WRITE | windows.SYNCHRONIZE
+	}
+	attrs := uint32(windows.FILE_ATTRIBUTE_NORMAL)
+	if flag&os.O_SYNC != 0 {
+		attrs |= windows.FILE_FLAG_WRITE_THROUGH
+	}
+	h, err := windows.CreateFile(p, access, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE, nil, windows.OPEN_EXISTING, attrs, 0)
+	if err != nil {
+		return nil, &os.PathError{Op: "open", Path: path, Err: err}
+	}
+	f := os.NewFile(uintptr(h), path)
+	if flag&os.O_TRUNC != 0 {
+		if err := f.Truncate(0); err != nil {
+			f.Close()
+			return nil, err
+		}
+	}
+	return f, nil
 }
 
 func ProtectFile(f *os.File) error { return Protect(f.Name()) }

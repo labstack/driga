@@ -142,9 +142,6 @@ func TestSinceYesterday(t *testing.T) {
 }
 
 func TestReadFallsBackToSnapshot(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Unix service or hook path contract; Windows has watch/refusal tests")
-	}
 	readEnv(t)
 	for i := 0; i < 2; i++ {
 		out, errout := readRun(t, "--json")

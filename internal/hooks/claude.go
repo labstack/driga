@@ -10,11 +10,14 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 	"unicode"
+
+	"github.com/labstack/driga/internal/pathx"
 )
 
 // Diff contains the complete original and proposed file contents.
@@ -184,11 +187,13 @@ func ClaudeInstall(settingsPath, driga string, dryRun bool, now time.Time) (Diff
 		if hasClaudeHook(groups, driga) {
 			continue
 		}
+		entry, err := hookEntry(driga, "claude", event, runtime.GOOS)
+		if err != nil {
+			return d, err
+		}
 		h[event] = append(groups, map[string]any{
 			"matcher": "",
-			"hooks": []any{map[string]any{
-				"type": "command", "command": shellQuote(driga) + " hook claude " + event,
-			}},
+			"hooks":   []any{entry},
 		})
 		d.Changed = true
 	}
@@ -377,12 +382,20 @@ func hasClaudeHook(groups []any, driga string) bool {
 func isClaudeHook(value any, driga string) bool {
 	entry, _ := value.(map[string]any)
 	command, _ := entry["command"].(string)
-	program, rest, ok := shellProgram(command)
+	if args, exists := entry["args"]; runtime.GOOS == "windows" && exists {
+		words, ok := args.([]any)
+		return ok && len(words) == 3 && words[0] == "hook" && words[1] == "claude" && ours(command, driga)
+	}
+	program, rest, ok := hookProgram(command)
 	return ok && ours(program, driga) && strings.HasPrefix(rest, " hook ")
 }
 
 func ours(program, driga string) bool {
-	return program != "" && ((driga != "" && program == driga) || filepath.Base(program) == "driga")
+	match := program == driga
+	if runtime.GOOS == "windows" {
+		match = pathx.Equal(program, driga)
+	}
+	return program != "" && ((driga != "" && match) || filepath.Base(program) == "driga" || runtime.GOOS == "windows" && strings.EqualFold(filepath.Base(program), "driga.exe"))
 }
 
 func currentBinary() string {

@@ -12,9 +12,6 @@ import (
 )
 
 func TestHooksOTLPCLI(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Unix path or action contract; Windows phase 1 has dedicated watch/refusal tests")
-	}
 
 	g, out := initFixture(t, "y\n")
 	cmd := HooksInstallCmd{HooksOptions: HooksOptions{Agent: "claude", OTLP: true, Traces: true, DryRun: true}}
@@ -115,9 +112,6 @@ func TestHooksInstallUsesUnresolvedExecutable(t *testing.T) {
 }
 
 func TestHooksConfiguredEndpoint(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Unix path or action contract; Windows phase 1 has dedicated watch/refusal tests")
-	}
 
 	g, out := initFixture(t, "y\n")
 	if err := os.MkdirAll(filepath.Dir(os.Getenv("DRIGA_CONFIG")), 0700); err != nil {
@@ -151,9 +145,6 @@ func (r *editingPrompt) Read(b []byte) (int, error) {
 	return copy(b, "y\n"), nil
 }
 func TestHooksCLIRejectsEditAfterPreview(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Unix path or action contract; Windows phase 1 has dedicated watch/refusal tests")
-	}
 
 	g, _ := initFixture(t, "")
 	path := filepath.Join(os.Getenv("HOME"), ".claude", "settings.json")

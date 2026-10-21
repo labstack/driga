@@ -15,9 +15,13 @@ func TestNeedsYouInboxJumpAndHeader(t *testing.T) {
 	f.snap.Inbox.Rows[0].Tool = "Bash"
 	f.snap.Inbox.Rows[0].WaitingSinceAt = f.snap.ObservedAt.Add(-time.Minute)
 	f.snap.Inbox.Rows[0].TS = f.snap.Inbox.Rows[0].WaitingSinceAt
-	f.snap.Inbox.Rows[0].Jump = &model.InboxJump{Kind: "tmux", Target: "dev:1.2", Server: "/tmp/fake", Command: "tmux attach -t 'dev:1.2'"}
+	f.snap.Inbox.Rows[0].Jump = fixtureLocalJump(t, model.InboxJump{Kind: "tmux", Target: "dev:1.2", Server: "/tmp/fake", Command: "tmux attach -t 'dev:1.2'"})
+	calls := 0
 	m := setup(t, f, Options{Exec: func(args []string) error {
-		if strings.Join(args, " ") != "tmux -S /tmp/fake select-pane -t dev:1.2" {
+		calls++
+		if runtime.GOOS == "windows" {
+			requireFixtureTerminal(t, args)
+		} else if strings.Join(args, " ") != "tmux -S /tmp/fake select-pane -t dev:1.2" {
 			t.Fatal(args)
 		}
 		return nil
@@ -35,11 +39,7 @@ func TestNeedsYouInboxJumpAndHeader(t *testing.T) {
 	if cmd := m.openSelected(false); cmd != nil {
 		cmd()
 	}
-	wantStatus := "tmux attach"
-	if runtime.GOOS == "windows" {
-		wantStatus = "not yet supported on Windows"
-	}
-	if m.detail || !strings.Contains(m.status, wantStatus) {
+	if calls != 1 || m.detail || !strings.Contains(m.status, "tmux attach") {
 		t.Fatal("Enter did not offer jump", m.status)
 	}
 }
@@ -53,10 +53,14 @@ func TestNeedsYouJumpSwitchesOnlySameLocalServer(t *testing.T) {
 		if remote {
 			row.MachineID = "peer"
 		}
-		row.Jump = &model.InboxJump{Kind: "tmux", Server: "/tmp/fake-socket", Target: "dev:1.2", Command: "tmux attach -t 'dev:1.2'"}
+		row.Jump = fixtureLocalJump(t, model.InboxJump{Kind: "tmux", Server: "/tmp/fake-socket", Target: "dev:1.2", Command: "tmux attach -t 'dev:1.2'"})
 		calls := 0
 		m := setup(t, f, Options{Tmux: "/tmp/fake-socket,123,0", Exec: func(args []string) error {
 			calls++
+			if runtime.GOOS == "windows" {
+				requireFixtureTerminal(t, args)
+				return nil
+			}
 			action := "switch-client"
 			if calls == 2 {
 				action = "select-pane"
@@ -72,13 +76,16 @@ func TestNeedsYouJumpSwitchesOnlySameLocalServer(t *testing.T) {
 			cmd()
 		}
 		wantCalls := 0
-		if !remote && runtime.GOOS != "windows" {
+		if !remote {
 			wantCalls = 2
+			if runtime.GOOS == "windows" {
+				wantCalls = 1
+			}
 		}
 		if calls != wantCalls {
 			t.Fatal(remote, calls, m.status)
 		}
-		if !remote && runtime.GOOS == "windows" && !strings.Contains(m.status, "not yet supported on Windows") {
+		if !strings.Contains(m.status, "tmux attach") {
 			t.Fatal(m.status)
 		}
 	}

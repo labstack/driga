@@ -115,8 +115,7 @@ The Claude, Codex, Copilot and Gemini adapters are enabled by default. Override 
 `~/.gemini/tmp/*/chats/` (or `$GEMINI_CLI_HOME`). Copilot uses hooks and process
 observations; without hooks it shows process-level sessions with unknown state.
 Install with `driga hooks install copilot`; `driga doctor` reports missing or
-stale hooks. Copilot hooks require CLI 1.0.98 or newer and are unsupported
-on Windows. Copilot session-state files are not read. Antigravity (`agy`) keeps a
+stale hooks. Copilot hooks require CLI 1.0.98 or newer. Windows support is experimental. Copilot session-state files are not read. Antigravity (`agy`) keeps a
 closed SQLite format, so Driga shows `agy` sessions from the process table only;
 `driga doctor` says so. `driga dev agy-schema` prints table and column names and
 row counts — never values — from your own `agy` databases, so support can be built
@@ -129,7 +128,10 @@ terminal-opening command using `{cwd}`; otherwise the terminal is detected.
 | SQLite database and collector state (Linux) | `$XDG_DATA_HOME/driga`, else `~/.local/share/driga/` | `DRIGA_DATA_DIR` |
 | Hook/ack spool (macOS) | `$XDG_STATE_HOME/driga/events`, else `~/Library/Application Support/driga/events/` | `DRIGA_SPOOL_DIR` |
 | Hook/ack spool (Linux) | `$XDG_STATE_HOME/driga/events`, else `~/.local/state/driga/events/` | `DRIGA_SPOOL_DIR` |
-| Configuration | `~/.config/driga/config.toml` | `DRIGA_CONFIG` |
+| SQLite database and collector state (Windows) | `%LOCALAPPDATA%\driga\` | `DRIGA_DATA_DIR` |
+| Hook/ack spool (Windows) | `%LOCALAPPDATA%\driga\events` | `DRIGA_SPOOL_DIR` |
+| Configuration (Windows) | `%APPDATA%\driga\config.toml` | `DRIGA_CONFIG` |
+| Configuration (macOS/Linux) | `~/.config/driga/config.toml` | `DRIGA_CONFIG` |
 
 Database/spool files use mode `0600`, and their directories use `0700`. Claude
 data is read under `~/.claude/`; Codex under `~/.codex/`, or `CODEX_HOME` when set.
@@ -239,6 +241,62 @@ then read it with `go tool pprof -top $(which driga) cpu.pprof`. When the window
 ends or the collector stops early, it also writes an allocation profile to
 `cpu.pprof.alloc`; inspect it with
 `go tool pprof -sample_index=alloc_space -top $(which driga) cpu.pprof.alloc`.
+
+## Windows (experimental)
+
+Windows 10 1809+ / Windows 11 support the same read interfaces, foreground
+collector, optional OTLP intake, MCP, web and fleet. Real-agent Windows behavior
+still needs hardware validation. Orphan killing, cleanup application, Claude
+scratch paths and socket/file probes remain unavailable.
+
+`driga service install` registers `\Driga\<current-user-SID>\Driga collector`
+and starts it. The task runs `driga.exe collect` with internal scheduler flags,
+at that user's logon, using the interactive token and least privilege. It has
+no password, elevation or PowerShell dependency. Failure restarts are attempted
+every minute, up to 999 times; battery operation and unlimited runtime are enabled.
+It stops at logout. `service stop` ends the task through Task Scheduler; SQLite
+recovers normally on restart. `restart` waits for the prior task to stop.
+Installation refuses an existing task; uninstall before changing its binary path.
+`service status` shows the task state plus collector lock/PID liveness; a running
+task alone does not prove fresh collection. Check `doctor` for freshness.
+The scheduled collector detaches its console immediately; verify whether the
+host briefly shows a console during task launch. It uses the logon environment
+and the data directory recorded at installation; set persistent user environment
+variables for custom config/spool/agent homes and PATH before logging in.
+
+Collector logs are at `%LOCALAPPDATA%\driga\logs\collector.log` (or
+`DRIGA_DATA_DIR\logs\collector.log`), bounded to 10 MiB plus one rotated file.
+`driga service logs [-f]` reads them directly. Agent homes use `%USERPROFILE%`
+and their usual overrides. Windows private files/directories use a protected
+DACL for the current user, SYSTEM and administrators.
+
+Hook setup previews the diff and preserves the same owned-file rules and edit
+checks as Unix. Claude uses the documented executable/`args` form on Windows:
+[Claude hook reference](https://code.claude.com/docs/en/hooks#command-hook-fields).
+The executable is an absolute JSON string; shell quotes are not part of an exec
+filename. This avoids Git Bash/PowerShell selection and path expansion. Use a
+Claude version supporting exec-form hooks. Copilot similarly uses absolute
+`exec` plus `args`. Codex notify uses argv; its permission hook uses
+`cmd.exe /d /c call "<absolute driga.exe>" hook codex PermissionRequest`, valid
+from cmd.exe and PowerShell. This conservative string form rejects shell
+metacharacters in the install path (including `%`, `!`, `&`, parentheses, `$`
+and backticks); choose a plain stable directory. Spaces, apostrophes and Unicode
+are supported. `CLAUDE_CONFIG_DIR`, `CODEX_HOME` and `COPILOT_HOME` are respected.
+
+Alerts use WinRT with a per-user `LabStack.Driga` notification identity, registered
+on the first alert. No PowerShell or cgo is used. Toasts are plain, without click
+activation; use `driga inbox` and `driga jump <item>` for navigation. Windows
+notification policy, Focus Assist/Do Not Disturb, and interactive desktop state
+can suppress delivery. Doctor probes availability without registering or sending;
+it reports `notifications unavailable` for native API/setting failures.
+
+For local session jumps and the TUI open action, Windows Terminal is preferred
+(`wt.exe -d <cwd>`); otherwise Driga uses
+`cmd.exe /c start "" /D <cwd> cmd.exe`. Directories are quoted for cmd.exe.
+This opens a new terminal; stored agent resume commands are shown for copying,
+never executed. Existing terminal focus by PID is deferred because ownership of
+a terminal window is not proven by the current process data. Remote cached jumps
+are never executed locally.
 
 ## Fleet setup
 

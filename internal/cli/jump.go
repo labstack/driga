@@ -3,10 +3,8 @@ package cli
 import (
 	"context"
 	"fmt"
-	"github.com/labstack/driga/internal/platform"
 	"os"
 	"path/filepath"
-	"runtime"
 	"time"
 
 	"github.com/labstack/driga/internal/config"
@@ -20,9 +18,6 @@ type JumpCmd struct {
 }
 
 func (c JumpCmd) Run(g *Globals) error {
-	if runtime.GOOS == "windows" {
-		return platform.ErrWindowsAction
-	}
 	return c.run(g, newInboxRunner(), "")
 }
 
