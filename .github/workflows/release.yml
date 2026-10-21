@@ -1,16 +1,9 @@
-# Canon: conventions/workflow.md (Release security), README.md (Pixel CI),
-# and .github/workflows/typescript.yml (runner selection and action pins).
 name: Release checks and packaging
 
 on:
   push:
-    tags: ["v*"]
+    tags: ["v[1-9][0-9][0-9][0-9].*.*"]
   workflow_dispatch:
-    inputs:
-      hosted:
-        type: boolean
-        default: false
-        description: Run on GitHub-hosted runners (spends paid minutes)
 
 permissions:
   contents: read
@@ -25,9 +18,9 @@ defaults:
 
 jobs:
   check-and-package:
-    # Dispatch on the release tag for a hosted retry. No PR trigger or credentials.
+    # Dispatch on the release tag to retry. No PR trigger or credentials.
     if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: ${{ (inputs.hosted || github.actor == 'dependabot[bot]') && fromJSON('["ubuntu-24.04"]') || fromJSON('["self-hosted","Linux","X64","pixel"]') }}
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     env:
       GOTOOLCHAIN: local
@@ -35,10 +28,18 @@ jobs:
       GOFLAGS: ""
       GOEXPERIMENT: ""
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1; Canon pin
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
+      - name: Validate calendar version tag
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          if [[ ! $TAG =~ ^v[1-9][0-9]{3}\.([1-9]|1[0-2])\.(0|[1-9][0-9]{0,18})(-alpha)?$ ]]; then
+            echo 'Expected vYYYY.M.REVISION[-alpha]' >&2
+            exit 1
+          fi
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
@@ -65,7 +66,7 @@ jobs:
         run: git merge-base --is-ancestor "$GITHUB_SHA" origin/main
       - name: Format and vet
         run: |
-          test -z "$(gofmt -l cmd/driga/*.go internal/cli/root.go internal/cli/version_test.go)"
+          test -z "$(gofmt -l .)"
           go vet ./...
       - name: Test on Linux (including binary smoke test)
         run: go test ./...
@@ -96,9 +97,9 @@ jobs:
             echo '```text'
             cat dist/SHA256SUMS
             echo '```'
-            echo 'Review README release gates before distribution. This workflow does not sign or publish.'
+            echo 'Review docs/release.md before distribution. This workflow does not sign or publish.'
           } >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2; Canon pin
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: driga-${{ github.ref_name }}-${{ github.sha }}
           path: dist/
@@ -106,5 +107,4 @@ jobs:
           retention-days: 30
     # No signing secrets are consumed here. Offline signing is a separate step
     # using scripts/release-evidence.sh and an approved managed key mount.
-    # GitHub provenance attestations may need Enterprise Cloud for private repos;
-    # Canon currently records build/integrity evidence on Team. No SLSA claim.
+    # Build metadata and checksums are retained with the artifact.

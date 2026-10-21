@@ -17,7 +17,7 @@ func TestVersionStamping(t *testing.T) {
 		args := []string{"build", "-trimpath", "-buildvcs=false", "-o", bin}
 		wantVersion, wantCommit, wantDate := "dev", "unknown", "unknown"
 		if stamped {
-			wantVersion, wantCommit, wantDate = "0.0.0-test", "0123456789abcdef", "2026-10-19T00:00:00Z"
+			wantVersion, wantCommit, wantDate = "2026.10.0-alpha", "0123456789abcdef", "2026-10-19T00:00:00Z"
 			args = append(args, "-ldflags", "-s -w -X main.version="+wantVersion+" -X main.commit="+wantCommit+" -X main.date="+wantDate)
 		}
 		build := exec.Command("go", append(args, ".")...)

@@ -3,7 +3,7 @@
 Hand-authored scenario, not captured from a user's machine. Fixed clock:
 2026-10-18T12:00:00Z. One peer, `trace-peer`, runs a Claude session `build`
 and a hosted Codex thread `review`. Labels in expected.json were reasoned from
-this scenario and the v1.5 design §§13–14 before applying the trace. Do not
+this scenario and the fleet snapshot/event contract before applying the trace. Do not
 regenerate expectations from program output or tune rules to this set.
 
 1. A snapshot at epoch A, seq 10 reports build working and review ~idle.

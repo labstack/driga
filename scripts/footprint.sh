@@ -30,7 +30,7 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-export GOCACHE=${GOCACHE:-"$repo/.superpowers/gocache"}
+export GOCACHE=${GOCACHE:-"$scratch/gocache"}
 export GOPROXY=off
 export CGO_ENABLED=0
 cd -- "$repo"

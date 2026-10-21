@@ -22,8 +22,8 @@ settings on request. Answer for this change:
     settings? Install must preview, ask, back up and round-trip every byte.
   - does it read or store more text? Capture is bounded by capture_text and
     fleet.share_text in every surface, alert and export.
-  - can it signal or kill a process? Only processes Driga started, after
-    re-verifying identity.
+  - can it signal or kill a process? Only confirmed targets, after re-verifying process identity,
+    descendants and ownership evidence.
 Write "None" for a change that cannot affect a user's machine or data.
 -->
 
@@ -48,3 +48,4 @@ None
 
 - [ ] `go test ./...` and `go test -race ./...`
 - [ ] `GOOS=linux go build ./...`
+- [ ] I have accepted the [CLA](https://github.com/labstack/driga/blob/main/CLA.md), or will when the bot asks on my first pull request.

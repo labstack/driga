@@ -1,5 +1,4 @@
-# Canon: README.md (Pixel CI) and .github/workflows/typescript.yml (runner
-# selection and action pins). Same isolation and pins as release.yml.
+# Same isolation and action pins as release.yml.
 name: CI
 
 on:
@@ -7,15 +6,7 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
-  # Escape hatch: run on GitHub-hosted runners when pixel is down or a clean
-  # image is needed. Paid minutes are manual, except that an untrusted pull
-  # request is always isolated from the persistent runner.
   workflow_dispatch:
-    inputs:
-      hosted:
-        description: "Run on GitHub-hosted runners (spends paid minutes)"
-        type: boolean
-        default: false
 
 permissions:
   contents: read
@@ -29,33 +20,9 @@ defaults:
     shell: bash
 
 jobs:
-  runners:
-    name: Choose runner
-    # The selector honors the escape hatch itself, so a hosted run never
-    # queues behind an unavailable pixel runner.
-    runs-on: ${{ (inputs.hosted || github.actor == 'dependabot[bot]' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)) && fromJSON('["ubuntu-24.04"]') || fromJSON('["self-hosted","Linux","X64","pixel"]') }}
-    timeout-minutes: 5
-    outputs:
-      linux: ${{ steps.select.outputs.linux }}
-    steps:
-      - name: Select Linux runner
-        id: select
-        env:
-          HOSTED: ${{ inputs.hosted || github.actor == 'dependabot[bot]' }}
-          UNTRUSTED_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
-        run: |
-          if [ "$HOSTED" = "true" ] || [ "$UNTRUSTED_PR" = "true" ]; then
-            echo 'linux=["ubuntu-24.04"]' >>"$GITHUB_OUTPUT"
-            echo "Runner: GitHub-hosted"
-          else
-            echo 'linux=["self-hosted","Linux","X64","pixel"]' >>"$GITHUB_OUTPUT"
-            echo "Runner: Pixel Linux"
-          fi
-
   test:
     name: Tests and build
-    needs: runners
-    runs-on: ${{ fromJSON(needs.runners.outputs.linux) }}
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
       GOTOOLCHAIN: local
@@ -63,7 +30,7 @@ jobs:
       GOFLAGS: ""
       GOEXPERIMENT: ""
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1; Canon pin
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -71,8 +38,7 @@ jobs:
           go-version-file: go.mod
           check-latest: false
           cache: false
-      # Tests must never see a real home, agent config or Driga data, on a
-      # shared runner least of all.
+      # Tests must never see a real home, agent config or Driga data.
       - name: Isolate test and build state
         run: |
           task_root=$(mktemp -d "$RUNNER_TEMP/driga-ci.XXXXXX")

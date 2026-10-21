@@ -1,10 +1,10 @@
-# Template only: choose a license, replace every placeholder, review, then copy
+# Template only: replace every placeholder, review, then copy
 # to a separately managed tap. Never populate this from a dry run or prerelease.
 class Driga < Formula
   desc "Watch local AI coding agent sessions from the terminal"
   homepage "https://github.com/labstack/driga"
   version "VERSION_PLACEHOLDER"
-  # license "SPDX_LICENSE_PLACEHOLDER" # Maintainer must choose the repository license.
+  license "Apache-2.0"
 
   depends_on "git"
 

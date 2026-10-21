@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func TestCanonJSONContract(t *testing.T) {
+func TestJSONContract(t *testing.T) {
 	at := time.Date(2026, 10, 19, 12, 0, 0, 123, time.FixedZone("offset", -7*3600))
 	e := Envelope{Schema: 2, ObservedAt: at, Data: AgentRow{Label: "stalled", Heuristic: true, Age: 1500 * time.Millisecond, Mem: 123, LastActivityAt: at}}
 	b, err := json.Marshal(e)

@@ -825,7 +825,7 @@ func passFeedRows(tx *store.Tx, now time.Time, share feed.ShareText) (map[string
 		add(feed.Summary, feed.SummaryRow{Summary: s, RepoPath: repoPaths[s.ProjectID]})
 	}
 	for _, i := range items {
-		// Cleanup's machine-level attention stays local. The v1.5 feed
+		// Cleanup's machine-level attention stays local. The fleet feed
 		// requires session keys; never publish an empty session reference.
 		if (i.Kind == "low_disk" || i.Kind == "memory_pressure") && i.SessionID == 0 {
 			continue

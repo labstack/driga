@@ -1,4 +1,4 @@
-# Machine health (Parts 1 and 4)
+# Machine health
 
 `driga machine --json` and MCP `get_machine` use the same schema 2 view:
 `sample`, `top_memory`, `top_cpu`, `mcp_servers`, and the existing `memory` agent-role totals,

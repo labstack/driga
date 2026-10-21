@@ -11,18 +11,15 @@ if [[ ${1:-} == --dry-run ]]; then
 	dry_run=true
 	shift
 fi
-[[ $# == 1 ]] || die 'usage: scripts/release.sh [--dry-run] vMAJOR.MINOR.PATCH[-PRERELEASE][+BUILD]'
+[[ $# == 1 ]] || die 'usage: scripts/release.sh [--dry-run] vYYYY.M.REVISION[-alpha]'
 tag=$1
-# SemVer 2.0: numeric prerelease identifiers cannot have leading zeros.
-python3 - "$tag" <<'PY'
+# Calendar versions: unpadded month, revision zero at each UTC month boundary.
+python3 - "$tag" <<'PYVERSION'
 import re, sys
-tag = sys.argv[1]
-number = r'(?:0|[1-9][0-9]*)'
-identifier = r'(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)'
-pattern = rf'v{number}\.{number}\.{number}(?:-{identifier}(?:\.{identifier})*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?'
-if not re.fullmatch(pattern, tag):
-    sys.exit('release: expected a v-prefixed SemVer tag')
-PY
+pattern = r'^v[1-9][0-9]{3}\.([1-9]|1[0-2])\.(0|[1-9][0-9]{0,18})(-alpha)?$'
+if not re.fullmatch(pattern, sys.argv[1]):
+    sys.exit('release: expected vYYYY.M.REVISION[-alpha] (month 1–12, no leading zeros)')
+PYVERSION
 
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 cd "$root"
@@ -93,6 +90,8 @@ for target in targets:
     }
     if pathlib.Path('LICENSE').is_file():
         files['LICENSE'] = pathlib.Path('LICENSE').read_bytes()
+    if pathlib.Path('NOTICE').is_file():
+        files['NOTICE'] = pathlib.Path('NOTICE').read_bytes()
     if dry_run == 'true':
         files['NON-DISTRIBUTABLE.txt'] = b'DRY RUN ONLY. Unreviewed source; tag and license gates bypassed. Do not distribute.\n'
     archive = output / f'driga_{version}_{os_name}_{arch}.tar.gz'

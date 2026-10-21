@@ -1,6 +1,6 @@
 @font-face{font-family:"IBM Plex Sans";src:url("/static/fonts/ibm-plex-sans-latin-400-normal.woff2") format("woff2");font-weight:400;font-display:swap}
 @font-face{font-family:"IBM Plex Sans";src:url("/static/fonts/ibm-plex-sans-latin-600-normal.woff2") format("woff2");font-weight:600;font-display:swap}
-/* Flow reference: docs/design/flow-mock.html. Roles preserve stored-data semantics. */
+/* Flow roles preserve stored-data semantics. */
 .metro{--mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;--sans:"IBM Plex Sans",system-ui,-apple-system,sans-serif;display:grid;gap:12px;min-width:0;width:100%;max-width:1400px;margin:0 auto;font:13px/1.5 var(--sans,system-ui);grid-column:1/-1}
 .metro-header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .metro h1{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;font:600 17px/1.2 var(--mono,monospace);margin:0}.metro h1 b{color:var(--accent)}.metro-sep{color:var(--line)}

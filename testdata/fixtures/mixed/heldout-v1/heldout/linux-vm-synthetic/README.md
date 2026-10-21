@@ -11,6 +11,6 @@ with reparented to systemd --user evidence. Snapshot verification remains false.
 proc/ deliberately has no pressure/memory, as in containers without PSI.
 Its meminfo gives MemAvailable/MemTotal = 25%; PSI must remain unavailable.
 Registry fields are synthetic assumptions, not evidence of Linux agent output.
-Expected labels above were reasoned by hand before collection, using v1 §7.1,
-§7.2 and v1.5 §5.8. Do not rewrite expected.json from Driga output.
+Expected labels above were reasoned by hand before collection, using the agent-state, orphan,
+and Linux process-sampling rules. Do not rewrite expected.json from Driga output.
 Empty Git objects are shared input scaffolding from the existing synthetic corpus.

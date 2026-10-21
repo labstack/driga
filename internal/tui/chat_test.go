@@ -95,9 +95,9 @@ func TestChatGoldens(t *testing.T) {
 func TestChatReadableContext(t *testing.T) {
 	m := setup(t, fixture(), Options{}).(*app)
 	m.tab, m.width = chatTab, 140
-	m.chatContext = chat.Context{Page: "agents", SessionID: 1, Project: "/Users/v/Projects/labstack/pursue", Machine: "eba4b8d2deadbeef"}
+	m.chatContext = chat.Context{Page: "agents", SessionID: 1, Project: "/Users/example/Projects/example/sample-app", Machine: "eba4b8d2deadbeef"}
 	got := m.chatView()
-	for _, want := range []string{"[agents]", "[session #1 · test title]", "[project · pursue]"} {
+	for _, want := range []string{"[agents]", "[session #1 · test title]", "[project · sample-app]"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q: %s", want, got)
 		}

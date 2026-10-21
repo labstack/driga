@@ -32,7 +32,7 @@ func TestMCPReportedCommands(t *testing.T) {
 		"playwright-mcp":           {2, 2, 0, 140, true},
 		"ChatGPT · cua node_repl":  {2, 1, 1, 66, false},
 		"ChatGPT · cua-repl.mjs":   {1, 1, 0, 16, false},
-		"monk/server mcp":          {1, 1, 0, 166, false},
+		"sample-app/server mcp":    {1, 1, 0, 166, false},
 		"maestro mcp":              {1, 1, 0, 165, false},
 	}
 	if len(got.Commands) != len(wants) {
@@ -55,7 +55,7 @@ func TestMCPReportedCommands(t *testing.T) {
 			t.Errorf("metadata: %s", encoded)
 		}
 		if c.Name == "playwright-mcp" {
-			for _, install := range []string{"/opt/homebrew/bin/node", "/Users/v/.local/share/mise/installs/node/24.1.0/bin/node"} {
+			for _, install := range []string{"/opt/homebrew/bin/node", "/Users/example/.local/share/mise/installs/node/24.1.0/bin/node"} {
 				if !strings.Contains(string(encoded), install) {
 					t.Errorf("missing install %s: %s", install, encoded)
 				}
@@ -146,7 +146,7 @@ func TestMCPLauncherReportedScale(t *testing.T) {
 		pid := int32(10 + i*2)
 		ps = append(ps,
 			model.Proc{PID: pid, PPID: 1, Cmdline: "node exec firecrawl-mcp", Footprint: 15, MemoryMeasure: "physical_footprint"},
-			model.Proc{PID: pid + 1, PPID: pid, Cmdline: "node /Users/v/.npm/_npx/12b05d58670d8359/node_modules/.bin/firecrawl-mcp", Footprint: 85, MemoryMeasure: "physical_footprint"})
+			model.Proc{PID: pid + 1, PPID: pid, Cmdline: "node /Users/example/.npm/_npx/12b05d58670d8359/node_modules/.bin/firecrawl-mcp", Footprint: 85, MemoryMeasure: "physical_footprint"})
 	}
 	for i := range 166 {
 		pid := int32(1000 + i*2)
