@@ -1,4 +1,5 @@
 {
+  "os": "linux",
   "sampled_at": "2026-10-18T18:00:00Z",
   "cores": 2,
   "mem_total_bytes": 4194304,

@@ -3,6 +3,7 @@ package kill
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"time"
 
 	"github.com/labstack/driga/internal/derive"
@@ -15,6 +16,10 @@ import (
 // membership, accumulates no CPU time, and has no socket peer outside itself.
 // It lets snapshot mode offer a kill without the background service.
 func VerifyIdle(ctx context.Context, plat platform.Platform, o model.Orphan, expect []int32, window time.Duration) (bool, string, error) {
+	return verifyIdle(ctx, plat, o, expect, window, runtime.GOOS == "windows")
+}
+
+func verifyIdle(ctx context.Context, plat platform.Platform, o model.Orphan, expect []int32, window time.Duration, windows bool) (bool, string, error) {
 	prober, ok := plat.(platform.SocketProber)
 	if !ok {
 		return false, "cannot check sockets on this platform", nil
@@ -35,7 +40,12 @@ func VerifyIdle(ctx context.Context, plat platform.Platform, o model.Orphan, exp
 		return false, reason, err
 	}
 	// CPUSeconds has tick granularity; 10ms over the window is noise, not work.
-	if grew := second - first; grew > 0.01 {
+	if windows {
+		if reason := windowsTreeChanged(first.tree, second.tree); reason != "" {
+			return false, reason, nil
+		}
+	}
+	if grew := second.cpu - first.cpu; grew > 0.01 {
 		return false, fmt.Sprintf("used %.2fs CPU in %s", grew, window), nil
 	}
 	pids := append([]int32{o.RootPID}, expect...)
@@ -44,6 +54,9 @@ func VerifyIdle(ctx context.Context, plat platform.Platform, o model.Orphan, exp
 		return false, "", err
 	}
 	for _, pid := range pids {
+		if _, present := peers[pid]; windows && !present {
+			return false, fmt.Sprintf("socket peer check missing PID %d", pid), nil
+		}
 		if peers[pid] {
 			return false, fmt.Sprintf("pid %d has a connection outside the tree", pid), nil
 		}
@@ -53,15 +66,20 @@ func VerifyIdle(ctx context.Context, plat platform.Platform, o model.Orphan, exp
 
 // verifySample returns the tree's total CPU seconds, or a reason it no longer
 // matches the candidate.
-func verifySample(ctx context.Context, plat platform.Platform, o model.Orphan, expect []int32) (float64, string, error) {
+type idleSample struct {
+	cpu  float64
+	tree []model.Proc
+}
+
+func verifySample(ctx context.Context, plat platform.Platform, o model.Orphan, expect []int32) (idleSample, string, error) {
 	procs, err := plat.Procs(ctx)
 	if err != nil {
-		return 0, "", err
+		return idleSample{}, "", err
 	}
 	idx := derive.NewProcIndex(procs)
 	root, ok := idx.Get(o.RootPID)
 	if !ok || !root.StartTime.Equal(o.StartTime) {
-		return 0, "orphan root changed or exited", nil
+		return idleSample{}, "orphan root changed or exited", nil
 	}
 	want := make(map[int32]bool, len(expect))
 	for _, pid := range expect {
@@ -69,14 +87,14 @@ func verifySample(ctx context.Context, plat platform.Platform, o model.Orphan, e
 	}
 	desc := idx.Descendants(o.RootPID)
 	if len(desc) != len(want) {
-		return 0, "orphan descendant set changed", nil
+		return idleSample{}, "orphan descendant set changed", nil
 	}
 	cpu := root.CPUSeconds
 	for _, p := range desc {
 		if !want[p.PID] {
-			return 0, "orphan descendant set changed", nil
+			return idleSample{}, "orphan descendant set changed", nil
 		}
 		cpu += p.CPUSeconds
 	}
-	return cpu, "", nil
+	return idleSample{cpu: cpu, tree: append(desc, root)}, "", nil
 }

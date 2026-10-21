@@ -47,12 +47,13 @@ func TestOrphanVerifiedMigration(t *testing.T) {
 	if verified != 0 {
 		t.Fatal("old candidate became verified")
 	}
-	o := model.Orphan{ID: "candidate", RootPID: 2, PIDs: []int32{2}, Verified: true, FirstSeen: time.Now()}
+	start := time.Now().UTC()
+	o := model.Orphan{ID: "candidate", RootPID: 2, PIDs: []int32{2}, Verified: true, FirstSeen: time.Now(), ProcessStarts: map[int32]time.Time{2: start}}
 	if err := st.Tx(context.Background(), func(tx *Tx) error { return tx.ReplaceOrphans([]model.Orphan{o}) }); err != nil {
 		t.Fatal(err)
 	}
 	os, err := st.Orphans()
-	if err != nil || len(os) != 1 || !os[0].Verified {
+	if err != nil || len(os) != 1 || !os[0].Verified || !os[0].ProcessStarts[2].Equal(start) {
 		t.Fatalf("verified round-trip: %+v %v", os, err)
 	}
 }

@@ -8,7 +8,6 @@ import (
 	"io"
 	"os"
 	"runtime"
-	"slices"
 	"strings"
 	"time"
 
@@ -42,25 +41,26 @@ type Globals struct {
 type Root struct {
 	Globals
 
-	Summary   SummaryCmd   `cmd:"" default:"1" help:"Show a one-screen summary."`
-	Flow      FlowCmd      `cmd:"" help:"Show a session family and its state signals."`
-	Activity  ActivityCmd  `cmd:"" help:"Show the last hour of machine activity."`
-	Agents    AgentsCmd    `cmd:"" help:"List agents grouped by family."`
-	Agent     AgentCmd     `cmd:"" help:"Show session detail."`
-	Projects  ProjectsCmd  `cmd:"" help:"List project status."`
-	Summarize SummarizeCmd `cmd:"" help:"Refresh opt-in local project summaries through Claude."`
-	Ask       AskCmd       `cmd:"" help:"Ask a one-shot Chat question through Claude and driga's read-only tools."`
-	Cleanup   CleanupCmd   `cmd:"" help:"Inspect and explicitly clean local agent disk candidates."`
-	Where     WhereCmd     `cmd:"" help:"Show where a project stands."`
-	Inbox     InboxCmd     `cmd:"" help:"List attention and completion events."`
-	Jump      JumpCmd      `cmd:"" help:"Jump to a local inbox item without acknowledging it."`
-	Conflicts ConflictsCmd `cmd:"" help:"Show current and recent overlaps."`
-	Orphans   OrphansCmd   `cmd:"" help:"List orphan process trees."`
-	Machines  MachinesCmd  `cmd:"" help:"List known machines and their connection health."`
-	Machine   MachineCmd   `cmd:"" help:"Show machine health."`
-	Web       WebCmd       `cmd:"" help:"Open a read-only browser dashboard on loopback."`
-	Top       TopCmd       `cmd:"" help:"Open the interactive session viewer."`
-	MCP       MCPCmd       `cmd:"" name:"mcp" help:"Serve read-only MCP tools over stdio."`
+	Summary   SummaryCmd     `cmd:"" default:"1" help:"Show a one-screen summary."`
+	Flow      FlowCmd        `cmd:"" help:"Show a session family and its state signals."`
+	Activity  ActivityCmd    `cmd:"" help:"Show the last hour of machine activity."`
+	Agents    AgentsCmd      `cmd:"" help:"List agents grouped by family."`
+	Agent     AgentCmd       `cmd:"" help:"Show session detail."`
+	Projects  ProjectsCmd    `cmd:"" help:"List project status."`
+	Summarize SummarizeCmd   `cmd:"" help:"Refresh opt-in local project summaries through Claude."`
+	Ask       AskCmd         `cmd:"" help:"Ask a one-shot Chat question through Claude and driga's read-only tools."`
+	Cleanup   CleanupCmd     `cmd:"" help:"Inspect and explicitly clean local agent disk candidates."`
+	Where     WhereCmd       `cmd:"" help:"Show where a project stands."`
+	Inbox     InboxCmd       `cmd:"" help:"List attention and completion events."`
+	Jump      JumpCmd        `cmd:"" help:"Jump to a local inbox item without acknowledging it."`
+	Conflicts ConflictsCmd   `cmd:"" help:"Show current and recent overlaps."`
+	Orphans   OrphansCmd     `cmd:"" help:"List orphan process trees."`
+	Kill      OrphansKillCmd `cmd:"" help:"Confirm and kill driga-proven local orphan trees (alias of orphans kill)."`
+	Machines  MachinesCmd    `cmd:"" help:"List known machines and their connection health."`
+	Machine   MachineCmd     `cmd:"" help:"Show machine health."`
+	Web       WebCmd         `cmd:"" help:"Open a read-only browser dashboard on loopback."`
+	Top       TopCmd         `cmd:"" help:"Open the interactive session viewer."`
+	MCP       MCPCmd         `cmd:"" name:"mcp" help:"Serve read-only MCP tools over stdio."`
 
 	Service    ServiceCmd `cmd:"" help:"Manage the collector service."`
 	Doctor     DoctorCmd  `cmd:"" help:"Check setup and collection health."`
@@ -165,17 +165,9 @@ func run(args []string, version string, stdin io.Reader, stdout, stderr io.Write
 				panic(r)
 			}
 		}()
-		if runtime.GOOS == "windows" && slices.Contains(args, "cleanup") && slices.Contains(args, "--apply") {
-			report(platform.ErrWindowsAction, 2)
-			return 2
-		}
 		ctx, err := parser.Parse(args)
 		if err != nil {
 			report(err, 2)
-			return 2
-		}
-		if runtime.GOOS == "windows" && windowsUnsupported(ctx.Command(), root.Cleanup) {
-			report(platform.ErrWindowsAction, 2)
 			return 2
 		}
 		if root.JSON && !supportsJSON(ctx.Command()) {
@@ -228,17 +220,3 @@ type usageError struct{ error }
 
 func (usageError) ExitCode() int                    { return 2 }
 func invalidUsage(format string, args ...any) error { return usageError{fmt.Errorf(format, args...)} }
-
-func windowsUnsupported(command string, c CleanupCmd) bool {
-	words := strings.Fields(command)
-	if len(words) == 0 {
-		return false
-	}
-	switch words[0] {
-	case "orphans":
-		return len(words) > 1 && words[1] == "kill"
-	case "cleanup":
-		return c.ID != "" || c.All || c.Kind == "scratch"
-	}
-	return false
-}

@@ -18,6 +18,7 @@ import (
 
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/pathx"
+	"github.com/labstack/driga/internal/platform"
 )
 
 // NormalizePath resolves absolute paths and symlinks, including existing parents
@@ -267,7 +268,7 @@ func runGit(ctx context.Context, dir string, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "GIT_OPTIONAL_LOCKS=0")
-	out, err := cmd.Output()
+	out, err := platform.ChildOutput(cmd, false)
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}

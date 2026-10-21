@@ -46,6 +46,9 @@ func roots(e Env) []string {
 	if e.TempRoots != nil {
 		return e.TempRoots
 	}
+	if runtime.GOOS == "windows" {
+		return []string{os.TempDir()}
+	}
 	return []string{"/tmp", "/private/tmp", os.TempDir()}
 }
 func scratchCandidates(ctx context.Context, e Env, s snapshot) []Candidate {
@@ -76,7 +79,7 @@ func scratchCandidates(ctx context.Context, e Env, s snapshot) []Candidate {
 }
 func inspectScratch(ctx context.Context, e Env, s snapshot, c Candidate) (Candidate, error) {
 	if runtime.GOOS == "windows" {
-		return Candidate{}, platform.ErrWindowsAction
+		return Candidate{}, fmt.Errorf("Claude scratch cleanup refused: Windows scratch layout is unverified; open-file inspection is unavailable")
 	}
 	id := strings.TrimPrefix(c.ID, "scratch:")
 	if !validSessionID(id) {

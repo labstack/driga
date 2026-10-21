@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -22,6 +23,15 @@ type Platform interface {
 	Machine(context.Context) (model.MachineSample, error)
 	Cwds(context.Context, []int32) (map[int32]string, error)
 	Alive(pid int32, start time.Time) bool
+}
+
+// ProcessOS returns the OS that produced the process table. Live platforms use
+// the host OS; recorded sources override it even when their OS is unknown.
+func ProcessOS(p Platform) string {
+	if source, ok := p.(interface{ ProcessOS() string }); ok {
+		return source.ProcessOS()
+	}
+	return runtime.GOOS
 }
 
 // SocketProber optionally checks socket activity for a candidate process tree.
@@ -100,11 +110,3 @@ func CPUPercent(prev, cur model.Proc, dt time.Duration) float64 {
 type SubreaperFinder interface {
 	UserSubreaper() (int32, bool)
 }
-
-// ErrWindowsAction marks actions deferred beyond Windows watch support.
-var ErrWindowsAction error = windowsActionError{}
-
-type windowsActionError struct{}
-
-func (windowsActionError) Error() string { return "not yet supported on Windows" }
-func (windowsActionError) ExitCode() int { return 2 }

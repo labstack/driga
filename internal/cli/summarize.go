@@ -17,6 +17,7 @@ import (
 	"github.com/labstack/driga/internal/derive"
 	"github.com/labstack/driga/internal/llm"
 	"github.com/labstack/driga/internal/model"
+	"github.com/labstack/driga/internal/platform"
 	"github.com/labstack/driga/internal/scrub"
 	"github.com/labstack/driga/internal/spool"
 	"github.com/labstack/driga/internal/store"
@@ -116,7 +117,7 @@ func (s SummarizeCmd) run(ctx context.Context, g *Globals) error {
 			// a non-terminal stdout disables the pager.
 			cmd := exec.CommandContext(ctx, "git", "-C", w.Path, "log", "-5", "--format=%s")
 			cmd.Env = append(os.Environ(), "GIT_OPTIONAL_LOCKS=0", "GIT_TERMINAL_PROMPT=0")
-			out, err := cmd.Output()
+			out, err := platform.ChildOutput(cmd, false)
 			if err != nil {
 				return fmt.Errorf("git log for project %s: %w", repo.Name, err)
 			}

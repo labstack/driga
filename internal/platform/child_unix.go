@@ -20,3 +20,17 @@ func OwnChild(cmd *exec.Cmd) func() {
 		}
 	}
 }
+
+func RunChild(cmd *exec.Cmd) error {
+	stop := OwnChild(cmd)
+	defer stop()
+	return cmd.Run()
+}
+
+// Collector's short-lived probes retain their existing Unix execution path.
+func ChildOutput(cmd *exec.Cmd, combined bool) ([]byte, error) {
+	if combined {
+		return cmd.CombinedOutput()
+	}
+	return cmd.Output()
+}

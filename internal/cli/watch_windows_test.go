@@ -13,22 +13,16 @@ import (
 	"github.com/labstack/driga/internal/inbox"
 )
 
-func TestWindowsUnsupportedCommands(t *testing.T) {
+func TestWindowsActionCapabilities(t *testing.T) {
 	root := t.TempDir()
 	for key, value := range map[string]string{"HOME": root, "USERPROFILE": root, "APPDATA": root, "LOCALAPPDATA": root, "DRIGA_CONFIG": filepath.Join(root, "config.toml"), "DRIGA_DATA_DIR": filepath.Join(root, "data"), "DRIGA_SPOOL_DIR": filepath.Join(root, "events")} {
 		t.Setenv(key, value)
 	}
-	for _, args := range [][]string{{"orphans", "kill", "id"}, {"cleanup", "id", "--yes"}} {
-		var out, errout bytes.Buffer
-		if code := run(args, "test", strings.NewReader(""), &out, &errout); code != 2 || !strings.Contains(errout.String(), "not yet supported on Windows") {
-			t.Fatalf("%v: %d %s", args, code, errout.String())
-		}
-	}
 	checks := Doctor(context.Background(), DoctorDeps{OS: "windows", Home: root, DataDir: filepath.Join(root, "data"), Now: time.Now(), LockProbe: func(string) (bool, error) { return false, nil }})
-	for _, name := range []string{"kill", "cleanup apply", "socket probers", "file probers"} {
+	for _, name := range []string{"file probers", "Claude scratch"} {
 		found := false
 		for _, c := range checks {
-			if c.Name == name && strings.Contains(c.Detail, "not yet supported on Windows") {
+			if c.Name == name && (strings.Contains(c.Detail, "unknown") || strings.Contains(c.Detail, "refused")) {
 				found = true
 			}
 		}
@@ -36,7 +30,7 @@ func TestWindowsUnsupportedCommands(t *testing.T) {
 			t.Fatal("missing doctor check", name)
 		}
 	}
-	for _, name := range []string{"service", "hooks install", "notifications", "terminal jump"} {
+	for _, name := range []string{"service", "hooks install", "notifications", "terminal jump", "kill", "cleanup apply", "socket probers"} {
 		found := false
 		for _, c := range checks {
 			if c.Name == name && !strings.Contains(c.Detail, "not yet supported") {
@@ -44,7 +38,7 @@ func TestWindowsUnsupportedCommands(t *testing.T) {
 			}
 		}
 		if !found {
-			t.Fatal("missing phase 2 doctor check", name)
+			t.Fatal("missing Windows capability check", name)
 		}
 	}
 }

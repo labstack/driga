@@ -502,7 +502,7 @@ func TestSnapshotAllReferencesAndPrivacy(t *testing.T) {
 		if err := tx.ReplaceProcs([]model.Proc{{PID: 1, Agent: "claude", SessionID: ids["proc"], Cmdline: "claude ghp_abcdefghijklmnopqrstuvwxyz1234567890"}, {PID: 2, Cmdline: "unrelated process"}}); err != nil {
 			return err
 		}
-		if err := tx.ReplaceOrphans([]model.Orphan{{ID: "orphan", PIDs: []int32{1}, Evidence: []string{"reparented"}, Verified: true}}); err != nil {
+		if err := tx.ReplaceOrphans([]model.Orphan{{ID: "orphan", PIDs: []int32{1}, Evidence: []string{"reparented"}, Verified: true, ProcessStarts: map[int32]time.Time{1: now}}}); err != nil {
 			return err
 		}
 		if err := tx.InsertSample(model.MachineSample{TS: now, Cores: 4}); err != nil {
@@ -526,6 +526,10 @@ func TestSnapshotAllReferencesAndPrivacy(t *testing.T) {
 	}
 	if len(snap.Data.Sessions) != 4 || len(snap.Data.Handoffs) != 1 || len(snap.Data.SessionFiles) != 1 || len(snap.Data.Procs) != 1 || len(snap.Data.Orphans) != 1 {
 		t.Fatalf("snapshot %+v", snap.Data)
+	}
+	var orphan model.Orphan
+	if err := json.Unmarshal(snap.Data.Orphans[0], &orphan); err != nil || !orphan.ProcessStarts[1].Equal(now) {
+		t.Fatal("snapshot lost process identities", err)
 	}
 	b, _ := json.Marshal(snap)
 	text := string(b)

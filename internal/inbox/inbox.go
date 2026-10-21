@@ -18,6 +18,7 @@ import (
 
 	"github.com/labstack/driga/internal/config"
 	"github.com/labstack/driga/internal/model"
+	"github.com/labstack/driga/internal/platform"
 	"github.com/labstack/driga/internal/scrub"
 )
 
@@ -41,7 +42,14 @@ func (CommandRunner) Run(ctx context.Context, name string, args ...string) ([]by
 	var b limitedBuffer
 	cmd.Stdout = &b
 	cmd.Stderr = io.Discard
-	err := cmd.Run()
+	var err error
+	if runtime.GOOS == "windows" && name == "claude" {
+		// The collector's bounded `claude agents` probe owns all descendants.
+		// Terminal launch commands intentionally outlive their launcher instead.
+		err = platform.RunChild(cmd)
+	} else {
+		err = cmd.Run()
+	}
 	return b.data, err
 }
 

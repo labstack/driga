@@ -246,6 +246,8 @@ type Orphan struct {
 	Evidence  []string  `json:"evidence"`
 	FirstSeen time.Time `json:"first_seen_at"`
 	PIDs      []int32   `json:"pids"`
+	// Windows pins every member because creator PIDs survive parent exit.
+	ProcessStarts map[int32]time.Time `json:"process_starts,omitempty"`
 }
 
 // Conflict is two or more live sessions overlapping on a worktree or file.

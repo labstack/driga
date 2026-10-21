@@ -12,6 +12,7 @@ import (
 	"github.com/labstack/driga/internal/feed"
 	"github.com/labstack/driga/internal/intake"
 	"github.com/labstack/driga/internal/model"
+	"github.com/labstack/driga/internal/platform"
 	"github.com/labstack/driga/internal/scrub"
 	"github.com/labstack/driga/internal/store"
 )
@@ -308,7 +309,7 @@ func applyIntake(ctx context.Context, d Deps, st *store.Store, b intake.Batch) (
 		if err != nil {
 			return err
 		}
-		idx := derive.NewProcIndex(procs)
+		idx := derive.NewProcIndexForOS(procs, platform.ProcessOS(d.Plat))
 		items, err := tx.Inbox(time.Time{}, false)
 		if err != nil {
 			return err

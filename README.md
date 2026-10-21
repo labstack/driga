@@ -49,19 +49,25 @@ path. Use an archive or a source checkout.
 ## Windows (experimental)
 
 Windows 10 1809+ and Windows 11 have native snapshots, foreground collection,
-read commands, TUI/web/MCP, OTLP intake and fleet interfaces. Phase 2 adds:
+read commands, TUI/web/MCP, OTLP intake and fleet interfaces, plus:
 
 - A per-user Task Scheduler collector at logon: `driga service install`,
   `uninstall`, `start`, `stop`, `status`, `restart`, and `logs [-f]`; no elevation.
 - Previewed Claude, Codex and Copilot hook installation with absolute executable paths.
 - Native plain toast alerts (no PowerShell); doctor reports availability.
 - Terminal jumps/open in Windows Terminal, falling back to a new Command Prompt.
+- Confirmed killing of driga-proven orphan trees, with pinned process start
+  times, socket checks, a graceful attempt and optional forced termination.
+- Confirmed cleanup of verified linked worktrees into the Recycle Bin, with
+  the same revalidation and audit logging as Unix cleanup.
 
 Logs live at `%LOCALAPPDATA%\driga\logs\collector.log`. Keep `driga.exe` at a
-stable path before installing. Killing orphan processes, cleanup application,
-Claude scratch discovery and socket/file probes remain unavailable. Toast clicks
-and focusing an existing terminal are not implemented. Windows remains experimental
-until real agent sessions, logon/restart and notifications are verified on hardware.
+stable path before installing. Phase 3 is feature-complete pending real-machine
+verification; Windows remains **experimental**. TCP/UDP probes cover IPv4 and IPv6;
+open-file inspection stays unknown. Claude scratch cleanup stays refused because
+its Windows layout is unverified in repository fixtures. Toasts are plain and
+terminal jumps open a new window. Real agent sessions, logon/restart, notifications,
+orphan shutdown and Recycle Bin restore still need verification on Windows hardware.
 See [Windows setup details](docs/usage.md#windows-experimental).
 
 ## Quick start
