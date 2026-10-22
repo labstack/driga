@@ -87,8 +87,7 @@ permit the release identity's metadata-only fast-forward of `main`.
 
 A completed workflow does not replace platform qualification: Windows is
 experimental until real sessions, service logon/restart, hooks, terminal launch,
-and notifications have been verified on hardware. A binary rollback does not
-undo data migrations; review compatibility before changing installed versions.
+and notifications have been verified on hardware. Pre-release databases must be reset; `driga doctor` prints the reset command.
 
 ## What gets published
 

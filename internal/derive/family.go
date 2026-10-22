@@ -1,6 +1,7 @@
 package derive
 
 import (
+	"fmt"
 	"runtime"
 	"sort"
 	"time"
@@ -20,16 +21,16 @@ type ProcIndex struct {
 // NewProcIndex builds an index of live local processes without retaining the
 // caller's slice. Recorded and fleet samples must use NewProcIndexForOS.
 func NewProcIndex(procs []model.Proc) ProcIndex {
-	return NewProcIndexForOS(procs, runtime.GOOS)
+	return newProcIndex(procs, runtime.GOOS == "windows")
 }
 
 // NewProcIndexForOS uses the process source's OS, independent of the viewer.
-// The caller must supply a nonempty source OS.
-func NewProcIndexForOS(procs []model.Proc, sourceOS string) ProcIndex {
+// Missing provenance is an error at the boundary, never a panic.
+func NewProcIndexForOS(procs []model.Proc, sourceOS string) (ProcIndex, error) {
 	if sourceOS == "" {
-		panic("process source OS is required")
+		return ProcIndex{}, fmt.Errorf("process source OS is required")
 	}
-	return newProcIndex(procs, sourceOS == "windows")
+	return newProcIndex(procs, sourceOS == "windows"), nil
 }
 
 func newProcIndex(procs []model.Proc, windows bool) ProcIndex {

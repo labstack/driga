@@ -3,6 +3,8 @@ package fleet
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -29,7 +31,7 @@ func raw(t *testing.T, v any) json.RawMessage {
 	return b
 }
 func remoteSnapshot(t *testing.T, at time.Time, epoch string) *Snapshot {
-	return &Snapshot{Schema: 2, ObservedAt: at, Data: SnapshotData{Machine: raw(t, model.Machine{MachineID: "remote", Hostname: "vm"}), Cursor: Cursor{epoch, 0}, Sessions: []json.RawMessage{raw(t, feed.SessionRow{Session: model.Session{SessionObs: model.SessionObs{Adapter: "claude", ExternalID: "one", LastActivityAt: at.Add(-time.Second)}, Label: "working"}})}}}
+	return &Snapshot{Schema: 2, ObservedAt: at, Data: SnapshotData{Machine: raw(t, model.Machine{MachineID: "remote", Hostname: "vm", OS: "linux"}), Cursor: Cursor{epoch, 0}, Sessions: []json.RawMessage{raw(t, feed.SessionRow{Session: model.Session{SessionObs: model.SessionObs{Adapter: "claude", ExternalID: "one", LastActivityAt: at.Add(-time.Second)}, Label: "working"}})}}}
 }
 func apply(t *testing.T, st *store.Store, b Batch, now time.Time) {
 	t.Helper()
@@ -245,5 +247,44 @@ func TestApplyRejectsMissingEpochAndRollsBack(t *testing.T) {
 		if len(rs) != 0 || ms[0].FeedSeq != 0 {
 			t.Fatalf("partial apply: %v %v", rs, ms)
 		}
+	}
+}
+
+func TestSnapshotWithoutOSIsIncompatible(t *testing.T) {
+	st := remoteStore(t)
+	now := time.Now().UTC()
+	apply(t, st, Batch{MachineID: "remote", Snapshot: remoteSnapshot(t, now, "original")}, now)
+	snap := remoteSnapshot(t, now, "replacement")
+	snap.Data.Machine = raw(t, model.Machine{MachineID: "remote"})
+	snap.Data.Procs = []json.RawMessage{raw(t, model.Proc{PID: 99, Agent: "claude"})}
+	err := st.Tx(context.Background(), func(tx *store.Tx) error { return ApplyBatch(tx, Batch{MachineID: "remote", Snapshot: snap}, now) })
+	var incompatible *schemaError
+	if !errors.As(err, &incompatible) || !strings.Contains(err.Error(), "incompatible (schema 2): machine OS is required") {
+		t.Fatal(err)
+	}
+	machines, e := st.Machines()
+	if e != nil || len(machines) != 1 || machines[0].OS != "linux" || machines[0].FeedEpoch != "original" {
+		t.Fatalf("snapshot modified provenance/cursor: %+v %v", machines, e)
+	}
+	procs, e := st.ProcsScoped(store.Scope{})
+	if e != nil || len(procs) != 0 {
+		t.Fatalf("invalid snapshot stored processes: %+v %v", procs, e)
+	}
+}
+
+func TestMachineFeedWithoutOSIsIncompatible(t *testing.T) {
+	st := remoteStore(t)
+	now := time.Now().UTC()
+	apply(t, st, Batch{MachineID: "remote", Snapshot: remoteSnapshot(t, now, "epoch")}, now)
+	err := st.Tx(context.Background(), func(tx *store.Tx) error {
+		return ApplyBatch(tx, Batch{MachineID: "remote", Rows: []FeedRow{{Seq: 1, Kind: "machine", Payload: raw(t, model.Machine{})}}, Cursor: Cursor{"epoch", 1}}, now)
+	})
+	var incompatible *schemaError
+	if !errors.As(err, &incompatible) {
+		t.Fatal(err)
+	}
+	machines, e := st.Machines()
+	if e != nil || machines[0].OS != "linux" || machines[0].FeedSeq != 0 {
+		t.Fatalf("machine feed modified provenance/cursor: %+v %v", machines, e)
 	}
 }

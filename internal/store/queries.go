@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -82,6 +83,12 @@ const machineColumns = "id,machine_id,hostname,os,arch,cores,mem_total,first_see
 
 // UpsertMachine stores host information under the writer's machine ID.
 func (tx *Tx) UpsertMachine(m model.Machine) error {
+	// Local writes always know the machine OS, even before a health sample.
+	// Remote provenance is validated by fleet before applying process data.
+	if m.OS == "" && tx.machineID == tx.localID {
+		m.OS = runtime.GOOS
+	}
+
 	if m.Name == "" {
 		m.Name = m.Hostname
 	}

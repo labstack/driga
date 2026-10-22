@@ -9,7 +9,7 @@ import (
 	"github.com/labstack/driga/internal/model"
 )
 
-func TestFlowMigrationAndMetadataRoundTrip(t *testing.T) {
+func TestFlowMetadataRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "flow.db")
 	st, err := Open(path, ReadWrite)
 	if err != nil {

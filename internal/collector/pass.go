@@ -166,17 +166,20 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 			}
 		}
 		work.applyCwds(procs)
+		// Every pass records process provenance, even if collection is not due
+		// or the machine/process source fails this pass.
+		m, err := tx.Machine()
+		if err != nil && !errors.Is(err, store.ErrNotFound) {
+			return err
+		}
+		m.OS, m.Arch = platform.ProcessOS(d.Plat), runtime.GOARCH
+		if m.OS == "" {
+			return fmt.Errorf("process source OS is required")
+		}
+		if err := tx.UpsertMachine(m); err != nil {
+			return err
+		}
 		if procsOK {
-			// Process recordings carry provenance even when the machine sample
-			// is not due or cannot be collected.
-			m, err := tx.Machine()
-			if err != nil && !errors.Is(err, store.ErrNotFound) {
-				return err
-			}
-			m.OS, m.Arch = platform.ProcessOS(d.Plat), runtime.GOARCH
-			if err := tx.UpsertMachine(m); err != nil {
-				return err
-			}
 			due, err := tx.MCPObservationDue(now)
 			if err != nil {
 				return err
@@ -311,7 +314,10 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 		if err := observeSessions(tx, work, ss, procs, previousProcs, procsOK, now); err != nil {
 			return err
 		}
-		idx := derive.NewProcIndexForOS(procs, platform.ProcessOS(d.Plat))
+		idx, err := derive.NewProcIndexForOS(procs, platform.ProcessOS(d.Plat))
+		if err != nil {
+			return err
+		}
 		// Inbox grouping needs parent IDs before labels consume the unseen items.
 		parents := derive.LinkParents(ss, idx)
 		if err := explicitParents(tx, ss, parents); err != nil {

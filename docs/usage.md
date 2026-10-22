@@ -178,25 +178,15 @@ last-state endpoints to 30 days; `driga machine --full` labels the retained
 resolution. Unchanged observations update an endpoint without adding a state
 row. Default reports and critical-pressure alerts read at most 24 hours.
 
-Schema migration 0020 atomically discards the previous short-lived MCP trend
-history and creates the new tables. After migration, the writer rebuilds the
-database once with `VACUUM` to enable incremental auto-vacuum. The durable vacuum
-setting prevents repeat rebuilds; a failed rebuild is retried at the next
-writable open, after the already committed schema migration. This
-can delay the collector's first startup after upgrading and needs temporary
-free disk space comparable to the database size (plus the WAL). WAL readers can
-continue their existing snapshots during the rebuild; readers never run
-migrations or vacuum. New-version readers wait for the collector to finish
-upgrading the schema. The collector returns up to 256 free pages to the file
-after each hourly retention pass, without a recurring full rebuild. Long-lived
-read snapshots can delay WAL space recovery until they close.
+Pre-release databases must be reset; `driga doctor` prints the exact stop/remove/start command.
+Fresh databases enable incremental auto-vacuum before creating tables. The
+collector returns up to 256 free pages after each hourly retention pass.
+Long-lived read snapshots can delay WAL space recovery until they close.
 
 `driga doctor` warns when the database plus WAL exceeds the **500 MB**
 (500,000,000 byte) budget and lists the largest table, including its indexes.
 The budget is a diagnostic threshold; actual size depends on group turnover
-and observed state changes. A synthetic day with 200 groups and 79% unchanged
-observations measured 531,615,744 bytes with the old schema versus 20,946,944
-bytes with change storage (about 25.4× smaller), before older-hour downsampling.
+and observed state changes.
 
 After pairing, the serving peer controls what leaves that machine:
 

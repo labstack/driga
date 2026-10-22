@@ -2,7 +2,6 @@ package store
 
 import (
 	"context"
-	"database/sql"
 )
 
 // StorageBudgetBytes is the doctor warning threshold for the database plus WAL.
@@ -35,22 +34,5 @@ func (q *querier) StorageUsage() (StorageUsage, error) {
 // Readers retain their WAL snapshots throughout this operation.
 func (s *Store) ReclaimSpace(ctx context.Context) error {
 	_, err := s.db.ExecContext(ctx, "PRAGMA incremental_vacuum(256)")
-	return err
-}
-
-// enableIncrementalVacuum runs the expensive rebuild only for a database whose
-// durable page layout is not yet incremental. Read-only opens never call it.
-func enableIncrementalVacuum(ctx context.Context, db *sql.DB) error {
-	var mode int
-	if err := db.QueryRowContext(ctx, "PRAGMA auto_vacuum").Scan(&mode); err != nil {
-		return err
-	}
-	if mode == 2 {
-		return nil
-	}
-	if _, err := db.ExecContext(ctx, "PRAGMA auto_vacuum=INCREMENTAL"); err != nil {
-		return err
-	}
-	_, err := db.ExecContext(ctx, "VACUUM")
 	return err
 }

@@ -67,12 +67,6 @@ func loadTrust[T any](path string) ([]T, error) {
 	if err != nil {
 		return nil, err
 	}
-	if filepath.Base(path) == "viewers.json" {
-		b, err = migrateViewerContract(path, b)
-		if err != nil {
-			return nil, err
-		}
-	}
 	var entries []T
 	if err := json.Unmarshal(b, &entries); err != nil {
 		return nil, fmt.Errorf("trust file %s: %w", path, err)

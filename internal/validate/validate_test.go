@@ -241,7 +241,11 @@ func validateFixture(t *testing.T, src string) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		direct := derive.FindOrphans(derive.NewProcIndexForOS(procs, platform.ProcessOS(fake)), ss, sigs, sc.Now, cfg.OrphanMinAge, nil, derive.WithSubreaper(pid))
+		idx, err := derive.NewProcIndexForOS(procs, platform.ProcessOS(fake))
+		if err != nil {
+			t.Fatal(err)
+		}
+		direct := derive.FindOrphans(idx, ss, sigs, sc.Now, cfg.OrphanMinAge, nil, derive.WithSubreaper(pid))
 		ids := []string{}
 		for _, o := range direct {
 			ids = append(ids, o.ID)

@@ -198,9 +198,10 @@ validation rules. Colors respect `NO_COLOR` and `--no-color`.
 
 ## 10. Storage
 
-SQLite WAL separates the collector writer from readers. Embedded migrations
-preserve persisted contracts. Sessions, process observations, inbox events,
-source health, and per-minute histories retain their machine identity.
+SQLite WAL separates the collector writer from readers. The embedded baseline
+creates the schema; pre-release databases must be reset. Sessions, process
+observations, inbox events, source health, and per-minute histories retain
+their machine identity.
 Data and spool files use mode `0600`; private directories use `0700`.
 
 ## 11. Stack
@@ -236,7 +237,8 @@ handles paired machines. Scrubbed fixtures live under `testdata/fixtures`.
 ## 15. Testing
 
 Use adapter fixtures for format drift, derive tests for synthetic state rules,
-temporary databases for migrations, isolated collector snapshots for integration,
+temporary databases for baseline creation, isolated collector snapshots for
+integration,
 and fixed-width view snapshots for presentation. Fleet traces cover duplicate
 and out-of-order events, epoch changes, stale peers, and atomic replacement.
 All agent and Driga homes are temporary; real agent CLIs are never invoked.

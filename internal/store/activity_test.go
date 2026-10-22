@@ -98,7 +98,7 @@ func TestEventCountsSurviveSessionRetention(t *testing.T) {
 	}
 }
 
-func TestEventMinutesBackfillAndPrune(t *testing.T) {
+func TestEventMinutesPrune(t *testing.T) {
 	st, err := Open("", Memory)
 	if err != nil {
 		t.Fatal(err)
@@ -116,21 +116,9 @@ func TestEventMinutesBackfillAndPrune(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	// Recreate the pre-0007 schema and execute its actual migration against rows.
-	if _, err = st.db.Exec("DROP TABLE event_minutes"); err != nil {
-		t.Fatal(err)
-	}
-	migration, err := migrations.ReadFile("migrations/0007_event_minutes.sql")
-	if err != nil {
-		t.Fatal(err)
-	}
-	up := strings.Split(string(migration), "-- +goose Down")[0]
-	if _, err = st.db.Exec(up); err != nil {
-		t.Fatal(err)
-	}
 	counts, err := st.EventCounts(old, now)
 	if err != nil || len(counts) != 2 {
-		t.Fatalf("backfill %v %v", counts, err)
+		t.Fatalf("event counts %v %v", counts, err)
 	}
 	if err = st.Tx(context.Background(), func(tx *Tx) error { return tx.Prune(now) }); err != nil {
 		t.Fatal(err)

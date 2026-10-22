@@ -14,6 +14,8 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -25,9 +27,9 @@ import (
 type Mode int
 
 const (
-	ReadWrite Mode = iota // ReadWrite creates and migrates a disk database.
-	ReadOnly              // ReadOnly opens an existing database without migrating it.
-	Memory                // Memory creates a private, migrated snapshot database.
+	ReadWrite Mode = iota // ReadWrite creates or opens a baseline disk database.
+	ReadOnly              // ReadOnly opens an existing baseline database.
+	Memory                // Memory creates a private snapshot database with the baseline schema.
 )
 
 // ErrNotFound is returned when a requested single row does not exist.
@@ -74,7 +76,7 @@ func (tx *Tx) ForMachine(id string) *MachineTx {
 	return &MachineTx{Tx: &Tx{querier: q}}
 }
 
-// Open opens a database and migrates writable stores. Disk databases and their
+// Open opens a baseline database, creating its schema only when empty. Files and their
 // parent directories are restricted to the owner before SQLite opens the file.
 func Open(path string, mode Mode) (_ *Store, retErr error) {
 	var dsn string
@@ -85,6 +87,7 @@ func Open(path string, mode Mode) (_ *Store, retErr error) {
 		if err != nil {
 			return nil, err
 		}
+		path = abs
 		dataDir = filepath.Dir(abs)
 		if mode == ReadWrite {
 			dir := filepath.Dir(abs)
@@ -107,7 +110,7 @@ func Open(path string, mode Mode) (_ *Store, retErr error) {
 		if mode == ReadOnly {
 			dsn += "?mode=ro&_pragma=busy_timeout(5000)"
 		} else {
-			dsn += "?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)"
+			dsn += "?_pragma=busy_timeout(5000)&_pragma=synchronous(NORMAL)"
 		}
 	case Memory:
 		id, err := randomID()
@@ -135,32 +138,34 @@ func Open(path string, mode Mode) (_ *Store, retErr error) {
 	if err := db.PingContext(ctx); err != nil {
 		return nil, err
 	}
-	if mode == ReadOnly {
-		if err := checkSchema(ctx, db); err != nil {
+	var objects int
+	if err := db.QueryRowContext(ctx, "SELECT count(*) FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'").Scan(&objects); err != nil {
+		return nil, err
+	}
+	fresh := objects == 0 && mode != ReadOnly
+	if !fresh {
+		if err := checkSchema(ctx, db, path); err != nil {
 			return nil, err
 		}
 	}
-	if mode != ReadOnly {
+	if fresh {
+		// Set the page layout before goose creates even its history table.
+		if _, err := db.ExecContext(ctx, "PRAGMA auto_vacuum=INCREMENTAL"); err != nil {
+			return nil, err
+		}
 		provider, err := migrationProvider(db)
 		if err != nil {
 			return nil, err
 		}
-		// SQLite table rebuilds require foreign keys disabled outside the
-		// migration transaction. This private single connection is not exposed
-		// until migration completes and constraints have been restored.
-		if _, err := db.ExecContext(ctx, "PRAGMA foreign_keys=OFF"); err != nil {
-			return nil, err
+		if _, err := provider.Up(ctx); err != nil {
+			return nil, fmt.Errorf("create schema: %w", err)
 		}
-		_, migrateErr := provider.Up(ctx)
-		_, fkErr := db.ExecContext(ctx, "PRAGMA foreign_keys=ON")
-		if err := errors.Join(migrateErr, fkErr); err != nil {
-			return nil, fmt.Errorf("migrate: %w", err)
-		}
-		// Page-layout changes require VACUUM outside the migration transaction.
-		// Check SQLite's durable setting so an interrupted/failed rebuild can
-		// retry without repeating the already committed schema migration.
-		if err := enableIncrementalVacuum(ctx, db); err != nil {
-			return nil, fmt.Errorf("enable incremental vacuum: %w", err)
+	}
+	if mode != ReadOnly {
+		if mode == ReadWrite {
+			if _, err := db.ExecContext(ctx, "PRAGMA journal_mode=WAL"); err != nil {
+				return nil, err
+			}
 		}
 		id, err := newMachineID()
 		if err != nil {
@@ -265,36 +270,114 @@ func (q *querier) exec(query string, args ...any) error {
 	return err
 }
 
-// ErrSchemaBehind means another (older) Driga owns the database and has not
-// applied this binary's migrations yet, typically right after an upgrade.
-var ErrSchemaBehind = errors.New("database schema is older than this driga")
+// ErrSchemaPreRelease means the database must be reset, with no conversion.
+var ErrSchemaPreRelease = errors.New("database uses a pre-release schema")
+
+// ErrSchemaNewer means the database belongs to a newer driga binary.
+var ErrSchemaNewer = errors.New("database is from a newer driga")
+
+// SchemaError carries the same diagnosis and fix for writers, readers and doctor.
+type SchemaError struct {
+	Path  string
+	Newer bool
+}
+
+func (e *SchemaError) Unwrap() error {
+	if e.Newer {
+		return ErrSchemaNewer
+	}
+	return ErrSchemaPreRelease
+}
+
+func (e *SchemaError) Fix() string {
+	if e.Newer {
+		return "upgrade driga to the version that created this database"
+	}
+	return resetCommand(e.Path, runtime.GOOS)
+}
+
+func (e *SchemaError) Error() string {
+	if e.Newer {
+		return fmt.Sprintf("database at %s is from a newer driga; %s", e.Path, e.Fix())
+	}
+	return fmt.Sprintf("database at %s uses a pre-release schema; reset it: %s", e.Path, e.Fix())
+}
+
+func resetCommand(path, goos string) string {
+	paths := []string{path, path + "-wal", path + "-shm"}
+	for i, p := range paths {
+		if goos == "windows" {
+			paths[i] = "'" + strings.ReplaceAll(p, "'", "''") + "'"
+		} else {
+			paths[i] = "'" + strings.ReplaceAll(p, "'", "'\"'\"'") + "'"
+		}
+	}
+	if goos == "windows" {
+		return "driga service stop; if ($LASTEXITCODE -eq 0) { Remove-Item -LiteralPath " + strings.Join(paths, ", ") + " -Force -ErrorAction SilentlyContinue; driga service start }"
+	}
+	return "driga service stop && rm -f -- " + strings.Join(paths, " ") + " && driga service start"
+}
 
 func migrationProvider(db *sql.DB) (*goose.Provider, error) {
 	subFS, err := fs.Sub(migrations, "migrations")
 	if err != nil {
 		return nil, err
 	}
-	return goose.NewProvider(goose.DialectSQLite3, db, subFS, goose.WithDisableGlobalRegistry(true), goose.WithGoMigrations(canonMigration()))
+	return goose.NewProvider(goose.DialectSQLite3, db, subFS, goose.WithDisableGlobalRegistry(true))
 }
 
-// checkSchema lets a reader fail clearly instead of with "no such column" when
-// the database predates this binary. Readers never migrate: the collector does.
-func checkSchema(ctx context.Context, db *sql.DB) error {
-	provider, err := migrationProvider(db)
-	if err != nil {
+// checkSchema accepts only the baseline's history. It never creates or converts
+// a history table, including on read-only opens.
+func checkSchema(ctx context.Context, db *sql.DB, path string) error {
+	incompatible := &SchemaError{Path: path}
+	var marker int
+	if err := db.QueryRowContext(ctx, "PRAGMA user_version").Scan(&marker); err != nil {
 		return err
 	}
-	sources := provider.ListSources()
-	if len(sources) == 0 {
-		return nil
+	var exists int
+	if err := db.QueryRowContext(ctx, "SELECT count(*) FROM sqlite_schema WHERE type='table' AND name='goose_db_version'").Scan(&exists); err != nil {
+		return err
 	}
-	want := sources[len(sources)-1].Version
-	have, err := provider.GetDBVersion(ctx)
+	if exists != 1 {
+		return incompatible
+	}
+	rows, err := db.QueryContext(ctx, "SELECT version_id,is_applied FROM goose_db_version ORDER BY id")
 	if err != nil {
-		return fmt.Errorf("read schema version: %w", err)
+		return incompatible
 	}
-	if have < want {
-		return fmt.Errorf("%w (%d < %d); an older collector may still be running: run driga service restart", ErrSchemaBehind, have, want)
+	defer rows.Close()
+	var versions []int64
+	for rows.Next() {
+		var version int64
+		var applied bool
+		if err := rows.Scan(&version, &applied); err != nil {
+			return incompatible
+		}
+		if !applied {
+			return incompatible
+		}
+		versions = append(versions, version)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if marker < 1 || len(versions) < 2 || versions[0] != 0 || versions[1] != 1 {
+		return incompatible
+	}
+	// A newer baseline descendant has a strictly increasing history. Legacy and
+	// unknown chains lack the baseline marker and always require a reset.
+	previous := int64(1)
+	for _, v := range versions[2:] {
+		if v <= previous {
+			return incompatible
+		}
+		previous = v
+	}
+	if marker > 1 || previous > 1 {
+		return &SchemaError{Path: path, Newer: true}
+	}
+	if marker != 1 {
+		return incompatible
 	}
 	return nil
 }
