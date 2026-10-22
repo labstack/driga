@@ -140,7 +140,9 @@ func TestWindowsPrivateSocketDirectory(t *testing.T) {
 
 func TestWindowsLongDataAndTempSocketPaths(t *testing.T) {
 	root := t.TempDir()
-	longTemp := filepath.Join(root, strings.Repeat("temp-", 40))
+	// Long enough to exceed the socket limit, but below MAX_PATH: Windows
+	// rejects longer TEMP values and os.TempDir never returns for them.
+	longTemp := filepath.Join(root, strings.Repeat("temp-", 12))
 	if err := os.MkdirAll(longTemp, 0700); err != nil {
 		t.Fatal(err)
 	}

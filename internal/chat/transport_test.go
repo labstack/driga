@@ -3,6 +3,7 @@ package chat
 import (
 	"context"
 	"github.com/labstack/driga/internal/fleet"
+	"github.com/labstack/driga/internal/secfile"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -66,8 +67,12 @@ func TestSocketAndFallback(t *testing.T) {
 func TestSocketRefusesRegularFile(t *testing.T) {
 	b, _, _ := fixture(t, false)
 	dir := t.TempDir()
-	// Real data directories are private; t.TempDir follows the umask.
-	if err := os.Chmod(dir, 0700); err != nil {
+	// Listen protects the data directory before checking its socket; do the
+	// same so the fixture matches a real data directory on every OS.
+	if err := secfile.MkdirPrivate(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := secfile.Protect(dir); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("LOCALAPPDATA", t.TempDir())

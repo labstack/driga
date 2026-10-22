@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/labstack/driga/internal/chat"
 	"github.com/labstack/driga/internal/fleet"
+	"github.com/labstack/driga/internal/secfile"
 	"github.com/labstack/driga/internal/store"
 	"os"
 	"path/filepath"
@@ -23,6 +24,13 @@ func TestChatListenFailureKeepsCollectingAndServing(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(root)
+	// Run protects its data directory first; match that before the socket check.
+	if err := secfile.MkdirPrivate(root); err != nil {
+		t.Fatal(err)
+	}
+	if err := secfile.Protect(root); err != nil {
+		t.Fatal(err)
+	}
 	path := chat.SocketPath(root)
 	if err := fleet.EnsureSocketDir(path); err != nil {
 		t.Fatal(err)
