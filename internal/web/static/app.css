@@ -81,11 +81,17 @@ button:hover {
   text-overflow:ellipsis;
 }
 .seg.brand {
-  background:var(--accent);
-  color:var(--on-accent);
+  background:#bd3927;
+  color:#fff;
   font-weight:700;
   letter-spacing:.02em;
   text-decoration:none;
+}
+.brand-mark {
+  display:block;
+  width:20px;
+  height:20px;
+  flex-shrink:0;
 }
 .seg.right {
   margin-left:auto;
