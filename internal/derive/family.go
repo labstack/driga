@@ -216,7 +216,9 @@ func familyLink(links map[int64]int64, child, parent int64) {
 	links[child] = parent
 }
 
-func familySessionLive(s model.Session) bool { return s.EndedAt == nil && s.Label != "dead" }
+func familySessionLive(s model.Session) bool {
+	return s.EndedAt == nil && s.Label != "dead" && s.Label != "ended"
+}
 
 func familyLivePIDs(sessions []model.Session, idx ProcIndex) map[int32]int64 {
 	result := make(map[int32]int64)

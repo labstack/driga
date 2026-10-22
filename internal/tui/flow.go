@@ -250,7 +250,7 @@ func flowHeadCap(state string) string {
 		return "··○"
 	case "stalled":
 		return "┄┄‖"
-	case "finished", "dead":
+	case "finished", "ended", "dead":
 		return "──●"
 	default:
 		return "┈┈?"

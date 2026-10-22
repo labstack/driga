@@ -387,7 +387,7 @@ func writeGit(tx *store.Tx, repos []repoResult, scanErr error, source func(strin
 func reconcileSessions(ss []model.Session, procs []model.Proc, plat platform.Platform, now time.Time) {
 	for i := range ss {
 		s := &ss[i]
-		if s.Adapter == "copilot" && s.RegistryStatus == "ended" {
+		if (s.Adapter == "copilot" || s.Adapter == "claude") && s.RegistryStatus == "ended" {
 			if s.EndedAt == nil {
 				at := s.LastActivityAt
 				s.EndedAt = &at
@@ -404,12 +404,12 @@ func reconcileSessions(ss []model.Session, procs []model.Proc, plat platform.Pla
 	linkCodex(ss, procs, plat)
 	for i := range ss {
 		s := &ss[i]
-		if s.Adapter == "copilot" && s.RegistryStatus == "ended" {
+		if (s.Adapter == "copilot" || s.Adapter == "claude") && s.RegistryStatus == "ended" {
 			continue
 		}
 		if s.PID != 0 || s.Hosted && now.Sub(s.LastActivityAt) <= 24*time.Hour {
 			s.EndedAt = nil
-			if s.Label == "dead" {
+			if s.Label == "dead" || s.Label == "ended" {
 				s.Label = ""
 			}
 		} else if s.EndedAt == nil {
@@ -442,6 +442,7 @@ func reconcileClaude(ss []model.Session, observations []model.SessionObs, now ti
 			continue
 		}
 		s.PID, s.Hosted, s.TurnOpen = 0, false, false
+		s.RegistryStatus, s.RegistryUpdatedAt = "ended", now
 		if s.EndedAt == nil {
 			at := now
 			s.EndedAt = &at

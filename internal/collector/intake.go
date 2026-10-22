@@ -158,6 +158,24 @@ func labelSession(tx *store.Tx, d Deps, s *model.Session, idx derive.ProcIndex, 
 	s.Mixer = &mixed
 	s.Label, s.Heuristic, s.Evidence = mixed.Verdict, mixed.Heuristic, mixed.Evidence
 	s.LastPromptAt = in.LastUserPrompt
+	if s.Label == "ended" {
+		s.TurnOpen = false
+		if s.EndedAt == nil {
+			at := now
+			if in.LastLifecycle == "SessionEnd" {
+				at = in.LastLifecycleAt
+			}
+			if s.RegistryStatus == "ended" && !s.RegistryUpdatedAt.IsZero() {
+				at = s.RegistryUpdatedAt
+			}
+			s.EndedAt = &at
+		}
+		// Ending a session closes pending questions, never unread completions.
+		return tx.CloseAttentionBefore(s.ID, *s.EndedAt)
+	}
+	if s.EndedAt != nil && in.LastLifecycleAt.After(*s.EndedAt) && in.LastLifecycle != "SessionEnd" && (in.Proc != nil || in.Obs.Hosted) {
+		s.EndedAt = nil
+	}
 	return nil
 }
 

@@ -49,6 +49,16 @@ func label(in StateInput, now time.Time, th Thresholds) (label string, heuristic
 	if in.Obs.LastActivityAt.IsZero() {
 		quiet = "no activity timestamp"
 	}
+	// A registry replacement is explicit conversation termination, even if its
+	// last transcript or hook still describes an open turn.
+	if in.Obs.Adapter == "claude" && in.Obs.RegistryStatus == "ended" {
+		return "ended", false, "conversation replaced in live process"
+	}
+	gone := !in.Obs.Hosted && in.Proc == nil
+	if in.Obs.Adapter == "claude" {
+		// A transcript without a registry cannot prove Claude process loss.
+		gone = !in.Obs.Hosted && in.Obs.PID == 0 && in.Obs.RegistryStatus != ""
+	}
 	// Explicit lifecycle hooks supersede older transcript/registry observations.
 	// Newer activity and telemetry still win over delayed hook delivery.
 	if in.Obs.Adapter == "claude" || in.Obs.Adapter == "codex" {
@@ -66,15 +76,24 @@ func label(in StateInput, now time.Time, th Thresholds) (label string, heuristic
 		if !in.LastLifecycleAt.IsZero() && !in.LastLifecycleAt.Before(latest) {
 			switch in.LastLifecycle {
 			case "SessionEnd":
-				return "dead", false, "hook SessionEnd"
+				return "ended", false, "hook SessionEnd"
 			case "SessionStart", "Notification:idle_prompt":
+				if gone {
+					break
+				}
 				return "idle", false, "hook " + in.LastLifecycle
 			case "UserPromptSubmit":
+				if gone {
+					break
+				}
 				if now.Sub(in.LastLifecycleAt) >= th.StalledAfter {
 					return "stalled", false, "hook turn open, no log growth " + stateDuration(now.Sub(in.LastLifecycleAt))
 				}
 				return "working", false, "hook UserPromptSubmit"
 			case "Stop":
+				if gone {
+					return "ended", false, "process gone after hook Stop"
+				}
 				if in.Unseen {
 					return "finished", false, "hook unacknowledged Stop"
 				}
@@ -105,9 +124,17 @@ func label(in StateInput, now time.Time, th Thresholds) (label string, heuristic
 		live := in.Obs.PID != 0 || in.Obs.Hosted && copilot.Recent(in.Obs, now)
 		switch in.Obs.RegistryStatus {
 		case "ended":
-			return "finished", false, "Copilot sessionEnd"
-		case "error", "error_recoverable":
-			return "finished", false, "Copilot errorOccurred"
+			return "ended", false, "Copilot sessionEnd"
+		case "error":
+			if live {
+				return "finished", false, "Copilot errorOccurred"
+			}
+			return "dead", false, "Copilot fatal errorOccurred"
+		case "error_recoverable":
+			if !live {
+				return "ended", false, "Copilot process gone after recoverable error"
+			}
+			return "finished", false, "Copilot recoverable errorOccurred"
 		case "started":
 			if live {
 				return "idle", false, "Copilot sessionStart"
@@ -124,6 +151,9 @@ func label(in StateInput, now time.Time, th Thresholds) (label string, heuristic
 				return "working", false, "Copilot turn activity"
 			}
 		case "idle":
+			if !live {
+				return "ended", false, "Copilot process gone after completed turn"
+			}
 			if in.Unseen {
 				return "finished", false, "unacknowledged Copilot agentStop"
 			}
@@ -135,10 +165,13 @@ func label(in StateInput, now time.Time, th Thresholds) (label string, heuristic
 			return "unknown", false, "Copilot process alive; install hooks with driga hooks install copilot"
 		}
 		if in.Proc == nil {
-			if in.Obs.RegistryStatus == "idle" && in.Unseen {
-				return "finished", false, "Copilot turn completed; process gone"
+			if in.Obs.TurnOpen || in.Obs.RegistryStatus == "busy" || in.Obs.RegistryStatus == "waiting" {
+				return "dead", false, "Copilot process gone with turn still open"
 			}
-			return "dead", false, "Copilot process gone or identity unavailable"
+			if in.Obs.RegistryStatus != "" {
+				return "ended", false, "Copilot process gone with no open turn"
+			}
+			return "unknown", false, "Copilot identity unavailable; no lifecycle evidence"
 		}
 		return "unknown", false, "no recognized Copilot hook state"
 	case "claude":
@@ -152,14 +185,13 @@ func label(in StateInput, now time.Time, th Thresholds) (label string, heuristic
 			}
 		}
 		finished := in.LastStop != nil && in.LastStop.After(in.LastUserPrompt) && !in.LastStop.Before(in.LastLifecycleAt) && in.Unseen
-		// A dead registry must not look waiting or busy. Check liveness before
-		// busy rules, but preserve an unseen Stop as finished even after exit.
-		// Live sessions retain the table's busy-before-Stop rule order.
-		if in.Obs.PID == 0 && in.Obs.RegistryStatus != "" {
-			if finished {
-				return "finished", false, "unacknowledged Stop newer than last user prompt; process gone"
+		// Liveness precedes busy/waiting and unread-completion display rules.
+		// A completed turn stays in the inbox independently of session state.
+		if gone {
+			if claudeOpenTurn(in) {
+				return "dead", false, "process gone with turn still open"
 			}
-			return "dead", false, "registry present, process gone"
+			return "ended", false, "process gone with no open turn"
 		}
 		if in.LastNotification != nil && in.LastNotification.After(in.Obs.LastActivityAt) && in.LastNotification.After(cleared) {
 			return "waiting", false, "Notification newer than last activity"
@@ -195,7 +227,7 @@ func label(in StateInput, now time.Time, th Thresholds) (label string, heuristic
 		return "unknown", false, "no recognized Claude registry or hook state"
 	case "agy":
 		if in.Proc == nil {
-			return "dead", false, "agy process gone; unsupported-version: transcript schema not yet supported"
+			return "unknown", false, "agy process gone; unsupported-version: end reason unavailable"
 		}
 		return "unknown", false, "agy process alive; unsupported-version: title/state schema not yet supported"
 	case "codex", "gemini":
@@ -212,7 +244,7 @@ func label(in StateInput, now time.Time, th Thresholds) (label string, heuristic
 		}
 		if in.Proc == nil {
 			if !in.Obs.TurnOpen {
-				return "finished", false, "process gone after completed turn"
+				return "ended", false, "process gone after completed turn"
 			}
 			return "dead", false, "process gone with turn still open"
 		}
@@ -232,6 +264,45 @@ func label(in StateInput, now time.Time, th Thresholds) (label string, heuristic
 	default:
 		return "unknown", false, "unrecognized adapter"
 	}
+}
+
+// claudeOpenTurn compares positive work signals with explicit turn closures.
+// A newer idle registry or Stop closes older transcript/telemetry activity;
+// a prompt or tool/API call after that closure opens the next turn.
+func claudeOpenTurn(in StateInput) bool {
+	open := in.Obs.TurnOpen || in.Obs.RegistryStatus == "busy"
+	openedAt := in.LastUserPrompt
+	if in.Obs.TurnOpen && in.Obs.LastActivityAt.After(openedAt) {
+		openedAt = in.Obs.LastActivityAt
+	}
+	for _, ts := range []*time.Time{in.LastToolResult, in.LastAPIRequest} {
+		if ts != nil && ts.After(openedAt) {
+			openedAt = *ts
+		}
+	}
+	if in.LastLifecycle == "UserPromptSubmit" && in.LastLifecycleAt.After(openedAt) {
+		openedAt = in.LastLifecycleAt
+	}
+	closedAt := time.Time{}
+	if in.Obs.RegistryStatus == "idle" || in.Obs.RegistryStatus == "shell" {
+		closedAt = in.Obs.RegistryUpdatedAt
+	}
+	if in.LastStop != nil && in.LastStop.After(closedAt) {
+		closedAt = *in.LastStop
+	}
+	switch in.LastLifecycle {
+	case "Stop", "SessionStart", "Notification:idle_prompt":
+		if in.LastLifecycleAt.After(closedAt) {
+			closedAt = in.LastLifecycleAt
+		}
+	}
+	if !openedAt.IsZero() && openedAt.After(closedAt) {
+		open = true
+	}
+	if !closedAt.IsZero() && !closedAt.Before(openedAt) && !closedAt.Before(in.Obs.RegistryUpdatedAt) {
+		open = false
+	}
+	return open
 }
 
 func stateDuration(d time.Duration) string {

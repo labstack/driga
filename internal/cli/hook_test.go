@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -43,7 +44,17 @@ func TestHookUsesRuntimeSpoolAndStructuredRotatedErrors(t *testing.T) {
 	if err := cmd.Run(&Globals{Stdin: strings.NewReader(`{"session_id":"new-location"}`)}); err != nil {
 		t.Fatal(err)
 	}
-	events, _, err := spool.Drain(config.SpoolDir(), nil)
+	d, err := NewDeps(config.Default())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.SpoolDir != config.SpoolDir() {
+		t.Fatal("hook and collector spool differ", d.SpoolDir, config.SpoolDir())
+	}
+	if runtime.GOOS == "darwin" && d.SpoolDir != filepath.Join(home, "Library", "Application Support", "driga", "events") {
+		t.Fatal("macOS hook used XDG state", d.SpoolDir)
+	}
+	events, _, err := spool.Drain(d.SpoolDir, nil)
 	if err != nil || len(events) != 1 {
 		t.Fatal(events, err)
 	}

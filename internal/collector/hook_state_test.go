@@ -43,7 +43,7 @@ func TestSpoolOnlyHookState(t *testing.T) {
 			check := func(want string, waiting bool) {
 				t.Helper()
 				s := sessions(t, st)[0]
-				if s.Label != want || s.Mixer == nil || derive.SessionMixer(s).Verdict != want {
+				if s.Label != want || (s.EndedAt != nil) != (want == "ended") || s.Mixer == nil || derive.SessionMixer(s).Verdict != want {
 					t.Fatalf("stored label/mixer = %s/%+v; want %s", s.Label, s.Mixer, want)
 				}
 				rows, err := st.Inbox(time.Time{}, false)
@@ -91,7 +91,28 @@ func TestSpoolOnlyHookState(t *testing.T) {
 			appendHook(waitEvent, "permission_prompt")
 			check("waiting", true)
 			appendHook("SessionEnd", "")
-			check("dead", false)
+			check("ended", false)
+			if s := sessions(t, st)[0]; s.EndedAt == nil || s.TurnOpen {
+				t.Fatalf("normal end left a live session: %+v", s)
+			}
+			rows, err := st.Inbox(time.Time{}, false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			completed := 0
+			for _, row := range rows {
+				if row.Kind == "finished" {
+					completed++
+				}
+			}
+			if completed != 2 {
+				t.Fatalf("ending lost unread Stop items: %+v", rows)
+			}
+			appendHook("SessionStart", "")
+			check("idle", false)
+			if s := sessions(t, st)[0]; s.EndedAt != nil {
+				t.Fatalf("resumed session still ended: %+v", s)
+			}
 		})
 	}
 }

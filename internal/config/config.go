@@ -143,10 +143,10 @@ func spoolDirForOS(goos string) string {
 	if goos == "windows" {
 		return filepath.Join(windowsAppDir("LOCALAPPDATA", "Local"), "driga", "events")
 	}
-	if p := os.Getenv("XDG_STATE_HOME"); filepath.IsAbs(p) {
-		return filepath.Join(p, "driga", "events")
-	}
 	if goos == "linux" {
+		if p := os.Getenv("XDG_STATE_HOME"); filepath.IsAbs(p) {
+			return filepath.Join(p, "driga", "events")
+		}
 		return filepath.Join(home(), ".local", "state", "driga", "events")
 	}
 	return filepath.Join(home(), "Library", "Application Support", "driga", "events")

@@ -187,7 +187,7 @@ func StateCounts(agents []AgentRow) []StateCount {
 		counts[strings.TrimSuffix(strings.TrimPrefix(a.Label, "~"), "?")]++
 	}
 	result := []StateCount{}
-	for _, label := range []string{"working", "waiting", "stalled", "idle", "finished", "dead", "unknown"} {
+	for _, label := range []string{"working", "waiting", "stalled", "idle", "finished", "ended", "dead", "unknown"} {
 		if counts[label] > 0 {
 			result = append(result, StateCount{label, counts[label]})
 		}

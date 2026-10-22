@@ -83,7 +83,7 @@ func (s Setting) Value(c Config) any {
 var runtimeSettings = []struct{ Name, Type, Default, Purpose string }{
 	{"DRIGA_CONFIG", "path", "$XDG_CONFIG_HOME/driga/config.toml or ~/.config/driga/config.toml", "Configuration file override."},
 	{"DRIGA_DATA_DIR", "path", "Linux: $XDG_DATA_HOME/driga or ~/.local/share/driga; macOS: ~/Library/Application Support/driga", "Database and fleet data directory override."},
-	{"DRIGA_SPOOL_DIR", "path", "Linux: $XDG_STATE_HOME/driga/events or ~/.local/state/driga/events; macOS: $XDG_STATE_HOME/driga/events or ~/Library/Application Support/driga/events", "Hook/ack spool directory override."},
+	{"DRIGA_SPOOL_DIR", "path", "Linux: $XDG_STATE_HOME/driga/events or ~/.local/state/driga/events; macOS: ~/Library/Application Support/driga/events", "Hook/ack spool directory override."},
 	{"DRIGA_INTERNAL", "marker", "unset", "1 suppresses recursive hooks from Driga-owned Claude subprocesses."},
 	{"DRIGA_FIXTURE_OUTPUT", "path", "unset", "Fixture generator output directory (tests only)."},
 	{"DRIGA_COLLECTOR_HEAP_CHILD", "marker", "unset", "1 selects isolated collector heap-test child."},

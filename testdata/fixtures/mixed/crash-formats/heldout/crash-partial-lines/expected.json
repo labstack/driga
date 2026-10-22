@@ -10,11 +10,11 @@
     },
     {
       "external_id": "crash-completed",
-      "label": "finished"
+      "label": "ended"
     },
     {
       "external_id": "reused-registry",
-      "label": "dead"
+      "label": "ended"
     }
   ],
   "orphans": [],

@@ -83,7 +83,7 @@ func TestClaudeRegistrySwitchOwnsProcess(t *testing.T) {
 		for _, s := range sessions(t, st) {
 			if s.ExternalID == "after-clear" {
 				current = s
-			} else if s.PID != 0 || s.Hosted || s.EndedAt == nil {
+			} else if s.PID != 0 || s.Hosted || s.EndedAt == nil || s.Label != "ended" {
 				t.Errorf("previous conversation still live: %+v", s)
 			}
 		}

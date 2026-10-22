@@ -254,7 +254,7 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 
 		for i := range ss {
 			s := &ss[i]
-			if procsOK && s.StartedFrom == "" && !s.Hosted && s.EndedAt == nil && s.Label != "dead" && !s.ProcStart.IsZero() {
+			if procsOK && s.StartedFrom == "" && !s.Hosted && s.EndedAt == nil && s.Label != "dead" && s.Label != "ended" && !s.ProcStart.IsZero() {
 				if proc, ok := work.prev[s.PID]; ok && derive.SameStart(proc.StartTime, s.ProcStart) {
 					s.StartedFrom = derive.LaunchSurface(work.prev, s.PID)
 				}

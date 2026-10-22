@@ -327,8 +327,8 @@ func (p *pageData) prepare() {
 	for _, a := range p.AgentRows {
 		counts[strings.TrimSuffix(strings.TrimPrefix(a.Label, "~"), "?")]++
 	}
-	for _, label := range []string{"working", "waiting", "stalled", "idle", "finished", "dead", "unknown"} {
-		if counts[label] > 0 || label != "dead" && label != "unknown" {
+	for _, label := range []string{"working", "waiting", "stalled", "idle", "finished", "ended", "dead", "unknown"} {
+		if counts[label] > 0 || label != "ended" && label != "dead" && label != "unknown" {
 			p.States = append(p.States, view.StateCount{Label: label, Count: counts[label]})
 		}
 	}

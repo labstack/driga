@@ -98,7 +98,7 @@ func inspectScratch(ctx context.Context, e Env, s snapshot, c Candidate) (Candid
 	return c, fmt.Errorf("scratch path does not match a stored session and attributed root")
 }
 func inspectScratchSession(ctx context.Context, e Env, s snapshot, c Candidate, session model.Session) (Candidate, error) {
-	if !validSessionID(session.ExternalID) || session.Label != "dead" && session.Label != "finished" {
+	if !validSessionID(session.ExternalID) || session.Label != "dead" && session.Label != "ended" && session.Label != "finished" {
 		return c, fmt.Errorf("owning session is live or invalid")
 	}
 	// "finished" also labels an unacknowledged completion with its process

@@ -30,38 +30,6 @@ type Diff struct {
 	owned               bool // A standalone Driga file: no backups; empty After deletes it.
 }
 
-// Unified renders a simple line diff, omitting common leading and trailing lines.
-func (d Diff) Unified() string {
-	if !d.Changed || d.Before == d.After {
-		return ""
-	}
-	lines := func(s string) []string {
-		if s == "" {
-			return nil
-		}
-		return strings.Split(strings.TrimSuffix(s, "\n"), "\n")
-	}
-	before, after := lines(d.Before), lines(d.After)
-	for len(before) > 0 && len(after) > 0 && before[0] == after[0] {
-		before, after = before[1:], after[1:]
-	}
-	for len(before) > 0 && len(after) > 0 && before[len(before)-1] == after[len(after)-1] {
-		before, after = before[:len(before)-1], after[:len(after)-1]
-	}
-	var b strings.Builder
-	if d.FullRewrite {
-		b.WriteString("# Full settings rewrite: targeted edit unavailable\n")
-	}
-	fmt.Fprintf(&b, "--- %s\n+++ %s\n", d.Path, d.Path)
-	for _, line := range before {
-		fmt.Fprintf(&b, "-%s\n", line)
-	}
-	for _, line := range after {
-		fmt.Fprintf(&b, "+%s\n", line)
-	}
-	return b.String()
-}
-
 var claudeEvents = []string{"Stop", "Notification", "SessionStart", "SessionEnd"}
 
 var renameSettings = os.Rename

@@ -33,8 +33,19 @@ an observation time, collection mode, source freshness, coverage gaps, and data.
 `doctor --json` returns diagnostic checks rather than a view envelope.
 Use `driga <command> --help` for command-specific flags.
 
-Labels are `working`, `waiting`, `idle`, `stalled?`, `finished`, `dead`, and
+Labels are `working`, `waiting`, `idle`, `stalled?`, `finished`, `ended`, `dead`, and
 `unknown`, with evidence in session details. `stalled?` means suspected inactivity.
+`ended` means the process exited with no open turn, a SessionEnd/sessionEnd hook
+arrived, or the conversation was replaced by `/clear` or `/resume`. `dead` requires
+an interrupted open turn or crash evidence. An unsupported adapter's exit stays
+`unknown` when it cannot establish either outcome. `finished` means an unread
+completed turn in a continuing session; ending the session preserves unread
+completion items in the inbox and closes pending waits. Use `--all` to include
+recently ended sessions.
+
+The `ended` label is an additive schema-2 string value, following the
+[wire versioning rule](../CONTRIBUTING.md#rules-for-changes). CLI JSON, MCP and
+fleet retain schema 2; consumers must tolerate additional label values.
 Hosted Codex threads use heuristic labels prefixed with `~`; a shared host process
 does not establish individual thread liveness. Unknown agent versions are parsed
 tolerantly and reported by `driga doctor`.
@@ -156,7 +167,7 @@ terminal-opening command using `{cwd}`; otherwise the terminal is detected.
 | --- | --- | --- |
 | SQLite database and collector state (macOS) | `~/Library/Application Support/driga/` | `DRIGA_DATA_DIR` |
 | SQLite database and collector state (Linux) | `$XDG_DATA_HOME/driga`, else `~/.local/share/driga/` | `DRIGA_DATA_DIR` |
-| Hook/ack spool (macOS) | `$XDG_STATE_HOME/driga/events`, else `~/Library/Application Support/driga/events/` | `DRIGA_SPOOL_DIR` |
+| Hook/ack spool (macOS) | `~/Library/Application Support/driga/events/` | `DRIGA_SPOOL_DIR` |
 | Hook/ack spool (Linux) | `$XDG_STATE_HOME/driga/events`, else `~/.local/state/driga/events/` | `DRIGA_SPOOL_DIR` |
 | SQLite database and collector state (Windows) | `%LOCALAPPDATA%\driga\` | `DRIGA_DATA_DIR` |
 | Hook/ack spool (Windows) | `%LOCALAPPDATA%\driga\events` | `DRIGA_SPOOL_DIR` |
@@ -218,7 +229,8 @@ driga hooks uninstall
 ```
 
 `--agent claude|codex|copilot|all` (or a positional agent name) selects the integration.
-Installation shows a diff and asks for confirmation. Existing Claude and Codex
+Installation shows a line-level unified diff with three context lines and `@@`
+hunk ranges, then asks for confirmation. Existing Claude and Codex
 files are backed up to `*.driga-bak-<timestamp>`.
 Claude installation appends commands for Stop, Notification, SessionStart, and
 SessionEnd to `~/.claude/settings.json`, preserving existing hooks. Codex
@@ -242,7 +254,8 @@ titles, tool details and notification messages. Permission waits carry no tool n
 Background notifications never update activity. Waits end on the same session's
 prompt, successful or failed tool result, agentStop, errorOccurred or sessionEnd.
 Session start records lifecycle metadata without resetting an open turn or wait.
-Errors finish the turn; subsequent turn activity resumes a recoverable error.
+Errors finish the turn; a process gone after a fatal error is `dead`. Subsequent
+turn activity resumes a recoverable error. A normal sessionEnd is `ended`.
 Only `snippets` stores a scrubbed `error: <name>` reason; error messages and stacks
 are never stored.
 
@@ -540,8 +553,8 @@ driga cleanup --kind worktree --all # every ready worktree; skips anything chang
   only when merged (never `-D`). Ignored build output (`cleanup.regenerable`) leaves
   with the worktree; any other ignored file (`.env`, local databases) makes the
   candidate `needs-review`, and acting on it needs `--include-ignored`.
-- **Scratch**: a Claude Code per-session temp directory whose session is dead or
-  finished for 24 h and has no open files. It is moved to the trash (macOS Trash,
+- **Scratch**: a Claude Code per-session temp directory whose session has ended
+  for 24 h and has no open files. It is moved to the trash (macOS Trash,
   or the freedesktop trash on Linux), never deleted.
 - **History**: agent history sizes by age. Report only; use the agent's own
   retention setting (Claude Code: `cleanupPeriodDays`).
