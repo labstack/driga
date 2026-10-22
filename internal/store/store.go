@@ -156,6 +156,12 @@ func Open(path string, mode Mode) (_ *Store, retErr error) {
 		if err := errors.Join(migrateErr, fkErr); err != nil {
 			return nil, fmt.Errorf("migrate: %w", err)
 		}
+		// Page-layout changes require VACUUM outside the migration transaction.
+		// Check SQLite's durable setting so an interrupted/failed rebuild can
+		// retry without repeating the already committed schema migration.
+		if err := enableIncrementalVacuum(ctx, db); err != nil {
+			return nil, fmt.Errorf("enable incremental vacuum: %w", err)
+		}
 		id, err := newMachineID()
 		if err != nil {
 			return nil, err

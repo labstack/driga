@@ -184,10 +184,18 @@ project. This feature never signals a process. No cleanup action is added.
 
 ### Observed trends
 
-The collector records the first successful process sample of each minute in
-`mcp_minutes`, reusing the existing scan and logical server/launcher grouping.
-Rows contain machine, host PID and start time, normalized command key, server
-count, measured footprint, and each logical server's PID/start identity. Missing
+The collector observes the first successful process sample of each minute,
+reusing the existing scan and logical server/launcher grouping. `mcp_groups`
+interns machine, host PID/start, and command key once; `mcp_labels` interns
+host/command display strings. `mcp_states` references their integer IDs, so
+metadata changes also preserve the labels at each observation. States retain exact server count,
+measured footprint, and logical server PID/start identities. An unchanged state
+extends its last observation timestamp in place and writes no new state row.
+A state change or UTC hour boundary starts a new run (an hourly heartbeat).
+`mcp_clock` stores one timestamp per successful observation shared by all groups;
+it preserves exact first/last times when a query window cuts a run or collection
+has gaps. Scans feed run endpoints to the trend builder: repeated intermediate
+states cannot change starts, ends, identity completeness, or rate math. Missing
 commands receive one zero sample, including when their host exits. Failed scans
 and machine-only passes add no process evidence. Restarting a host starts a new
 history, even if its PID is reused; restarting the collector preserves history.
@@ -196,7 +204,8 @@ history, even if its PID is reused; restarting the collector preserves history.
 default; `--full` reports every retained history. Each command
 and pile-up also has `trends` for its hosts. Fields include `started_count`,
 `ended_count`, `net_growth`, `first_sample`, `last_sample`, `rate_per_hour`, and
-`identity_complete`. The first retained sample is a baseline: processes already
+`identity_complete`. `resolution_seconds` is 60 for minute detail, or 3600 when
+the history includes hourly retained endpoints. The first retained sample is a baseline: processes already
 present do not count as additions. Subsequent membership changes count starts
 and ends, so replacing a server at a flat count is still **churning**.
 **Observed growth** (JSON state `"leaking"`) means at least two distinct observed additions and no observed ends,
@@ -213,11 +222,17 @@ host's marker, otherwise churning or steady; they never sum unrelated hosts'
 rates or windows. Critical-pressure advice names the largest observed growth by measured
 footprint, with its cadence and explicit observed window.
 
-Retention matches the other per-minute observations: 30 days in a daemon,
-and the current minute plus 59 preceding minutes in disposable snapshot mode.
-Pruned evidence is not carried forward into the rate or classification. A
-fresh snapshot has only a baseline and cannot establish observed growth. History reads
-stream samples rather than loading all retained rows into memory. These local
+Retention keeps full change detail for at least 24 hours (rounded outward to
+the hour), then the last observed state per UTC hour and host/command for up to
+30 days. Older trends describe those hourly endpoints; starts/ends between
+endpoints can be lost and their rates/classification reflect only retained
+evidence. `--full` labels this resolution in text and JSON. Disposable snapshots
+keep the current minute plus 59 preceding minutes. Pruned evidence is not
+carried forward into rates or classification. A fresh snapshot has only a
+baseline and cannot establish observed growth. Every history scan has time
+bounds: default reports and critical memory-pressure advice read the last 24
+hours; `--full` reads at most 30 days. Reads stream endpoints rather than loading
+all retained rows into memory. These local
 observations are not added to the fleet wire protocol; peer reports only show
 trends when that machine has stored sample evidence.
 
