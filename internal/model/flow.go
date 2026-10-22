@@ -32,6 +32,8 @@ type StateSignal struct {
 
 // StateInput contains the observations consumed by the label table.
 type StateInput struct {
+	LastLifecycle    string     `json:"last_lifecycle,omitempty"`
+	LastLifecycleAt  time.Time  `json:"last_lifecycle_at,omitzero"`
 	LastHook         string     `json:"last_hook"`
 	LastHookAt       time.Time  `json:"last_hook_at"`
 	Obs              SessionObs `json:"obs"`

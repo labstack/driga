@@ -488,7 +488,7 @@ func doctorIntake(d DoctorDeps, held bool) Check {
 	if addr := read("listen"); addr != "" && held {
 		c.Detail = "listening on " + addr + "; " + c.Detail
 	}
-	for _, kv := range [][2]string{{"parse_failures", "parse failures"}, {"ignored", "ignored"}, {"invalid_records", "invalid records"}, {"dropped", "content attributes dropped"}, {"unmatched", "unmatched OTLP sessions"}} {
+	for _, kv := range [][2]string{{"accepted", "accepted/matched records"}, {"records_rejected", "rejected records"}, {"metrics_rejected", "unused metric data points"}, {"parse_failures", "parse failures"}, {"ignored", "ignored"}, {"invalid_records", "invalid records"}, {"dropped", "content attributes dropped"}, {"unmatched", "unmatched OTLP sessions"}} {
 		v := read(kv[0])
 		if v == "" {
 			v = "0"

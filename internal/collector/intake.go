@@ -18,7 +18,8 @@ import (
 )
 
 type intakeResult struct {
-	err error
+	unmatched int
+	err       error
 }
 type intakeRequest struct {
 	batch   intake.Batch
@@ -34,7 +35,7 @@ func startIntake(ctx context.Context, d Deps, st *store.Store, requests chan<- i
 	runCtx, cancel := context.WithCancel(ctx)
 	// Every writer remains on Run's goroutine, including startup diagnostics.
 	err := st.Tx(ctx, func(tx *store.Tx) error {
-		keys := []string{"received", "dropped", "unmatched", "ignored", "invalid_records", "rejected", "parse_failures"}
+		keys := []string{"received", "accepted", "records_rejected", "metrics_rejected", "dropped", "unmatched", "ignored", "invalid_records", "rejected", "parse_failures"}
 		for _, reason := range intake.RejectionReasons() {
 			keys = append(keys, "reject:"+reason)
 		}
@@ -79,8 +80,7 @@ func startIntake(ctx context.Context, d Deps, st *store.Store, requests chan<- i
 		}
 		select {
 		case result := <-req.reply:
-			// Unmatched sessions are valid telemetry, acknowledged and counted.
-			return 0, result.err
+			return result.unmatched, result.err
 		case <-runCtx.Done():
 			return 0, intake.ErrBusy
 		case <-reqCtx.Done():
@@ -144,11 +144,51 @@ func recordIntakeError(ctx context.Context, d Deps, st *store.Store, cause error
 	})
 }
 
+// labelSession is shared by full collection, spool wakes, and optional intake.
+// All paths use the same stored events, process identity and derive table.
+func labelSession(tx *store.Tx, d Deps, s *model.Session, idx derive.ProcIndex, events []model.Event, unseen bool, now time.Time) error {
+	in := derive.StateInput{Obs: s.SessionObs, LastUserPrompt: s.LastPromptAt, Unseen: unseen}
+	if p, ok := idx.Get(s.PID); ok && (s.ProcStart.IsZero() || derive.SameStart(p.StartTime, s.ProcStart)) {
+		in.Proc = &p
+	}
+	if err := intakeInput(tx, *s, events, &in, now); err != nil {
+		return err
+	}
+	mixed := derive.LabelWithEvidence(in, now, derive.Thresholds{StalledAfter: d.Cfg.StalledAfter})
+	s.Mixer = &mixed
+	s.Label, s.Heuristic, s.Evidence = mixed.Verdict, mixed.Heuristic, mixed.Evidence
+	s.LastPromptAt = in.LastUserPrompt
+	return nil
+}
+
 func intakeInput(tx *store.Tx, s model.Session, events []model.Event, in *derive.StateInput, now time.Time) error {
+	latest := func(dst **time.Time, ts time.Time) {
+		if *dst == nil || ts.After(**dst) {
+			at := ts
+			*dst = &at
+		}
+	}
 	for _, e := range events {
 		if !strings.HasPrefix(e.Kind, "otlp:") && e.TS.After(in.LastHookAt) {
-			in.LastHook = e.Kind
-			in.LastHookAt = e.TS
+			in.LastHook, in.LastHookAt = e.Kind, e.TS
+		}
+		switch e.Kind {
+		case "SessionStart", "SessionEnd", "UserPromptSubmit", "Stop", "Notification:idle_prompt":
+			if e.TS.After(in.LastLifecycleAt) {
+				in.LastLifecycle, in.LastLifecycleAt = e.Kind, e.TS
+			}
+		}
+		switch e.Kind {
+		case "Notification", "PermissionRequest":
+			latest(&in.LastNotification, e.TS)
+		case "Stop":
+			latest(&in.LastStop, e.TS)
+		case "UserPromptSubmit":
+			if e.TS.After(in.LastUserPrompt) {
+				in.LastUserPrompt = e.TS
+			}
+		case "PostToolUse":
+			latest(&in.LastToolResult, e.TS)
 		}
 	}
 	if s.Adapter != "claude" {
@@ -168,21 +208,8 @@ func intakeInput(tx *store.Tx, s model.Session, events []model.Event, in *derive
 	var errorAt time.Time
 	for _, e := range events {
 		switch e.Kind {
-		case "Notification", "PermissionRequest":
-			if in.LastNotification == nil || e.TS.After(*in.LastNotification) {
-				ts := e.TS
-				in.LastNotification = &ts
-			}
-		case "Stop":
-			if in.LastStop == nil || e.TS.After(*in.LastStop) {
-				ts := e.TS
-				in.LastStop = &ts
-			}
 		case "otlp:tool_result", "otlp:assistant_response", "otlp:user_prompt":
-			if in.LastToolResult == nil || e.TS.After(*in.LastToolResult) {
-				ts := e.TS
-				in.LastToolResult = &ts
-			}
+			latest(&in.LastToolResult, e.TS)
 		case "otlp:api_error":
 			if e.TS.After(errorAt) {
 				errorAt = e.TS
@@ -326,25 +353,26 @@ func applyIntake(ctx context.Context, d Deps, st *store.Store, b intake.Batch) (
 			if err != nil {
 				return err
 			}
-			in := derive.StateInput{Obs: s.SessionObs, LastUserPrompt: s.LastPromptAt, Unseen: unseen[s.ID]}
-			if p, ok := idx.Get(s.PID); ok && (s.ProcStart.IsZero() || derive.SameStart(p.StartTime, s.ProcStart)) {
-				in.Proc = &p
-			}
-			if err := intakeInput(tx, *s, events, &in, now); err != nil {
+			if err := labelSession(tx, d, s, idx, events, unseen[s.ID], now); err != nil {
 				return err
 			}
-			mixed := derive.LabelWithEvidence(in, now, derive.Thresholds{StalledAfter: d.Cfg.StalledAfter})
-			s.Mixer = &mixed
-			s.Label, s.Heuristic, s.Evidence = mixed.Verdict, mixed.Heuristic, mixed.Evidence
 			// Fold activity after labeling so the optional fact can support idle registries.
+			in := s.Mixer.Input
 			if in.LastToolResult != nil && in.LastToolResult.After(s.LastActivityAt) {
 				s.LastActivityAt = *in.LastToolResult
 			}
+
 			if _, err := tx.UpsertSession(*s); err != nil {
 				return err
 			}
 		}
-		for key, n := range map[string]int{"received": len(b.Facts) + b.Rejected + b.Ignored, "dropped": b.Dropped, "unmatched": unmatched, "ignored": b.Ignored, "invalid_records": b.Rejected} {
+		for key, n := range map[string]int{
+			"received":         len(b.Facts) + b.Rejected + b.Ignored + b.MetricsRejected,
+			"accepted":         len(b.Facts) - unmatched,
+			"records_rejected": b.Rejected + unmatched + b.MetricsRejected,
+			"metrics_rejected": b.MetricsRejected,
+			"dropped":          b.Dropped, "unmatched": unmatched, "ignored": b.Ignored, "invalid_records": b.Rejected,
+		} {
 			raw, err := tx.Meta("otlp:" + key)
 			if err != nil && !errors.Is(err, store.ErrNotFound) {
 				return err
@@ -354,7 +382,7 @@ func applyIntake(ctx context.Context, d Deps, st *store.Store, b intake.Batch) (
 				return err
 			}
 		}
-		if len(b.Facts)+b.Rejected+b.Ignored > 0 {
+		if len(b.Facts)+b.Rejected+b.Ignored+b.MetricsRejected > 0 {
 			if err := tx.SetSourceOK("otlp", now); err != nil {
 				return err
 			}

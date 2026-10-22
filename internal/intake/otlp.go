@@ -40,6 +40,7 @@ type Fact struct {
 type Batch struct {
 	Facts                      []Fact
 	Dropped, Rejected, Ignored int
+	MetricsRejected            int
 }
 
 // OTLP's protobuf JSON mapping accepts both strings and numbers for int64
@@ -155,7 +156,24 @@ type record struct {
 	Body       json.RawMessage `json:"body"`
 	Attributes []attribute     `json:"attributes"`
 }
+
+// Only point counts cross the intake boundary; metric contents stay opaque.
+type metricPoints struct {
+	Points []json.RawMessage `json:"dataPoints"`
+}
+
 type document struct {
+	Metrics []struct {
+		Scopes []struct {
+			Metrics []struct {
+				Gauge                metricPoints `json:"gauge"`
+				Sum                  metricPoints `json:"sum"`
+				Histogram            metricPoints `json:"histogram"`
+				ExponentialHistogram metricPoints `json:"exponentialHistogram"`
+				Summary              metricPoints `json:"summary"`
+			} `json:"metrics"`
+		} `json:"scopeMetrics"`
+	} `json:"resourceMetrics"`
 	Logs []struct {
 		Resource resource `json:"resource"`
 		Scopes   []struct {
@@ -226,6 +244,16 @@ func Decode(r io.Reader, path string) (Batch, error) {
 	var doc document
 	if err := json.Unmarshal(raw, &doc); err != nil {
 		return b, errors.New("invalid OTLP JSON")
+	}
+	if path == "/v1/metrics" {
+		for _, resource := range doc.Metrics {
+			for _, scope := range resource.Scopes {
+				for _, metric := range scope.Metrics {
+					b.MetricsRejected += len(metric.Gauge.Points) + len(metric.Sum.Points) + len(metric.Histogram.Points) + len(metric.ExponentialHistogram.Points) + len(metric.Summary.Points)
+				}
+			}
+		}
+		return b, nil
 	}
 	add := func(res map[string]string, r record, span bool) {
 		attrs := attributes(r.Attributes, &b.Dropped)
@@ -502,13 +530,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid OTLP JSON", 400)
 		return
 	}
-	// Metrics are acknowledged and discarded, with the same body bounds.
-	if r.URL.Path == "/v1/metrics" {
-		w.Header().Set("Content-Type", "application/json")
-		io.WriteString(w, "{}")
-		return
+	rejected := b.Rejected + b.MetricsRejected
+	reason := "invalid records"
+	if b.MetricsRejected > 0 {
+		reason = "metrics are not used"
 	}
-	rejected := b.Rejected
 	if h.sink != nil {
 		n, e := h.sink(r.Context(), b)
 		if e != nil {
@@ -518,6 +544,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		rejected += n
+		if n > 0 {
+			reason = "unmatched sessions"
+			if b.Rejected > 0 {
+				reason = "invalid records or unmatched sessions"
+			}
+		}
 	}
 	w.Header().Set("Content-Type", "application/json")
 	if rejected == 0 {
@@ -527,9 +559,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	key := "rejectedLogRecords"
 	if r.URL.Path == "/v1/traces" {
 		key = "rejectedSpans"
+	} else if r.URL.Path == "/v1/metrics" {
+		key = "rejectedDataPoints"
 	}
 	// OTLP int64 response counters are string encoded too.
-	json.NewEncoder(w).Encode(map[string]any{"partialSuccess": map[string]any{key: strconv.Itoa(rejected), "errorMessage": "invalid records"}})
+	json.NewEncoder(w).Encode(map[string]any{"partialSuccess": map[string]any{key: strconv.Itoa(rejected), "errorMessage": reason}})
 }
 
 // Listen refuses DNS names and every non-loopback bind address.

@@ -145,7 +145,7 @@ func TestOTLPTracesMetricsAndUnmappedCodex(t *testing.T) {
 		r.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, r)
-		if w.Code != 200 || (tt.path == "/v1/metrics" && called) {
+		if w.Code != 200 || !called {
 			t.Fatal(w.Code, w.Body, called)
 		}
 	}
@@ -172,5 +172,38 @@ func TestOTLPRateLimit(t *testing.T) {
 		if w.Code != want {
 			t.Fatal(i, w.Code)
 		}
+	}
+}
+
+func TestOTLPMetricsRejected(t *testing.T) {
+	// All five OTLP metric types count data points, never buckets or exemplars.
+	raw := `{"resourceMetrics":[{"resource":{"attributes":[{"key":"prompt","value":{"stringValue":"NEVER_STORE"}}]},"scopeMetrics":[{"metrics":[
+ {"name":"gauge","gauge":{"dataPoints":[{"asDouble":1,"attributes":[{"key":"user.email","value":{"stringValue":"NEVER_STORE"}}]}]}},
+ {"name":"sum","sum":{"dataPoints":[{"asInt":"1"},{"asInt":"2"}]}},
+ {"name":"histogram","histogram":{"dataPoints":[{"count":"5","bucketCounts":["2","3"]}]}},
+ {"name":"exponential","exponentialHistogram":{"dataPoints":[{"count":"6"}]}},
+ {"name":"summary","summary":{"dataPoints":[{"count":"7"}]}}
+ ]}]}]}`
+	var batch Batch
+	h := New(func(_ context.Context, b Batch) (int, error) { batch = b; return 0, nil })
+	r := httptest.NewRequest("POST", "/v1/metrics", strings.NewReader(raw))
+	r.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	var response struct {
+		Partial struct {
+			Rejected string `json:"rejectedDataPoints"`
+			Reason   string `json:"errorMessage"`
+		} `json:"partialSuccess"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if w.Code != 200 || response.Partial.Rejected != "6" || response.Partial.Reason != "metrics are not used" {
+		t.Fatal(w.Code, w.Body)
+	}
+	stored, _ := json.Marshal(batch)
+	if len(batch.Facts) != 0 || strings.Contains(string(stored), "NEVER_STORE") {
+		t.Fatal(string(stored))
 	}
 }

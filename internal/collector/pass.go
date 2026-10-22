@@ -341,30 +341,9 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 		for i := range ss {
 			s := &ss[i]
 			events := eventsBySession[sessionKey(s.Adapter, s.ExternalID)]
-			in := derive.StateInput{Obs: s.SessionObs, LastUserPrompt: s.LastPromptAt, Unseen: unseen[s.ID]}
-			if proc, ok := idx.Get(s.PID); ok && (s.ProcStart.IsZero() || derive.SameStart(proc.StartTime, s.ProcStart)) {
-				in.Proc = &proc
-			}
-			for _, e := range events {
-				switch e.Kind {
-				case "Notification":
-					if in.LastNotification == nil || e.TS.After(*in.LastNotification) {
-						ts := e.TS
-						in.LastNotification = &ts
-					}
-				case "Stop":
-					if in.LastStop == nil || e.TS.After(*in.LastStop) {
-						ts := e.TS
-						in.LastStop = &ts
-					}
-				}
-			}
-			if err := intakeInput(tx, *s, events, &in, now); err != nil {
+			if err := labelSession(tx, d, s, idx, events, unseen[s.ID], now); err != nil {
 				return err
 			}
-			mixed := derive.LabelWithEvidence(in, now, derive.Thresholds{StalledAfter: d.Cfg.StalledAfter})
-			s.Mixer = &mixed
-			s.Label, s.Heuristic, s.Evidence = mixed.Verdict, mixed.Heuristic, mixed.Evidence
 		}
 		parents = derive.LinkParents(ss, idx)
 		if err := explicitParents(tx, ss, parents); err != nil {
@@ -655,11 +634,12 @@ func drainSpool(d Deps, tx *store.Tx, now time.Time, source func(string, error) 
 		ev.Title = scrub.Snippet(ev.Title)
 		ev.Prompt = scrub.Snippet(ev.Prompt)
 		ev.Tool = scrub.Snippet(ev.Tool)
-		// idle notifications are not evidence of a blocked session.
+		kind := ev.Event
+		// Retain idle as protocol metadata, without manufacturing a permission wait.
 		if ev.Event == "Notification" && ev.NotificationType == "idle_prompt" {
-			continue
+			kind = "Notification:idle_prompt"
 		}
-		event := model.Event{MachineID: tx.MachineID(), Adapter: ev.Adapter, ExternalID: ev.SessionID, TS: ev.TS, Kind: ev.Event, Summary: ev.Message}
+		event := model.Event{MachineID: tx.MachineID(), Adapter: ev.Adapter, ExternalID: ev.SessionID, TS: ev.TS, Kind: kind, Summary: ev.Message}
 		if ev.Adapter == "copilot" && ev.Tool != "" {
 			event.Metadata = &model.EventMetadata{Tool: ev.Tool}
 		}

@@ -671,7 +671,12 @@ exporters instead of installing hooks; existing hooks are left in place.
 The intake accepts OTLP/HTTP JSON (including gzip); protobuf returns 415. Content
 attributes are discarded before storage. It only enriches existing sessions;
 unmatched session IDs are rejected with partial-success counts and never create
-sessions. Use `driga doctor` for intake health and counters.
+sessions. A rejected export still returns HTTP 200, with `partialSuccess`, a
+string-encoded `rejectedLogRecords` (or `rejectedSpans`) count and `errorMessage`.
+Metrics are not used: their data points are rejected with `rejectedDataPoints`
+and the reason `metrics are not used`. Empty exports return `{}`.
+Use `driga doctor` for received, accepted/matched, rejected/unmatched and unused
+metric data point counts, alongside HTTP request failures and content drops.
 
 To undo, preview then remove Driga's intact exporter settings, disable
 `intake.otlp`, and restart the collector:

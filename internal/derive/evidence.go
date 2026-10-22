@@ -182,6 +182,10 @@ func LabelWithEvidence(in StateInput, now time.Time, th Thresholds) model.StateM
 	default:
 		support[0] = true // The adapter itself is unrecognized.
 	}
+	if strings.HasPrefix(evidence, "hook ") {
+		deciding = "hooks"
+		support = [4]bool{false, true, false, false}
+	}
 	for i := range m.Rows {
 		m.Rows[i].Supports = support[i]
 		if support[i] {

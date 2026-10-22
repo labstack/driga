@@ -103,13 +103,13 @@ func TestDoctorIntake(t *testing.T) {
 	if !strings.Contains(c.Detail, "no OTLP events since start") {
 		t.Fatal(c)
 	}
-	for k, v := range map[string]string{"listen": "127.0.0.1:12345", "received": "3", "dropped": "5", "unmatched": "2"} {
+	for k, v := range map[string]string{"listen": "127.0.0.1:12345", "received": "3", "accepted": "1", "records_rejected": "4", "metrics_rejected": "2", "dropped": "5", "unmatched": "2"} {
 		if err := st.SetMeta("otlp:"+k, v); err != nil {
 			t.Fatal(err)
 		}
 	}
 	c = requireCheck(t, Doctor(context.Background(), d), "otlp intake", "ok", "")
-	for _, s := range []string{"127.0.0.1:12345", "events received: 3", "content attributes dropped: 5", "unmatched OTLP sessions: 2"} {
+	for _, s := range []string{"127.0.0.1:12345", "events received: 3", "content attributes dropped: 5", "unmatched OTLP sessions: 2", "accepted/matched records: 1", "rejected records: 4", "unused metric data points: 2"} {
 		if !strings.Contains(c.Detail, s) {
 			t.Fatal(c)
 		}

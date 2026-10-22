@@ -93,9 +93,13 @@ func syncInbox(tx *store.Tx, d Deps, ss []model.Session, parents map[int64]int64
 		switch h.Event {
 		case "Stop":
 			changes = append(changes, change{at: h.TS, session: id, explicit: true})
+		case "Notification":
+			if h.NotificationType == "idle_prompt" {
+				changes = append(changes, change{at: h.TS, session: id, explicit: true})
+			}
 		case "PostToolUse":
 			changes = append(changes, change{at: h.TS, session: id})
-		case "UserPromptSubmit":
+		case "UserPromptSubmit", "SessionStart", "SessionEnd":
 			changes = append(changes, change{at: h.TS, session: id, explicit: true})
 		}
 	}

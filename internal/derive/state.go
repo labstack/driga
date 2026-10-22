@@ -49,6 +49,57 @@ func label(in StateInput, now time.Time, th Thresholds) (label string, heuristic
 	if in.Obs.LastActivityAt.IsZero() {
 		quiet = "no activity timestamp"
 	}
+	// Explicit lifecycle hooks supersede older transcript/registry observations.
+	// Newer activity and telemetry still win over delayed hook delivery.
+	if in.Obs.Adapter == "claude" || in.Obs.Adapter == "codex" {
+		latest := in.Obs.LastActivityAt
+		for _, ts := range []time.Time{in.Obs.RegistryUpdatedAt, in.LastUserPrompt} {
+			if ts.After(latest) {
+				latest = ts
+			}
+		}
+		for _, ts := range []*time.Time{in.LastNotification, in.LastDecision, in.LastToolResult, in.LastAPIRequest} {
+			if ts != nil && ts.After(latest) {
+				latest = *ts
+			}
+		}
+		if !in.LastLifecycleAt.IsZero() && !in.LastLifecycleAt.Before(latest) {
+			switch in.LastLifecycle {
+			case "SessionEnd":
+				return "dead", false, "hook SessionEnd"
+			case "SessionStart", "Notification:idle_prompt":
+				return "idle", false, "hook " + in.LastLifecycle
+			case "UserPromptSubmit":
+				if now.Sub(in.LastLifecycleAt) >= th.StalledAfter {
+					return "stalled", false, "hook turn open, no log growth " + stateDuration(now.Sub(in.LastLifecycleAt))
+				}
+				return "working", false, "hook UserPromptSubmit"
+			case "Stop":
+				if in.Unseen {
+					return "finished", false, "hook unacknowledged Stop"
+				}
+				return "idle", false, "hook Stop acknowledged"
+			}
+		}
+		// Codex's PermissionRequest is explicit evidence; rollouts alone cannot
+		// infer approval waits. Keep liveness checks for unhosted, exited sessions.
+		if in.Obs.Adapter == "codex" && (in.Proc != nil || in.Obs.Hosted) && in.LastNotification != nil {
+			cleared := in.Obs.LastActivityAt
+			for _, ts := range []time.Time{in.LastUserPrompt, in.LastLifecycleAt} {
+				if ts.After(cleared) {
+					cleared = ts
+				}
+			}
+			for _, ts := range []*time.Time{in.LastDecision, in.LastToolResult} {
+				if ts != nil && ts.After(cleared) {
+					cleared = *ts
+				}
+			}
+			if in.LastNotification.After(cleared) {
+				return "waiting", false, "hook PermissionRequest newer than activity"
+			}
+		}
+	}
 	switch in.Obs.Adapter {
 	case "copilot":
 		live := in.Obs.PID != 0 || in.Obs.Hosted && copilot.Recent(in.Obs, now)
@@ -92,12 +143,15 @@ func label(in StateInput, now time.Time, th Thresholds) (label string, heuristic
 		return "unknown", false, "no recognized Copilot hook state"
 	case "claude":
 		cleared := in.LastUserPrompt
+		if in.LastLifecycleAt.After(cleared) {
+			cleared = in.LastLifecycleAt
+		}
 		for _, ts := range []*time.Time{in.LastDecision, in.LastToolResult, in.LastStop} {
 			if ts != nil && ts.After(cleared) {
 				cleared = *ts
 			}
 		}
-		finished := in.LastStop != nil && in.LastStop.After(in.LastUserPrompt) && in.Unseen
+		finished := in.LastStop != nil && in.LastStop.After(in.LastUserPrompt) && !in.LastStop.Before(in.LastLifecycleAt) && in.Unseen
 		// A dead registry must not look waiting or busy. Check liveness before
 		// busy rules, but preserve an unseen Stop as finished even after exit.
 		// Live sessions retain the table's busy-before-Stop rule order.

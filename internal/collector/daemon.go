@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/labstack/driga/internal/derive"
 	"github.com/labstack/driga/internal/filelock"
 	"github.com/labstack/driga/internal/platform"
 	"github.com/labstack/driga/internal/secfile"
@@ -391,8 +392,8 @@ func Run(ctx context.Context, d Deps, dataDir string) error {
 				}
 				continue
 			}
-			_, err := applyIntake(ctx, d, st, req.batch)
-			req.reply <- intakeResult{err: err}
+			unmatched, err := applyIntake(ctx, d, st, req.batch)
+			req.reply <- intakeResult{unmatched: unmatched, err: err}
 			if err != nil {
 				if ctx.Err() != nil {
 					return nil
@@ -535,11 +536,22 @@ func drainOnly(ctx context.Context, d Deps, st *store.Store) error {
 		if err != nil {
 			return err
 		}
+		affected := make(map[string]bool)
+		for _, h := range hooks {
+			affected[sessionKey(h.Adapter, h.SessionID)] = true
+		}
+		idx := derive.NewProcIndexForOS(procs, platform.ProcessOS(d.Plat))
 		for i := range ss {
-			if ss[i].Adapter != "copilot" {
+			if !affected[sessionKey(ss[i].Adapter, ss[i].ExternalID)] {
 				continue
 			}
-			labelCopilot(&ss[i], procs, unseen[ss[i].ID], now, d.Cfg.StalledAfter)
+			events, err := tx.Events(ss[i].Adapter, ss[i].ExternalID, time.Time{})
+			if err != nil {
+				return err
+			}
+			if err := labelSession(tx, d, &ss[i], idx, events, unseen[ss[i].ID], now); err != nil {
+				return err
+			}
 			if _, err := tx.UpsertSession(ss[i]); err != nil {
 				return err
 			}
