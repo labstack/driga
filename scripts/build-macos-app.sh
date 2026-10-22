@@ -16,17 +16,22 @@ if [ "$snapshot" != true ]; then
   [ "$(uname -s)" = Darwin ] || { echo 'App signing requires macOS.' >&2; exit 1; }
   : "${DRIGA_SIGNING_KEYCHAIN:?temporary signing keychain required}"
   : "${DRIGA_SIGNING_IDENTITY:?Developer ID Application identity required}"
+  : "${DRIGA_NOTARY_KEY:?App Store Connect API key file required}"
+  : "${DRIGA_NOTARY_KEY_ID:?App Store Connect API key ID required}"
+  : "${DRIGA_NOTARY_ISSUER:?App Store Connect issuer ID required}"
+  # Credentials go to notarytool directly: a keychain profile stored in the
+  # temporary keychain is not found by later notarytool calls on runners.
+  notary=(--key "$DRIGA_NOTARY_KEY" --key-id "$DRIGA_NOTARY_KEY_ID" --issuer "$DRIGA_NOTARY_ISSUER")
   # Signing the outer bundle also signs its main executable and seals resources.
   codesign --force --sign "$DRIGA_SIGNING_IDENTITY" --keychain "$DRIGA_SIGNING_KEYCHAIN" \
     --options runtime --timestamp "$app"
   codesign --verify --deep --strict --verbose=2 "$app"
   submission="$build_dir/notary-submission.zip"
   ditto -c -k --keepParent "$app" "$submission"
-  xcrun notarytool submit "$submission" --keychain "$DRIGA_SIGNING_KEYCHAIN" \
-    --keychain-profile driga --wait --timeout 20m --output-format json > "$build_dir/notary-result.json"
+  xcrun notarytool submit "$submission" "${notary[@]}" \
+    --wait --timeout 20m --output-format json > "$build_dir/notary-result.json"
   submission_id=$(jq -er '.id // empty' "$build_dir/notary-result.json")
-  xcrun notarytool log "$submission_id" --keychain "$DRIGA_SIGNING_KEYCHAIN" \
-    --keychain-profile driga "$build_dir/notary-log.json"
+  xcrun notarytool log "$submission_id" "${notary[@]}" "$build_dir/notary-log.json"
   jq '{status, statusSummary, issues}' "$build_dir/notary-log.json"
   jq -e '.status == "Accepted"' "$build_dir/notary-result.json" >/dev/null
   jq -e '[.issues[]? | select(.severity == "error")] | length == 0' "$build_dir/notary-log.json" >/dev/null

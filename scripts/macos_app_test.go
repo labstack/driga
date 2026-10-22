@@ -63,9 +63,9 @@ esac
 			command := exec.CommandContext(t.Context(), "bash", "scripts/build-macos-app.sh", executable, "darwin", "2026.10.0-alpha", test.snapshot)
 			command.Dir = repo
 			log := filepath.Join(root, "tools.log")
-			command.Env = append(releaseTestEnv(t), "PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"), "FAKE_TOOL_LOG="+log, "FAKE_NOTARY_STATUS="+test.status, "DRIGA_SIGNING_KEYCHAIN=", "DRIGA_SIGNING_IDENTITY=")
+			command.Env = append(releaseTestEnv(t), "PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"), "FAKE_TOOL_LOG="+log, "FAKE_NOTARY_STATUS="+test.status, "DRIGA_SIGNING_KEYCHAIN=", "DRIGA_SIGNING_IDENTITY=", "DRIGA_NOTARY_KEY=", "DRIGA_NOTARY_KEY_ID=", "DRIGA_NOTARY_ISSUER=")
 			if test.status != "" {
-				command.Env = append(command.Env, "DRIGA_SIGNING_KEYCHAIN="+filepath.Join(root, "fake.keychain"), "DRIGA_SIGNING_IDENTITY=synthetic identity")
+				command.Env = append(command.Env, "DRIGA_SIGNING_KEYCHAIN="+filepath.Join(root, "fake.keychain"), "DRIGA_SIGNING_IDENTITY=synthetic identity", "DRIGA_NOTARY_KEY="+filepath.Join(root, "notary.p8"), "DRIGA_NOTARY_KEY_ID=KEYID", "DRIGA_NOTARY_ISSUER=issuer")
 			}
 			output, err := command.CombinedOutput()
 			if (err == nil) != test.succeeds {
@@ -78,7 +78,7 @@ esac
 				}
 			} else if test.status != "" {
 				calls := string(trace)
-				if !strings.Contains(calls, "--options runtime --timestamp") || !strings.Contains(calls, "notarytool submit") {
+				if !strings.Contains(calls, "--options runtime --timestamp") || !strings.Contains(calls, "notarytool submit") || !strings.Contains(calls, "--key-id KEYID") || strings.Contains(calls, "keychain-profile") {
 					t.Fatal(calls)
 				}
 				staple := strings.Contains(calls, "stapler staple")

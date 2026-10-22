@@ -109,6 +109,9 @@ jobs:
           PACKAGE_REPOS_TOKEN: ${{ secrets.PACKAGE_REPOS_TOKEN }}
           DRIGA_SIGNING_KEYCHAIN: ${{ env.DRIGA_SIGNING_KEYCHAIN }}
           DRIGA_SIGNING_IDENTITY: ${{ env.DRIGA_SIGNING_IDENTITY }}
+          DRIGA_NOTARY_KEY: ${{ env.DRIGA_NOTARY_KEY }}
+          DRIGA_NOTARY_KEY_ID: ${{ env.DRIGA_NOTARY_KEY_ID }}
+          DRIGA_NOTARY_ISSUER: ${{ env.DRIGA_NOTARY_ISSUER }}
 
       # The published artifacts, not a snapshot of them. Until this ran here,
       # nothing checked what a user actually downloads.
