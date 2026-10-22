@@ -97,6 +97,27 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 			status = "warn"
 			detail = err.Error()
 		}
+		if entry.name == "storage:db" {
+			budgetSize := size
+			if info, statErr := os.Stat(filepath.Join(d.DataDir, "driga.db-wal")); statErr == nil {
+				budgetSize += info.Size()
+			}
+			detail += fmt.Sprintf("; database + WAL budget %d bytes", store.StorageBudgetBytes)
+			if budgetSize > store.StorageBudgetBytes {
+				status = "warn"
+			}
+			if reader, ok := d.Store.(interface {
+				StorageUsage() (store.StorageUsage, error)
+			}); ok {
+				usage, usageErr := reader.StorageUsage()
+				if usageErr != nil {
+					status = "warn"
+					detail += "; page map: " + usageErr.Error()
+				} else {
+					detail += fmt.Sprintf("; largest table %s: %d bytes including indexes", usage.LargestTable, usage.LargestTableBytes)
+				}
+			}
+		}
 		if strings.Contains(entry.name, "log") {
 			detail += fmt.Sprintf("; cap %d bytes (10 MiB), one rotated file", logfile.MaxSize)
 		}

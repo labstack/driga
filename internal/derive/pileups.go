@@ -17,10 +17,10 @@ import (
 // MCPServerView is derived solely from one existing process table. A roll-up
 // includes singles; only duplicate commands within one host are findings.
 type MCPServerView struct {
-	Pileups  []MCPPileup       `json:"pileups"`
-	Commands []MCPCommand      `json:"commands"`
-	Trends   []MCPTrend        `json:"trends"`
-	Samples  []model.MCPMinute `json:"-"`
+	Pileups  []MCPPileup            `json:"pileups"`
+	Commands []MCPCommand           `json:"commands"`
+	Trends   []MCPTrend             `json:"trends"`
+	Samples  []model.MCPObservation `json:"-"`
 }
 
 type MCPHost = model.MCPHost
@@ -239,7 +239,7 @@ func MCPServers(procs []model.Proc, sigs *signatures.Set, now time.Time) MCPServ
 	rollups := map[string]*MCPCommand{}
 	for k, g := range groups {
 		sort.Slice(members[k], func(i, j int) bool { return members[k][i].PID < members[k][j].PID })
-		result.Samples = append(result.Samples, model.MCPMinute{At: now, Host: g.Host, Key: k.command, Name: g.Name, Count: g.Count, Footprint: g.Memory, Members: members[k]})
+		result.Samples = append(result.Samples, model.MCPObservation{At: now, Host: g.Host, Key: k.command, Name: g.Name, Count: g.Count, Footprint: g.Memory, Members: members[k]})
 		finishMCPEvidence(&g.MCPCommand)
 		g.DuplicateCount = max(0, g.Count-1)
 		if g.Count > 1 {

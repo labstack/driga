@@ -159,6 +159,11 @@ func MCPCommandDetails(c derive.MCPCommand) string {
 	}
 	for _, t := range c.Trends {
 		fmt.Fprintf(&b, "\n%s PID %d: %s · started %d · ended %d · net %+d · %.2g/h\nObserved: %s to %s", t.Host.Name, t.Host.PID, MCPTrendMarker(t), t.StartedCount, t.EndedCount, t.NetGrowth, t.RatePerHour, t.FirstSample.Format(time.RFC3339), t.LastSample.Format(time.RFC3339))
+		if t.ResolutionSeconds >= 3600 {
+			fmt.Fprint(&b, " · hourly endpoints (older than 24h)")
+		} else {
+			fmt.Fprint(&b, " · minute observations")
+		}
 		if !t.IdentityComplete {
 			b.WriteString(" · incomplete process start identities")
 		}

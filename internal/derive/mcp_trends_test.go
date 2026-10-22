@@ -25,7 +25,7 @@ func TestMCPRecordedTrends(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			b := NewMCPTrendBuilder()
 			for i, ids := range tc.series {
-				s := model.MCPMinute{At: at.Add(time.Duration(i) * 80 * time.Minute), Key: "command:server", Name: "server", Host: MCPHost{PID: 100, StartedAt: at.Add(-time.Hour)}, Count: len(ids)}
+				s := model.MCPObservation{At: at.Add(time.Duration(i) * 80 * time.Minute), Key: "command:server", Name: "server", Host: MCPHost{PID: 100, StartedAt: at.Add(-time.Hour)}, Count: len(ids)}
 				for _, pid := range ids {
 					s.Members = append(s.Members, model.ProcessIdentity{PID: pid, StartedAt: at.Add(time.Duration(pid) * time.Second)})
 				}
@@ -42,7 +42,7 @@ func TestMCPRecordedTrends(t *testing.T) {
 func TestMCPTrendIdentityReuseAndUnknownStarts(t *testing.T) {
 	at := time.Date(2026, 10, 20, 8, 12, 0, 0, time.UTC)
 	b := NewMCPTrendBuilder()
-	s := model.MCPMinute{At: at, Key: "server", Host: MCPHost{PID: 100, StartedAt: at.Add(-time.Hour)}, Count: 1, Members: []model.ProcessIdentity{{PID: 1, StartedAt: at}}}
+	s := model.MCPObservation{At: at, Key: "server", Host: MCPHost{PID: 100, StartedAt: at.Add(-time.Hour)}, Count: 1, Members: []model.ProcessIdentity{{PID: 1, StartedAt: at}}}
 	b.Add(s)
 	s.At = at.Add(time.Minute)
 	s.Members = []model.ProcessIdentity{{PID: 1, StartedAt: s.At}}

@@ -167,7 +167,7 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 		}
 		work.applyCwds(procs)
 		if procsOK {
-			due, err := tx.MCPMinuteDue(now)
+			due, err := tx.MCPObservationDue(now)
 			if err != nil {
 				return err
 			}

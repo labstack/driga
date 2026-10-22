@@ -243,7 +243,7 @@ func Render(w io.Writer, v any, opts RenderOpts) error {
 			fmt.Fprintln(tw, "MEMORY\tCOMPRESSED\tSWAP\tLOAD (1/5/15)\tCORES\tDISK FREE\tPRESSURE LEVEL / FREE")
 			fmt.Fprintf(tw, "%s/%s\t%s\t%s/%s\t%s/%s/%s\t%d\t%s\t%s / %.1f\n", humanBytes(s.MemUsed), humanBytes(s.MemTotal), humanBytes(s.MemCompressed), humanBytes(s.SwapUsed), humanBytes(s.SwapTotal), FormatLoad(s.Load1, "%.1f"), FormatLoad(s.Load5, "%.1f"), FormatLoad(s.Load15, "%.1f"), s.Cores, humanBytes(s.DiskFree), s.PressureLevel, s.PressureFree)
 			if h.Full {
-				fmt.Fprintln(tw, "Retained MCP trends")
+				fmt.Fprintln(tw, "Retained MCP trends · minute detail for 24h; hourly endpoints to 30 days")
 				for _, t := range h.MCPServers.Trends {
 					fmt.Fprintf(tw, "%s · host PID %d · %s · started %d / ended %d · %s to %s\n", cell(t.Name), t.Host.PID, cell(t.State), t.StartedCount, t.EndedCount, t.FirstSample.Format(time.RFC3339), t.LastSample.Format(time.RFC3339))
 				}

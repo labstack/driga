@@ -109,10 +109,6 @@ func TestMachineDefaultBoundsAndUniqueReports(t *testing.T) {
 
 type noMachineHistory struct{ Reader }
 
-func (noMachineHistory) ScanMCPMinutes(time.Time, func(model.MCPMinute) error) error {
-	return fmt.Errorf("summary read full machine history")
-}
-
 func TestSummaryDoesNotBuildMachineHistory(t *testing.T) {
 	st := machineHistoryFixture(t)
 	if _, err := summaryLocal(noMachineHistory{st}, Filter{}, testNow); err != nil {
@@ -136,6 +132,6 @@ func TestMachineFullRetainsEvidence(t *testing.T) {
 	}
 }
 
-func (noMachineHistory) ScanMCPMinutesSince(time.Time, time.Time, func(model.MCPMinute) error) error {
+func (noMachineHistory) ScanMCPHistory(time.Time, time.Time, func(model.MCPObservation) error) error {
 	return fmt.Errorf("summary read recent machine history")
 }

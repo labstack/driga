@@ -18,13 +18,14 @@ type ProcessIdentity struct {
 	StartedAt time.Time `json:"started_at"`
 }
 
-// MCPMinute is the first successful process observation in a minute. At retains
+// MCPObservation is the first successful process observation in a minute. At retains
 // the actual sample time rather than implying a longer observation window.
-type MCPMinute struct {
-	At        time.Time
-	Host      MCPHost
-	Key, Name string
-	Count     int
-	Footprint uint64
-	Members   []ProcessIdentity
+type MCPObservation struct {
+	ResolutionSeconds int // 60 for full detail; 3600 for hourly retained endpoints.
+	At                time.Time
+	Host              MCPHost
+	Key, Name         string
+	Count             int
+	Footprint         uint64
+	Members           []ProcessIdentity
 }

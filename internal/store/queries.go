@@ -748,6 +748,9 @@ func (q *querier) Handoffs(repoID int64, limit int) ([]model.CompletionEvent, er
 // Prune removes expired history and keeps the latest sample in each five-minute
 // bucket between 24 hours and seven days old. Samples in the last day stay intact.
 func (tx *Tx) Prune(now time.Time) error {
+	if err := tx.pruneMCP(now); err != nil {
+		return err
+	}
 	month, week, day := unix(now.Add(-30*24*time.Hour)), unix(now.Add(-7*24*time.Hour)), unix(now.Add(-24*time.Hour))
 	// Inbox has no cascading FK; events reference the natural key. Keep the
 	// attribution row for every retained reference, on local and remote machines.
@@ -807,7 +810,6 @@ func (tx *Tx) Prune(now time.Time) error {
 		{"DELETE FROM events WHERE machine_id=? AND ts<?", []any{tx.machineID, month}},
 		{"DELETE FROM event_minutes WHERE machine_id=? AND minute<?", []any{tx.machineID, unix(now.Add(-30 * 24 * time.Hour).Truncate(time.Minute))}},
 		{"DELETE FROM observation_minutes WHERE machine_id=? AND minute<?", []any{tx.machineID, now.Add(-30 * 24 * time.Hour).Truncate(time.Minute).UnixMilli()}},
-		{"DELETE FROM mcp_minutes WHERE machine_id=? AND minute<?", []any{tx.machineID, unix(now.Add(-30 * 24 * time.Hour).Truncate(time.Minute))}},
 		{"DELETE FROM inbox_items WHERE machine_id=? AND ts<?", []any{tx.machineID, month}},
 		{"DELETE FROM handoffs WHERE machine_id=? AND ts<?", []any{tx.machineID, month}},
 		{"DELETE FROM sessions WHERE " + expiredSession, sessionArgs},
@@ -1005,11 +1007,16 @@ func (tx *Tx) PruneSnapshot(now time.Time) error {
 		return err
 	}
 	cutoff := unix(now.Truncate(time.Minute).Add(-59 * time.Minute))
+	if err := tx.exec("DELETE FROM mcp_states WHERE machine_id=? AND last_at<?", tx.machineID, cutoff); err != nil {
+		return err
+	}
+	if err := tx.exec("DELETE FROM mcp_clock WHERE machine_id=? AND at<?", tx.machineID, cutoff); err != nil {
+		return err
+	}
 	if err := tx.exec("DELETE FROM observation_minutes WHERE machine_id=? AND minute<?", tx.machineID, now.Truncate(time.Minute).Add(-59*time.Minute).UnixMilli()); err != nil {
 		return err
 	}
 	for _, query := range []string{
-		"DELETE FROM mcp_minutes WHERE machine_id=? AND minute<?",
 		"DELETE FROM machine_samples WHERE machine_id=? AND ts<?",
 		"DELETE FROM events WHERE machine_id=? AND ts<?",
 		"DELETE FROM event_minutes WHERE machine_id=? AND minute<?",

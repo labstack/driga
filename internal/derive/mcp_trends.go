@@ -8,19 +8,20 @@ import (
 )
 
 type MCPTrend struct {
-	Host             MCPHost   `json:"host"`
-	Key              string    `json:"command_key"`
-	Name             string    `json:"name"`
-	State            string    `json:"state"`
-	StartedCount     int       `json:"started_count"`
-	EndedCount       int       `json:"ended_count"`
-	NetGrowth        int       `json:"net_growth"`
-	FirstSample      time.Time `json:"first_sample"`
-	LastSample       time.Time `json:"last_sample"`
-	RatePerHour      float64   `json:"rate_per_hour"`
-	Count            int       `json:"count"`
-	Memory           uint64    `json:"memory_bytes"`
-	IdentityComplete bool      `json:"identity_complete"`
+	ResolutionSeconds int       `json:"resolution_seconds"`
+	Host              MCPHost   `json:"host"`
+	Key               string    `json:"command_key"`
+	Name              string    `json:"name"`
+	State             string    `json:"state"`
+	StartedCount      int       `json:"started_count"`
+	EndedCount        int       `json:"ended_count"`
+	NetGrowth         int       `json:"net_growth"`
+	FirstSample       time.Time `json:"first_sample"`
+	LastSample        time.Time `json:"last_sample"`
+	RatePerHour       float64   `json:"rate_per_hour"`
+	Count             int       `json:"count"`
+	Memory            uint64    `json:"memory_bytes"`
+	IdentityComplete  bool      `json:"identity_complete"`
 }
 
 type mcpTrendKey struct {
@@ -52,7 +53,7 @@ func NewMCPTrendBuilder() *MCPTrendBuilder {
 
 // Add consumes chronological observations. The first retained sample is a
 // baseline, never evidence that its already-running servers were added.
-func (b *MCPTrendBuilder) Add(s model.MCPMinute) {
+func (b *MCPTrendBuilder) Add(s model.MCPObservation) {
 	k := trendKey(s.Host, s.Key)
 	g := b.groups[k]
 	first := g == nil
@@ -85,6 +86,7 @@ func (b *MCPTrendBuilder) Add(s model.MCPMinute) {
 		}
 	}
 	g.previous = current
+	g.trend.ResolutionSeconds = max(g.trend.ResolutionSeconds, s.ResolutionSeconds)
 	t := &g.trend
 	t.LastSample, t.Count, t.Memory = s.At, s.Count, s.Footprint
 	t.NetGrowth = s.Count - g.initial

@@ -347,6 +347,12 @@ func Run(ctx context.Context, d Deps, dataDir string) error {
 				}
 				return err
 			}
+			if err := st.ReclaimSpace(ctx); err != nil {
+				if ctx.Err() != nil {
+					return nil
+				}
+				return err
+			}
 			if err := spool.Prune(d.SpoolDir, d.now()); err != nil {
 				slog.Warn("spool prune failed", "event", "spool_prune_failed", "err", scrub.Scrub(err.Error()))
 			}

@@ -355,3 +355,37 @@ func TestServiceLogsLinux(t *testing.T) {
 		t.Fatal(name, args)
 	}
 }
+
+func TestDoctorDatabaseSizeBudget(t *testing.T) {
+	d, _ := doctorFixture(t)
+	path := filepath.Join(d.DataDir, "driga.db")
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Truncate(store.StorageBudgetBytes + 1); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	check := requireCheck(t, Doctor(context.Background(), d), "storage:db", "warn", "")
+	for _, want := range []string{"500000000", "largest table", "including indexes"} {
+		if !strings.Contains(check.Detail, want) {
+			t.Fatalf("missing %q: %+v", want, check)
+		}
+	}
+	// The WAL also consumes the budget, even when the database alone is small.
+	if err := os.Truncate(path, 1); err != nil {
+		t.Fatal(err)
+	}
+	wal, err := os.Create(path + "-wal")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := wal.Truncate(store.StorageBudgetBytes); err != nil {
+		t.Fatal(err)
+	}
+	wal.Close()
+	requireCheck(t, Doctor(context.Background(), d), "storage:db", "warn", "")
+}

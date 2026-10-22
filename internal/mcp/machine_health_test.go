@@ -14,7 +14,7 @@ import (
 func TestMachineLeakFieldsCLIParity(t *testing.T) {
 	st, _ := fixture(t)
 	t.Setenv("PATH", t.TempDir())
-	at := time.Date(2020, 1, 1, 8, 12, 0, 0, time.UTC)
+	at := time.Now().UTC().Truncate(time.Hour).Add(-4 * time.Hour)
 	ps := []model.Proc{{PID: 100, Cmdline: "codex app-server", StartTime: at.Add(-time.Hour)}}
 	for i := range 3 {
 		now := at.Add(time.Duration(i) * 80 * time.Minute)
@@ -46,7 +46,7 @@ func TestMachineLeakFieldsCLIParity(t *testing.T) {
 		t.Fatalf("trend parity: %+v %+v", a, b)
 	}
 	trend := a["trends"].([]any)[0].(map[string]any)
-	if trend["state"] != "leaking" || trend["started_count"] != float64(2) || trend["ended_count"] != float64(0) || trend["net_growth"] != float64(2) || trend["rate_per_hour"] != .75 || trend["first_sample"] != "2020-01-01T08:12:00Z" || trend["last_sample"] != "2020-01-01T10:52:00Z" {
+	if trend["state"] != "leaking" || trend["started_count"] != float64(2) || trend["ended_count"] != float64(0) || trend["net_growth"] != float64(2) || trend["rate_per_hour"] != .75 || trend["first_sample"] != at.Format(time.RFC3339) || trend["last_sample"] != at.Add(160*time.Minute).Format(time.RFC3339) {
 		t.Fatal(trend)
 	}
 	for _, field := range []string{"commands", "pileups"} {

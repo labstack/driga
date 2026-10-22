@@ -54,7 +54,7 @@ func memoryPressureInbox(tx *store.Tx, s model.MachineSample, now time.Time, pro
 		return nil
 	}
 	trends := derive.NewMCPTrendBuilder()
-	if err := tx.ScanMCPMinutes(now, func(s model.MCPMinute) error { trends.Add(s); return nil }); err != nil {
+	if err := tx.ScanMCPHistory(now.Add(-24*time.Hour), now, func(s model.MCPObservation) error { trends.Add(s); return nil }); err != nil {
 		return err
 	}
 	// Sessions are read only once the alert is due, never on every pass.

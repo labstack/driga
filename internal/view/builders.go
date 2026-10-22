@@ -528,13 +528,13 @@ func machineLocal(r Reader, f Filter, now time.Time) (MachineView, error) {
 	v.MCPServers = derive.MCPServers(procs, nil, now)
 	buildAgentShare(&v, procs, ss, placements)
 	trends := derive.NewMCPTrendBuilder()
-	scan := func(s model.MCPMinute) error { trends.Add(s); return nil }
+	scan := func(s model.MCPObservation) error { trends.Add(s); return nil }
 	var trendErr error
 	if f.Full {
-		trendErr = r.ScanMCPMinutes(now, scan)
+		trendErr = r.ScanMCPHistory(now.Add(-30*24*time.Hour), now, scan)
 	} else {
 		v.TrendSince = now.Truncate(time.Minute).Add(-24 * time.Hour)
-		trendErr = r.ScanMCPMinutesSince(v.TrendSince, now, scan)
+		trendErr = r.ScanMCPHistory(v.TrendSince, now, scan)
 	}
 	if err := trendErr; err != nil {
 		return v, err

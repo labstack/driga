@@ -32,7 +32,7 @@ func TestMCPTrendCollectionAndPressure(t *testing.T) {
 	read := func() []derive.MCPTrend {
 		t.Helper()
 		b := derive.NewMCPTrendBuilder()
-		if err := st.ScanMCPMinutes(now, func(s model.MCPMinute) error { b.Add(s); return nil }); err != nil {
+		if err := st.ScanMCPHistory(now.Add(-30*24*time.Hour), now, func(s model.MCPObservation) error { b.Add(s); return nil }); err != nil {
 			t.Fatal(err)
 		}
 		return b.Trends()
@@ -74,5 +74,41 @@ func TestMCPTrendCollectionAndPressure(t *testing.T) {
 	pass(t, d, st, Plan{Procs: true})
 	if read()[0].State != "churning" {
 		t.Fatal(read())
+	}
+}
+
+func TestMCPPressureHistoryBoundedTo24Hours(t *testing.T) {
+	_, st, _, _ := setup(t)
+	now := time.Date(2026, 10, 22, 12, 0, 0, 0, time.UTC)
+	// The same currently visible host/command has an old observed-growth history.
+	procs := []model.Proc{{PID: 100, Cmdline: "claude", StartTime: now.Add(-72 * time.Hour)}}
+	for i := 0; i < 3; i++ {
+		at := now.Add(-48*time.Hour + time.Duration(i)*time.Hour)
+		procs = append(procs, model.Proc{PID: int32(i + 1), PPID: 100, Cmdline: "node /opt/server.js", StartTime: at, RSS: 1 << 30})
+		observations := derive.MCPServers(procs, nil, at).Samples
+		if err := st.Tx(context.Background(), func(tx *store.Tx) error { return tx.ObserveMCP(at, observations) }); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Ensure the fixture would trigger growth advice without the 24h bound.
+	baseline := derive.NewMCPTrendBuilder()
+	if err := st.ScanMCPHistory(now.Add(-30*24*time.Hour), now, func(row model.MCPObservation) error { baseline.Add(row); return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if len(baseline.Trends()) != 1 || baseline.Trends()[0].State != "leaking" {
+		t.Fatal(baseline.Trends())
+	}
+	for i := 0; i < 2; i++ {
+		at := now.Add(time.Duration(i) * time.Minute)
+		if err := st.Tx(context.Background(), func(tx *store.Tx) error {
+			return memoryPressureInbox(tx, model.MachineSample{TS: at, PressureLevel: "critical"}, at, procs)
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, item := range inbox(t, st) {
+		if item.Kind == "memory_pressure" && strings.Contains(item.Summary, "Largest observed growth") {
+			t.Fatal("alert read history older than 24h:", item.Summary)
+		}
 	}
 }
