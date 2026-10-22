@@ -167,6 +167,16 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 		}
 		work.applyCwds(procs)
 		if procsOK {
+			// Process recordings carry provenance even when the machine sample
+			// is not due or cannot be collected.
+			m, err := tx.Machine()
+			if err != nil && !errors.Is(err, store.ErrNotFound) {
+				return err
+			}
+			m.OS, m.Arch = platform.ProcessOS(d.Plat), runtime.GOARCH
+			if err := tx.UpsertMachine(m); err != nil {
+				return err
+			}
 			due, err := tx.MCPObservationDue(now)
 			if err != nil {
 				return err
@@ -1091,4 +1101,12 @@ func Snapshot(ctx context.Context, d Deps) (*store.Store, error) {
 		return nil, err
 	}
 	return st, nil
+}
+
+// spoolOffsetPrefix keeps platform-default and explicitly overridden spool offsets separate.
+func spoolOffsetPrefix(d Deps) string {
+	if os.Getenv("DRIGA_SPOOL_DIR") == "" && filepath.Clean(d.SpoolDir) == filepath.Clean(config.SpoolDir()) {
+		return "spool/state/"
+	}
+	return "spool/"
 }

@@ -47,9 +47,6 @@ func TestHookUsesRuntimeSpoolAndStructuredRotatedErrors(t *testing.T) {
 	if err != nil || len(events) != 1 {
 		t.Fatal(events, err)
 	}
-	if _, err := os.Stat(filepath.Join(home, ".driga/events")); !os.IsNotExist(err) {
-		t.Fatal(err)
-	}
 	path := filepath.Join(config.SpoolDir(), "hook-errors.log")
 	if err := os.WriteFile(path, []byte(strings.Repeat("x", int(logfile.MaxSize))), 0600); err != nil {
 		t.Fatal(err)
@@ -83,17 +80,17 @@ func TestHookIgnoresInternal(t *testing.T) {
 	}
 }
 
-func TestHookSnippetsAndCodexPayload(t *testing.T) {
+func TestHookSnippetsAndCodexPermission(t *testing.T) {
 	dir := hookTestEnv(t)
 	if err := os.WriteFile(os.Getenv("DRIGA_CONFIG"), []byte("capture_text = 'snippets'\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	cmd := HookCmd{Adapter: "codex", Event: "notify", Payload: []string{"ignored", `{"thread-id":"thread","cwd":"/repo","type":"agent-turn-complete","last-assistant-message":"done ghp_secret\n next"}`}}
-	if err := cmd.Run(&Globals{}); err != nil {
+	cmd := HookCmd{Adapter: "codex", Event: "PermissionRequest"}
+	if err := cmd.Run(&Globals{Stdin: strings.NewReader(`{"session_id":"thread","cwd":"/repo","message":"please ghp_secret approve"}`)}); err != nil {
 		t.Fatal(err)
 	}
 	got, off, err := spool.Drain(dir, nil)
-	if err != nil || len(got) != 1 || got[0].SessionID != "thread" || got[0].Event != "notify" || got[0].Message != "done [redacted] next" {
+	if err != nil || len(got) != 1 || got[0].SessionID != "thread" || got[0].Event != "PermissionRequest" || got[0].Message != "please [redacted] approve" {
 		t.Fatal(got, err)
 	}
 	claude := HookCmd{Adapter: "claude", Event: "Notification"}
@@ -193,10 +190,10 @@ func TestHookKongArguments(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := parser.Parse([]string{"hook", "codex", "notify", `{"thread-id":"s"}`}); err != nil {
+	if _, err := parser.Parse([]string{"hook", "codex", "PermissionRequest"}); err != nil {
 		t.Fatal(err)
 	}
-	if root.Hook.Adapter != "codex" || root.Hook.Event != "notify" || len(root.Hook.Payload) != 1 {
+	if root.Hook.Adapter != "codex" || root.Hook.Event != "PermissionRequest" {
 		t.Fatal(root.Hook)
 	}
 }

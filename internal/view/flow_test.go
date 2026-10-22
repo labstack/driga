@@ -3,7 +3,6 @@ package view
 import (
 	"encoding/json"
 	"fmt"
-	"reflect"
 	"testing"
 	"time"
 
@@ -84,29 +83,6 @@ func TestFlowUsesLabelPassInputs(t *testing.T) {
 		if string(got) != string(want) || v.Lead.Label != "finished" {
 			t.Errorf("flow replaced label-pass evidence at %s: got %s, want %s", now, got, want)
 		}
-	}
-}
-
-func TestFlowLegacyMixerPreservesStoredEvidence(t *testing.T) {
-	mixed := flowtest.Expected()
-	// A legacy record has no retained inputs, only the original explanation.
-	raw, _ := json.Marshal(mixed)
-	var fields map[string]json.RawMessage
-	json.Unmarshal(raw, &fields)
-	delete(fields, "input")
-	raw, _ = json.Marshal(fields)
-	json.Unmarshal(raw, &mixed)
-	var id int64
-	st := fixture(t, func(tx *store.Tx) (err error) {
-		id, err = tx.UpsertSession(model.Session{SessionObs: flowtest.Input().Obs, Label: mixed.Verdict, Mixer: &mixed})
-		return err
-	})
-	v, err := Flow(st, Filter{}, id, flowtest.Now.Add(time.Hour))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(v.Mixer, mixed) {
-		t.Fatalf("legacy evidence changed: got %+v, want %+v", v.Mixer, mixed)
 	}
 }
 

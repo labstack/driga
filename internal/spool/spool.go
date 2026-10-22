@@ -172,7 +172,7 @@ func Prune(dir string, now time.Time) error {
 
 // RecentDay includes the cutoff's UTC day and leaves unknown filenames alone.
 func RecentDay(name string, since time.Time) bool {
-	day, err := time.Parse("20060102.jsonl", strings.TrimPrefix(name, "legacy-"))
+	day, err := time.Parse("20060102.jsonl", name)
 	if err != nil || since.IsZero() {
 		return true
 	}

@@ -13,7 +13,6 @@ import (
 // InboxItems returns deduplicated signal facts. Old completions use the import
 // baseline; a waiting signal never becomes an acknowledgement just by being read.
 // Worker completions group on the lead; waits retain their own session identity.
-// Codex notify hooks are deliberately ignored: rollouts already emit completions.
 func InboxItems(sessions []model.Session, parents map[int64]int64, hooks []model.HookEvent, baseline time.Time) []model.InboxItem {
 	var result []model.InboxItem
 	for _, item := range inboxEvents(sessions, hooks, baseline) {
@@ -82,9 +81,6 @@ func inboxEvents(sessions []model.Session, hooks []model.HookEvent, baseline tim
 		}
 	}
 	for _, h := range hooks {
-		if h.Adapter == "codex" && h.Event == "notify" {
-			continue
-		}
 		id, ok := byKey[sessionKey{h.Adapter, h.SessionID}]
 		if !ok {
 			continue

@@ -21,10 +21,6 @@ func TestSpoolPruneOldDays(t *testing.T) {
 	if err := os.WriteFile(other, nil, 0600); err != nil {
 		t.Fatal(err)
 	}
-	legacy := filepath.Join(dir, "legacy-"+now.AddDate(0, 0, -31).Format("20060102.jsonl"))
-	if err := os.WriteFile(legacy, nil, 0600); err != nil {
-		t.Fatal(err)
-	}
 	if err := Prune(dir, now); err != nil {
 		t.Fatal(err)
 	}
@@ -34,8 +30,5 @@ func TestSpoolPruneOldDays(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, now.AddDate(0, 0, -31).Format("20060102")+".jsonl")); !os.IsNotExist(err) {
 		t.Fatalf("old day retained: %v", err)
-	}
-	if _, err := os.Stat(legacy); !os.IsNotExist(err) {
-		t.Fatal("migrated day retained", err)
 	}
 }

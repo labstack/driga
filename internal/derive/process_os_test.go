@@ -17,7 +17,7 @@ func TestSubreaperEvidenceUsesSampleOS(t *testing.T) {
 		{PID: 701, PPID: 700, StartTime: now.Add(-time.Hour), Cmdline: "claude mcp serve"},
 		{PID: 702, PPID: 701, StartTime: now.Add(-time.Minute)},
 	}
-	for _, sourceOS := range []string{"linux", "darwin", "windows", ""} {
+	for _, sourceOS := range []string{"linux", "darwin", "windows"} {
 		t.Run(sourceOS, func(t *testing.T) {
 			got := FindOrphans(NewProcIndexForOS(ps, sourceOS), nil, signatures.Builtin(), now, 0, nil, WithSubreaper(700))
 			if sourceOS == "windows" {

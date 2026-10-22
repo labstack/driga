@@ -14,8 +14,8 @@ import (
 )
 
 // Fake supplies a fixed process table and machine sample without host access.
-// LoadFake reads procs.json and optional machine.json, sockets.json (pid to
-// serving flag), and peers.json (pid to connected peer pids) fixture data.
+// LoadFake reads procs.json and machine.json with an explicit OS. Optional
+// sockets.json maps pids to serving flags; peers.json maps pids to peer pids.
 type Fake struct {
 	procs   []model.Proc
 	machine model.MachineSample
@@ -42,8 +42,8 @@ func (f *Fake) UserSubreaper() (int32, bool) {
 var _ Platform = (*Fake)(nil)
 var _ SocketProber = (*Fake)(nil)
 
-// LoadFake reads a fixture table. A missing machine.json means a zero sample;
-// malformed or unreadable files are errors, including an optional sample.
+// LoadFake reads a fixture table. machine.json must name the source OS;
+// malformed or unreadable files are errors, including optional files.
 func LoadFake(dir string) (*Fake, error) {
 	f := &Fake{}
 	read := func(name string, dst any, optional bool) error {
@@ -66,8 +66,11 @@ func LoadFake(dir string) (*Fake, error) {
 		model.MachineSample
 		OS string `json:"os"`
 	}
-	if err := read("machine.json", &machine, true); err != nil {
+	if err := read("machine.json", &machine, false); err != nil {
 		return nil, err
+	}
+	if machine.OS == "" {
+		return nil, fmt.Errorf("fake machine.json: source OS is required")
 	}
 	f.machine, f.os = machine.MachineSample, machine.OS
 	if err := read("sockets.json", &f.sockets, true); err != nil {
@@ -96,8 +99,7 @@ func LoadFake(dir string) (*Fake, error) {
 	return f, nil
 }
 
-// ProcessOS returns fixture provenance, never the replay host's OS. Older
-// fixtures without an OS retain the legacy Unix parent relationships.
+// ProcessOS returns explicit fixture provenance, never the replay host's OS.
 func (f *Fake) ProcessOS() string { return f.os }
 
 func (f *Fake) OpenFiles(ctx context.Context, path string) (bool, error) {
@@ -138,7 +140,7 @@ func (f *Fake) Procs(ctx context.Context) ([]model.Proc, error) {
 	return append([]model.Proc(nil), f.procs...), nil
 }
 
-// Machine returns the optional fixed machine sample.
+// Machine returns the fixed machine sample.
 func (f *Fake) Machine(ctx context.Context) (model.MachineSample, error) {
 	return f.machine, ctx.Err()
 }

@@ -138,12 +138,12 @@ Defaults and their purpose:
 | `summaries.model` | `haiku` | Model passed to `claude -p` for summaries. |
 | `cleanup.worktree_idle` | `168h` | Minimum idle time before a worktree is a candidate. |
 | `machine.disk_free_min` | `"0"` (automatic) | Inbox `low_disk` warning below the smaller of 10% of the volume or decimal 20 GB; override with a byte string or KiB/MiB/GiB. Env: `DRIGA_MACHINE_DISK_FREE_MIN`. |
-| `cleanup.low_disk_percent` / `cleanup.low_disk_bytes` | `10` / `10GiB` | Legacy keys accepted for compatibility; warnings now use `machine.disk_free_min`. |
+| `cleanup.low_disk_bytes` | `10GiB` | Legacy key accepted for compatibility; warnings now use `machine.disk_free_min`. |
 | `cleanup.regenerable` | `node_modules/`, `target/`, `.venv/`, … | Ignored directories that may leave with a worktree; extends the defaults. |
 
 The Claude, Codex, Copilot and Gemini adapters are enabled by default. Override them with
 `[adapters.<name>]` and `enabled = false`. Gemini CLI sessions are read from
-`~/.gemini/tmp/*/chats/` (or `$GEMINI_CLI_HOME`). Copilot uses hooks and process
+`~/.gemini/tmp/*/chats/` as JSONL transcripts (or under `$GEMINI_CLI_HOME`). Copilot uses hooks and process
 observations; without hooks it shows process-level sessions with unknown state.
 Install with `driga hooks install copilot`; `driga doctor` reports missing or
 stale hooks. Copilot hooks require CLI 1.0.98 or newer. Windows support is experimental. Copilot session-state files are not read. Antigravity (`agy`) keeps a
@@ -233,10 +233,9 @@ Installation shows a diff and asks for confirmation. Existing Claude and Codex
 files are backed up to `*.driga-bak-<timestamp>`.
 Claude installation appends commands for Stop, Notification, SessionStart, and
 SessionEnd to `~/.claude/settings.json`, preserving existing hooks. Codex
-installation sets `notify` in its `config.toml` only when unset; an existing notify
-command stays untouched and rollout tailing continues. TOML comments may be lost
-when a change is written; the backup retains the original. Uninstall removes only
-Driga entries. Hooks append events to the spool; the collector alone writes SQLite.
+installation manages only the `[[hooks.PermissionRequest]]` block in
+`config.toml`, preserving comments and existing `notify` settings. Uninstall
+removes only Driga entries. Hooks append events to the spool; the collector alone writes SQLite.
 
 Copilot installation manages only `$COPILOT_HOME/hooks/driga.json`, falling back
 to `~/.copilot/hooks/driga.json`. It captures sessionStart, userPromptSubmitted,
@@ -398,7 +397,7 @@ checks as Unix. Claude uses the documented executable/`args` form on Windows:
 The executable is an absolute JSON string; shell quotes are not part of an exec
 filename. This avoids Git Bash/PowerShell selection and path expansion. Use a
 Claude version supporting exec-form hooks. Copilot similarly uses absolute
-`exec` plus `args`. Codex notify uses argv; its permission hook uses
+`exec` plus `args`. Codex's permission hook uses
 `cmd.exe /d /c call "<absolute driga.exe>" hook codex PermissionRequest`, valid
 from cmd.exe and PowerShell. This conservative string form rejects shell
 metacharacters in the install path (including `%`, `!`, `&`, parentheses, `$`

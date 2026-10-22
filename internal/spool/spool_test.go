@@ -23,7 +23,7 @@ func TestAppendDrainRoundTrip(t *testing.T) {
 
 	dir := filepath.Join(t.TempDir(), "events")
 	now := time.Date(2026, 10, 18, 23, 0, 0, 0, time.FixedZone("west", -7*3600))
-	events := []model.HookEvent{{TS: now, Adapter: "claude", SessionID: "one", Event: "Stop"}, {TS: now.Add(-48 * time.Hour), Adapter: "codex", SessionID: "two", Event: "notify"}}
+	events := []model.HookEvent{{TS: now, Adapter: "claude", SessionID: "one", Event: "Stop"}, {TS: now.Add(-48 * time.Hour), Adapter: "codex", SessionID: "two", Event: "PermissionRequest"}}
 	for _, ev := range events {
 		if err := Append(dir, ev); err != nil {
 			t.Fatal(err)

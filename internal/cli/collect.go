@@ -74,9 +74,6 @@ func (c CollectCmd) Run(g *Globals) error {
 		return err
 	}
 	defer st.Close()
-	if err := collector.MigrateSpool(ctx, d, st); err != nil {
-		return err
-	}
 	r, err := collector.Pass(ctx, d, st, collector.Plan{Procs: true, Machine: true, Git: true, GitFull: true, Cwds: true, Sockets: true})
 	if err != nil {
 		return err

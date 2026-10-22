@@ -212,6 +212,9 @@ func TestFakeIdentityAndIsolation(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "procs.json"), b, 0600); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(dir, "machine.json"), []byte(`{"os":"linux"}`), 0600); err != nil {
+		t.Fatal(err)
+	}
 	f, err := platform.LoadFake(dir)
 	if err != nil {
 		t.Fatal(err)
@@ -236,7 +239,7 @@ func TestFakeIdentityAndIsolation(t *testing.T) {
 	if _, err := f.Machine(ctx); err != nil {
 		t.Fatalf("optional sample: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "machine.json"), []byte(`{"cores":12}`), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "machine.json"), []byte(`{"os":"linux","cores":12}`), 0600); err != nil {
 		t.Fatal(err)
 	}
 	f, err = platform.LoadFake(dir)

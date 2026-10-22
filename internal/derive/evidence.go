@@ -199,16 +199,10 @@ func LabelWithEvidence(in StateInput, now time.Time, th Thresholds) model.StateM
 // SessionMixer is the flow source of truth for web, TUI, CLI JSON and MCP.
 // Recompute from the same inputs, CPU sample, time and threshold used by the
 // last label pass, never today's procs/events/clock: the mixer explains the
-// stored label. Legacy rows without inputs retain their stored explanation;
-// rows predating mixers expose unavailable signals until the next label pass.
+// stored label. Sessions without a label pass expose unavailable signals.
 func SessionMixer(s model.Session) model.StateMixer {
-	if s.Mixer != nil {
-		if s.Mixer.Input != nil {
-			return LabelWithEvidence(*s.Mixer.Input, s.Mixer.ObservedAt, Thresholds{StalledAfter: time.Duration(s.Mixer.StalledAfterMS) * time.Millisecond})
-		}
-		m := *s.Mixer
-		m.Rows = append([]model.StateSignal(nil), m.Rows...)
-		return m
+	if s.Mixer != nil && s.Mixer.Input != nil {
+		return LabelWithEvidence(*s.Mixer.Input, s.Mixer.ObservedAt, Thresholds{StalledAfter: time.Duration(s.Mixer.StalledAfterMS) * time.Millisecond})
 	}
 	m := model.StateMixer{Verdict: s.Label, Heuristic: s.Heuristic, Evidence: s.Evidence}
 	for _, name := range []string{"registry", "hooks", "telemetry", "process"} {

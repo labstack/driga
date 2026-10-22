@@ -43,10 +43,9 @@ type InboxConfig struct {
 
 // CleanupConfig bounds eligibility and regenerable ignored directories.
 type CleanupConfig struct {
-	WorktreeIdle   time.Duration
-	LowDiskPercent float64
-	LowDiskBytes   uint64
-	Regenerable    []string
+	WorktreeIdle time.Duration
+	LowDiskBytes uint64
+	Regenerable  []string
 }
 
 type SummariesConfig struct {
@@ -153,9 +152,6 @@ func spoolDirForOS(goos string) string {
 	}
 	return filepath.Join(home(), "Library", "Application Support", "driga", "events")
 }
-
-// LegacySpoolDir is only read by the collector migration.
-func LegacySpoolDir() string { return filepath.Join(home(), ".driga", "events") }
 
 func windowsAppDir(env, leaf string) string {
 	if p := os.Getenv(env); p != "" {

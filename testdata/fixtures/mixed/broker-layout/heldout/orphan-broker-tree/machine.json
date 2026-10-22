@@ -1,4 +1,5 @@
 {
+  "os": "linux",
   "sampled_at": "2026-10-18T18:00:00Z",
   "mem_used_bytes": 6442450944,
   "mem_compressed_bytes": 0,

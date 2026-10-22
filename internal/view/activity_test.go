@@ -20,7 +20,7 @@ func TestActivityBucketsGapsEventsAndScope(t *testing.T) {
 			if id == "remote" {
 				factor = 10
 			}
-			if err := w.UpsertMachine(model.Machine{Name: id}); err != nil {
+			if err := w.UpsertMachine(model.Machine{OS: "linux", Name: id}); err != nil {
 				return err
 			}
 			for i, at := range []time.Time{start.Add(-time.Second), start, start.Add(20 * time.Second), testNow, now.Add(time.Second)} {

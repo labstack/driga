@@ -3,7 +3,7 @@ The directory names the plan's tested format family, not a real captured run.
 
 Verified against public google-gemini/gemini-cli source on 2026-10-18:
 
-- [chatRecordingService.ts](https://github.com/google-gemini/gemini-cli/blob/main/packages/core/src/services/chatRecordingService.ts): metadata, messages, replacement messages, inclusive rewind, tool result patches, recovery rename and legacy migration.
+- [chatRecordingService.ts](https://github.com/google-gemini/gemini-cli/blob/main/packages/core/src/services/chatRecordingService.ts): metadata, messages, replacement messages, inclusive rewind, tool result patches, recovery rename.
 - [chatRecordingTypes.ts](https://github.com/google-gemini/gemini-cli/blob/main/packages/core/src/services/chatRecordingTypes.ts): tool calls use `args` and optional `result`.
 - [paths.ts](https://github.com/google-gemini/gemini-cli/blob/main/packages/core/src/utils/paths.ts) and [storage.ts](https://github.com/google-gemini/gemini-cli/blob/main/packages/core/src/config/storage.ts): `GEMINI_CLI_HOME` replaces the home directory; append `.gemini`.
 - [projectRegistry.ts](https://github.com/google-gemini/gemini-cli/blob/main/packages/core/src/config/projectRegistry.ts): `.project_root` holds the project path.

@@ -42,7 +42,7 @@ func TestRecordedProcessOS(t *testing.T) {
 					t.Fatal(err)
 				}
 				d.Plat = fake
-				pass(t, d, st, Plan{Procs: true, Machine: true})
+				pass(t, d, st, Plan{Procs: true})
 				m, err := st.Machine()
 				if err != nil || m.OS != sourceOS {
 					t.Fatalf("source OS: %+v %v", m, err)

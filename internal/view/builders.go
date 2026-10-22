@@ -57,16 +57,19 @@ func procTree(s model.Session, idx derive.ProcIndex) []model.Proc {
 }
 
 func recordedProcIndex(r Reader, procs []model.Proc) (derive.ProcIndex, error) {
+	if len(procs) == 0 {
+		return derive.ProcIndex{}, nil
+	}
 	ms, err := r.Machines()
 	if err != nil {
 		return derive.ProcIndex{}, err
 	}
 	for _, m := range ms {
-		if m.MachineID == r.MachineID() {
+		if m.MachineID == r.MachineID() && m.OS != "" {
 			return derive.NewProcIndexForOS(procs, m.OS), nil
 		}
 	}
-	return derive.NewProcIndexForOS(procs, ""), nil
+	return derive.ProcIndex{}, fmt.Errorf("process source OS is required for machine %s", r.MachineID())
 }
 
 // Agents builds families in activity order, retaining children next to parents.

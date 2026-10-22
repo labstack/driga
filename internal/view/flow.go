@@ -371,7 +371,10 @@ func Flow(r Reader, f Filter, sessionID int64, now time.Time) (FlowView, error) 
 	if err != nil {
 		return v, err
 	}
-	idx := derive.NewProcIndexForOS(procs, selectedMachine.OS)
+	idx, err := recordedProcIndex(selectedReader, procs)
+	if err != nil {
+		return v, err
+	}
 	repos, err := selectedReader.Repos()
 	if err != nil {
 		return v, err

@@ -25,7 +25,12 @@ func fixture(t *testing.T, seed func(*store.Tx) error) *store.Store {
 	}
 	t.Cleanup(func() { s.Close() })
 	if seed != nil {
-		if err := s.Tx(context.Background(), seed); err != nil {
+		if err := s.Tx(context.Background(), func(tx *store.Tx) error {
+			if err := tx.UpsertMachine(model.Machine{OS: "linux"}); err != nil {
+				return err
+			}
+			return seed(tx)
+		}); err != nil {
 			t.Fatal(err)
 		}
 	}

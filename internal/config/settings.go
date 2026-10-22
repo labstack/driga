@@ -46,7 +46,6 @@ var settings = []Setting{
 	{"summaries.enabled", "Summaries.Enabled", "bool", false, "Enable optional local Claude summaries.", "true or false"},
 	{"summaries.model", "Summaries.Model", "string", "haiku", "Model selection passed to the Claude CLI.", "nonempty"},
 	{"cleanup.worktree_idle", "Cleanup.WorktreeIdle", "duration", "168h", "Idle worktree cleanup eligibility.", "0..2562047h47m16.854775807s; zero = no idle minimum"},
-	{"cleanup.low_disk_percent", "Cleanup.LowDiskPercent", "float", float64(10), "Legacy cleanup threshold; machine warnings now use machine.disk_free_min.", "0..100; compatibility only"},
 	{"cleanup.low_disk_bytes", "Cleanup.LowDiskBytes", "size", "10GiB", "Legacy cleanup threshold; machine warnings now use machine.disk_free_min.", "0..18446744073709551615 bytes; compatibility only"},
 	{"cleanup.regenerable", "Cleanup.Regenerable", "list", []string{"node_modules/", "target/", ".venv/", "venv/", "dist/", "build/", ".next/", "__pycache__/", ".gradle/", ".terraform/"}, "Additional regenerable relative directories (merged with defaults).", "file-only; empty = built-in directories"},
 	{"fleet.serve", "Fleet.Serve", "bool", false, "Enable optional fleet serving.", "true or false; requires fleet.listen"},
@@ -85,7 +84,7 @@ func (s Setting) Value(c Config) any {
 var runtimeSettings = []struct{ Name, Type, Default, Purpose string }{
 	{"DRIGA_CONFIG", "path", "$XDG_CONFIG_HOME/driga/config.toml or ~/.config/driga/config.toml", "Configuration file override."},
 	{"DRIGA_DATA_DIR", "path", "Linux: $XDG_DATA_HOME/driga or ~/.local/share/driga; macOS: ~/Library/Application Support/driga", "Database and fleet data directory override."},
-	{"DRIGA_SPOOL_DIR", "path", "Linux: $XDG_STATE_HOME/driga/events or ~/.local/state/driga/events; macOS: $XDG_STATE_HOME/driga/events or ~/Library/Application Support/driga/events", "Hook/ack spool directory override; disables legacy migration."},
+	{"DRIGA_SPOOL_DIR", "path", "Linux: $XDG_STATE_HOME/driga/events or ~/.local/state/driga/events; macOS: $XDG_STATE_HOME/driga/events or ~/Library/Application Support/driga/events", "Hook/ack spool directory override."},
 	{"DRIGA_INTERNAL", "marker", "unset", "1 suppresses recursive hooks from Driga-owned Claude subprocesses."},
 	{"DRIGA_FIXTURE_OUTPUT", "path", "unset", "Fixture generator output directory (tests only)."},
 	{"DRIGA_COLLECTOR_HEAP_CHILD", "marker", "unset", "1 selects isolated collector heap-test child."},
@@ -156,17 +155,6 @@ func (s Setting) assign(c *Config, raw any) error {
 			return fmt.Errorf("expected integer; allowed range %s", s.Range)
 		}
 		v = int(n)
-	case "float":
-		n, ok := raw.(float64)
-		if !ok {
-			if i, yes := raw.(int64); yes {
-				n, ok = float64(i), true
-			}
-		}
-		if !ok || math.IsNaN(n) || math.IsInf(n, 0) || n < 0 || n > 100 {
-			return fmt.Errorf("expected percent; allowed range %s", s.Range)
-		}
-		v = n
 	case "bool":
 		b, ok := raw.(bool)
 		if !ok {
@@ -360,12 +348,6 @@ func load(path string, overrides map[string]any) (Config, map[string]string, err
 			n, err := strconv.ParseInt(text, 10, 64)
 			if err != nil {
 				return c, sources, fmt.Errorf("%s: expected integer; allowed range %s", name, s.Range)
-			}
-			raw = n
-		case "float":
-			n, err := strconv.ParseFloat(text, 64)
-			if err != nil {
-				return c, sources, fmt.Errorf("%s: expected percent; allowed range %s", name, s.Range)
 			}
 			raw = n
 		}

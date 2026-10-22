@@ -243,7 +243,7 @@ for example `disk_free_min = "5GiB"`. Its environment override is
 `DRIGA_MACHINE_DISK_FREE_MIN`. The default `"0"` means automatic: the smaller
 of 10% of the sampled root volume or 20,000,000,000 bytes (decimal 20 GB).
 Warnings trigger strictly below the limit; equality ends the episode.
-The old `cleanup.low_disk_*` keys remain accepted for config compatibility but
+The old `cleanup.low_disk_bytes` key remains accepted for config compatibility but
 no longer control machine warnings.
 
 The existing `low_disk` episode IDs and state are reused. Existing open items

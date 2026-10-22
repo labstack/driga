@@ -1,4 +1,4 @@
-// Package gemini reads synthetic-tested Gemini CLI conversation formats.
+// Package gemini reads synthetic-tested Gemini CLI JSONL conversations.
 package gemini
 
 import (
@@ -29,12 +29,10 @@ type cachedFile struct {
 type geminiAdapter struct {
 	mu    sync.Mutex
 	cache map[string]cachedFile
-	// Injectable legacy opener; all opens are read-only.
-	open func(string) (*os.File, error)
 }
 
 // New returns the Gemini CLI adapter.
-func New() adapter.Adapter                      { return &geminiAdapter{cache: make(map[string]cachedFile), open: os.Open} }
+func New() adapter.Adapter                      { return &geminiAdapter{cache: make(map[string]cachedFile)} }
 func (*geminiAdapter) Name() string             { return "gemini" }
 func (*geminiAdapter) TestedVersions() []string { return []string{"0.46"} }
 
@@ -54,7 +52,7 @@ func (a *geminiAdapter) Collect(ctx context.Context, env adapter.Env) ([]model.S
 	}
 	root := filepath.Join(home, ".gemini", "tmp")
 	var paths []string
-	for _, pattern := range []string{"*/chats/*.jsonl", "*/chats/*/*.jsonl", "*/chats/session-*.json"} {
+	for _, pattern := range []string{"*/chats/*.jsonl", "*/chats/*/*.jsonl"} {
 		found, err := filepath.Glob(filepath.Join(root, pattern))
 		if err != nil {
 			return nil, nil, err
@@ -101,19 +99,7 @@ func (a *geminiAdapter) Collect(ctx context.Context, env adapter.Env) ([]model.S
 			delete(a.cache, path)
 			continue
 		}
-		var f conversation
-		var next model.Offset
-		var w []adapter.Warning
-		if strings.HasSuffix(path, ".json") {
-			// A migrated JSONL sibling is authoritative; don't alternate old
-			// and new snapshots of the same conversation every pass.
-			if _, err := os.Stat(path + "l"); err == nil {
-				continue
-			}
-			f, next, w, err = a.readLegacy(ctx, path, prev)
-		} else {
-			f, next, w, err = a.readJSONL(ctx, path, prev)
-		}
+		f, next, w, err := a.readJSONL(ctx, path, prev)
 		warnings = append(warnings, w...)
 		if errors.Is(err, fs.ErrNotExist) {
 			delete(a.cache, path)

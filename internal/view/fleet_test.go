@@ -19,7 +19,7 @@ func TestPeerRecordedPathStyles(t *testing.T) {
 		t.Run(tc.cwd, func(t *testing.T) {
 			st := fixture(t, func(tx *store.Tx) error {
 				peer := tx.ForMachine("peer")
-				if err := peer.UpsertMachine(model.Machine{Hostname: "peer", State: "live"}); err != nil {
+				if err := peer.UpsertMachine(model.Machine{OS: "linux", Hostname: "peer", State: "live"}); err != nil {
 					return err
 				}
 				for _, id := range []string{"one", "two"} {
@@ -62,7 +62,7 @@ func fleetFixture(t *testing.T) *store.Store {
 			if id == "remote" {
 				state, name = "stale", "vm"
 			}
-			if err := w.UpsertMachine(model.Machine{Name: name, Hostname: name, State: state, LastContactAt: testNow.Add(-12 * time.Minute), ClockSkewMS: 61000}); err != nil {
+			if err := w.UpsertMachine(model.Machine{OS: "linux", Name: name, Hostname: name, State: state, LastContactAt: testNow.Add(-12 * time.Minute), ClockSkewMS: 61000}); err != nil {
 				return err
 			}
 			repo, err := w.UpsertRepo(model.Repo{Name: "api", Path: "/code/api"})

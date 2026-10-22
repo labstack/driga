@@ -2,6 +2,7 @@ package flowtest
 
 import (
 	"fmt"
+	"github.com/labstack/driga/internal/derive"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/store"
 	"time"
@@ -10,7 +11,12 @@ import (
 // SeedMap is an eight-hour family with measured bursts and twelve quiet threads.
 // Snapshot pruning leaves most of the four-hour zoom explicitly without data.
 func SeedMap(tx *store.Tx, now time.Time, snapshot bool) (int64, error) {
-	mixer := model.StateMixer{Verdict: "working", ObservedAt: now.Add(-5 * time.Second), Evidence: "stored hooks and process verdict", Agreement: 3, Rows: []model.StateSignal{{Name: "hooks", Reading: "tool result"}, {Name: "process", Reading: "alive · CPU 2.5%"}}}
+	observedAt := now.Add(-5 * time.Second)
+	toolAt := observedAt.Add(-time.Second)
+	mixer := derive.LabelWithEvidence(derive.StateInput{
+		Obs:  model.SessionObs{Adapter: "claude", PID: 100, RegistryStatus: "busy", LastActivityAt: toolAt},
+		Proc: &model.Proc{PID: 100, CPUPercent: 2.5}, LastToolResult: &toolAt,
+	}, observedAt, derive.Thresholds{})
 	lead, err := tx.UpsertSession(model.Session{SessionObs: model.SessionObs{Adapter: "claude", ExternalID: "eight-hour-lead", PID: 100, Title: "Driga flow map", StartedAt: now.Add(-8 * time.Hour), LastActivityAt: now}, Label: "working", Mixer: &mixer})
 	if err != nil {
 		return 0, err
@@ -32,10 +38,25 @@ func SeedMap(tx *store.Tx, now time.Time, snapshot bool) (int64, error) {
 		}
 	}
 	for i, adapter := range []string{"claude", "copilot", "codex", "gemini"} {
-		mix := mixer
-		mix.Verdict = []string{"working", "finished", "waiting", "unknown"}[i]
-		mix.Evidence = "stored " + adapter + " verdict"
-		s := model.Session{ParentID: &lead, SessionObs: model.SessionObs{Adapter: adapter, ExternalID: "map-" + adapter, Title: []string{"Implement geometry", "Review CSP", "Permission check", "Quiet remote analysis"}[i], StartedAt: now.Add(time.Duration(i-25) * time.Minute), LastActivityAt: now.Add(-time.Minute)}, Label: mix.Verdict, Mixer: &mix}
+		obs := model.SessionObs{Adapter: adapter, ExternalID: "map-" + adapter, Title: []string{"Implement geometry", "Review CSP", "Permission check", "Quiet remote analysis"}[i], StartedAt: now.Add(time.Duration(i-25) * time.Minute), LastActivityAt: now.Add(-time.Minute)}
+		in := derive.StateInput{Obs: obs}
+		switch adapter {
+		case "claude":
+			in.Obs.PID, in.Obs.RegistryStatus = 101, "busy"
+			in.Proc = &model.Proc{PID: 101, CPUPercent: 2.5}
+		case "copilot":
+			in.Obs.RegistryStatus = "ended"
+		case "codex":
+			in.Obs.PID, in.Obs.TurnOpen = 102, true
+			in.Proc = &model.Proc{PID: 102}
+			at := now.Add(-30 * time.Second)
+			in.LastNotification = &at
+		case "gemini":
+			in.Obs.PID, in.Obs.TurnOpen = 103, true
+			in.Proc = &model.Proc{PID: 103}
+		}
+		mix := derive.LabelWithEvidence(in, now, derive.Thresholds{})
+		s := model.Session{ParentID: &lead, SessionObs: in.Obs, Label: mix.Verdict, Heuristic: mix.Heuristic, Evidence: mix.Evidence, Mixer: &mix}
 		if adapter == "copilot" {
 			end := now.Add(-3 * time.Minute)
 			s.EndedAt = &end
