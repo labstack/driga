@@ -124,5 +124,6 @@ jobs:
         if: always()
         run: |
           keychain="$RUNNER_TEMP/driga-signing/signing.keychain-db"
+          # delete-keychain also removes it from the user search list.
           if [ -f "$keychain" ]; then security delete-keychain "$keychain"; fi
           rm -rf "$RUNNER_TEMP/driga-signing"

@@ -1,0 +1,68 @@
+name: macOS signing
+
+# Exercises the release's signing path (temporary keychain, Developer ID
+# codesign, notarization, stapling) without publishing anything, so signing
+# changes are proven before a release tag is spent.
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/macos-signing.yml
+      - scripts/build-macos-app.sh
+      - scripts/macos-app.py
+      - scripts/macos-signing-keychain.sh
+
+permissions:
+  contents: read
+
+jobs:
+  sign:
+    name: Sign and notarize Driga.app
+    # Secrets are not available to forks; only same-repository changes run.
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: macos-15
+    timeout-minutes: 30
+    env:
+      GOTOOLCHAIN: local
+      CGO_ENABLED: "0"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          check-latest: false
+          cache: false
+
+      - name: Prepare temporary signing keychain
+        env:
+          MACOS_SIGN_P12: ${{ secrets.MACOS_SIGN_P12 }}
+          MACOS_SIGN_PASSWORD: ${{ secrets.MACOS_SIGN_PASSWORD }}
+          MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
+          MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+        run: bash scripts/macos-signing-keychain.sh
+
+      # Names and fingerprints only; no secret material.
+      - name: Show signing identities
+        run: |
+          security list-keychains -d user
+          security find-identity -v -p codesigning "$DRIGA_SIGNING_KEYCHAIN"
+          security find-identity -v -p codesigning
+
+      - name: Build, sign and notarize the app
+        run: |
+          app="$RUNNER_TEMP/signing-check/Driga.app"
+          mkdir -p "$app/Contents/MacOS"
+          go build -trimpath -ldflags "-s -w" -o "$app/Contents/MacOS/driga" ./cmd/driga
+          bash scripts/build-macos-app.sh "$app/Contents/MacOS/driga" darwin 0.0.0-signing-check false
+          codesign -dv --verbose=2 "$app" 2>&1 | grep -E '^(Authority|TeamIdentifier|Identifier)='
+
+      - name: Delete temporary signing keychain
+        if: always()
+        run: |
+          keychain="$RUNNER_TEMP/driga-signing/signing.keychain-db"
+          # delete-keychain also removes it from the user search list.
+          if [ -f "$keychain" ]; then security delete-keychain "$keychain"; fi
+          rm -rf "$RUNNER_TEMP/driga-signing" "$RUNNER_TEMP/signing-check"
