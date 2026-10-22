@@ -222,7 +222,7 @@ func defaultFlowLead(sessions []model.Session, since time.Time) *model.Session {
 	for i := range sessions {
 		s := &sessions[i]
 		// Only interactive roots are default leads; other origins remain explicitly openable.
-		if s.ParentID != nil || s.Hosted || !strings.HasPrefix(s.Origin, "interactive") || s.PID == 0 || s.EndedAt != nil || s.Label == "dead" || !since.IsZero() && s.LastActivityAt.Before(since) {
+		if s.ParentID != nil || s.Hosted || !strings.HasPrefix(s.Origin, "interactive") || s.PID == 0 || s.EndedAt != nil || s.Label == "dead" || s.Label == "ended" || !since.IsZero() && s.LastActivityAt.Before(since) {
 			continue
 		}
 		if best != nil {

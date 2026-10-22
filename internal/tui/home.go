@@ -156,7 +156,7 @@ func (m *app) homeView() string {
 	counts := map[string]int{}
 	total := 0
 	m.eachAgent(func(a view.AgentRow) { counts[strings.TrimSuffix(strings.TrimPrefix(a.Label, "~"), "?")]++; total++ })
-	stateOrder := []string{"working", "waiting", "stalled", "idle", "finished", "dead", "unknown"}
+	stateOrder := []string{"working", "waiting", "stalled", "idle", "finished", "ended", "dead", "unknown"}
 	segmented := ""
 	legend := []string{}
 	used := 0
@@ -169,7 +169,7 @@ func (m *app) homeView() string {
 			segmented += m.stateText(strings.Repeat("█", end-used), state)
 			used = end
 		}
-		if n > 0 || state != "dead" && state != "unknown" {
+		if n > 0 || state != "ended" && state != "dead" && state != "unknown" {
 			legend = append(legend, m.stateText(fmt.Sprintf("● %d %s", n, state), state))
 		}
 	}

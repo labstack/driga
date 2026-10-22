@@ -24,7 +24,7 @@ func Conflicts(sessions []model.Session, files map[int64][]model.FileTouch, pare
 	absoluteFiles := make(map[string]map[int64]conflictEdit)
 	otherFiles := make(map[conflictFileKey]map[int64]conflictEdit)
 	for _, s := range sessions {
-		if s.EndedAt != nil || s.Label == "dead" || s.Label == "finished" {
+		if s.EndedAt != nil || s.Label == "dead" || s.Label == "ended" || s.Label == "finished" {
 			continue
 		}
 		root := conflictRoot(s.ID, parents)

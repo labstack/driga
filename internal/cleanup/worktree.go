@@ -117,7 +117,7 @@ func inspectWorktree(ctx context.Context, e Env, s snapshot, w model.Worktree, e
 	latest := time.Time{}
 	for _, session := range s.sessions {
 		if inside(resolved(c.Path), resolved(session.Cwd)) {
-			if session.Label != "dead" && session.Label != "finished" {
+			if session.Label != "dead" && session.Label != "ended" && session.Label != "finished" {
 				return fail("live session is inside worktree")
 			}
 			if session.LastActivityAt.After(latest) {

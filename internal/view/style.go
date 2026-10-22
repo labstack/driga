@@ -17,7 +17,7 @@ func StateStyle(label string, noColor bool) lipgloss.Style {
 		token = "stalled"
 	}
 	switch token {
-	case "working", "waiting", "stalled", "idle", "finished":
+	case "working", "waiting", "stalled", "idle", "finished", "ended":
 		return TokenStyle(token, noColor)
 	}
 

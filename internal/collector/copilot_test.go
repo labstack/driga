@@ -63,6 +63,9 @@ func TestCopilotPromptBeforeStartAndError(t *testing.T) {
 							if i >= 2 {
 								want = "finished"
 							}
+							if i == 3 {
+								want = "ended"
+							}
 							if s.Label != want || s.TurnOpen != (i < 2) || (s.EndedAt != nil) != (i == 3) {
 								t.Fatalf("%s: %+v", h.Event, s)
 							}
@@ -116,7 +119,7 @@ func TestCopilotHooksStateAndInbox(t *testing.T) {
 				{"notification", "permission_prompt", "waiting", true}, {"agentStop", "", "finished", false},
 				{"userPromptSubmitted", "", "working", false},
 				{"notification", "permission_prompt", "waiting", true}, {"errorOccurred", "", "finished", false},
-				{"notification", "elicitation_dialog", "waiting", true}, {"sessionEnd", "", "finished", false},
+				{"notification", "elicitation_dialog", "waiting", true}, {"sessionEnd", "", "ended", false},
 			}
 			for _, tc := range events {
 				at = at.Add(time.Second)

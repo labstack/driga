@@ -119,7 +119,7 @@ func LabelWithEvidence(in StateInput, now time.Time, th Thresholds) model.StateM
 		m.Rows[1].Reading = "Copilot " + in.Obs.RegistryStatus
 		m.Rows[1].At = in.Obs.LastActivityAt
 		support[1] = in.Obs.RegistryStatus != ""
-		support[3] = available && (alive || verdict == "dead")
+		support[3] = available && (alive || verdict == "dead" || verdict == "ended")
 		if in.Obs.RegistryStatus == "" {
 			deciding = "process"
 		}
@@ -148,7 +148,7 @@ func LabelWithEvidence(in StateInput, now time.Time, th Thresholds) model.StateM
 		case "stalled":
 			support[0] = in.Obs.RegistryStatus == "busy" && age >= th.StalledAfter
 			support[3] = available && alive && in.Proc.CPUPercent < 1
-		case "dead":
+		case "dead", "ended":
 			support[0] = in.Obs.PID == 0 && in.Obs.RegistryStatus != ""
 			support[3] = available && !alive
 		case "unknown":
@@ -164,7 +164,7 @@ func LabelWithEvidence(in StateInput, now time.Time, th Thresholds) model.StateM
 			support[0] = true
 		} else {
 			switch verdict {
-			case "finished", "idle":
+			case "finished", "idle", "ended":
 				support[3] = !in.Obs.TurnOpen
 			case "dead":
 				support[3] = !alive && in.Obs.TurnOpen

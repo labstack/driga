@@ -51,7 +51,7 @@ func PlaceProcesses(procs []model.Proc, sessions []model.Session, sigs *signatur
 	live := map[int32]model.Session{}
 	for _, s := range sessions {
 		p, ok := byPID[s.PID]
-		if !ok || s.ID == 0 || s.EndedAt != nil || s.Label == "dead" || s.Hosted || s.ProcStart.IsZero() || !SameStart(p.StartTime, s.ProcStart) {
+		if !ok || s.ID == 0 || s.EndedAt != nil || s.Label == "dead" || s.Label == "ended" || s.Hosted || s.ProcStart.IsZero() || !SameStart(p.StartTime, s.ProcStart) {
 			continue
 		}
 		live[s.PID] = s

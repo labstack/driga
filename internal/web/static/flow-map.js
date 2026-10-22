@@ -3,7 +3,7 @@
   "use strict";
   const minute=60000, stamp=x=>x?Date.parse(x):NaN;
   const valid=x=>Number.isFinite(x)&&x>-60000000000000;
-  const glyph=s=>({working:"▶",waiting:"◆",stalled:"‖",unknown:"?",idle:"○",finished:"●",dead:"●"})[s]||"?";
+  const glyph=s=>({working:"▶",waiting:"◆",stalled:"‖",unknown:"?",idle:"○",finished:"●",ended:"●",dead:"●"})[s]||"?";
   const stateName=s=>s==="waiting"?"needs you":s==="stalled"?"stalled?":s;
   const sessionTitle=n=>(n.title||n.adapter+" thread")+(n.started_from?" · from "+n.started_from:"");
   const state=n=>n.mixer?.verdict||n.label||"unknown";
@@ -72,7 +72,7 @@
   const sortAttention=waits=>[...waits].sort((a,b)=>waitStart(a)-waitStart(b)||String(a.machine_id||"").localeCompare(String(b.machine_id||""))||String(a.id||"").localeCompare(String(b.id||"")));
   const waitReason=w=>w.reason==="permission"?"◆ Permission"+(w.tool?" · "+w.tool:"")+(w.detail?": "+w.detail:""):"◆ Asked for input · what it asked wasn't captured";
   const signalGlyph=r=>!r.strength?"–":r.supports?"✓":"✗";
-  function headPattern(st){return st==="idle"?"ring":st==="stalled"?"dashed":!["working","waiting","finished","dead"].includes(st)?"question":"filled";}
+  function headPattern(st){return st==="idle"?"ring":st==="stalled"?"dashed":!["working","waiting","finished","ended","dead"].includes(st)?"question":"filled";}
   // Collapse only consecutive identical stored events, preserving the newest three.
   function recentEvents(events) {
     const sorted=[...events].sort((a,b)=>stamp(b.occurred_at)-stamp(a.occurred_at)),out=[];

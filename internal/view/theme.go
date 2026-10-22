@@ -34,6 +34,7 @@ var themeTokens = [...]ThemeToken{
 	{"accent", "#7629D6", "#CBA6F7"},
 	{"observation", "#116762", "#94E2D5"},
 	{"tool", "#04778A", "#89DCEB"},
+	{"ended", "#5C5F77", "#A6ADC8"},
 }
 
 // consoleTokens maps the console's roles onto the same Catppuccin palettes.

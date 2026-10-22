@@ -91,8 +91,10 @@ func tailEvent(e model.Event, machineID, machine, description string) TailEvent 
 	key := fmt.Sprintf("%x", sha256.Sum256([]byte(fmt.Sprintf("%s\x00%s\x00%s\x00%d\x00%s\x00%s", machineID, e.Adapter, e.ExternalID, e.TS.UnixNano(), e.Kind, e.Summary))))
 	state := "idle"
 	switch strings.ToLower(e.Kind) {
-	case "stop", "finished", "worker_finished", "sessionend":
+	case "stop", "finished", "worker_finished":
 		state = "finished"
+	case "sessionend", "ended":
+		state = "ended"
 	case "notification", "waiting", "permissionrequest":
 		state = "waiting"
 	case "stalled", "error", "otlp:api_error":

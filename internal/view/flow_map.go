@@ -75,7 +75,7 @@ func FlowGlyph(label string) string {
 		return "‖"
 	case "idle":
 		return "○"
-	case "finished", "dead":
+	case "finished", "ended", "dead":
 		return "●"
 	}
 	return "?"
@@ -92,7 +92,7 @@ func FlowHeadPattern(label string) rune {
 		return '┄'
 	case "idle":
 		return '·'
-	case "finished", "dead":
+	case "finished", "ended", "dead":
 		return '━'
 	}
 	return '┈'

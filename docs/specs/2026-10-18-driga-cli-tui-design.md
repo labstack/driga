@@ -124,9 +124,12 @@ already-known ahead/behind state. Bound root traversal and avoid fetching.
 ### 7.1 Agent states
 
 Keep liveness, activity, completion events, and attention requests as separate
-facts. Display `working`, `waiting`, `idle`, `stalled?`, `finished`, `dead`, or
+facts. Display `working`, `waiting`, `idle`, `stalled?`, `finished`, `ended`, `dead`, or
 `unknown` with evidence and observation time. `stalled?` expresses suspected
-inactivity, not proof of failure. Hosted Codex heuristics carry a `~` marker.
+inactivity, not proof of failure. `ended` identifies normal session termination
+or conversation replacement; `dead` requires an open turn at process loss or
+crash evidence. `finished` describes unread turn completion, whose inbox event
+survives session termination. Hosted Codex heuristics carry a `~` marker.
 
 ### 7.1a Session families
 

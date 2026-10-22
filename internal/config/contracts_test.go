@@ -98,9 +98,21 @@ func TestConfigAndSpoolXDGPaths(t *testing.T) {
 	if got := spoolDirForOS("linux"); got != filepath.Join(h, "state/driga/events") {
 		t.Fatal(got)
 	}
-	if got := spoolDirForOS("darwin"); got != filepath.Join(h, "state/driga/events") {
+	if got := spoolDirForOS("darwin"); got != filepath.Join(h, "Library/Application Support/driga/events") {
 		t.Fatal(got)
 	}
+	t.Setenv("XDG_DATA_HOME", filepath.Join(h, "xdg-data"))
+	t.Setenv("DRIGA_DATA_DIR", filepath.Join(h, "custom-data"))
+	if got := spoolDirForOS("darwin"); got != filepath.Join(h, "Library/Application Support/driga/events") {
+		t.Fatal("macOS spool must ignore data and XDG overrides", got)
+	}
+	t.Setenv("DRIGA_SPOOL_DIR", filepath.Join(h, "custom-spool"))
+	for _, goos := range []string{"darwin", "linux", "windows"} {
+		if got := spoolDirForOS(goos); got != filepath.Join(h, "custom-spool") {
+			t.Fatal(goos, got)
+		}
+	}
+	t.Setenv("DRIGA_SPOOL_DIR", "")
 	t.Setenv("XDG_STATE_HOME", "relative")
 	if got := spoolDirForOS("linux"); got != filepath.Join(h, ".local/state/driga/events") {
 		t.Fatal(got)

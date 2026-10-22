@@ -1,6 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Driga schema 2 read envelopes and CLI error records",
+  "description": "Session label strings include working, waiting, idle, stalled, finished, ended, dead and unknown (display labels may carry ~ or ?). ended is an additive schema-2 value for normal termination; dead requires interrupted work or crash evidence. Label strings remain open to additive values; inbox completion kinds remain finished/worker_finished.",
   "type": "object",
   "required": ["schema"],
   "anyOf": [{"required": ["data"]}, {"required": ["error"]}],

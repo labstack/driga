@@ -31,12 +31,12 @@ func TestAgyProcessSession(t *testing.T) {
 	// A cached process sample must not resurrect a process whose liveness
 	// check has already failed on a pass without a new process scan.
 	pass(t, d, st, Plan{})
-	if got := sessions(t, st)[0]; got.PID != 0 || got.EndedAt == nil || got.Label != "dead" {
+	if got := sessions(t, st)[0]; got.PID != 0 || got.EndedAt == nil || got.Label != "unknown" {
 		t.Fatal(got)
 	}
 	p.procs = nil
 	pass(t, d, st, Plan{Procs: true})
-	if got := sessions(t, st)[0]; got.EndedAt == nil || got.PID != 0 || got.Label != "dead" {
+	if got := sessions(t, st)[0]; got.EndedAt == nil || got.PID != 0 || got.Label != "unknown" {
 		t.Fatal(got)
 	}
 }

@@ -251,13 +251,13 @@ button:hover {
 .waiting {
   color:var(--waiting);
 }
-.stalled {
+.stalled,.dead {
   color:var(--stalled);
 }
 .idle {
   color:var(--idle);
 }
-.finished {
+.finished,.ended {
   color:var(--finished);
 }
 .crit {
@@ -715,7 +715,7 @@ dialog dd {
     padding:6px 10px;
   }
 }
-.strip.working,.strip.waiting,.strip.stalled,.strip.idle,.strip.finished {
+.strip.working,.strip.waiting,.strip.stalled,.strip.idle,.strip.finished,.ended {
   color:var(--fg);
 }
 meter {

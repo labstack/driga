@@ -52,7 +52,7 @@ func Project(repo model.Repo, wts []model.Worktree, sessions []model.Session, ha
 		if !projectSessionInRepo(s, repo, wts) {
 			continue
 		}
-		if s.EndedAt == nil && s.Label != "dead" && s.Label != "finished" {
+		if s.EndedAt == nil && s.Label != "dead" && s.Label != "ended" && s.Label != "finished" {
 			status.LiveAgents++
 		}
 		if s.LastActivityAt.After(lastActivity) {

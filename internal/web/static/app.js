@@ -1,7 +1,7 @@
 "use strict";
 (() => {
   const readOnly = "read-only in browser · use the CLI";
-  const states = ["working", "waiting", "stalled", "idle", "finished", "dead", "unknown"];
+  const states = ["working", "waiting", "stalled", "idle", "finished", "ended", "dead", "unknown"];
   function parseCommand(input, scope = "all") {
     const error = message => ({error: message});
     if (input.length > 500) return error("Command is too long");
@@ -270,7 +270,7 @@
       row.title = [e.machine, e.adapter, e.kind, e.summary].join(" · ");
       const time = document.createElement("span"); time.className = "d"; time.textContent = new Date(e.occurred_at).toLocaleTimeString([], {hour12: false});
       const agent = document.createElement("span"); agent.className = "m"; agent.textContent = e.adapter;
-      const kind = document.createElement("span"); kind.className = ["working", "waiting", "stalled", "idle", "finished"].includes(e.state) ? e.state : "finished"; kind.textContent = e.kind;
+      const kind = document.createElement("span"); kind.className = ["working", "waiting", "stalled", "idle", "finished", "ended", "dead"].includes(e.state) ? e.state : "finished"; kind.textContent = e.kind;
       row.append(time, " ", agent, " ", kind, " ", document.createTextNode(e.summary)); tailNodes.set(e.key, row);
     }
     while (tailNodes.size > 200) tailNodes.delete(tailNodes.keys().next().value);
