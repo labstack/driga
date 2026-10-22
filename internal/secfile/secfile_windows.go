@@ -39,7 +39,7 @@ func OpenFile(path string, flag int) (*os.File, error) {
 			return nil, err
 		}
 		sa := windows.SecurityAttributes{Length: uint32(unsafe.Sizeof(windows.SecurityAttributes{})), SecurityDescriptor: sd}
-		h, err := windows.CreateFile(p, windows.GENERIC_READ|windows.GENERIC_WRITE, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE, &sa, windows.CREATE_NEW, windows.FILE_ATTRIBUTE_NORMAL, 0)
+		h, err := windows.CreateFile(p, windows.GENERIC_READ|windows.GENERIC_WRITE, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE, &sa, windows.CREATE_NEW, windows.FILE_ATTRIBUTE_NORMAL, 0)
 		if err == nil {
 			if err := windows.CloseHandle(h); err != nil {
 				return nil, err
@@ -51,7 +51,42 @@ func OpenFile(path string, flag int) (*os.File, error) {
 	if err := Protect(path); err != nil {
 		return nil, err
 	}
-	return os.OpenFile(path, flag, 0600)
+	// Reopen the protected file without O_EXCL (CREATE_NEW above already
+	// created it) and keep delete sharing for the writer's lifetime: Windows
+	// refuses rename/replace/remove of a file while a handle lacks it.
+	p, err := windows.UTF16PtrFromString(path)
+	if err != nil {
+		return nil, err
+	}
+	access := uint32(windows.GENERIC_READ)
+	switch flag & (os.O_WRONLY | os.O_RDWR) {
+	case os.O_WRONLY:
+		access = windows.GENERIC_WRITE
+	case os.O_RDWR:
+		access = windows.GENERIC_READ | windows.GENERIC_WRITE
+	}
+	if flag&os.O_APPEND != 0 {
+		if flag&os.O_TRUNC == 0 {
+			access &^= windows.GENERIC_WRITE
+		}
+		access |= windows.FILE_APPEND_DATA | windows.FILE_WRITE_ATTRIBUTES | windows.FILE_WRITE_EA | windows.STANDARD_RIGHTS_WRITE | windows.SYNCHRONIZE
+	}
+	attrs := uint32(windows.FILE_ATTRIBUTE_NORMAL)
+	if flag&os.O_SYNC != 0 {
+		attrs |= windows.FILE_FLAG_WRITE_THROUGH
+	}
+	h, err := windows.CreateFile(p, access, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE, nil, windows.OPEN_EXISTING, attrs, 0)
+	if err != nil {
+		return nil, &os.PathError{Op: "open", Path: path, Err: err}
+	}
+	f := os.NewFile(uintptr(h), path)
+	if flag&os.O_TRUNC != 0 {
+		if err := f.Truncate(0); err != nil {
+			f.Close()
+			return nil, err
+		}
+	}
+	return f, nil
 }
 
 func ProtectFile(f *os.File) error { return Protect(f.Name()) }
