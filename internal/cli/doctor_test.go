@@ -244,6 +244,29 @@ func TestDoctorCollectorPaths(t *testing.T) {
 	}
 }
 
+// The budget uses the platform's own-memory measure when one is recorded: RSS
+// also counts clean, shared code pages and swings with each GC cycle.
+func TestDoctorCollectorFootprint(t *testing.T) {
+	for _, tc := range []struct {
+		footprint, rss uint64
+		status, detail string
+	}{
+		{40_000_000, 58_000_000, "ok", "40.0 MB footprint (RSS 58.0 MB)"},
+		{51_000_000, 58_000_000, "warn", "51.0 MB footprint (RSS 58.0 MB)"},
+	} {
+		d, st := doctorFixture(t)
+		if err := st.Tx(context.Background(), func(tx *store.Tx) error {
+			return tx.ReplaceProcs([]model.Proc{{PID: 1, Cmdline: "/opt/driga collect", Footprint: tc.footprint, MemoryMeasure: "physical_footprint", RSS: tc.rss}})
+		}); err != nil {
+			t.Fatal(err)
+		}
+		c := requireCheck(t, Doctor(context.Background(), d), "collector_rss", tc.status, "")
+		if c.Detail != tc.detail {
+			t.Fatalf("detail %q, want %q", c.Detail, tc.detail)
+		}
+	}
+}
+
 func TestDoctorCommandWarningsAndFailures(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Unix path or action contract; Windows phase 1 has dedicated watch/refusal tests")
