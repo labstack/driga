@@ -246,7 +246,7 @@ ends or the collector stops early, it also writes an allocation profile to
 
 Windows 10 1809+ / Windows 11 support the same read interfaces, foreground
 collector, optional OTLP intake, MCP, web and fleet. Phase 3 is feature-complete
-pending real-machine verification; Windows remains experimental.
+pending real-hardware verification; Windows remains experimental.
 
 `driga kill <id>` (also `driga orphans kill <id>`) and the TUI action use the
 same driga-proven orphan candidates and confirmations as Unix. Windows orphans
@@ -271,8 +271,14 @@ Socket evidence uses `GetExtendedTcpTable` (`TCP_TABLE_OWNER_PID_ALL`) and
 `GetExtendedUdpTable`, for IPv4 and IPv6. TCP listeners/connections and bound
 UDP endpoints prevent an idle verdict; table errors remain unknown. UDP owner
 tables do not expose peers, so a bound endpoint is conservatively treated as a
-listener. Open-file inspection remains unknown: no reliable unprivileged API
-is available for the directory-wide check, and Driga never guesses.
+listener. Open-file evidence uses the unprivileged Restart Manager API, without
+WMI or PowerShell. Driga walks regular files below the directory, including use
+by its own processes, and registers batches of 100 files. The walk is capped at
+10,000 entries with a five-second context budget (or the caller's earlier deadline). Unreadable entries, non-regular files, exceeded limits
+and API errors leave evidence unknown. Native calls cannot be interrupted; a call
+that finishes past the deadline also leaves evidence unknown.
+Directory handles are not Restart Manager resources; process cwd checks remain
+separate. See [Restart Manager resources](https://learn.microsoft.com/en-us/windows/win32/api/restartmanager/nf-restartmanager-rmregisterresources).
 
 Cleanup retains the same candidate checks, preview, confirmation, ignored-file
 review and `cleanup.log` audit trail. On Windows, verified linked worktrees go
@@ -282,10 +288,21 @@ the Shell's per-item recycling result, then prunes Git worktree metadata and
 optionally deletes a merged branch. Restore files through the Recycle Bin;
 Git metadata/branch restoration is separate. Agent history remains report-only.
 Claude scratch discovery and cleanup stay refused: repository fixtures do not
-establish Claude's Windows scratch layout, and open-file checks are unavailable.
-`doctor` explains these two fail-closed limits. No Unix temp layout is assumed.
+establish Claude's Windows scratch layout. `doctor` explains this fail-closed
+limit. No Unix temp layout is assumed.
 
-Real-machine checks still include agent attribution, logon/restart, notifications,
+The `Windows end-to-end` CI job runs on GitHub-hosted `windows-2025` machines.
+It builds `driga.exe` and drives subprocesses with disposable homes and synthetic
+Claude fixtures: snapshot attribution, foreground collection, the Task Scheduler
+lifecycle, dashboard/static assets and CSP, installed hooks through `cmd.exe`,
+confirmed orphan kill, and linked-worktree recycling with Git metadata cleanup.
+Notification availability is checked through `doctor`; toast display is not sent.
+Run it locally with `go test -tags e2e ./internal/e2e -v` on Windows; it requires
+Git, Task Scheduler, an unused Driga task for the current user and a local volume
+supporting the Recycle Bin. Tests only signal their own processes. The Windows
+platform tests also verify Restart Manager against a child holding an open file.
+
+Real-hardware checks still include real agent attribution, logon/restart, notifications,
 console/window shutdown, job descendants, socket ownership and Recycle Bin restore.
 The native API contracts follow Microsoft's
 [console group rules](https://learn.microsoft.com/en-us/windows/console/generateconsolectrlevent),
@@ -304,8 +321,9 @@ Installation refuses an existing task; uninstall before changing its binary path
 task alone does not prove fresh collection. Check `doctor` for freshness.
 The scheduled collector detaches its console immediately; verify whether the
 host briefly shows a console during task launch. It uses the logon environment
-and the data directory recorded at installation; set persistent user environment
-variables for custom config/spool/agent homes and PATH before logging in.
+plus the home, temporary-directory, Driga config/data/spool and agent-path
+overrides recorded at installation. Reinstall after changing those paths. Other
+variables, including PATH, come from the logon environment.
 
 Collector logs are at `%LOCALAPPDATA%\driga\logs\collector.log` (or
 `DRIGA_DATA_DIR\logs\collector.log`), bounded to 10 MiB plus one rotated file.

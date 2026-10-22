@@ -19,7 +19,7 @@ func TestWindowsActionCapabilities(t *testing.T) {
 		t.Setenv(key, value)
 	}
 	checks := Doctor(context.Background(), DoctorDeps{OS: "windows", Home: root, DataDir: filepath.Join(root, "data"), Now: time.Now(), LockProbe: func(string) (bool, error) { return false, nil }})
-	for _, name := range []string{"file probers", "Claude scratch"} {
+	for _, name := range []string{"Claude scratch"} {
 		found := false
 		for _, c := range checks {
 			if c.Name == name && (strings.Contains(c.Detail, "unknown") || strings.Contains(c.Detail, "refused")) {
@@ -30,7 +30,7 @@ func TestWindowsActionCapabilities(t *testing.T) {
 			t.Fatal("missing doctor check", name)
 		}
 	}
-	for _, name := range []string{"service", "hooks install", "notifications", "terminal jump", "kill", "cleanup apply", "socket probers"} {
+	for _, name := range []string{"service", "hooks install", "notifications", "terminal jump", "kill", "cleanup apply", "socket probers", "file probers"} {
 		found := false
 		for _, c := range checks {
 			if c.Name == name && !strings.Contains(c.Detail, "not yet supported") {

@@ -154,3 +154,54 @@ jobs:
           go build ./...
           $env:GOARCH = 'arm64'
           go build ./...
+
+  windows-e2e:
+    name: Windows end-to-end
+    runs-on: windows-2025
+    timeout-minutes: 30
+    env:
+      GOTOOLCHAIN: local
+      GOWORK: "off"
+      GOFLAGS: ""
+      GOEXPERIMENT: ""
+      CGO_ENABLED: "0"
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          check-latest: false
+          cache: false
+      - name: Isolate test and build state
+        run: |
+          $taskRoot = Join-Path $env:RUNNER_TEMP ("dw-" + [guid]::NewGuid().ToString('N').Substring(0,8))
+          $testHome = Join-Path $taskRoot 'home'
+          New-Item -ItemType Directory -Force $testHome, "$taskRoot/data", "$taskRoot/spool", "$taskRoot/temp" | Out-Null
+          $settings = @{
+            HOME = $testHome
+            USERPROFILE = $testHome
+            APPDATA = "$testHome/AppData/Roaming"
+            LOCALAPPDATA = "$testHome/AppData/Local"
+            CLAUDE_CONFIG_DIR = ''
+            CODEX_HOME = "$testHome/.codex"
+            COPILOT_HOME = "$testHome/.copilot"
+            GEMINI_CLI_HOME = "$testHome/.gemini"
+            XDG_CONFIG_HOME = "$testHome/.config"
+            XDG_DATA_HOME = "$testHome/.local/share"
+            XDG_STATE_HOME = "$testHome/.local/state"
+            DRIGA_DATA_DIR = "$taskRoot/data"
+            DRIGA_SPOOL_DIR = "$taskRoot/spool"
+            DRIGA_CONFIG = "$taskRoot/config.toml"
+            TEMP = "$taskRoot/temp"
+            TMP = "$taskRoot/temp"
+            GOCACHE = "$taskRoot/gocache"
+            GOMODCACHE = "$taskRoot/gomodcache"
+          }
+          foreach ($entry in $settings.GetEnumerator()) { "$($entry.Key)=$($entry.Value)" >> $env:GITHUB_ENV }
+      - name: Windows end-to-end
+        run: go test -tags e2e ./internal/e2e -v -timeout 25m

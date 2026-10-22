@@ -64,7 +64,15 @@ func (s *taskService) Install() error {
 	if err := secfile.MkdirPrivate(s.dataDir); err != nil {
 		return err
 	}
-	b, err := taskXML(s.bin, s.sid, s.dataDir)
+	env := make([]string, 0, len(scheduledEnvKeys))
+	// Persist only variables that are set: an empty HOME or TEMP must not
+	// replace the login environment of a normal install.
+	for _, key := range scheduledEnvKeys {
+		if value, ok := os.LookupEnv(key); ok {
+			env = append(env, key+"="+value)
+		}
+	}
+	b, err := taskXML(s.bin, s.sid, s.dataDir, env...)
 	if err != nil {
 		return err
 	}
@@ -198,7 +206,16 @@ func (s *taskService) TaskState() (string, error) {
 }
 
 // PrepareScheduled detaches only the scheduler-launched collector console.
-func PrepareScheduled(dataDir string) error {
+func PrepareScheduled(dataDir string, env ...string) error {
+	for _, value := range env {
+		key, value, ok := strings.Cut(value, "=")
+		if !ok || !scheduledEnvKey(key) {
+			return errors.New("invalid scheduled collector environment")
+		}
+		if err := os.Setenv(key, value); err != nil {
+			return err
+		}
+	}
 	if !filepath.IsAbs(dataDir) {
 		return errors.New("scheduled collector requires an absolute data directory")
 	}

@@ -84,3 +84,26 @@ func TestTaskArgs(t *testing.T) {
 		t.Fatal("unknown action")
 	}
 }
+
+func TestTaskEnvironment(t *testing.T) {
+	b, err := taskXML(`C:\Tools\driga.exe`, "S-1-5-21-123", `C:\data`, `USERPROFILE=C:\isolated home\`, `CLAUDE_CONFIG_DIR=`, `DRIGA_SPOOL_DIR=C:\spool & events`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var task struct {
+		Actions struct{ Exec struct{ Arguments string } }
+	}
+	if err := xml.Unmarshal(b, &task); err != nil {
+		t.Fatal(err)
+	}
+	for _, arg := range []string{`--service-env "USERPROFILE=C:\isolated home\\"`, `--service-env "CLAUDE_CONFIG_DIR="`, `--service-env "DRIGA_SPOOL_DIR=C:\spool & events"`} {
+		if !strings.Contains(task.Actions.Exec.Arguments, arg) {
+			t.Fatalf("missing %q: %s", arg, task.Actions.Exec.Arguments)
+		}
+	}
+	for _, bad := range []string{"TOKEN=secret", "PATH=C:\\tools", "HOME", "HOME=C:\\bad\npath", `HOME=C:\bad"path`} {
+		if _, err := taskXML(`C:\Tools\driga.exe`, "S-1-5-21-123", `C:\data`, bad); err == nil {
+			t.Fatalf("accepted non-path/invalid environment %q", bad)
+		}
+	}
+}

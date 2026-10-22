@@ -8,7 +8,8 @@
 **See what your coding agents are doing, and what needs you.**
 
 Driga is a CLI, terminal UI, and local web dashboard for AI coding agent
-sessions on macOS and Linux. Windows: experimental (phase 2: always on).
+sessions on macOS and Linux. Windows: experimental, including orphan kill and
+worktree cleanup.
 It brings agent activity, project status, an attention inbox, orphaned helpers, and machine health into one place.
 
 Driga is **alpha**. Agent formats and behavior can change; unknown or incomplete
@@ -79,12 +80,15 @@ read commands, TUI/web/MCP, OTLP intake and fleet interfaces, plus:
   the same revalidation and audit logging as Unix cleanup.
 
 Logs live at `%LOCALAPPDATA%\driga\logs\collector.log`. Keep `driga.exe` at a
-stable path before installing. Phase 3 is feature-complete pending real-machine
+stable path before installing. Phase 3 is feature-complete pending real-hardware
 verification; Windows remains **experimental**. TCP/UDP probes cover IPv4 and IPv6;
-open-file inspection stays unknown. Claude scratch cleanup stays refused because
-its Windows layout is unverified in repository fixtures. Toasts are plain and
+open-file evidence uses bounded Restart Manager queries. Claude scratch cleanup
+stays refused because its Windows layout is unverified in repository fixtures. Toasts are plain and
 terminal jumps open a new window. Real agent sessions, logon/restart, notifications,
 orphan shutdown and Recycle Bin restore still need verification on Windows hardware.
+A separate Windows end-to-end CI job builds the CLI and exercises attribution,
+collection, Task Scheduler, web assets, hooks, orphan kill and Recycle Bin cleanup
+on GitHub-hosted `windows-2025` runners.
 See [Windows setup details](docs/usage.md#windows-experimental).
 
 ## Quick start
