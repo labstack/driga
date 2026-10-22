@@ -304,3 +304,16 @@ func TestPullerBatchesBurst(t *testing.T) {
 	}
 	t.Logf("1000 rows committed in %d transactions without resnapshot", transactions)
 }
+
+func TestPullerReportsBoundedScrubbedServerError(t *testing.T) {
+	p, _, _, _, _ := pullFixture(t, func(w http.ResponseWriter, r *http.Request) {
+		jsonError(w, "snapshot unavailable: invalid uri authority: a ghp_testsecretvalue "+strings.Repeat("x", 4000), 503)
+	})
+	defer p.transport.CloseIdleConnections()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	_, err := p.get(ctx, "/v1/snapshot", Cursor{})
+	if err == nil || !strings.Contains(err.Error(), "snapshot unavailable: invalid uri authority: a") || strings.Contains(err.Error(), "ghp_") || len(err.Error()) > 1200 {
+		t.Fatalf("server diagnostic: %v", err)
+	}
+}

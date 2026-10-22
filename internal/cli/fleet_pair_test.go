@@ -148,3 +148,23 @@ func TestAddShowsGrantedPermissions(t *testing.T) {
 		})
 	}
 }
+
+func TestFleetDiagnosticsShowSnapshotError(t *testing.T) {
+	readEnv(t)
+	const message = "fleet /v1/snapshot: 503 Service Unavailable: snapshot unavailable: invalid uri authority: a"
+	readDB(t, func(tx *store.Tx) error {
+		return tx.ForMachine("remote").UpsertMachine(model.Machine{Name: "peer-a", LastError: message})
+	})
+	if err := fleet.SavePeers(filepath.Join(config.DataDir(), "fleet"), []fleet.Peer{{Name: "peer-a", MachineID: "remote"}}); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{{"fleet", "peers"}, {"machines"}} {
+		var out, errs bytes.Buffer
+		if code := run(args, "test", strings.NewReader(""), &out, &errs); code != 0 {
+			t.Fatalf("%v: %d %s", args, code, &errs)
+		}
+		if !strings.Contains(out.String(), message) {
+			t.Fatalf("%v omitted diagnostic: %s", args, &out)
+		}
+	}
+}

@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"github.com/labstack/driga/internal/config"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -13,27 +12,8 @@ import (
 // maxSocketPath stays under macOS's 104-byte sun_path limit (Linux: 108).
 const maxSocketPath = 100
 
-// ControlSocketPath is where the collector's control socket lives for dataDir:
-// fleet/fleet.sock in the data dir, or, when that path is too long for a Unix
-// socket, a short per-user directory keyed by a hash of dataDir.
-func ControlSocketPath(dataDir string) string {
-	if runtime.GOOS == "windows" {
-		return WatchSocketPath(dataDir, "fleet")
-	}
-	p := filepath.Join(dataDir, "fleet", "fleet.sock")
-	if len(p) <= maxSocketPath {
-		return p
-	}
-	sum := sha256.Sum256([]byte(filepath.Clean(dataDir)))
-	name := hex.EncodeToString(sum[:8]) + ".sock"
-	if runtimeDir := os.Getenv("XDG_RUNTIME_DIR"); filepath.IsAbs(runtimeDir) {
-		p := filepath.Join(runtimeDir, "driga", name)
-		if len(p) <= maxSocketPath {
-			return p
-		}
-	}
-	return filepath.Join("/tmp", fmt.Sprintf("driga-%d", os.Getuid()), name)
-}
+// ControlSocketPath resolves the local control socket using the shared IPC rule.
+func ControlSocketPath(dataDir string) string { return WatchSocketPath(dataDir, "fleet") }
 
 // ensureSocketDir creates the socket's directory 0700 and refuses one that is
 // a symlink or not owned by this user (the shared temp dir case).
@@ -77,22 +57,30 @@ func checkControlSocket(sock string) error {
 	return nil
 }
 
-// WatchSocketPath uses per-data-directory names under the Windows run directory,
-// falling back to a short per-user temporary directory for long profile paths.
+// WatchSocketPath prefers the data directory, then a private per-user directory
+// under os.TempDir, then a short platform fallback. All names are stable across
+// clients and collectors; the data-directory hash isolates independent instances.
+// The conservative byte limit also fits Windows AF_UNIX's 108-byte sun_path.
 func WatchSocketPath(dataDir, kind string) string {
+	if abs, err := filepath.Abs(dataDir); err == nil {
+		dataDir = abs
+	}
+	p := filepath.Join(dataDir, kind+".sock")
+	if kind == "fleet" {
+		p = filepath.Join(dataDir, "fleet", "fleet.sock")
+	}
+	if len(p) <= maxSocketPath {
+		return p
+	}
 	sum := sha256.Sum256([]byte(filepath.Clean(dataDir)))
-	root := os.Getenv("LOCALAPPDATA")
-	if root == "" {
-		root = filepath.Dir(config.DataDir())
-	}
 	name := kind + "-" + hex.EncodeToString(sum[:8]) + ".sock"
-	p := filepath.Join(root, "driga", "run", name)
-	if runtime.GOOS == "windows" && len(p) >= 108 {
-		return shortSocketPath(name)
+	p = filepath.Join(os.TempDir(), socketUserDir(), name)
+	if len(p) <= maxSocketPath && filepath.IsAbs(p) {
+		return p
 	}
-	return p
+	return shortSocketPath(name)
 }
 
-// EnsureSocketDir and CheckSocketDir share the private Windows IPC directory with chat.
+// EnsureSocketDir and CheckSocketDir enforce the private IPC directory for both services.
 func EnsureSocketDir(sock string) error { return ensureSocketDir(sock) }
 func CheckSocketDir(sock string) error  { return checkSocketDir(sock) }

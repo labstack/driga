@@ -16,6 +16,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/labstack/driga/internal/scrub"
 	"github.com/labstack/driga/internal/store"
 	"golang.org/x/sync/semaphore"
 )
@@ -178,8 +179,19 @@ func (p *Puller) get(ctx context.Context, path string, cursor Cursor) (*http.Res
 		return nil, errStop
 	}
 	if resp.StatusCode != http.StatusOK {
-		resp.Body.Close()
-		return nil, fmt.Errorf("fleet %s: %s", path, resp.Status)
+		defer resp.Body.Close()
+		var message struct {
+			Error string `json:"error"`
+		}
+		// Only the protocol's error field is diagnostic text. Never render an
+		// arbitrary response body (HTML, proxy credentials, or oversized input).
+		_ = json.NewDecoder(io.LimitReader(resp.Body, 8<<10)).Decode(&message)
+		detail := scrub.Truncate(scrub.Scrub(strings.Join(strings.Fields(message.Error), " ")), 512)
+		status := strings.TrimSpace(fmt.Sprintf("%d %s", resp.StatusCode, http.StatusText(resp.StatusCode)))
+		if detail != "" {
+			return nil, fmt.Errorf("fleet %s: %s: %s", path, status, detail)
+		}
+		return nil, fmt.Errorf("fleet %s: %s", path, status)
 	}
 	return resp, nil
 }

@@ -164,6 +164,10 @@ terminal-opening command using `{cwd}`; otherwise the terminal is detected.
 | Configuration (Windows) | `%APPDATA%\driga\config.toml` | `DRIGA_CONFIG` |
 | Configuration (macOS/Linux) | `$XDG_CONFIG_HOME/driga/config.toml`, else `~/.config/driga/config.toml` | `DRIGA_CONFIG` |
 
+Data, spool and config paths (including platform-derived defaults) are expanded,
+cleaned and resolved to absolute paths once at startup. Relative overrides such
+as `DRIGA_DATA_DIR=a/data` are relative to the startup working directory.
+
 Database/spool files use mode `0600`, and their directories use `0700`. Claude
 data is read under `~/.claude/`; Codex under `~/.codex/`, or `CODEX_HOME` when set.
 The Codex catalog is opened read-only. Local Git commands never fetch.
@@ -468,7 +472,10 @@ An interrupted tunnel shows the peer as stale and reconnects when it returns.
 `driga fleet status` shows serving streams and enrollment;
 `driga fleet viewers` lists authorized viewers. `driga fleet revoke <viewer>`
 revokes access immediately. `driga fleet remove <name>` (alias `unpair`) stops
-pulling locally; add `--purge` to delete cached rows. Stopped/unreachable peers
+pulling locally and keeps cached history; add `--purge` to delete cached rows.
+You can also run `driga fleet remove <name-or-machine-id> --purge` after a peer
+has already been removed. Ambiguous cached names require the machine ID.
+Stopped/unreachable peers
 become stale after 45 seconds without contact; last-known rows remain visible.
 Epoch/retention changes trigger a new snapshot. Clock skew over 60 seconds warns
 in `driga machines`.
@@ -477,6 +484,26 @@ Before enrolling a cloned VM, stop its collector and run
 `driga machine reset-id` **on the clone**, then restart and re-pair. This creates a
 new machine ID and certificate and invalidates old pairings. `driga fleet rekey`
 rotates only the certificate, also requiring a stopped collector and re-pairing.
+On a viewer that reports the rotated peer as untrusted, deliberately remove the
+peer, reopen enrollment on the serving peer, then add it again using its new
+device ID (or compare pairing codes). Purging is unnecessary: retained history
+from the removed certificate does not block re-pairing. Two active peers claiming
+the same machine ID still require `machine reset-id` on the clone.
+
+`driga fleet peers`, `driga machines` and `driga doctor` show the last fleet
+failure, including bounded, scrubbed server diagnostics such as snapshot errors.
+Doctor also reports the actual Chat and fleet control socket paths. Both sockets
+prefer their data-directory paths (`chat.sock` and `fleet/fleet.sock`). If a path
+exceeds 100 bytes, they use stable, separate names keyed by the absolute data
+directory under the OS temporary directory (`TMPDIR` on Unix, `TEMP`/`TMP` on
+Windows), in a private per-user `driga-<user>` directory. If that is also too long,
+Unix falls back to `/tmp/driga-<uid>`; Windows tries the short TEMP name, then
+`%SystemRoot%\Temp\driga-<SID-hash>`. This byte limit fits both Unix and Windows
+AF_UNIX limits. Directories must be real, owned by the current user and mode
+`0700` on Unix; Windows uses a private owner DACL. Unix sockets use mode `0600`.
+Chat is optional: failure to create its socket logs a warning and appears in
+doctor while collecting and serving continue. Fix the reported path or
+permissions and restart the collector to retry Chat.
 
 ## Cleanup
 
@@ -553,8 +580,8 @@ and other customizations while retaining Claude's authentication/model/permissio
 settings. Only the explicit driga read-tool list is approved. Trust controls are
 disabled. Chat does not dispatch tasks or approve agent actions.
 
-The collector owns the broker and `chat.sock` in the data directory (0700 directory,
-0600 socket). Web, TUI and ask connect locally. Without a service, the opening
+The collector owns the broker and its local socket, using the shared directory
+rule described in Fleet setup. Web, TUI and ask connect locally. Without a service, the opening
 client runs a private in-process broker and labels it **conversations end with it**.
 No driga conversation history survives that client. With the service, conversation
 IDs, vendor resume IDs and capture-filtered messages persist in SQLite for 30 days;

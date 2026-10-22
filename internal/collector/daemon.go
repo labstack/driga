@@ -194,9 +194,17 @@ func Run(ctx context.Context, d Deps, dataDir string) error {
 	defer broker.Close()
 	stopChat, err := chat.Listen(ctx, dataDir, broker)
 	if err != nil {
-		return fmt.Errorf("chat broker: %w", err)
+		message := scrub.Scrub(err.Error())
+		slog.Warn("chat unavailable", "event", "chat_listen_failed", "path", chat.SocketPath(dataDir), "err", message)
+		if err := st.Tx(ctx, func(tx *store.Tx) error { return tx.SetSourceError("chat", message, d.now()) }); err != nil {
+			return err
+		}
+	} else {
+		defer stopChat()
+		if err := st.Tx(ctx, func(tx *store.Tx) error { return tx.SetSourceOK("chat", d.now()) }); err != nil {
+			return err
+		}
 	}
-	defer stopChat()
 	intakeRequests := make(chan intakeRequest, 16)
 	stopIntake, err := startIntake(ctx, d, st, intakeRequests)
 	if err != nil {

@@ -11,24 +11,35 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-func shortSocketPath(name string) string {
-	root := os.TempDir()
-	// GetShortPathName helps when TEMP itself has a long profile component.
-	if p, err := windows.UTF16PtrFromString(root); err == nil {
-		buf := make([]uint16, 32768)
-		if n, err := windows.GetShortPathName(p, &buf[0], uint32(len(buf))); err == nil && n < uint32(len(buf)) && n > 0 {
-			short := windows.UTF16ToString(buf[:n])
-			if len(short) < len(root) {
-				root = short
-			}
-		}
-	}
+func socketUserDir() string {
 	user := os.Getenv("LOCALAPPDATA")
 	if u, err := windows.GetCurrentProcessToken().GetTokenUser(); err == nil {
 		user = u.User.Sid.String()
 	}
 	sum := sha256.Sum256([]byte(user))
-	return filepath.Join(root, "driga-"+hex.EncodeToString(sum[:4]), name)
+	return "driga-" + hex.EncodeToString(sum[:4])
+}
+
+func shortSocketPath(name string) string {
+	root := os.TempDir()
+	// GetShortPathName helps when TEMP has a long profile component.
+	if p, err := windows.UTF16PtrFromString(root); err == nil {
+		buf := make([]uint16, 32768)
+		if n, err := windows.GetShortPathName(p, &buf[0], uint32(len(buf))); err == nil && n < uint32(len(buf)) && n > 0 {
+			short := windows.UTF16ToString(buf[:n])
+			p := filepath.Join(short, socketUserDir(), name)
+			if len(p) <= maxSocketPath {
+				return p
+			}
+		}
+	}
+	// The system temp root stays short even with a long user TEMP/profile.
+	// Creation and access still require the current user's private DACL.
+	root, err := windows.GetWindowsDirectory()
+	if err != nil {
+		root = os.Getenv("SystemRoot")
+	}
+	return filepath.Join(root, "Temp", socketUserDir(), name)
 }
 
 func ensureWindowsSocketDir(sock string) error {

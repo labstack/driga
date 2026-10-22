@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/labstack/driga/internal/secfile"
 	"os"
+	"path/filepath"
 	"syscall"
 )
 
@@ -27,5 +28,6 @@ func privateKey(path string, _ os.FileInfo) error {
 
 func makePrivateFile(string) error { return nil }
 
-// Only the Windows socket path resolver needs a short temporary fallback.
-func shortSocketPath(name string) string { return name }
+func socketUserDir() string { return fmt.Sprintf("driga-%d", os.Getuid()) }
+
+func shortSocketPath(name string) string { return filepath.Join("/tmp", socketUserDir(), name) }
