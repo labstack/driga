@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -544,5 +545,153 @@ func TestPairBeforeFirstPass(t *testing.T) {
 	}
 	if resp.StatusCode != 200 || hello["machine_id"] != s.st.MachineID() || hello["hostname"] != host || hello["os"] != runtime.GOOS || hello["arch"] != runtime.GOARCH {
 		t.Fatalf("%d %+v", resp.StatusCode, hello)
+	}
+}
+
+// Exercise the same stop/rekey/restart/remove/re-pair sequence as two instances.
+func TestPairAfterRotationAndRemoveKeepsHistory(t *testing.T) {
+	s, _, _ := serverFixture(t)
+	dir, id := pairIdentity(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	start := func(s *Server, addr string) (string, func()) {
+		t.Helper()
+		ln, err := net.Listen("tcp", addr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		runCtx, stop := context.WithCancel(ctx)
+		done := make(chan error, 1)
+		go func() { done <- s.Serve(runCtx, ln) }()
+		closeServer := sync.OnceFunc(func() {
+			stop()
+			if err := <-done; err != nil {
+				t.Error(err)
+			}
+		})
+		t.Cleanup(closeServer)
+		deadline := time.Now().Add(3 * time.Second)
+		for {
+			if _, err := Control(ctx, s.dataDir, ControlRequest{Op: "status"}); err == nil {
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatal("control not ready")
+			}
+			time.Sleep(time.Millisecond)
+		}
+		return ln.Addr().String(), closeServer
+	}
+	addr, stop := start(s, "127.0.0.1:0")
+	if _, err := Enroll(ctx, s.dataDir, EnrollOpts{AllowID: id.DeviceID}, nil); err != nil {
+		t.Fatal(err)
+	}
+	cached, err := Add(ctx, addr, AddOpts{DataDir: dir, Name: "peer-a", ID: s.id.DeviceID}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st, err := store.Open(filepath.Join(dir, "driga.db"), store.ReadWrite)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	if err := st.Tx(ctx, func(tx *store.Tx) error {
+		r := tx.ForMachine(cached.MachineID)
+		if err := r.UpsertMachine(model.Machine{Name: cached.Name, Addr: addr, DeviceID: cached.DeviceID}); err != nil {
+			return err
+		}
+		_, err := r.UpsertSession(model.Session{SessionObs: model.SessionObs{Adapter: "test", ExternalID: "retained"}})
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	stop()
+	if err := Rekey(ctx, s.dataDir); err != nil {
+		t.Fatal(err)
+	}
+	fresh, err := LoadOrCreateIdentity(filepath.Join(s.dataDir, "fleet"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fresh.DeviceID == s.id.DeviceID {
+		t.Fatal("certificate did not rotate")
+	}
+	rotated := NewServer(s.st, fresh, s.dataDir, s.cfg)
+	start(rotated, addr)
+	if _, err := Add(ctx, addr, AddOpts{DataDir: dir, Name: "peer-a"}, nil); err == nil || !strings.Contains(err.Error(), "untrusted") {
+		t.Fatalf("rotation not detected: %v", err)
+	}
+	peers, err := LoadPeers(filepath.Join(dir, "fleet"))
+	if err != nil || len(peers) != 1 || peers[0].State != "untrusted" {
+		t.Fatalf("trust state: %+v %v", peers, err)
+	}
+	if _, err := RemovePeer(ctx, dir, "peer-a", false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Enroll(ctx, rotated.dataDir, EnrollOpts{AllowID: id.DeviceID}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Add(ctx, addr, AddOpts{DataDir: dir, Name: "peer-a", ID: fresh.DeviceID}, nil); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := st.SessionsScoped(store.SessionFilter{IncludeEnded: true}, store.Scope{})
+	if err != nil || len(rows) != 1 || rows[0].ExternalID != "retained" {
+		t.Fatalf("history: %+v %v", rows, err)
+	}
+	// A retired certificate in active trust must still trigger the clone check.
+	// Use another address so the candidate reaches clone detection after TLS.
+	cached.Addr = "127.0.0.1:1"
+	if err := SavePeers(filepath.Join(dir, "fleet"), []Peer{cached}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Enroll(ctx, rotated.dataDir, EnrollOpts{AllowID: id.DeviceID}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Add(ctx, addr, AddOpts{DataDir: dir, ID: fresh.DeviceID}, nil); err == nil || !strings.Contains(err.Error(), "reset-id") {
+		t.Fatalf("active clone accepted: %v", err)
+	}
+}
+
+func TestPurgeAlreadyRemovedPeer(t *testing.T) {
+	for _, key := range []string{"peer-a", "remote-machine"} {
+		for _, legacy := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/legacy=%v", key, legacy), func(t *testing.T) {
+				dir, _ := pairIdentity(t)
+				ctx := context.Background()
+				st, err := store.Open(filepath.Join(dir, "driga.db"), store.ReadWrite)
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer st.Close()
+				if err := st.Tx(ctx, func(tx *store.Tx) error {
+					return tx.ForMachine("remote-machine").UpsertMachine(model.Machine{Name: "peer-a", DeviceID: "old"})
+				}); err != nil {
+					t.Fatal(err)
+				}
+				if err := SavePeers(filepath.Join(dir, "fleet"), []Peer{{Name: "peer-a", MachineID: "remote-machine", DeviceID: "old"}}); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := RemovePeer(ctx, dir, "peer-a", false); err != nil {
+					t.Fatal(err)
+				}
+				if legacy {
+					if err := os.Remove(filepath.Join(dir, "fleet", "removed-peers.json")); err != nil {
+						t.Fatal(err)
+					}
+				}
+				if _, err := RemovePeer(ctx, dir, key, true); err != nil {
+					t.Fatal(err)
+				}
+				ms, err := st.Machines()
+				if err != nil {
+					t.Fatal(err)
+				}
+				for _, m := range ms {
+					if m.MachineID == "remote-machine" {
+						t.Fatal("cached machine retained")
+					}
+				}
+			})
+		}
 	}
 }

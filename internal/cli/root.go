@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/alecthomas/kong"
+	"github.com/labstack/driga/internal/config"
 	"github.com/labstack/driga/internal/platform"
 	"github.com/labstack/driga/internal/scrub"
 )
@@ -93,6 +94,10 @@ func (VersionCmd) Run(g *Globals) error {
 
 // Main parses args, runs the selected command and returns the exit code.
 func Main(args []string, version string, metadata ...string) int {
+	if err := config.ResolvePaths(); err != nil {
+		fmt.Fprintln(os.Stderr, "driga: resolve paths:", err)
+		return 1
+	}
 	return run(args, version, os.Stdin, os.Stdout, os.Stderr, metadata...)
 }
 

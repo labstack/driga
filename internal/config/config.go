@@ -101,7 +101,9 @@ func ExpandHome(p string) string {
 }
 
 // Path is the config file location (env DRIGA_CONFIG overrides).
-func Path() string {
+func Path() string { return absolutePath(configPath()) }
+
+func configPath() string {
 	if p := os.Getenv("DRIGA_CONFIG"); p != "" {
 		return p
 	}
@@ -115,7 +117,7 @@ func Path() string {
 }
 
 // DataDir holds driga.db, driga.lock and viewer.heartbeat (env DRIGA_DATA_DIR overrides).
-func DataDir() string { return dataDirForOS(runtime.GOOS) }
+func DataDir() string { return absolutePath(dataDirForOS(runtime.GOOS)) }
 
 func dataDirForOS(goos string) string {
 	if p := os.Getenv("DRIGA_DATA_DIR"); p != "" {
@@ -134,7 +136,7 @@ func dataDirForOS(goos string) string {
 }
 
 // SpoolDir holds hook/ack event files (env DRIGA_SPOOL_DIR overrides).
-func SpoolDir() string { return spoolDirForOS(runtime.GOOS) }
+func SpoolDir() string { return absolutePath(spoolDirForOS(runtime.GOOS)) }
 
 func spoolDirForOS(goos string) string {
 	if p := os.Getenv("DRIGA_SPOOL_DIR"); p != "" {
@@ -160,4 +162,31 @@ func windowsAppDir(env, leaf string) string {
 		return p
 	}
 	return filepath.Join(home(), "AppData", leaf)
+}
+
+func absolutePath(p string) string {
+	if abs, err := filepath.Abs(ExpandHome(p)); err == nil {
+		return abs
+	}
+	return filepath.Clean(ExpandHome(p))
+}
+
+// ResolvePaths freezes process paths at startup, before any worker or child
+// process can change directories. Explicit and platform-derived paths follow
+// the same rule; children inherit the resolved overrides.
+func ResolvePaths() error {
+	for _, entry := range []struct{ key, path string }{
+		{"DRIGA_DATA_DIR", DataDir()},
+		{"DRIGA_SPOOL_DIR", SpoolDir()},
+		{"DRIGA_CONFIG", Path()},
+	} {
+		p, err := filepath.Abs(entry.path)
+		if err != nil {
+			return err
+		}
+		if err := os.Setenv(entry.key, p); err != nil {
+			return err
+		}
+	}
+	return nil
 }

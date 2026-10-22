@@ -18,15 +18,18 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/labstack/driga/internal/chat"
 	"github.com/labstack/driga/internal/cleanup"
 	"github.com/labstack/driga/internal/collector"
 	"github.com/labstack/driga/internal/config"
+	"github.com/labstack/driga/internal/fleet"
 	"github.com/labstack/driga/internal/hooks"
 	"github.com/labstack/driga/internal/inbox"
 	"github.com/labstack/driga/internal/intake"
 	"github.com/labstack/driga/internal/logfile"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/platform"
+	"github.com/labstack/driga/internal/scrub"
 	"github.com/labstack/driga/internal/service"
 	"github.com/labstack/driga/internal/signatures"
 	"github.com/labstack/driga/internal/store"
@@ -134,7 +137,7 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 			add("sources", "fail", err.Error(), "check database access; run driga service restart")
 		}
 		for _, source := range sources {
-			if source.Name == "otlp" {
+			if source.Name == "otlp" || source.Name == "chat" {
 				continue
 			} // Event-driven intake has no polling freshness deadline.
 			fresh := view.SourceFreshness(source, "daemon", d.Now, intervals)
@@ -399,8 +402,51 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 			add("notifications", "info", "osascript (Script Editor)", "brew install terminal-notifier")
 		}
 	}
+	add("fleet socket", "info", fleet.ControlSocketPath(d.DataDir), "")
+	checks = append(checks, doctorChatSocket(d, held))
+	if r, ok := d.Store.(interface {
+		Machines() ([]model.Machine, error)
+		MachineID() string
+	}); ok {
+		machines, err := r.Machines()
+		if err != nil {
+			add("fleet", "warn", err.Error(), "check database access")
+		}
+		for _, m := range machines {
+			if m.MachineID != r.MachineID() && m.LastError != "" {
+				detail := scrub.Truncate(scrub.Scrub(strings.Join(strings.Fields(m.LastError), " ")), 1024)
+				add("fleet:"+view.MachineName(m), "warn", detail, "check the peer's doctor output")
+			}
+		}
+	}
 	checks = append(checks, doctorIntake(d, held))
 	return checks
+}
+
+func doctorChatSocket(d DoctorDeps, held bool) Check {
+	path := chat.SocketPath(d.DataDir)
+	c := Check{Name: "chat socket", Status: "info", Detail: path + "; optional, collector not running"}
+	if held {
+		c.Status, c.Detail = "ok", path
+		if _, err := os.Lstat(path); err != nil {
+			c.Status, c.Detail = "warn", path+"; optional chat unavailable: "+err.Error()
+		} else if err := fleet.CheckSocketDir(path); err != nil {
+			c.Status, c.Detail = "warn", path+"; "+err.Error()
+		}
+	}
+	if d.Store != nil {
+		sources, _ := d.Store.Sources()
+		for _, source := range sources {
+			if source.Name == "chat" && source.LastError != "" && !source.LastErrorAt.Before(source.LastOKAt) {
+				c.Status = "warn"
+				c.Detail = path + "; optional chat unavailable: " + scrub.Snippet(source.LastError)
+			}
+		}
+	}
+	if c.Status == "warn" {
+		c.Fix = "check the socket directory permissions; restart the collector to retry Chat"
+	}
+	return c
 }
 
 func doctorIntake(d DoctorDeps, held bool) Check {

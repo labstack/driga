@@ -2,6 +2,7 @@ package fleet
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/labstack/driga/internal/filelock"
 	"github.com/labstack/driga/internal/secfile"
@@ -97,7 +98,7 @@ func RemovePeer(ctx context.Context, dataDir, name string, purge bool) (Peer, er
 	keep := make([]Peer, 0, len(ps))
 	var removed *Peer
 	for _, p := range ps {
-		if p.Name == name || p.DeviceID == name {
+		if p.Name == name || p.DeviceID == name || p.MachineID == name {
 			if removed != nil {
 				return zero, fmt.Errorf("ambiguous peer %q", name)
 			}
@@ -107,8 +108,39 @@ func RemovePeer(ctx context.Context, dataDir, name string, purge bool) (Peer, er
 			keep = append(keep, p)
 		}
 	}
+	retiredPath := filepath.Join(dir, "removed-peers.json")
+	retired, err := loadTrust[Peer](retiredPath)
+	if err != nil {
+		return zero, err
+	}
+	if removed == nil && purge {
+		cached, err := cachedPeers(dataDir)
+		if err != nil {
+			return zero, err
+		}
+		for _, p := range append(retired, cached...) {
+			if p.Name == name || p.MachineID == name || p.DeviceID == name {
+				if removed != nil && removed.MachineID != p.MachineID {
+					return zero, fmt.Errorf("ambiguous peer %q", name)
+				}
+				v := p
+				removed = &v
+			}
+		}
+	}
 	if removed == nil {
 		return zero, fmt.Errorf("peer %q not found", name)
+	}
+	// Remember deliberate removals independently of cached rows. These records
+	// confer no trust, but allow rotation and a later purge without losing history.
+	found := false
+	for _, p := range retired {
+		found = found || p.MachineID == removed.MachineID && p.DeviceID == removed.DeviceID
+	}
+	if !found {
+		if err := saveTrust(retiredPath, append(retired, *removed)); err != nil {
+			return zero, err
+		}
 	}
 	if err := SavePeers(dir, keep); err != nil {
 		return zero, err
@@ -126,6 +158,25 @@ func RemovePeer(ctx context.Context, dataDir, name string, purge bool) (Peer, er
 		}
 	}
 	return *removed, nil
+}
+
+// cachedPeers includes history for removed peers, but never the local machine.
+func cachedPeers(dataDir string) ([]Peer, error) {
+	st, err := store.Open(filepath.Join(dataDir, "driga.db"), store.ReadOnly)
+	if err != nil {
+		return nil, err
+	}
+	machines, readErr := st.Machines()
+	if err := errors.Join(readErr, st.Close()); err != nil {
+		return nil, err
+	}
+	var peers []Peer
+	for _, m := range machines {
+		if m.MachineID != st.MachineID() {
+			peers = append(peers, Peer{Name: m.Name, Addr: m.Addr, MachineID: m.MachineID, DeviceID: m.DeviceID})
+		}
+	}
+	return peers, nil
 }
 
 type purgeRequest struct {

@@ -99,8 +99,8 @@ func TestControlSocketShortWithLongTMPDIR(t *testing.T) {
 		if len(got) > maxSocketPath || !strings.HasPrefix(got, "/tmp/") {
 			t.Fatalf("fallback %q is not short", got)
 		}
-		if runtime == "/tmp" && filepath.Dir(got) != "/tmp/driga" {
-			t.Fatalf("runtime dir not preferred: %s", got)
+		if filepath.Dir(got) != filepath.Join("/tmp", socketUserDir()) {
+			t.Fatalf("short fallback must be per-user: %s", got)
 		}
 	}
 }
@@ -169,5 +169,26 @@ func testUnsafeControlDir(t *testing.T, symlink bool) {
 		if err == nil || !strings.Contains(err.Error(), "fleet control dir") {
 			t.Errorf("enroll=%v unsafe directory accepted: %v", enroll, err)
 		}
+	}
+}
+
+func TestSocketsPreferConfiguredTemp(t *testing.T) {
+	base := "/tmp"
+	if runtime.GOOS == "windows" {
+		base = os.TempDir()
+	}
+	root, err := os.MkdirTemp(base, "ds-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(root)
+	t.Setenv("TMPDIR", root)
+	t.Setenv("TEMP", root)
+	t.Setenv("TMP", root)
+	t.Setenv("XDG_RUNTIME_DIR", "")
+	dir := filepath.Join(root, strings.Repeat("data", 40))
+	got := ControlSocketPath(dir)
+	if !strings.HasPrefix(got, root+string(filepath.Separator)) {
+		t.Fatalf("socket escaped configured temp: %s", got)
 	}
 }

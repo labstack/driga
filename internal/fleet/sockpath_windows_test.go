@@ -56,15 +56,16 @@ func TestWindowsLongSocketPath(t *testing.T) {
 	// Keep the fallback in test-owned storage as well.
 	t.Setenv("TMP", root)
 	t.Setenv("TEMP", root)
+	dataDir := filepath.Join(root, strings.Repeat("data-", 40))
 	for _, kind := range []string{"fleet", "chat"} {
-		path := WatchSocketPath(filepath.Join(root, "data"), kind)
+		path := WatchSocketPath(dataDir, kind)
 		if len(path) >= 108 {
 			t.Fatalf("socket path has %d bytes", len(path))
 		}
-		if path != WatchSocketPath(filepath.Join(root, "data"), kind) {
+		if path != WatchSocketPath(dataDir, kind) {
 			t.Fatal("unstable path")
 		}
-		if path == WatchSocketPath(filepath.Join(root, "other-data"), kind) {
+		if path == WatchSocketPath(dataDir+"-other", kind) {
 			t.Fatal("data directories share a socket")
 		}
 		if err := ensureSocketDir(path); err != nil {
@@ -134,5 +135,39 @@ func TestWindowsPrivateSocketDirectory(t *testing.T) {
 	t.Cleanup(func() { _ = protectWindowsDir(filepath.Dir(sock)) })
 	if err := checkSocketDir(sock); err == nil {
 		t.Fatal("shared socket directory accepted")
+	}
+}
+
+func TestWindowsLongDataAndTempSocketPaths(t *testing.T) {
+	root := t.TempDir()
+	longTemp := filepath.Join(root, strings.Repeat("temp-", 40))
+	if err := os.MkdirAll(longTemp, 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TMP", longTemp)
+	t.Setenv("TEMP", longTemp)
+	dataDir := filepath.Join(root, strings.Repeat("data-", 40))
+	fleetPath := ControlSocketPath(dataDir)
+	for _, kind := range []string{"fleet", "chat"} {
+		path := WatchSocketPath(dataDir, kind)
+		if !filepath.IsAbs(path) || len(path) > maxSocketPath || path != WatchSocketPath(dataDir, kind) {
+			t.Fatalf("invalid fallback: %s", path)
+		}
+		if filepath.Dir(path) != filepath.Dir(fleetPath) {
+			t.Fatalf("inconsistent fallback: %s, %s", path, fleetPath)
+		}
+		if err := ensureSocketDir(path); err != nil {
+			t.Fatal(err)
+		}
+		if err := checkSocketDir(path); err != nil {
+			t.Fatal(err)
+		}
+		ln, err := net.Listen("unix", path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := ln.Close(); err != nil {
+			t.Fatal(err)
+		}
 	}
 }

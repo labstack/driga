@@ -824,3 +824,18 @@ func (s *Server) snapshotTx(ctx context.Context, tx *sql.Tx) (*Snapshot, error) 
 	err := json.Unmarshal(b.Bytes(), &snap)
 	return &snap, err
 }
+
+func TestSnapshotRelativeDataDir(t *testing.T) {
+	s, _, id := serverFixture(t)
+	t.Chdir(filepath.Dir(s.dataDir))
+	s.dataDir = filepath.Base(s.dataDir)
+	w := httptest.NewRecorder()
+	s.ServeHTTP(w, request(s, id, "GET", "/v1/snapshot"))
+	if w.Code != 200 {
+		t.Fatalf("relative snapshot: %d %s", w.Code, w.Body)
+	}
+	var snap Snapshot
+	if err := json.Unmarshal(w.Body.Bytes(), &snap); err != nil || snap.Schema != 2 {
+		t.Fatalf("snapshot: %+v %v", snap, err)
+	}
+}

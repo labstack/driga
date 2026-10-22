@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/labstack/driga/internal/config"
-	"github.com/labstack/driga/internal/store"
 )
 
 const confirmTimeout = 2 * time.Minute
@@ -641,18 +640,24 @@ func Add(ctx context.Context, addr string, opts AddOpts, prompt func(string) boo
 		return zero, err
 	}
 	known := append([]Peer{}, peers...)
-	st, err := store.Open(filepath.Join(opts.DataDir, "driga.db"), store.ReadOnly)
+	cached, err := cachedPeers(opts.DataDir)
 	if err != nil {
 		return zero, err
 	}
-	machines, readErr := st.Machines()
-	closeErr := st.Close()
-	if err := errors.Join(readErr, closeErr); err != nil {
+	removed, err := loadTrust[Peer](filepath.Join(dir, "removed-peers.json"))
+	if err != nil {
 		return zero, err
 	}
-	for _, m := range machines {
-		if m.DeviceID != "" {
-			known = append(known, Peer{Name: m.Name, Addr: m.Addr, MachineID: m.MachineID, DeviceID: m.DeviceID})
+	for _, p := range cached {
+		retired := false
+		for _, old := range removed {
+			if old.MachineID == p.MachineID && old.DeviceID == p.DeviceID {
+				retired = true
+				break
+			}
+		}
+		if p.DeviceID != "" && !retired {
+			known = append(known, p)
 		}
 	}
 	pin := opts.ID

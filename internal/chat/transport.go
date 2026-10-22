@@ -20,41 +20,7 @@ import (
 	"github.com/labstack/driga/internal/store"
 )
 
-func SocketPath(dataDir string) string {
-	if runtime.GOOS == "windows" {
-		return fleet.WatchSocketPath(dataDir, "chat")
-	}
-	return filepath.Join(dataDir, "chat.sock")
-}
-
-// Darwin's sockaddr_un is only 104 bytes. A private short alias resolves to
-// exactly the same socket inode in the data directory without changing cwd.
-func socketAddress(path string) (string, func(), error) {
-	if runtime.GOOS == "windows" {
-		if len(path) >= 108 {
-			return "", nil, errors.New("Windows local socket path exceeds 107 bytes; use a shorter TEMP path")
-		}
-		return path, func() {}, nil
-	}
-	if len(path) < 100 {
-		return path, func() {}, nil
-	}
-	dir, err := os.MkdirTemp("", "driga-sock-")
-	if err != nil {
-		return "", nil, err
-	}
-	cleanup := func() { _ = os.Remove(filepath.Join(dir, "d")); _ = os.Remove(dir) }
-	if err := os.Symlink(filepath.Dir(path), filepath.Join(dir, "d")); err != nil {
-		cleanup()
-		return "", nil, err
-	}
-	address := filepath.Join(dir, "d", filepath.Base(path))
-	if len(address) >= 100 {
-		cleanup()
-		return "", nil, errors.New("temporary directory path too long for Unix Chat socket")
-	}
-	return address, cleanup, nil
-}
+func SocketPath(dataDir string) string { return fleet.WatchSocketPath(dataDir, "chat") }
 
 // Listen is owned by the collector lock holder. Never replace a live socket or
 // a regular file. The private parent prevents access during listen/chmod.
@@ -66,26 +32,14 @@ func Listen(ctx context.Context, dataDir string, b *Broker) (func(), error) {
 		return nil, err
 	}
 	path := SocketPath(dataDir)
-	if runtime.GOOS == "windows" {
-		if err := fleet.EnsureSocketDir(path); err != nil {
-			return nil, err
-		}
-	}
-	address, removeAlias, err := socketAddress(path)
-	if err != nil {
+	if err := fleet.EnsureSocketDir(path); err != nil {
 		return nil, err
 	}
-	keepAlias := false
-	defer func() {
-		if !keepAlias {
-			removeAlias()
-		}
-	}()
 	if info, err := os.Lstat(path); err == nil {
 		if info.Mode()&os.ModeSocket == 0 {
 			return nil, errors.New("chat socket path is not a socket")
 		}
-		conn, err := net.DialTimeout("unix", address, 100*time.Millisecond)
+		conn, err := net.DialTimeout("unix", path, 100*time.Millisecond)
 		if err == nil {
 			conn.Close()
 			return nil, errors.New("chat broker already running")
@@ -96,9 +50,8 @@ func Listen(ctx context.Context, dataDir string, b *Broker) (func(), error) {
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	}
-	l, err := net.Listen("unix", address)
+	l, err := net.Listen("unix", path)
 	if err != nil {
-		removeAlias()
 		return nil, err
 	}
 	// AF_UNIX access on Windows is guarded by the private parent DACL.
@@ -111,8 +64,7 @@ func Listen(ctx context.Context, dataDir string, b *Broker) (func(), error) {
 	server := &http.Server{Handler: handler(b), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 10 * time.Second, IdleTimeout: time.Minute, BaseContext: func(net.Listener) context.Context { return ctx }}
 	done := make(chan struct{})
 	go func() { defer close(done); _ = server.Serve(l) }()
-	keepAlias = true
-	closeFn := func() { _ = server.Close(); <-done; removeAlias() }
+	closeFn := func() { _ = server.Close(); <-done }
 	return closeFn, nil
 }
 func handler(b Client) http.Handler {
@@ -164,17 +116,14 @@ func handler(b Client) http.Handler {
 }
 
 type Remote struct {
-	http        *http.Client
-	transport   *http.Transport
-	removeAlias func()
+	http      *http.Client
+	transport *http.Transport
 }
 
 func Dial(ctx context.Context, dataDir string) (*Remote, error) {
 	path := SocketPath(dataDir)
-	if runtime.GOOS == "windows" {
-		if err := fleet.EnsureSocketDir(path); err != nil {
-			return nil, err
-		}
+	if err := fleet.CheckSocketDir(path); err != nil {
+		return nil, err
 	}
 	info, err := os.Stat(path)
 	if err != nil {
@@ -183,26 +132,17 @@ func Dial(ctx context.Context, dataDir string) (*Remote, error) {
 	if info.Mode()&os.ModeSocket == 0 || runtime.GOOS != "windows" && info.Mode().Perm()&0077 != 0 {
 		return nil, errors.New("chat socket must be owner-only")
 	}
-	if runtime.GOOS == "windows" {
-		if err := fleet.CheckSocketDir(path); err != nil {
-			return nil, err
-		}
-	}
-	address, removeAlias, err := socketAddress(path)
-	if err != nil {
-		return nil, err
-	}
 	t := &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-		return (&net.Dialer{Timeout: time.Second}).DialContext(ctx, "unix", address)
+		return (&net.Dialer{Timeout: time.Second}).DialContext(ctx, "unix", path)
 	}}
-	c := &Remote{http: &http.Client{Transport: t, Timeout: 10 * time.Second}, transport: t, removeAlias: removeAlias}
+	c := &Remote{http: &http.Client{Transport: t, Timeout: 10 * time.Second}, transport: t}
 	if err := c.call(ctx, "GET", "/health", nil, nil); err != nil {
 		c.Close()
 		return nil, err
 	}
 	return c, nil
 }
-func (c *Remote) Close() { c.transport.CloseIdleConnections(); c.removeAlias() }
+func (c *Remote) Close() { c.transport.CloseIdleConnections() }
 func (c *Remote) call(ctx context.Context, method, path string, in, out any) error {
 	var body bytes.Buffer
 	if in != nil {
