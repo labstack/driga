@@ -1,9 +1,11 @@
 package service
 
 import (
+	"bytes"
 	"encoding/xml"
 	"fmt"
 	"strings"
+	"unicode/utf16"
 
 	"github.com/labstack/driga/internal/pathx"
 )
@@ -48,6 +50,19 @@ func taskXML(bin, sid, dataDir string, env ...string) ([]byte, error) {
  <Actions Context="User"><Exec><Command>` + escape(bin) + `</Command><Arguments>` + escape(args) + `</Arguments><WorkingDirectory>` + escape(dataDir) + `</WorkingDirectory></Exec></Actions>
 </Task>
 `), nil
+}
+
+// schtasks /XML reads UTF-16 only: a UTF-8 declaration fails with "unable to
+// switch the encoding". taskXML stays UTF-8 so the contract tests can parse it.
+func taskFile(b []byte) []byte {
+	b = bytes.Replace(b, []byte(`encoding="UTF-8"`), []byte(`encoding="UTF-16"`), 1)
+	units := utf16.Encode([]rune(string(b)))
+	out := make([]byte, 2, 2+2*len(units))
+	out[0], out[1] = 0xff, 0xfe // little-endian byte order mark
+	for _, u := range units {
+		out = append(out, byte(u), byte(u>>8))
+	}
+	return out
 }
 
 func taskArgs(action, name, xmlPath string) ([]string, error) {

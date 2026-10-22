@@ -81,7 +81,7 @@ func (s *taskService) Install() error {
 		return err
 	}
 	defer os.Remove(f.Name())
-	_, err = f.Write(b)
+	_, err = f.Write(taskFile(b))
 	if err := errors.Join(err, f.Close()); err != nil {
 		return err
 	}

@@ -65,8 +65,16 @@ func TestWindowsEndToEnd(t *testing.T) {
 		f := s.isolate(t)
 		agent := f.agent(t)
 		collector := f.start(t, f.bin, "collect")
+		var last []byte
+		t.Cleanup(func() {
+			if t.Failed() {
+				agents, _ := f.try("", "agents", "--json")
+				t.Logf("last service status:\n%s\nagents:\n%s", last, agents)
+			}
+		})
 		eventually(t, "foreground collector lock and attributed stored session", func() bool {
 			out, err := f.try("", "service", "status")
+			last = out
 			return err == nil && strings.Contains(string(out), "lock held=true") && f.hasSession("daemon")
 		})
 		f.assertSession(t, "daemon", agent.cmd.Process.Pid)
@@ -304,8 +312,15 @@ func TestWindowsEndToEnd(t *testing.T) {
 		t.Setenv("DRIGA_E2E_MODE", "leaf")
 		sentinel := f.start(t, f.helper, "sentinel")
 		var candidate model.Orphan
+		var last []byte
+		t.Cleanup(func() {
+			if t.Failed() {
+				t.Logf("owned tree %v; last orphans output:\n%s", ids, last)
+			}
+		})
 		eventually(t, "real orphan proof for exactly the owned tree", func() bool {
 			out, err := f.try("", "orphans", "--snapshot", "--json")
+			last = append(out, []byte(fmt.Sprint(err))...)
 			if err != nil {
 				return false
 			}
@@ -545,6 +560,10 @@ func (f fixture) startAt(t *testing.T, dir, bin string, args ...string) *ownedPr
 	p := &ownedProcess{cmd: cmd, done: make(chan error, 1), stop: stop, log: log.Name()}
 	go func() { p.done <- cmd.Wait(); close(p.done) }()
 	t.Cleanup(func() {
+		if t.Failed() {
+			b, _ := os.ReadFile(log.Name())
+			t.Logf("owned %s %v output:\n%s", filepath.Base(bin), args, b)
+		}
 		stop()
 		select {
 		case <-p.done:
