@@ -68,6 +68,7 @@ type DoctorDeps struct {
 	ProcessAlive       func(int32, time.Time) bool // Optional PID/start validation for fixtures.
 	LockProbe          func(dataDir string) (held bool, err error)
 	NotifierLookup     func() string          // Optional cached notifier lookup for fixtures.
+	ServicePlistStale  func() (bool, error)   // macOS plist path, read-only.
 	ServiceState       func() (string, error) // Windows Task Scheduler, read-only.
 	NotificationStatus func() (string, error) // Windows Runtime, no registration/display.
 }
@@ -413,6 +414,14 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 		checks = append(checks, doctorLinuxChecks(d)...)
 	}
 	if goos == "darwin" {
+		if d.ServicePlistStale != nil {
+			stale, err := d.ServicePlistStale()
+			if err != nil {
+				add("service", "warn", err.Error(), "check collector plist; driga service install")
+			} else if stale {
+				add("service", "warn", "collector plist points at a stale binary", "driga service install")
+			}
+		}
 		lookup := d.NotifierLookup
 		if lookup == nil {
 			lookup = inbox.TerminalNotifierPath
@@ -613,6 +622,15 @@ func probeCollectorLock(dir string) (bool, error) {
 // notification status never registers an identity or displays an alert.
 func runtimeDoctor(ctx context.Context, cfg config.Config, now time.Time, reader DoctorReader) []Check {
 	d := DoctorDeps{DataDir: config.DataDir(), Config: cfg, Home: config.ExpandHome("~"), CodexHome: os.Getenv("CODEX_HOME"), CopilotHome: os.Getenv("COPILOT_HOME"), Now: now, Store: reader, LockProbe: probeCollectorLock}
+	if runtime.GOOS == "darwin" {
+		d.ServicePlistStale = func() (bool, error) {
+			bin, err := os.Executable()
+			if err != nil {
+				return false, err
+			}
+			return service.PlistStale(filepath.Join(d.Home, "Library", "LaunchAgents", "run.driga.collector.plist"), stablePath(bin))
+		}
+	}
 	if runtime.GOOS == "windows" {
 		d.NotificationStatus = inbox.WindowsNotificationStatus
 		d.ServiceState = func() (string, error) {

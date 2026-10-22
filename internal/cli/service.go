@@ -54,7 +54,11 @@ func (c ServiceCmd) Run(g *Globals) error {
 	if err != nil {
 		return err
 	}
-	s, err := service.New(stablePath(bin))
+	serviceBin := stablePath(bin)
+	if runtime.GOOS == "darwin" {
+		serviceBin = service.ExecutablePath(serviceBin)
+	}
+	s, err := service.New(serviceBin)
 	if err != nil {
 		return err
 	}

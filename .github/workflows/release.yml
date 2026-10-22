@@ -26,8 +26,8 @@ jobs:
   release:
     name: Publish signed release, Homebrew, and Scoop
     needs: [verify]
-    runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    runs-on: macos-15
+    timeout-minutes: 60
     permissions:
       contents: write
     steps:
@@ -88,6 +88,16 @@ jobs:
             fi
           done
 
+      # No GoReleaser Pro features: native signing happens in the OSS build hook.
+      - name: Prepare temporary signing keychain
+        env:
+          MACOS_SIGN_P12: ${{ secrets.MACOS_SIGN_P12 }}
+          MACOS_SIGN_PASSWORD: ${{ secrets.MACOS_SIGN_PASSWORD }}
+          MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
+          MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+        run: bash scripts/macos-signing-keychain.sh
+
       - name: Publish immutable release
         uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
@@ -97,13 +107,19 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PACKAGE_REPOS_TOKEN: ${{ secrets.PACKAGE_REPOS_TOKEN }}
-          MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
-          MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
-          MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
-          MACOS_SIGN_P12: ${{ secrets.MACOS_SIGN_P12 }}
-          MACOS_SIGN_PASSWORD: ${{ secrets.MACOS_SIGN_PASSWORD }}
+          DRIGA_SIGNING_KEYCHAIN: ${{ env.DRIGA_SIGNING_KEYCHAIN }}
+          DRIGA_SIGNING_IDENTITY: ${{ env.DRIGA_SIGNING_IDENTITY }}
 
       # The published artifacts, not a snapshot of them. Until this ran here,
       # nothing checked what a user actually downloads.
       - name: Verify published artifacts
+        env:
+          DRIGA_VERIFY_SIGNATURES: "true"
         run: scripts/verify-release-dist.sh dist
+
+      - name: Delete temporary signing keychain
+        if: always()
+        run: |
+          keychain="$RUNNER_TEMP/driga-signing/signing.keychain-db"
+          if [ -f "$keychain" ]; then security delete-keychain "$keychain"; fi
+          rm -rf "$RUNNER_TEMP/driga-signing"

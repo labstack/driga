@@ -7,11 +7,12 @@ The two source SVGs are never overwritten.
 """
 
 import argparse
-from copy import deepcopy
-from pathlib import Path
 import shutil
 import struct
 import subprocess
+import tempfile
+from copy import deepcopy
+from pathlib import Path
 from xml.etree import ElementTree as ET
 
 ASSETS = Path(__file__).resolve().parents[1] / "internal/web/static/brand"
@@ -54,13 +55,57 @@ def write(name, width, height, children):
     (ASSETS / name).write_text(ET.tostring(root, encoding="unicode") + "\n")
 
 
+def generate_icns(renderer, portable=False):
+    """Render the unchanged Murmur master at Apple's 1x and 2x icon sizes."""
+    iconutil = shutil.which("iconutil")
+    if not portable and not iconutil:
+        raise SystemExit("macOS iconutil is required to regenerate Driga.icns")
+    with tempfile.TemporaryDirectory(prefix="driga-icon-") as temporary:
+        iconset = Path(temporary) / "Driga.iconset"
+        iconset.mkdir()
+        for size in (16, 32, 128, 256, 512):
+            for scale in (1, 2):
+                suffix = "@2x" if scale == 2 else ""
+                subprocess.run([
+                    renderer, "--width", str(size * scale), "--height", str(size * scale),
+                    "--output", str(iconset / f"icon_{size}x{size}{suffix}.png"),
+                    str(ASSETS / "murmur.svg"),
+                ], check=True)
+        if portable:
+            # PNG-backed ICNS elements retain every Apple 1x/2x representation.
+            chunks = []
+            types = ("icp4", "ic11", "icp5", "ic12", "ic07", "ic13", "ic08", "ic14", "ic09", "ic10")
+            for path, kind in zip(
+                (iconset / f"icon_{size}x{size}{suffix}.png"
+                 for size in (16, 32, 128, 256, 512) for suffix in ("", "@2x")), types,
+            ):
+                png = path.read_bytes()
+                chunks.append(kind.encode("ascii") + struct.pack(">I", len(png) + 8) + png)
+            payload = b"".join(chunks)
+            (ASSETS / "Driga.icns").write_bytes(b"icns" + struct.pack(">I", len(payload) + 8) + payload)
+            return
+        subprocess.run([
+            iconutil, "--convert", "icns", "--output", str(ASSETS / "Driga.icns"),
+            str(iconset),
+        ], check=True)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--svg-only", action="store_true")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--svg-only", action="store_true")
+    mode.add_argument("--icns-only", action="store_true", help="regenerate only Driga.icns (macOS)")
+    parser.add_argument("--portable-icns", action="store_true", help="encode PNG ICNS chunks when iconutil cannot run")
     args = parser.parse_args()
+    if args.portable_icns and not args.icns_only:
+        parser.error("--portable-icns requires --icns-only")
     renderer = shutil.which("rsvg-convert")
     if not args.svg_only and not renderer:
         parser.error("rsvg-convert is required for PNG exports; use --svg-only for SVGs")
+
+    if args.icns_only:
+        generate_icns(renderer, args.portable_icns)
+        return
 
     symbol = ET.parse(ASSETS / "murmur.svg").getroot()
     wordmark = ET.parse(ASSETS / "wordmark.svg").getroot()
