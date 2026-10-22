@@ -250,8 +250,8 @@ func (p *Puller) connect(ctx context.Context) error {
 			if err != nil {
 				return err
 			}
-			if snap.Schema != 2 {
-				return &schemaError{snap.Schema}
+			if _, err := snapshotMachine(&snap); err != nil {
+				return err
 			}
 			if err = p.emit(ctx, Batch{Snapshot: &snap, Cursor: snap.Data.Cursor, ContactAt: p.now(), ClockSkewMS: p.skewMS, Resnapshot: p.resnapshot}); err != nil {
 				return err

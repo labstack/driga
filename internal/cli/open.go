@@ -72,8 +72,8 @@ func decideMode(ctx context.Context, g *Globals) (*store.Store, string, error) {
 				return st, "daemon", nil
 			}
 			_ = st.Close()
-		} else if errors.Is(err, store.ErrSchemaBehind) && g != nil && g.Stderr != nil {
-			// After an upgrade the old collector keeps the old schema until restarted.
+		} else if (errors.Is(err, store.ErrSchemaPreRelease) || errors.Is(err, store.ErrSchemaNewer)) && g != nil && g.Stderr != nil {
+			// Explain incompatible stored data before falling back to a snapshot.
 			fmt.Fprintf(g.Stderr, "driga: %v; showing a snapshot\n", err)
 		}
 	}

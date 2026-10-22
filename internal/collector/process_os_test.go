@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -69,5 +70,14 @@ func TestRecordedProcessOS(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestMachineOSRecordedWithoutDueSamples(t *testing.T) {
+	d, st, _, _ := setup(t)
+	pass(t, d, st, Plan{})
+	m, err := st.Machine()
+	if err != nil || m.OS != runtime.GOOS {
+		t.Fatalf("machine OS without samples: %+v %v", m, err)
 	}
 }

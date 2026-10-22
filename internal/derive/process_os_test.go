@@ -19,7 +19,11 @@ func TestSubreaperEvidenceUsesSampleOS(t *testing.T) {
 	}
 	for _, sourceOS := range []string{"linux", "darwin", "windows"} {
 		t.Run(sourceOS, func(t *testing.T) {
-			got := FindOrphans(NewProcIndexForOS(ps, sourceOS), nil, signatures.Builtin(), now, 0, nil, WithSubreaper(700))
+			idx, err := NewProcIndexForOS(ps, sourceOS)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := FindOrphans(idx, nil, signatures.Builtin(), now, 0, nil, WithSubreaper(700))
 			if sourceOS == "windows" {
 				if len(got) != 0 {
 					t.Fatalf("live Windows parent treated as subreaper: %+v", got)
@@ -31,5 +35,11 @@ func TestSubreaperEvidenceUsesSampleOS(t *testing.T) {
 				t.Fatalf("Unix sample lost subreaper evidence: %+v", got)
 			}
 		})
+	}
+}
+
+func TestProcIndexRejectsMissingOS(t *testing.T) {
+	if _, err := NewProcIndexForOS(nil, ""); err == nil {
+		t.Fatal("missing OS accepted")
 	}
 }

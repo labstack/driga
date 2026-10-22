@@ -652,6 +652,10 @@ func (DoctorCmd) Run(g *Globals) error {
 		if _, err := os.Stat(filepath.Join(dataDir, "driga.db")); errors.Is(err, os.ErrNotExist) {
 			status, fix = "warn", "driga service install"
 		}
+		var schemaErr *store.SchemaError
+		if errors.As(openErr, &schemaErr) {
+			fix = schemaErr.Fix()
+		}
 		checks = append(checks, Check{"database", status, openErr.Error(), fix})
 	}
 	if g.JSON {

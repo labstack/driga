@@ -45,7 +45,7 @@ func equal[T any](t *testing.T, want, got T, err error) {
 	}
 }
 
-func TestMigrateAndRoundTrip(t *testing.T) {
+func TestBaselineAndRoundTrip(t *testing.T) {
 	name := "data ?#"
 	if runtime.GOOS == "windows" {
 		name = "data # ü"
@@ -160,7 +160,7 @@ func TestMigrateAndRoundTrip(t *testing.T) {
 	if !errors.Is(err, ErrNotFound) {
 		t.Fatalf("missing session: %v", err)
 	}
-	// Reopen proves migrations are repeatable and identity is persistent, including RO.
+	// Reopen preserves the baseline and identity, including for read-only opens.
 	reopened := openTest(t, path, ReadWrite)
 	if reopened.MachineID() != s.MachineID() {
 		t.Fatal("machine identity changed")

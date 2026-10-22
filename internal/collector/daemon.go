@@ -543,7 +543,10 @@ func drainOnly(ctx context.Context, d Deps, st *store.Store) error {
 		for _, h := range hooks {
 			affected[sessionKey(h.Adapter, h.SessionID)] = true
 		}
-		idx := derive.NewProcIndexForOS(procs, platform.ProcessOS(d.Plat))
+		idx, err := derive.NewProcIndexForOS(procs, platform.ProcessOS(d.Plat))
+		if err != nil {
+			return err
+		}
 		for i := range ss {
 			if !affected[sessionKey(ss[i].Adapter, ss[i].ExternalID)] {
 				continue

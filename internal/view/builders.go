@@ -66,7 +66,7 @@ func recordedProcIndex(r Reader, procs []model.Proc) (derive.ProcIndex, error) {
 	}
 	for _, m := range ms {
 		if m.MachineID == r.MachineID() && m.OS != "" {
-			return derive.NewProcIndexForOS(procs, m.OS), nil
+			return derive.NewProcIndexForOS(procs, m.OS)
 		}
 	}
 	return derive.ProcIndex{}, fmt.Errorf("process source OS is required for machine %s", r.MachineID())

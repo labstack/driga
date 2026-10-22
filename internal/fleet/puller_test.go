@@ -176,7 +176,7 @@ func TestPullerStopsOn204(t *testing.T) {
 		case "/v1/hello":
 			fmt.Fprintf(w, `{"schema":2,"machine_id":%q}`, machine)
 		case "/v1/snapshot":
-			fmt.Fprintf(w, `{"schema":2,"observed_at":%q,"data":{"machine":{"machine_id":%q},"cursor":{"epoch":"epoch","seq":0}}}`, time.Now().UTC().Format(time.RFC3339Nano), machine)
+			fmt.Fprintf(w, `{"schema":2,"observed_at":%q,"data":{"machine":{"machine_id":%q,"os":"linux"},"cursor":{"epoch":"epoch","seq":0}}}`, time.Now().UTC().Format(time.RFC3339Nano), machine)
 		default:
 			w.WriteHeader(http.StatusNoContent)
 		}
@@ -315,5 +315,35 @@ func TestPullerReportsBoundedScrubbedServerError(t *testing.T) {
 	_, err := p.get(ctx, "/v1/snapshot", Cursor{})
 	if err == nil || !strings.Contains(err.Error(), "snapshot unavailable: invalid uri authority: a") || strings.Contains(err.Error(), "ghp_") || len(err.Error()) > 1200 {
 		t.Fatalf("server diagnostic: %v", err)
+	}
+}
+
+func TestPullerSnapshotWithoutOSIsIncompatible(t *testing.T) {
+	var machine string
+	p, out, st, count, _ := pullFixture(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/v1/hello":
+			fmt.Fprintf(w, `{"schema":2,"machine_id":%q}`, machine)
+		case "/v1/snapshot":
+			fmt.Fprintf(w, `{"schema":2,"observed_at":%q,"data":{"machine":{"machine_id":%q},"cursor":{"epoch":"epoch","seq":0},"procs":[{"pid":99,"agent":"claude"}]}}`, time.Now().UTC().Format(time.RFC3339Nano), machine)
+		default:
+			t.Errorf("unexpected request: %s", r.URL.Path)
+			w.WriteHeader(http.StatusNoContent)
+		}
+	})
+	machine = st.MachineID()
+	runPull(t, p)
+	b := nextBatch(t, out, func(b Batch) bool {
+		if b.Snapshot != nil || len(b.Rows) > 0 {
+			t.Fatal("incompatible snapshot reached the writer")
+		}
+		return b.State == "incompatible"
+	})
+	if count.Load() != 1 || b.Error != "incompatible (schema 2): machine OS is required" {
+		t.Fatalf("snapshots=%d batch=%+v", count.Load(), b)
+	}
+	if p.cursor.Epoch != "" {
+		t.Fatal("incompatible snapshot advanced cursor")
 	}
 }

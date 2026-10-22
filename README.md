@@ -14,6 +14,7 @@ It brings agent activity, project status, an attention inbox, orphaned helpers, 
 
 Driga is **alpha**. Agent formats and behavior can change; unknown or incomplete
 evidence is shown explicitly. Expect changes as the interfaces settle.
+Pre-release databases must be reset; `driga doctor` prints the reset command.
 
 [Usage](docs/usage.md) · [Machine health](docs/machine-health.md) · [Releases](https://github.com/labstack/driga/releases)
 

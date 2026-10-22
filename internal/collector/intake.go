@@ -336,7 +336,10 @@ func applyIntake(ctx context.Context, d Deps, st *store.Store, b intake.Batch) (
 		if err != nil {
 			return err
 		}
-		idx := derive.NewProcIndexForOS(procs, platform.ProcessOS(d.Plat))
+		idx, err := derive.NewProcIndexForOS(procs, platform.ProcessOS(d.Plat))
+		if err != nil {
+			return err
+		}
 		items, err := tx.Inbox(time.Time{}, false)
 		if err != nil {
 			return err

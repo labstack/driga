@@ -2,13 +2,11 @@ package store
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"github.com/labstack/driga/internal/derive"
 	"github.com/labstack/driga/internal/model"
 	"path/filepath"
 	"reflect"
-	"strings"
 	"testing"
 	"time"
 )
@@ -161,62 +159,9 @@ func TestMCPHistoryRetentionTiersAndBounds(t *testing.T) {
 	}
 }
 
-func TestMCPHistoryMigration19AndVacuum(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "old.db")
-	db, err := sql.Open("sqlite", path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	db.SetMaxOpenConns(1)
-	p, err := migrationProvider(db)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := p.UpTo(context.Background(), 19); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.Exec(`INSERT INTO meta VALUES('old','machine_id','old'); INSERT INTO mcp_minutes VALUES('old',1,1,1,'long command',1,'host','exe','cwd','server',1,42,'[]')`); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil {
-		t.Fatal(err)
-	}
-	oldReader, err := sql.Open("sqlite", "file:"+path+"?mode=ro&_pragma=busy_timeout(250)")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer oldReader.Close()
-	oldSnapshot, err := oldReader.Begin()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer oldSnapshot.Rollback()
-	var oldCount int
-	if err := oldSnapshot.QueryRow("SELECT count(*) FROM mcp_minutes").Scan(&oldCount); err != nil {
-		t.Fatal(err)
-	}
-	db.Close()
+func TestIncrementalVacuumWithReader(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "driga.db")
 	st := openTest(t, path, ReadWrite)
-	if err := oldSnapshot.QueryRow("SELECT count(*) FROM mcp_minutes").Scan(&oldCount); err != nil || oldCount != 1 {
-		t.Fatalf("migration blocked old reader: %d %v", oldCount, err)
-	}
-	if err := oldSnapshot.Rollback(); err != nil {
-		t.Fatal(err)
-	}
-	var vacuum int
-	if err := st.conn.QueryRowContext(st.ctx, `PRAGMA auto_vacuum`).Scan(&vacuum); err != nil || vacuum != 2 {
-		t.Fatalf("vacuum=%d %v", vacuum, err)
-	}
-	var old int
-	if err := st.conn.QueryRowContext(st.ctx, `SELECT count(*) FROM sqlite_schema WHERE name='mcp_minutes'`).Scan(&old); err != nil || old != 0 {
-		t.Fatalf("old=%d %v", old, err)
-	}
-	for _, table := range []string{"mcp_groups", "mcp_labels", "mcp_states", "mcp_clock"} {
-		var n int
-		if err := st.conn.QueryRowContext(st.ctx, "SELECT count(*) FROM "+table).Scan(&n); err != nil || n != 0 {
-			t.Fatalf("%s: %d %v", table, n, err)
-		}
-	}
 	// Verify real page reclamation while a read-only connection keeps a snapshot.
 	if err := st.exec(`CREATE TABLE vacuum_fixture(payload BLOB)`); err != nil {
 		t.Fatal(err)
@@ -246,11 +191,11 @@ func TestMCPHistoryMigration19AndVacuum(t *testing.T) {
 	if before <= after || before-after > 256 {
 		t.Fatalf("free pages %d -> %d", before, after)
 	}
-	// A subsequent writable open must not repeat the full VACUUM.
+	// Reopening must not rebuild the database or reclaim more pages.
 	reopened := openTest(t, path, ReadWrite)
 	var remaining int
 	if err := reopened.conn.QueryRowContext(reopened.ctx, "PRAGMA freelist_count").Scan(&remaining); err != nil || remaining != after {
-		t.Fatalf("repeated full vacuum: free pages %d -> %d (%v)", after, remaining, err)
+		t.Fatalf("reopen changed free pages: free pages %d -> %d (%v)", after, remaining, err)
 	}
 	if err := snapshot.QueryRow(`SELECT count(*) FROM vacuum_fixture`).Scan(&n); err != nil || n != 600 {
 		t.Fatalf("reader snapshot: %d %v", n, err)
@@ -268,84 +213,6 @@ func TestMCPStorageUsage(t *testing.T) {
 	}
 	if usage.LargestTable != "large_fixture" || usage.LargestTableBytes < 100000 || usage.Bytes < usage.LargestTableBytes {
 		t.Fatal(usage)
-	}
-}
-
-// Realistic command and identity widths, 200 groups, 1440 observations and 79%
-// unchanged states. The before database uses the exact schema-19 table/index.
-func TestMCPHistoryBytesPerDay(t *testing.T) {
-	if testing.Short() {
-		t.Skip("volume measurement")
-	}
-	st := openTest(t, filepath.Join(t.TempDir(), "after.db"), ReadWrite)
-	before, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "before.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer before.Close()
-	migration, err := migrations.ReadFile("migrations/0014_mcp_minutes.sql")
-	if err != nil {
-		t.Fatal(err)
-	}
-	ddl := strings.Split(strings.Split(string(migration), "-- +goose Up")[1], "-- +goose Down")[0]
-	if _, err := before.Exec(ddl); err != nil {
-		t.Fatal(err)
-	}
-	at := time.Date(2026, 10, 20, 0, 0, 5, 0, time.UTC)
-	var baseline int64
-	if err := st.conn.QueryRowContext(st.ctx, `PRAGMA page_count`).Scan(&baseline); err != nil {
-		t.Fatal(err)
-	}
-	oldTx, err := before.Begin()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer oldTx.Rollback()
-	insert, err := oldTx.Prepare(`INSERT INTO mcp_minutes VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer insert.Close()
-	err = st.Tx(context.Background(), func(tx *Tx) error {
-		samples := make([]model.MCPObservation, 200)
-		for group := range samples {
-			samples[group] = model.MCPObservation{Key: fmt.Sprintf("command:%04d:%s", group, strings.Repeat("x", 665)), Name: "server", Host: model.MCPHost{PID: int32(group + 100), StartedAt: at.Add(-time.Hour), Name: "claude", Exe: "/Applications/Claude.app/Contents/MacOS/claude", Cwd: "/Users/fixture/projects/workspace"}, Count: 2, Footprint: 100000000, Members: []model.ProcessIdentity{{PID: int32(group*2 + 1000), StartedAt: at}, {PID: int32(group*2 + 1001), StartedAt: at}}}
-		}
-		for minute := 0; minute < 1440; minute++ {
-			now := at.Add(time.Duration(minute) * time.Minute)
-			for group := range samples {
-				if (minute*37+group*17)%100 < 21 {
-					samples[group].Footprint++
-				}
-				row := samples[group]
-				members := fmt.Sprintf(`[{"pid":%d,"started_at":"2026-10-20T00:00:05Z"},{"pid":%d,"started_at":"2026-10-20T00:00:05Z"}]`, row.Members[0].PID, row.Members[1].PID)
-				if _, err := insert.Exec(tx.machineID, unix(now.Truncate(time.Minute)), row.Host.PID, unix(row.Host.StartedAt), row.Key, unix(now), row.Host.Name, row.Host.Exe, row.Host.Cwd, row.Name, row.Count, row.Footprint, members); err != nil {
-					return err
-				}
-			}
-			if err := tx.ObserveMCP(now, samples); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := oldTx.Commit(); err != nil {
-		t.Fatal(err)
-	}
-	var oldPages, newPages, pageSize, states int64
-	if err := before.QueryRow(`PRAGMA page_count`).Scan(&oldPages); err != nil {
-		t.Fatal(err)
-	}
-	st.conn.QueryRowContext(st.ctx, `PRAGMA page_count`).Scan(&newPages)
-	st.conn.QueryRowContext(st.ctx, `PRAGMA page_size`).Scan(&pageSize)
-	st.conn.QueryRowContext(st.ctx, `SELECT count(*) FROM mcp_states`).Scan(&states)
-	oldBytes, newBytes := oldPages*pageSize, (newPages-baseline)*pageSize
-	t.Logf("200 groups x 1440 minutes: before=%d bytes/day after=%d bytes/day states=%d reduction=%.2fx", oldBytes, newBytes, states, float64(oldBytes)/float64(newBytes))
-	if newBytes > oldBytes/3 || states > 70000 {
-		t.Fatalf("storage growth: before=%d after=%d states=%d", oldBytes, newBytes, states)
 	}
 }
 

@@ -48,8 +48,13 @@ func ApplyBatch(tx *store.Tx, b Batch, now time.Time) error {
 	if b.Cursor.Seq < 0 || b.Snapshot == nil && len(b.Rows) > 0 && b.Cursor.Epoch == "" {
 		return store.ErrResnapshot
 	}
-	if b.Snapshot != nil && b.Snapshot.Schema != 2 {
-		return fmt.Errorf("incompatible (schema %d)", b.Snapshot.Schema)
+	var machine model.Machine
+	if b.Snapshot != nil {
+		var err error
+		machine, err = snapshotMachine(b.Snapshot)
+		if err != nil {
+			return err
+		}
 	}
 	r := tx.ForMachine(b.MachineID)
 	m, err := r.Machine()
@@ -71,10 +76,6 @@ func ApplyBatch(tx *store.Tx, b Batch, now time.Time) error {
 		snap := b.Snapshot
 		if snap.ObservedAt.IsZero() || snap.Data.Cursor.Epoch == "" || snap.Data.Cursor.Seq < 0 {
 			return fmt.Errorf("invalid snapshot observation or cursor")
-		}
-		var machine model.Machine
-		if err := json.Unmarshal(snap.Data.Machine, &machine); err != nil {
-			return err
 		}
 		if machine.MachineID != b.MachineID {
 			return fmt.Errorf("snapshot machine_id mismatch")
@@ -320,6 +321,9 @@ func applyRow(r *store.MachineTx, m *model.Machine, kind feed.Kind, payload []by
 			err = r.UpsertSummary(v.Summary)
 		}
 	case *model.Machine:
+		if v.OS == "" {
+			return fmt.Errorf("%w: machine OS is required", &schemaError{2})
+		}
 		m.Hostname, m.OS, m.Arch, m.Cores, m.MemTotal, m.DrigaVersion = v.Hostname, v.OS, v.Arch, v.Cores, v.MemTotal, v.DrigaVersion
 	case *feed.SessionRow:
 		if v.Adapter == "" || v.ExternalID == "" {
@@ -469,4 +473,19 @@ func gapStart(m model.Machine) time.Time {
 		return m.LastSeen
 	}
 	return m.LastContactAt
+}
+
+// snapshotMachine validates provenance before any remote rows can be stored.
+func snapshotMachine(snap *Snapshot) (model.Machine, error) {
+	var m model.Machine
+	if snap.Schema != 2 {
+		return m, &schemaError{snap.Schema}
+	}
+	if err := json.Unmarshal(snap.Data.Machine, &m); err != nil {
+		return m, err
+	}
+	if m.OS == "" {
+		return m, fmt.Errorf("%w: machine OS is required", &schemaError{snap.Schema})
+	}
+	return m, nil
 }
