@@ -283,8 +283,8 @@ func TestWindowsEndToEnd(t *testing.T) {
 		work := filepath.Join(f.home, "orphan-worktree")
 		f.git(t, f.repo, "worktree", "add", "-b", "orphan-test", work)
 		handshake := filepath.Join(f.home, "owned-tree.json")
-		t.Setenv("DRIGA_E2E_MODE", "supervisor")
-		t.Setenv("DRIGA_E2E_HANDSHAKE", handshake)
+		t.Setenv("E2E_AGENT_MODE", "supervisor")
+		t.Setenv("E2E_AGENT_HANDSHAKE", handshake)
 		supervisor := f.startAt(t, work, f.helper, "mcp", "serve")
 		eventually(t, "owned tree handshake", func() bool {
 			b, err := os.ReadFile(handshake)
@@ -309,7 +309,7 @@ func TestWindowsEndToEnd(t *testing.T) {
 			handles = append(handles, h)
 			t.Cleanup(func() { windows.CloseHandle(h) })
 		}
-		t.Setenv("DRIGA_E2E_MODE", "leaf")
+		t.Setenv("E2E_AGENT_MODE", "leaf")
 		sentinel := f.start(t, f.helper, "sentinel")
 		var candidate model.Orphan
 		var last []byte
@@ -430,10 +430,15 @@ func TestWindowsEndToEnd(t *testing.T) {
 func (s suite) isolate(t *testing.T) fixture {
 	t.Helper()
 	home := t.TempDir()
+	// Local sockets live under TEMP and must stay below 108 bytes; the
+	// per-test TempDir is too deep, so use a short directory beside it.
+	temp, err := os.MkdirTemp(os.TempDir(), "t")
+	must(t, err)
+	t.Cleanup(func() { os.RemoveAll(temp) })
 	f := fixture{suite: s, home: home, repo: filepath.Join(home, "groves", "grove-000"), data: filepath.Join(home, "data"), spool: filepath.Join(home, "spool")}
 	for key, value := range map[string]string{
 		"HOME": home, "USERPROFILE": home, "APPDATA": filepath.Join(home, "AppData", "Roaming"), "LOCALAPPDATA": filepath.Join(home, "AppData", "Local"),
-		"TEMP": filepath.Join(home, "temp"), "TMP": filepath.Join(home, "temp"), "CLAUDE_CONFIG_DIR": "", "CODEX_HOME": filepath.Join(home, ".codex"), "COPILOT_HOME": filepath.Join(home, ".copilot"), "GEMINI_CLI_HOME": filepath.Join(home, ".gemini"),
+		"TEMP": temp, "TMP": temp, "CLAUDE_CONFIG_DIR": "", "CODEX_HOME": filepath.Join(home, ".codex"), "COPILOT_HOME": filepath.Join(home, ".copilot"), "GEMINI_CLI_HOME": filepath.Join(home, ".gemini"),
 		"XDG_CONFIG_HOME": filepath.Join(home, ".config"), "XDG_DATA_HOME": filepath.Join(home, ".local", "share"), "XDG_STATE_HOME": filepath.Join(home, ".local", "state"),
 		"DRIGA_DATA_DIR": f.data, "DRIGA_SPOOL_DIR": f.spool, "DRIGA_CONFIG": filepath.Join(home, "config.toml"), "DRIGA_INTERNAL": "",
 		"GIT_COMMITTER_DATE": "2020-01-01T00:00:00Z", "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": filepath.Join(home, "gitconfig"), "GIT_TERMINAL_PROMPT": "0", "GIT_OPTIONAL_LOCKS": "0",
@@ -577,7 +582,7 @@ func (f fixture) startAt(t *testing.T, dir, bin string, args ...string) *ownedPr
 func (f fixture) stopConsole(t *testing.T, p *ownedProcess) {
 	t.Helper()
 	cmd := exec.Command(f.helper)
-	cmd.Env = append(os.Environ(), "DRIGA_E2E_MODE=stop-console", "DRIGA_E2E_PID="+fmt.Sprint(p.cmd.Process.Pid))
+	cmd.Env = append(os.Environ(), "E2E_AGENT_MODE=stop-console", "E2E_AGENT_PID="+fmt.Sprint(p.cmd.Process.Pid))
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("signal owned console: %v %s", err, out)

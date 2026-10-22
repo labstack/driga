@@ -14,9 +14,9 @@ import (
 )
 
 func main() {
-	switch os.Getenv("DRIGA_E2E_MODE") {
+	switch os.Getenv("E2E_AGENT_MODE") {
 	case "stop-console":
-		pid, err := strconv.ParseUint(os.Getenv("DRIGA_E2E_PID"), 10, 32)
+		pid, err := strconv.ParseUint(os.Getenv("E2E_AGENT_PID"), 10, 32)
 		if err != nil {
 			panic(err)
 		}
@@ -40,7 +40,7 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-		if err := os.WriteFile(os.Getenv("DRIGA_E2E_HANDSHAKE"), b, 0600); err != nil {
+		if err := os.WriteFile(os.Getenv("E2E_AGENT_HANDSHAKE"), b, 0600); err != nil {
 			panic(err)
 		}
 	}
@@ -49,7 +49,7 @@ func main() {
 
 func spawn(mode string) *exec.Cmd {
 	child := exec.Command(os.Args[0], "mcp", "serve")
-	child.Env = append(os.Environ(), "DRIGA_E2E_MODE="+mode)
+	child.Env = append(os.Environ(), "E2E_AGENT_MODE="+mode)
 	child.Dir, _ = os.Getwd()
 	if err := child.Start(); err != nil {
 		panic(err)
