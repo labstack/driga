@@ -17,7 +17,7 @@ func TestServiceConfig(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	c := configForOS("/opt/driga", "darwin")
-	if c.Name != "run.driga.collector" || c.DisplayName != "driga collector" || c.Executable != "/opt/driga" || !reflect.DeepEqual(c.Arguments, []string{"collect"}) {
+	if c.Name != "run.driga.collector" || c.DisplayName != "Driga collector" || c.Executable != "/opt/driga" || !reflect.DeepEqual(c.Arguments, []string{"collect"}) {
 		t.Fatalf("unexpected config: %+v", c)
 	}
 	for _, key := range []string{"UserService", "KeepAlive", "RunAtLoad"} {
@@ -49,7 +49,7 @@ func TestServiceConfigLinux(t *testing.T) {
 		t.Fatal("launchd options on Linux")
 	}
 	template, _ := c.Option["SystemdScript"].(string)
-	if !strings.Contains(template, "WantedBy=default.target") || !strings.Contains(template, "StandardOutput=journal") {
+	if c.DisplayName != "Driga collector" || !strings.Contains(template, "Description=Driga collector\n") || !strings.Contains(template, "WantedBy=default.target") || !strings.Contains(template, "StandardOutput=journal") {
 		t.Fatal(template)
 	}
 	if hint := InstallHint("linux"); !strings.Contains(hint, "loginctl enable-linger $USER") {

@@ -54,6 +54,16 @@ func TestReleaseDistVerifierResolvesGeneratedCaskVersion(t *testing.T) {
 	})
 }
 
+func TestReleaseDistVerifierRejectsInvalidWindowsResources(t *testing.T) {
+	requireArtifactVerifierTools(t)
+	dist, binDir := releaseDistFixture(t, "2026.10.5-alpha", "v2026.10.5-alpha")
+	writeFixtureFile(t, filepath.Join(binDir, "go"), "#!/bin/sh\necho 'invalid Windows PE resources' >&2\nexit 1\n", 0o700)
+	output, err := runArtifactVerifier(t, dist, binDir)
+	if err == nil || !strings.Contains(output, "invalid Windows PE resources") {
+		t.Fatalf("verifier did not propagate resource inspection failure: %v\n%s", err, output)
+	}
+}
+
 func requireArtifactVerifierTools(t *testing.T) {
 	t.Helper()
 	if runtime.GOOS == "windows" {
@@ -153,6 +163,9 @@ end
 		t.Fatal(err)
 	}
 	writeFixtureFile(t, filepath.Join(binDir, "dpkg-deb"), "#!/bin/sh\nprintf '%s\\n' ' ./usr/bin/driga'\n", 0o700)
+	// These packaging fixtures deliberately contain fake executables. The real
+	// PE parser and generated resources are exercised in windows-resources.
+	writeFixtureFile(t, filepath.Join(binDir, "go"), "#!/bin/sh\n[ \"$1\" = test ] && [ \"$2\" = ./scripts/windows-resources ]\n", 0o700)
 	return dist, binDir
 }
 

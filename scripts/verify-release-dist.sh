@@ -197,4 +197,9 @@ if [ -n "$native_binary" ]; then
   fi
 fi
 
-echo "verified 6 archives, 4 Linux packages, ${distributable_count} checksums, Homebrew, Scoop, and embedded build metadata for ${release_tag}"
+# Inspect the archived PE resources without executing either Windows binary.
+absolute_dist=$(cd "$dist_dir" && pwd)
+repository_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+(cd "$repository_root" && go test ./scripts/windows-resources -run '^TestReleaseResources$' -count=1 -args -dist "$absolute_dist" -version "$release_version")
+
+echo "verified 6 archives, 4 Linux packages, ${distributable_count} checksums, Homebrew, Scoop, Windows PE resources, and embedded build metadata for ${release_tag}"
