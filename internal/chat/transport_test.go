@@ -66,6 +66,10 @@ func TestSocketAndFallback(t *testing.T) {
 func TestSocketRefusesRegularFile(t *testing.T) {
 	b, _, _ := fixture(t, false)
 	dir := t.TempDir()
+	// Real data directories are private; t.TempDir follows the umask.
+	if err := os.Chmod(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
 	t.Setenv("LOCALAPPDATA", t.TempDir())
 	path := SocketPath(dir)
 	if err := fleet.EnsureSocketDir(path); err != nil {
