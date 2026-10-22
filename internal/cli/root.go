@@ -109,7 +109,7 @@ func run(args []string, version string, stdin io.Reader, stdout, stderr io.Write
 			hookLogError(errors.New("hook requires adapter and event"))
 			return 0
 		}
-		_ = (HookCmd{Adapter: args[1], Event: args[2], Payload: args[3:]}).Run(&Globals{Stdin: stdin})
+		_ = (HookCmd{Adapter: args[1], Event: args[2]}).Run(&Globals{Stdin: stdin})
 		return 0
 	}
 

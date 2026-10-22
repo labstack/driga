@@ -18,7 +18,7 @@ func TestInboxIDsStableAndDeduped(t *testing.T) {
 	s.Completions = append(s.Completions, s.Completions[0])
 	c := inboxSession(2, "claude", "session", ts)
 	c.Completions = nil
-	hooks := []model.HookEvent{{TS: ts, Adapter: "claude", SessionID: "session", Event: "Stop", Message: "hook done"}, {TS: ts, Adapter: "codex", SessionID: "thread", Event: "notify", Message: "duplicate completion"}, {TS: ts, Adapter: "claude", SessionID: "unmatched", Event: "Notification"}, {TS: ts, Adapter: "other", SessionID: "session", Event: "Stop"}}
+	hooks := []model.HookEvent{{TS: ts, Adapter: "claude", SessionID: "session", Event: "Stop", Message: "hook done"}, {TS: ts, Adapter: "claude", SessionID: "unmatched", Event: "Notification"}, {TS: ts, Adapter: "other", SessionID: "session", Event: "Stop"}}
 	hooks = append(hooks, hooks[0])
 	sessions := []model.Session{s, c}
 	got := InboxItems(sessions, nil, hooks, time.Time{})
@@ -78,7 +78,7 @@ func TestChildFinishedCounted(t *testing.T) {
 	sessions[0].Completions = nil
 	sessions[1].Completions = append(sessions[1].Completions, sessions[1].Completions[0], model.CompletionEvent{ID: "old", TS: ts.Add(-time.Hour)})
 	parents := map[int64]int64{2: 1, 3: 2}
-	hooks := []model.HookEvent{{TS: ts, Adapter: "claude", SessionID: "grandchild", Event: "Stop"}, {TS: ts, Adapter: "codex", SessionID: "child", Event: "notify"}}
+	hooks := []model.HookEvent{{TS: ts, Adapter: "claude", SessionID: "grandchild", Event: "Stop"}}
 	got := InboxItems(sessions, parents, hooks, ts.Add(-time.Minute))
 	if len(got) != 4 {
 		t.Fatal(got)

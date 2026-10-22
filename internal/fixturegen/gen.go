@@ -156,7 +156,16 @@ func Write(dir string, sc Scenario) error {
 		}
 	}
 	w.json("procs.json", procs)
-	w.json("machine.json", model.MachineSample{TS: sc.Now, Cores: 8, MemTotal: 16 << 30, MemUsed: 6 << 30, SwapTotal: 2 << 30, DiskFree: 80 << 30, PressureFree: 65, Load1: 0.5})
+	sample, err := json.Marshal(model.MachineSample{TS: sc.Now, Cores: 8, MemTotal: 16 << 30, MemUsed: 6 << 30, SwapTotal: 2 << 30, DiskFree: 80 << 30, PressureFree: 65, Load1: 0.5})
+	if err != nil {
+		return err
+	}
+	var machine map[string]json.RawMessage
+	if err := json.Unmarshal(sample, &machine); err != nil {
+		return err
+	}
+	machine["os"] = json.RawMessage(`"linux"`)
+	w.json("machine.json", machine)
 	// Git checkouts do not preserve mtimes. The loader restores these explicitly.
 	w.json("mtimes.json", w.mtimes)
 	return w.err

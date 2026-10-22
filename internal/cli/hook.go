@@ -28,9 +28,8 @@ const hookTranscriptLimit = 256 << 10
 
 // HookCmd captures an agent hook quickly, without the store or process scans.
 type HookCmd struct {
-	Adapter string   `arg:""`
-	Event   string   `arg:""`
-	Payload []string `arg:"" optional:""`
+	Adapter string `arg:""`
+	Event   string `arg:""`
 }
 
 // Run always succeeds so failures cannot interrupt the invoking agent. Errors
@@ -59,27 +58,11 @@ func (h HookCmd) append(g *Globals) error {
 			return nil
 		}
 		data, err = hookReadCopilotInput(g.Stdin)
-	case "claude":
+	case "claude", "codex":
 		if g == nil || g.Stdin == nil {
 			return nil
 		}
 		data, err = hookReadInput(g.Stdin)
-	case "codex":
-		if h.Event != "notify" {
-			if g == nil || g.Stdin == nil {
-				return nil
-			}
-			data, err = hookReadInput(g.Stdin)
-			break
-		}
-		if len(h.Payload) == 0 {
-			return errors.New("codex hook has no notify payload")
-		}
-		payload := h.Payload[len(h.Payload)-1]
-		if len(payload) > hookPayloadLimit {
-			return errors.New("hook payload exceeds 1 MiB")
-		}
-		data = []byte(payload)
 	default:
 		return errors.New("unsupported hook adapter")
 	}
@@ -94,13 +77,10 @@ func (h HookCmd) append(g *Globals) error {
 	}
 	var payload struct {
 		SessionID        string          `json:"session_id"`
-		ThreadID         string          `json:"thread-id"`
 		Cwd              string          `json:"cwd"`
 		Event            string          `json:"hook_event_name"`
 		Message          string          `json:"message"`
 		AssistantMessage string          `json:"last_assistant_message"`
-		CodexMessage     string          `json:"last-assistant-message"`
-		Type             string          `json:"type"`
 		NotificationType string          `json:"notification_type"`
 		TranscriptPath   string          `json:"transcript_path"`
 		Tool             string          `json:"tool_name"`
@@ -117,10 +97,6 @@ func (h HookCmd) append(g *Globals) error {
 	message := payload.Message
 	if message == "" {
 		message = payload.AssistantMessage
-	}
-	if h.Adapter == "codex" && h.Event == "notify" {
-		ev.SessionID = payload.ThreadID
-		message = payload.CodexMessage
 	}
 	if ev.SessionID == "" {
 		return errors.New("hook payload has no session id")

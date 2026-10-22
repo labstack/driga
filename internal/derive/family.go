@@ -24,8 +24,11 @@ func NewProcIndex(procs []model.Proc) ProcIndex {
 }
 
 // NewProcIndexForOS uses the process source's OS, independent of the viewer.
-// An absent OS retains the legacy Unix topology used by older recordings.
+// The caller must supply a nonempty source OS.
 func NewProcIndexForOS(procs []model.Proc, sourceOS string) ProcIndex {
+	if sourceOS == "" {
+		panic("process source OS is required")
+	}
 	return newProcIndex(procs, sourceOS == "windows")
 }
 

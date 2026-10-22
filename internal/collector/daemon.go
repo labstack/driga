@@ -174,9 +174,6 @@ func Run(ctx context.Context, d Deps, dataDir string) error {
 		return err
 	}
 	defer st.Close()
-	if err := MigrateSpool(ctx, d, st); err != nil {
-		return err
-	}
 	// Commit export-policy changes before any listener can serve the retained
 	// feed. The first pass may spend a long time collecting recent histories.
 	if err := st.Tx(ctx, func(tx *store.Tx) error {

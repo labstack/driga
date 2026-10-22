@@ -56,6 +56,9 @@ func Expected() model.StateMixer {
 // Seed models a cached mixer from older derivation code, alongside the inputs
 // of the label pass. Later process and telemetry samples must not replace them.
 func Seed(tx *store.Tx) (int64, error) {
+	if err := tx.UpsertMachine(model.Machine{OS: "linux"}); err != nil {
+		return 0, err
+	}
 	in := Input()
 	mixed := Expected()
 	mixed.Agreement = 1

@@ -26,7 +26,7 @@ func workerStore(t *testing.T) (*store.Store, int64) {
 	t.Cleanup(func() { s.Close() })
 	var parent int64
 	err = s.Tx(context.Background(), func(tx *store.Tx) error {
-		if err := tx.UpsertMachine(model.Machine{Hostname: "test-host"}); err != nil {
+		if err := tx.UpsertMachine(model.Machine{OS: "linux", Hostname: "test-host"}); err != nil {
 			return err
 		}
 		baseline := workerNow.Add(-time.Hour)

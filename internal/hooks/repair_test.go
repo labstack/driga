@@ -94,26 +94,6 @@ func TestInstallRepairsMovedBinary(t *testing.T) {
 	}
 }
 
-func TestCodexRepairOwnedNotify(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Unix shell fixture")
-	}
-	for _, legacy := range []bool{false, true} {
-		path := filepath.Join(t.TempDir(), "config.toml")
-		before := "# keep this comment\n'notify' = [\n  '/old/driga', # executable\n  'hook', 'codex', 'notify'\n]\nmodel = 'fixture'\n"
-		writeFixture(t, path, before)
-		if !legacy {
-			if _, err := hooks.CodexInstall(path, "/old/driga", false, testNow); err != nil {
-				t.Fatal(err)
-			}
-		}
-		diff, err := hooks.CodexInstall(path, "/new/driga", true, testNow)
-		if err != nil || !diff.Changed || strings.Contains(diff.After, "/old/driga") || !strings.Contains(diff.After, "# executable") {
-			t.Fatalf("repair notify: %+v %v", diff, err)
-		}
-	}
-}
-
 func TestHookStatusSameFile(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Unix symlink fixture")

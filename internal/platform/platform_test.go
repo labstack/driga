@@ -99,6 +99,9 @@ func TestFakeExternalPeers(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	if err := os.WriteFile(filepath.Join(dir, "machine.json"), []byte(`{"os":"linux"}`), 0600); err != nil {
+		t.Fatal(err)
+	}
 	f, err := platform.LoadFake(dir)
 	if err != nil {
 		t.Fatal(err)
@@ -117,6 +120,9 @@ func TestFakeExternalPeers(t *testing.T) {
 func TestFakeAliveUsesExactFixtureIdentity(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "procs.json"), []byte(`[{"pid":10,"started_at":"2026-10-18T00:00:00Z"}]`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "machine.json"), []byte(`{"os":"linux"}`), 0600); err != nil {
 		t.Fatal(err)
 	}
 	f, err := platform.LoadFake(dir)
@@ -198,5 +204,21 @@ func TestCPUPercent(t *testing.T) {
 				t.Fatalf("CPUPercent = %v; want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestFakeRequiresSourceOS(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "procs.json"), []byte("[]"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := platform.LoadFake(dir); err == nil {
+		t.Fatal("missing machine.json accepted")
+	}
+	if err := os.WriteFile(filepath.Join(dir, "machine.json"), []byte(`{"cores":2}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := platform.LoadFake(dir); err == nil {
+		t.Fatal("missing source OS accepted")
 	}
 }

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
-	"reflect"
 	"runtime"
 	"strings"
 	"testing"
@@ -32,8 +31,7 @@ func TestCodexInstallWhenUnset(t *testing.T) {
 	if err := toml.Unmarshal([]byte(d.After), &got); err != nil {
 		t.Fatal(err)
 	}
-	want := []any{"/opt/tools with spaces/driga", "hook", "codex", "notify"}
-	if !reflect.DeepEqual(got["notify"], want) || got["model"] != "example" || got["custom"].(map[string]any)["count"] != int64(9007199254740993) {
+	if got["notify"] != nil || got["model"] != "example" || got["custom"].(map[string]any)["count"] != int64(9007199254740993) {
 		t.Fatalf("round trip = %v", got)
 	}
 	if readFixture(t, path+".driga-bak-1800000000") != before {
@@ -66,40 +64,11 @@ func TestCodexInstallKeepsForeignNotify(t *testing.T) {
 			if err != nil || !d.Changed || !strings.HasPrefix(d.After, before) || !strings.Contains(d.After, "[[hooks.PermissionRequest]]") || readFixture(t, path) != d.After {
 				t.Fatalf("install = %+v, %v", d, err)
 			}
-			if strings.Contains(d.After, "# driga notify added") {
-				t.Fatal("foreign notify claimed as ours")
-			}
 			u, err := hooks.CodexUninstall(path, false)
 			if err != nil || !u.Changed || readFixture(t, path) != before {
 				t.Fatalf("uninstall = %+v, %v; file %q", u, err, readFixture(t, path))
 			}
 		})
-	}
-}
-
-func TestCodexUninstallOnlyIfOurs(t *testing.T) {
-	for _, ours := range []bool{true, false} {
-		path := filepath.Join(t.TempDir(), "config.toml")
-		before := "notify = ['x', 'y']\nmodel = 'example'\n"
-		if ours {
-			before = "notify = ['/old/driga', 'hook', 'codex', 'notify']\nmodel = 'example'\n"
-		}
-		writeFixture(t, path, before)
-		d, err := hooks.CodexUninstall(path, true)
-		if err != nil || d.Changed != ours || readFixture(t, path) != before {
-			t.Fatalf("dry uninstall = %+v, %v", d, err)
-		}
-		d, err = hooks.CodexUninstall(path, false)
-		if err != nil || d.Changed != ours || !strings.Contains(d.After, "model") || (ours && strings.Contains(d.After, "notify")) || (!ours && d.After != before) {
-			t.Fatalf("uninstall = %+v, %v", d, err)
-		}
-		backups, _ := filepath.Glob(path + ".driga-bak-*")
-		if ours && (len(backups) != 1 || readFixture(t, backups[0]) != before) {
-			t.Fatal("uninstall missing backup")
-		}
-		if !ours && len(backups) != 0 {
-			t.Fatal("unrelated notify backed up")
-		}
 	}
 }
 
@@ -194,8 +163,8 @@ func TestHooksCLIConfirmationAndStatus(t *testing.T) {
 		t.Fatal("agent selection not respected")
 	}
 	runHooksCLI(t, "y\n", "uninstall", "--agent", "codex")
-	if strings.Contains(readFixture(t, codex), "notify") {
-		t.Fatal("Codex notify not removed")
+	if strings.Contains(readFixture(t, codex), "hooks.PermissionRequest") {
+		t.Fatal("Codex permission hook not removed")
 	}
 }
 

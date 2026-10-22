@@ -42,7 +42,7 @@ func fixture(t *testing.T) (*Server, *store.Store, int64, int64) {
 		if err != nil {
 			return err
 		}
-		if err := tx.UpsertMachine(model.Machine{Hostname: "Fixture machine", Cores: 4, MemTotal: 8 << 30}); err != nil {
+		if err := tx.UpsertMachine(model.Machine{OS: "linux", Hostname: "Fixture machine", Cores: 4, MemTotal: 8 << 30}); err != nil {
 			return err
 		}
 		if err := tx.InsertSample(model.MachineSample{TS: time.Now(), MemTotal: 8 << 30, MemUsed: 4 << 30, SwapTotal: 1 << 30, SwapUsed: 1 << 20, DiskFree: 64 << 30, Cores: 4, Load1: 1.5}); err != nil {

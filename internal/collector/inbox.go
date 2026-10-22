@@ -25,7 +25,7 @@ func hookSessions(ss []model.Session, hooks []model.HookEvent) []model.Session {
 		seen[sessionKey(s.Adapter, s.ExternalID)] = i
 	}
 	for _, h := range hooks {
-		if h.Adapter != "claude" && h.Adapter != "codex" && h.Adapter != "copilot" || h.SessionID == "" || h.Event == "notify" {
+		if h.Adapter != "claude" && h.Adapter != "codex" && h.Adapter != "copilot" || h.SessionID == "" {
 			continue
 		}
 		key := sessionKey(h.Adapter, h.SessionID)

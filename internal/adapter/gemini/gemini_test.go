@@ -147,44 +147,6 @@ func TestGeminiRecoveryRewrite(t *testing.T) {
 		})
 	}
 }
-func TestGeminiLegacyJSON(t *testing.T) {
-	env, path := setup(t, header)
-	if err := os.Remove(path); err != nil {
-		t.Fatal(err)
-	}
-	path = strings.TrimSuffix(path, "l")
-	data := strings.TrimSuffix(header, "}\n") + `,"summary":"Synthetic title","messages":[` + strings.TrimSpace(user1) + `,` + strings.TrimSpace(answer) + `]}`
-	write(t, path, data)
-	a := New().(*geminiAdapter)
-	reads := 0
-	a.open = func(p string) (*os.File, error) { reads++; return os.Open(p) }
-	s, _ := collect(t, a, env)
-	if s.TurnOpen || s.Title != "Synthetic title" || s.LastPromptAt.IsZero() {
-		t.Fatal(s)
-	}
-	collect(t, a, env)
-	if reads != 1 {
-		t.Fatalf("unchanged reads=%d", reads)
-	}
-	write(t, path, strings.Replace(data, "Synthetic title", "Changed title!", 1))
-	s, _ = collect(t, a, env)
-	if reads != 2 || s.Title != "Changed title!" {
-		t.Fatalf("changed reads=%d obs=%+v", reads, s)
-	}
-	f, err := os.OpenFile(path, os.O_WRONLY, 0600)
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = f.Truncate((8 << 20) + 1)
-	f.Close()
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, w, err := a.Collect(context.Background(), env)
-	if err != nil || len(w) != 1 || w[0].Kind != "skipped_backlog" {
-		t.Fatalf("warnings=%+v err=%v", w, err)
-	}
-}
 func TestGeminiSubagentParent(t *testing.T) {
 	env, path := setup(t, header+user1)
 	child := filepath.Join(filepath.Dir(path), "parent-session", "child.jsonl")
@@ -268,25 +230,15 @@ func TestGeminiOutstandingTools(t *testing.T) {
 	}
 }
 
-func TestGeminiSyntheticFixtures(t *testing.T) {
-	for _, name := range []string{"session-synthetic.jsonl", "session-legacy.json"} {
-		t.Run(name, func(t *testing.T) {
-			data, err := os.ReadFile(filepath.Join("..", "..", "..", "testdata", "fixtures", "gemini", "0.46", name))
-			if err != nil {
-				t.Fatal(err)
-			}
-			env, path := setup(t, string(data))
-			if strings.HasSuffix(name, ".json") {
-				if err := os.Remove(path); err != nil {
-					t.Fatal(err)
-				}
-				write(t, strings.TrimSuffix(path, "l"), string(data))
-			}
-			s, _ := collect(t, New(), env)
-			if s.TurnOpen || s.LastPromptAt.Format("15:04:05") != "12:00:01" {
-				t.Fatal(s)
-			}
-		})
+func TestGeminiSyntheticFixture(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "..", "testdata", "fixtures", "gemini", "0.46", "session-synthetic.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	env, _ := setup(t, string(data))
+	s, _ := collect(t, New(), env)
+	if s.TurnOpen || s.LastPromptAt.Format("15:04:05") != "12:00:01" {
+		t.Fatal(s)
 	}
 }
 

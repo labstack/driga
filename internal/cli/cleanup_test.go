@@ -21,6 +21,9 @@ func cleanupFake(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "procs.json"), []byte("[]"), 0600); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(dir, "machine.json"), []byte(`{"os":"linux"}`), 0600); err != nil {
+		t.Fatal(err)
+	}
 	p, err := platform.LoadFake(dir)
 	if err != nil {
 		t.Fatal(err)
@@ -134,7 +137,7 @@ func TestCleanupJSONKeepsPerTargetOutcomes(t *testing.T) {
 func TestCleanupConfigShown(t *testing.T) {
 	readEnv(t)
 	out, _ := readRun(t, "config", "show")
-	for _, s := range []string{"[cleanup]", "worktree_idle = '168h'", "low_disk_percent = 10.0", "low_disk_bytes = '10737418240'", "regenerable ="} {
+	for _, s := range []string{"[cleanup]", "worktree_idle = '168h'", "low_disk_bytes = '10737418240'", "regenerable ="} {
 		if !strings.Contains(out, s) {
 			t.Fatal("missing", s, out)
 		}

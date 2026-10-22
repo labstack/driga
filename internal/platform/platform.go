@@ -26,7 +26,7 @@ type Platform interface {
 }
 
 // ProcessOS returns the OS that produced the process table. Live platforms use
-// the host OS; recorded sources override it even when their OS is unknown.
+// the host OS; recorded sources supply explicit provenance.
 func ProcessOS(p Platform) string {
 	if source, ok := p.(interface{ ProcessOS() string }); ok {
 		return source.ProcessOS()

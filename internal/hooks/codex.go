@@ -48,9 +48,9 @@ func CodexUninstallOTLP(path string, dryRun bool, endpoints ...string) (Diff, er
 }
 
 // CodexInstall appends a report-only permission hook, preserving unrelated TOML.
-// It retains the legacy notify registration and preserves an existing foreign notify.
+// Existing notify settings remain untouched.
 func CodexInstall(configPath, driga string, dryRun bool, now time.Time) (Diff, error) {
-	d, settings, err := readCodex(configPath)
+	d, _, err := readCodex(configPath)
 	if err != nil {
 		return d, err
 	}
@@ -74,51 +74,21 @@ func CodexInstall(configPath, driga string, dryRun bool, now time.Time) (Diff, e
 			if err != nil {
 				return d, err
 			}
-			block, err := editCodexString(d.Before[pos:], "command", updated, false)
+			block, err := editCodexString(d.Before[pos:], "command", updated)
 			if err != nil {
 				return d, err
 			}
 			d.After = d.Before[:pos] + block
 		}
-		if codexNotifyOurs(settings["notify"], currentBinary()) {
-			args := settings["notify"].([]any)
-			if !sameBinary(args[0].(string), driga) {
-				d.After, err = updateCodexNotify(d.After, settings["notify"], driga)
-				if err != nil {
-					return d, err
-				}
-			}
-		}
 		d.Changed = d.Before != d.After
 		return d, writeDiff(d, dryRun, now)
 	}
-	// The permission hook is its own table, so a foreign notify stays untouched.
-	// Only an unset notify gets Driga's prefix, which uninstall removes to
-	// restore the original bytes. Legacy owned notify paths can be repaired.
-	_, hadNotify := settings["notify"]
-	notify, _ := toml.Marshal(map[string]any{"notify": []string{driga, "hook", "codex", "notify"}})
 	command, err := hookCommand(driga, "codex", "PermissionRequest", runtime.GOOS)
 	if err != nil {
 		return d, err
 	}
 	block := "\n# driga needs-you begin\n[[hooks.PermissionRequest]]\n[[hooks.PermissionRequest.hooks]]\ntype = 'command'\ncommand = " + strconv.Quote(command) + "\ntimeout = 3\n# driga needs-you end\n"
-	prefix := string(notify)
-	if hadNotify {
-		prefix = ""
-	} else {
-		block = strings.Replace(block, "# driga needs-you begin\n", "# driga needs-you begin\n# driga notify added\n", 1)
-	}
-	before := d.Before
-	if codexNotifyOurs(settings["notify"], currentBinary()) {
-		args := settings["notify"].([]any)
-		if !sameBinary(args[0].(string), driga) {
-			before, err = updateCodexNotify(before, settings["notify"], driga)
-			if err != nil {
-				return d, err
-			}
-		}
-	}
-	d.After = prefix + before + block
+	d.After = d.Before + block
 	var check map[string]any
 	if err := toml.Unmarshal([]byte(d.After), &check); err != nil {
 		return d, fmt.Errorf("Codex inline hooks cannot be safely appended: %w", err)
@@ -127,10 +97,9 @@ func CodexInstall(configPath, driga string, dryRun bool, now time.Time) (Diff, e
 	return d, writeDiff(d, dryRun, now)
 }
 
-// CodexUninstall round-trips the owned permission block and its optional notify
-// prefix. Changed blocks are refused; legacy notify-only settings retain removal.
+// CodexUninstall removes only the owned permission block. Changed blocks are refused.
 func CodexUninstall(configPath string, dryRun bool) (Diff, error) {
-	d, settings, err := readCodex(configPath)
+	d, _, err := readCodex(configPath)
 	if err != nil {
 		return d, err
 	}
@@ -151,10 +120,6 @@ func CodexUninstall(configPath string, dryRun bool) (Diff, error) {
 					p, rest, ok := hookProgram(cmd)
 					if ok && ours(p, currentBinary()) && rest == " hook codex PermissionRequest" && h["type"] == "command" && h["timeout"] == int64(3) && len(h) == 3 && len(g) == 1 {
 						after := d.Before[:pos]
-						if strings.Contains(d.Before[pos:], "# driga notify added\n") && codexNotifyOurs(settings["notify"], currentBinary()) {
-							line, _ := toml.Marshal(map[string]any{"notify": settings["notify"]})
-							after = strings.TrimPrefix(after, string(line))
-						}
 						d.After, d.Changed = after, true
 						return d, writeDiff(d, dryRun, time.Now())
 					}
@@ -165,33 +130,16 @@ func CodexUninstall(configPath string, dryRun bool) (Diff, error) {
 	if strings.Contains(d.Before, "# driga needs-you begin") {
 		return d, fmt.Errorf("Driga permission hook changed; refusing to rewrite Codex config")
 	}
-	if !codexNotifyOurs(settings["notify"], currentBinary()) {
-		return d, nil
-	}
-	delete(settings, "notify")
-	return finishCodex(d, settings, dryRun, time.Now())
-}
-
-func updateCodexNotify(src string, notify any, driga string) (string, error) {
-	// Preserve the canonical prefix that uninstall recognizes when Driga added it.
-	old, _ := toml.Marshal(map[string]any{"notify": notify})
-	if strings.HasPrefix(src, string(old)) {
-		updated, _ := toml.Marshal(map[string]any{"notify": []string{driga, "hook", "codex", "notify"}})
-		return string(updated) + strings.TrimPrefix(src, string(old)), nil
-	}
-	return editCodexString(src, "notify", driga, true)
+	return d, nil
 }
 
 // editCodexString changes a parsed string span, preserving comments, quoting of
 // keys, multiline arrays, and all bytes outside that value.
-func editCodexString(src, key, value string, arrayFirst bool) (string, error) {
+func editCodexString(src, key, value string) (string, error) {
 	var parser unstable.Parser
 	parser.Reset([]byte(src))
 	for parser.NextExpression() {
 		node := parser.Expression()
-		if arrayFirst && (node.Kind == unstable.Table || node.Kind == unstable.ArrayTable) {
-			break
-		}
 		if node.Kind != unstable.KeyValue {
 			continue
 		}
@@ -200,12 +148,6 @@ func editCodexString(src, key, value string, arrayFirst bool) (string, error) {
 			continue
 		}
 		val := node.Value()
-		if arrayFirst {
-			if val.Kind != unstable.Array {
-				break
-			}
-			val = val.Child()
-		}
 		if val == nil || val.Kind != unstable.String {
 			break
 		}
@@ -237,7 +179,7 @@ func codexPermissionCommand(block string) string {
 
 // CodexStatus names only registrations owned by Driga, never a foreign notify.
 func CodexStatus(path, driga string) (string, error) {
-	d, settings, err := readCodex(path)
+	d, _, err := readCodex(path)
 	if err != nil {
 		return "", err
 	}
@@ -248,29 +190,14 @@ func CodexStatus(path, driga string) (string, error) {
 	if !removal.Changed {
 		return "not installed", nil
 	}
-	detail := "notify installed"
-	stale := false
-	if pos := strings.Index(d.Before, "\n# driga needs-you begin\n"); pos >= 0 {
-		detail = "PermissionRequest installed"
-		program, _, _ := hookProgram(codexPermissionCommand(d.Before[pos:]))
-		stale = !binaryCurrent(program, driga)
-	}
-	if codexNotifyOurs(settings["notify"], currentBinary()) {
-		stale = stale || !binaryCurrent(settings["notify"].([]any)[0].(string), driga)
-	}
+	detail := "PermissionRequest installed"
+	pos := strings.Index(d.Before, "\n# driga needs-you begin\n")
+	program, _, _ := hookProgram(codexPermissionCommand(d.Before[pos:]))
+	stale := !binaryCurrent(program, driga)
 	if stale {
 		return "stale binary; " + detail, nil
 	}
 	return detail, nil
-}
-
-func codexNotifyOurs(value any, driga string) bool {
-	args, ok := value.([]any)
-	if !ok || len(args) != 4 {
-		return false
-	}
-	program, ok := args[0].(string)
-	return ok && ours(program, driga) && args[1] == "hook" && args[2] == "codex" && args[3] == "notify"
 }
 
 func readCodex(path string) (Diff, map[string]any, error) {

@@ -51,9 +51,9 @@ func OpenFile(path string, flag int) (*os.File, error) {
 	if err := Protect(path); err != nil {
 		return nil, err
 	}
-	// Keep delete sharing for the lifetime of the writer, not just creation.
-	// Legacy spool migration can unlink a hard-linked day file while a hook
-	// finishes appending through its existing handle.
+	// Reopen the protected file without O_EXCL (CREATE_NEW above already
+	// created it) and keep delete sharing for the writer's lifetime: Windows
+	// refuses rename/replace/remove of a file while a handle lacks it.
 	p, err := windows.UTF16PtrFromString(path)
 	if err != nil {
 		return nil, err
