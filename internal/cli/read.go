@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/labstack/driga/internal/pathx"
 	"github.com/labstack/driga/internal/secfile"
@@ -98,6 +99,9 @@ func (c AgentsCmd) Run(g *Globals) error {
 func (c AgentCmd) Run(g *Globals) error {
 	return runRead(g, view.Filter{}, "", func(r view.Reader, f view.Filter, now time.Time) (any, error) {
 		v, err := view.Agent(r, c.ID, now, f.Scope)
+		if errors.Is(err, store.ErrNotFound) {
+			return v, missingAgent(c.ID)
+		}
 		if err != nil {
 			return v, err
 		}
@@ -344,6 +348,10 @@ func (c FlowCmd) Run(g *Globals) error {
 		if c.ID < 0 {
 			return nil, fmt.Errorf("session id must be positive")
 		}
-		return view.Flow(r, f, c.ID, now)
+		v, err := view.Flow(r, f, c.ID, now)
+		if errors.Is(err, store.ErrNotFound) {
+			return v, missingAgent(c.ID)
+		}
+		return v, err
 	})
 }

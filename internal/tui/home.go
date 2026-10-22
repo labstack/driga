@@ -84,7 +84,7 @@ func framedPanel(title, hint, body string, width int, noColor bool) string {
 		line = truncate(line, inner)
 		lines = append(lines, border.Render("│")+" "+line+strings.Repeat(" ", max(0, inner-lipgloss.Width(line)))+" "+border.Render("│"))
 	}
-	lines = append(lines, border.Render("╰"+strings.Repeat("─", width-2)+"╯"))
+	lines = append(lines, border.Render("╰"+strings.Repeat("─", max(0, width-2))+"╯"))
 	return strings.Join(lines, "\n")
 }
 
@@ -164,7 +164,7 @@ func (m *app) homeView() string {
 	for _, state := range stateOrder {
 		n := counts[state]
 		seen += n
-		end := seen * (statesW - 4) / max(1, total)
+		end := seen * max(0, statesW-4) / max(1, total)
 		if n > 0 {
 			segmented += m.stateText(strings.Repeat("█", end-used), state)
 			used = end
@@ -174,7 +174,7 @@ func (m *app) homeView() string {
 		}
 	}
 	if total == 0 {
-		segmented = dim.Render(strings.Repeat("░", statesW-4))
+		segmented = dim.Render(strings.Repeat("░", max(0, statesW-4)))
 	}
 	states := segmented + "\n" + styledPack(legend, statesW-4, "  ")
 	machine := []string{}

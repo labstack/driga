@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/labstack/driga/internal/filelock"
 	"github.com/labstack/driga/internal/secfile"
@@ -71,6 +72,9 @@ func decideMode(ctx context.Context, g *Globals) (*store.Store, string, error) {
 				return st, "daemon", nil
 			}
 			_ = st.Close()
+		} else if errors.Is(err, store.ErrSchemaBehind) && g != nil && g.Stderr != nil {
+			// After an upgrade the old collector keeps the old schema until restarted.
+			fmt.Fprintf(g.Stderr, "driga: %v; showing a snapshot\n", err)
 		}
 	}
 	return nil, "snapshot", nil

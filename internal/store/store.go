@@ -135,12 +135,13 @@ func Open(path string, mode Mode) (_ *Store, retErr error) {
 	if err := db.PingContext(ctx); err != nil {
 		return nil, err
 	}
-	if mode != ReadOnly {
-		subFS, err := fs.Sub(migrations, "migrations")
-		if err != nil {
+	if mode == ReadOnly {
+		if err := checkSchema(ctx, db); err != nil {
 			return nil, err
 		}
-		provider, err := goose.NewProvider(goose.DialectSQLite3, db, subFS, goose.WithDisableGlobalRegistry(true), goose.WithGoMigrations(canonMigration()))
+	}
+	if mode != ReadOnly {
+		provider, err := migrationProvider(db)
 		if err != nil {
 			return nil, err
 		}
@@ -256,4 +257,38 @@ func timePointer(n sql.NullInt64) *time.Time {
 func (q *querier) exec(query string, args ...any) error {
 	_, err := q.conn.ExecContext(q.ctx, query, args...)
 	return err
+}
+
+// ErrSchemaBehind means another (older) Driga owns the database and has not
+// applied this binary's migrations yet, typically right after an upgrade.
+var ErrSchemaBehind = errors.New("database schema is older than this driga")
+
+func migrationProvider(db *sql.DB) (*goose.Provider, error) {
+	subFS, err := fs.Sub(migrations, "migrations")
+	if err != nil {
+		return nil, err
+	}
+	return goose.NewProvider(goose.DialectSQLite3, db, subFS, goose.WithDisableGlobalRegistry(true), goose.WithGoMigrations(canonMigration()))
+}
+
+// checkSchema lets a reader fail clearly instead of with "no such column" when
+// the database predates this binary. Readers never migrate: the collector does.
+func checkSchema(ctx context.Context, db *sql.DB) error {
+	provider, err := migrationProvider(db)
+	if err != nil {
+		return err
+	}
+	sources := provider.ListSources()
+	if len(sources) == 0 {
+		return nil
+	}
+	want := sources[len(sources)-1].Version
+	have, err := provider.GetDBVersion(ctx)
+	if err != nil {
+		return fmt.Errorf("read schema version: %w", err)
+	}
+	if have < want {
+		return fmt.Errorf("%w (%d < %d); an older collector may still be running: run driga service restart", ErrSchemaBehind, have, want)
+	}
+	return nil
 }

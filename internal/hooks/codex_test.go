@@ -43,7 +43,7 @@ func TestCodexInstallWhenUnset(t *testing.T) {
 	if info.Mode().Perm() != 0640 {
 		t.Fatalf("mode = %v", info.Mode())
 	}
-	d, err = hooks.CodexInstall(path, testBinary("/new/driga"), false, testNow.Add(time.Second))
+	d, err = hooks.CodexInstall(path, testBinary("/opt/tools with spaces/driga"), false, testNow.Add(time.Second))
 	if err != nil || d.Changed || d.Before != d.After {
 		t.Fatalf("repeat = %+v, %v", d, err)
 	}
@@ -179,7 +179,7 @@ func TestHooksCLIConfirmationAndStatus(t *testing.T) {
 		t.Fatalf("missing prompt: %q", out)
 	}
 	claudeBefore, codexBefore := readFixture(t, claude), readFixture(t, codex)
-	if out := runHooksCLI(t, "", "status"); !strings.Contains(out, "SessionStart") || !strings.Contains(out, "Codex: installed") {
+	if out := runHooksCLI(t, "", "status"); !strings.Contains(out, "SessionStart") || !strings.Contains(out, "Codex: PermissionRequest installed") {
 		t.Fatalf("status = %q", out)
 	}
 	if out := runHooksCLI(t, "", "install"); strings.Contains(out, "Apply?") {

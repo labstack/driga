@@ -342,3 +342,22 @@ func TestEventDrivenHelpReportsLastEvent(t *testing.T) {
 		t.Fatal(m.View().Content)
 	}
 }
+
+func TestHomeTinyWidths(t *testing.T) {
+	for _, width := range []int{-1, 0, 1, 2, 3, 4, 8, 16, 30} {
+		for _, empty := range []bool{false, true} {
+			s := fixture()
+			if empty {
+				s.snap.Agents.Rows = nil
+			}
+			m := setup(t, s, Options{})
+			m, _ = m.Update(tea.WindowSizeMsg{Width: width, Height: 10})
+			_ = m.View()
+		}
+	}
+	m := setup(t, fixture(), Options{})
+	m = key(m, '?')
+	if !strings.Contains(m.View().Content, "1–8 tabs") {
+		t.Fatal(m.View().Content)
+	}
+}

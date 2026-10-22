@@ -44,7 +44,7 @@ hour's activity, projects and leftovers. On terminals 140 columns or wider the A
 shows the selected agent beside the list. `driga activity` prints the same 60-minute
 history (machine samples and events per minute; minutes without a sample are gaps).
 
-In the TUI, use `0`–`6` for tabs (Home, Agents, Projects, Inbox, Orphans, Machine, Cleanup), Enter for detail, Esc to return, `?` for help,
+In the TUI, use `0`–`8` for tabs (Home, Agents, Projects, Inbox, Orphans, Machine, Cleanup, Flow, Chat), Enter for detail, Esc to return, `?` for help,
 `m` to cycle machine scope, and `q` to quit. Viewing details and issuing JSON
 queries never acknowledge inbox items. Use `x`/Space in Inbox or `driga inbox ack`. Without a running collector,
 acknowledgments are queued for the next collection. Orphan kills recheck process
@@ -106,6 +106,13 @@ driga config show
 driga config edit                  # $EDITOR, falling back to vi
 ```
 
+To disable desktop alerts:
+
+```toml
+[inbox]
+alerts = "off"
+```
+
 Defaults and their purpose:
 
 | Setting | Default | Purpose |
@@ -121,6 +128,9 @@ Defaults and their purpose:
 | `fleet.share_text` | `titles` | Share titles/commit subjects; `none` withholds them. |
 | `fleet.enroll_window` | `10m` | Bound pairing; at most three attempts, closes on success. |
 | `fleet.allow_any_address` | `false` | Refuse wildcard/public listeners by default. |
+| `inbox.alerts` | `waiting` | Desktop alerts for attention; `all` includes completions, `off` disables alerts. |
+| `inbox.alert_after` | `0s` | Alert when a wait remains open this long; zero alerts immediately. |
+| `inbox.alert_repeat` | `5m` | Minimum interval between alerts for one session; zero disables throttling. |
 | `intake.otlp` | `false` | Enable optional metadata-only OTLP/HTTP JSON. |
 | `intake.listen` | `127.0.0.1:7418` | Loopback only. |
 | `no_service_hint` | `false` | Allow a once-daily service hint in snapshot mode. |
@@ -152,7 +162,7 @@ terminal-opening command using `{cwd}`; otherwise the terminal is detected.
 | SQLite database and collector state (Windows) | `%LOCALAPPDATA%\driga\` | `DRIGA_DATA_DIR` |
 | Hook/ack spool (Windows) | `%LOCALAPPDATA%\driga\events` | `DRIGA_SPOOL_DIR` |
 | Configuration (Windows) | `%APPDATA%\driga\config.toml` | `DRIGA_CONFIG` |
-| Configuration (macOS/Linux) | `~/.config/driga/config.toml` | `DRIGA_CONFIG` |
+| Configuration (macOS/Linux) | `$XDG_CONFIG_HOME/driga/config.toml`, else `~/.config/driga/config.toml` | `DRIGA_CONFIG` |
 
 Database/spool files use mode `0600`, and their directories use `0700`. Claude
 data is read under `~/.claude/`; Codex under `~/.codex/`, or `CODEX_HOME` when set.

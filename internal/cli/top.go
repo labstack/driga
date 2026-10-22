@@ -6,6 +6,7 @@ import (
 	"os"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/term"
 	"github.com/labstack/driga/internal/chat"
 	"github.com/labstack/driga/internal/cleanup"
 	"github.com/labstack/driga/internal/config"
@@ -15,11 +16,23 @@ import (
 
 // TopCmd opens the interactive viewer using daemon data or live snapshots.
 type TopCmd struct {
-	Tab string `enum:"home,machine" default:"home" help:"Open directly to the Machine tab."`
+	Tab string `enum:"home,machine" default:"home" help:"Initial tab: home or machine."`
 }
 
 // Run keeps the viewer and its optional collector within the same lifetime.
 func (c TopCmd) Run(g *Globals) error {
+	input, output := g.Stdin, g.Stdout
+	if input == nil {
+		input = os.Stdin
+	}
+	if output == nil {
+		output = os.Stdout
+	}
+	in, inOK := input.(interface{ Fd() uintptr })
+	out, outOK := output.(interface{ Fd() uintptr })
+	if !inOK || !outOK || !term.IsTerminal(in.Fd()) || !term.IsTerminal(out.Fd()) {
+		return invalidUsage("driga top needs an interactive terminal; use driga agents or --json")
+	}
 	cfg, err := config.Load(config.Path())
 	if err != nil {
 		return err

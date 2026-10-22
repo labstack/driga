@@ -7,6 +7,7 @@ import (
 	"github.com/labstack/driga/internal/secfile"
 	"os"
 	"path/filepath"
+	"reflect"
 	"time"
 )
 
@@ -60,6 +61,21 @@ func CopilotInstall(path, driga string, dryRun bool, now time.Time) (Diff, error
 	if !filepath.IsAbs(driga) {
 		return d, fmt.Errorf("driga binary path must be absolute: %q", driga)
 	}
+	var existing copilotConfig
+	if json.Unmarshal([]byte(d.Before), &existing) == nil {
+		normalized := copilotSettings(driga)
+		for event, commands := range existing.Hooks {
+			for i := range commands {
+				if sameBinary(commands[i].Exec, driga) {
+					commands[i].Exec = driga
+				}
+			}
+			existing.Hooks[event] = commands
+		}
+		if reflect.DeepEqual(existing, normalized) {
+			return d, nil
+		}
+	}
 	b, err := json.MarshalIndent(copilotSettings(driga), "", "  ")
 	if err != nil {
 		return d, err
@@ -80,7 +96,7 @@ func CopilotUninstall(path string, dryRun bool) (Diff, error) {
 	return d, writeDiff(d, dryRun, time.Now())
 }
 
-// CopilotStatus checks executable ownership and existence, allowing other valid Driga paths.
+// CopilotStatus checks executable ownership, existence and identity.
 func CopilotStatus(path, driga string) (string, error) {
 	d, err := readCopilot(path)
 	if err != nil {
@@ -97,8 +113,7 @@ func CopilotStatus(path, driga string) (string, error) {
 	for _, commands := range c.Hooks {
 		for _, command := range commands {
 			commandsFound = true
-			info, err := os.Stat(command.Exec)
-			if err != nil || !info.Mode().IsRegular() || !ours(command.Exec, driga) {
+			if !ours(command.Exec, driga) || !binaryCurrent(command.Exec, driga) {
 				return "stale", nil
 			}
 		}
