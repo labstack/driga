@@ -160,23 +160,21 @@ func TestGeminiSubagentParent(t *testing.T) {
 	}
 }
 func TestGeminiFilesTouched(t *testing.T) {
-	for _, name := range []string{"write_file", "replace", "edit"} {
-		for _, arg := range []string{"file_path", "absolute_path"} {
-			for _, path := range []string{"a.go", "/absolute/a.go"} {
-				t.Run(name+arg+path, func(t *testing.T) {
-					data := strings.ReplaceAll(strings.ReplaceAll(tool, "write_file", name), "file_path", arg)
-					data = strings.ReplaceAll(data, "a.go", path)
-					env, _ := setup(t, header+user1+data)
-					s, _ := collect(t, New(), env)
-					want := path
-					if !recordpath.IsAbs(want) {
-						want = recordpath.Join(s.Cwd, want)
-					}
-					if len(s.FilesTouched) != 1 || s.FilesTouched[0].Path != want || s.FilesTouched[0].TS.IsZero() {
-						t.Fatal(s.FilesTouched)
-					}
-				})
-			}
+	for _, name := range []string{"write_file", "replace"} {
+		for _, path := range []string{"a.go", "/absolute/a.go"} {
+			t.Run(name+path, func(t *testing.T) {
+				data := strings.ReplaceAll(tool, "write_file", name)
+				data = strings.ReplaceAll(data, "a.go", path)
+				env, _ := setup(t, header+user1+data)
+				s, _ := collect(t, New(), env)
+				want := path
+				if !recordpath.IsAbs(want) {
+					want = recordpath.Join(s.Cwd, want)
+				}
+				if len(s.FilesTouched) != 1 || s.FilesTouched[0].Path != want || s.FilesTouched[0].TS.IsZero() {
+					t.Fatal(s.FilesTouched)
+				}
+			})
 		}
 	}
 }

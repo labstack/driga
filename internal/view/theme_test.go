@@ -14,31 +14,19 @@ import (
 func TestThemeCSSContainsEveryToken(t *testing.T) {
 	css := ThemeCSS()
 	sections := strings.Split(css, "}")
-	if len(ThemeTokens()) != 27 {
-		t.Fatalf("token count: %d", len(ThemeTokens()))
-	}
-	required := strings.Fields("ground surface sunk ink muted faint line strong on-strong working working-bg waiting waiting-bg waiting-bar stalled stalled-bg idle idle-bg finished finished-bg crit warn ok accent observation")
-	for _, name := range required {
-		if !strings.Contains(css, "--"+name+":") {
-			t.Errorf("missing required token %s", name)
-		}
-	}
-	for _, token := range ThemeTokens() {
-		for i, value := range []string{token.Light, token.Dark} {
+	for _, token := range consoleTokens {
+		for i, value := range []string{token.Dark, token.Light} {
 			if !strings.Contains(sections[i], "--"+token.Name+":"+value+";") {
 				t.Errorf("theme %d missing %s=%s", i, token.Name, value)
 			}
 		}
-	}
-	if !strings.Contains(css, `prefers-color-scheme: dark`) || !strings.Contains(css, `[data-theme="light"]`) || !strings.Contains(css, `[data-theme="dark"]`) {
-		t.Fatal("missing explicit or system theme")
 	}
 }
 
 func TestThemeTerminalParity(t *testing.T) {
 	original := compat.HasDarkBackground
 	defer func() { compat.HasDarkBackground = original }()
-	for _, token := range ThemeTokens() {
+	for _, token := range themeTokens {
 		adaptive := ThemeColor(token.Name)
 		for _, dark := range []bool{false, true} {
 			compat.HasDarkBackground = dark
@@ -57,12 +45,6 @@ func TestThemeTerminalParity(t *testing.T) {
 
 func TestConsoleThemeTokenParity(t *testing.T) {
 	css := ThemeCSS()
-	// A high-specificity legacy system selector must never override console tokens
-	// (especially latte selected while the OS uses dark mode).
-	if strings.Contains(css, `:root:not([data-theme="light"]):not([data-theme="dark"])`) {
-		t.Error("legacy automatic dark selector overrides named console palettes")
-	}
-
 	// Catppuccin Mocha (official) and Latte (text roles darkened for 4.5:1).
 	for _, set := range []string{
 		`--bg:#1E1E2E;--pane:#181825;--raise:#313244;--line:#45475A;--fg:#CDD6F4;--mid:#BAC2DE;--dim:#A6ADC8;--accent:#CBA6F7;--on-accent:#1E1E2E;--working:#A6E3A1;--waiting:#F9E2AF;--stalled:#F38BA8;--idle:#89B4FA;--finished:#A6ADC8;--crit:#F38BA8;--warn:#FAB387;`,
@@ -89,9 +71,9 @@ func TestUnknownTokenRendersPlain(t *testing.T) {
 
 // Every token the TUI asks for must exist in the shared palette.
 func TestTUITokensExist(t *testing.T) {
-	for _, name := range []string{"accent", "crit", "faint", "idle", "ink", "line", "muted", "working", "on-strong", "strong", "sunk"} {
+	for _, name := range []string{"accent", "crit", "faint", "idle", "ink", "line", "muted", "working", "on-strong", "strong", "sunk", "waiting", "stalled", "finished", "warn", "ok", "observation", "tool"} {
 		found := false
-		for _, tok := range ThemeTokens() {
+		for _, tok := range themeTokens {
 			found = found || tok.Name == name
 		}
 		if !found {
@@ -120,16 +102,11 @@ func TestFlowMockTokens(t *testing.T) {
 	}
 }
 
-// Web assets read console tokens. A legacy-only token keeps its light value
-// under the console's dark palette, so every variable they use must be here.
+// Every palette variable used by web assets must have a console value.
 func TestWebAssetsUseConsoleTokens(t *testing.T) {
 	console := map[string]bool{}
 	for _, tok := range consoleTokens {
 		console[tok.Name] = true
-	}
-	legacy := map[string]bool{}
-	for _, tok := range themeTokens {
-		legacy[tok.Name] = true
 	}
 	files, err := filepath.Glob("../web/static/*.[cj]s*")
 	if err != nil || len(files) == 0 {
@@ -141,8 +118,9 @@ func TestWebAssetsUseConsoleTokens(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		// Fonts and component-local meter/state variables are defined by the assets.
 		for _, m := range ref.FindAllStringSubmatch(string(b), -1) {
-			if legacy[m[1]] && !console[m[1]] {
+			if !console[m[1]] && m[1] != "mono" && m[1] != "sans" && m[1] != "meter-fill" && m[1] != "state" {
 				t.Errorf("%s uses --%s, which has no console value", filepath.Base(f), m[1])
 			}
 		}

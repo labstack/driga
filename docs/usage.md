@@ -138,7 +138,6 @@ Defaults and their purpose:
 | `summaries.model` | `haiku` | Model passed to `claude -p` for summaries. |
 | `cleanup.worktree_idle` | `168h` | Minimum idle time before a worktree is a candidate. |
 | `machine.disk_free_min` | `"0"` (automatic) | Inbox `low_disk` warning below the smaller of 10% of the volume or decimal 20 GB; override with a byte string or KiB/MiB/GiB. Env: `DRIGA_MACHINE_DISK_FREE_MIN`. |
-| `cleanup.low_disk_bytes` | `10GiB` | Legacy key accepted for compatibility; warnings now use `machine.disk_free_min`. |
 | `cleanup.regenerable` | `node_modules/`, `target/`, `.venv/`, … | Ignored directories that may leave with a worktree; extends the defaults. |
 
 The Claude, Codex, Copilot and Gemini adapters are enabled by default. Override them with
@@ -489,7 +488,7 @@ An interrupted tunnel shows the peer as stale and reconnects when it returns.
 revokes access immediately. `driga fleet remove <name>` (alias `unpair`) stops
 pulling locally and keeps cached history; add `--purge` to delete cached rows.
 You can also run `driga fleet remove <name-or-machine-id> --purge` after a peer
-has already been removed. Ambiguous cached names require the machine ID.
+has already been removed. Ambiguous removed-peer names require the machine ID.
 Stopped/unreachable peers
 become stale after 45 seconds without contact; last-known rows remain visible.
 Epoch/retention changes trigger a new snapshot. Clock skew over 60 seconds warns

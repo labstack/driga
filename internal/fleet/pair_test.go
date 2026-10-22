@@ -654,44 +654,64 @@ func TestPairAfterRotationAndRemoveKeepsHistory(t *testing.T) {
 
 func TestPurgeAlreadyRemovedPeer(t *testing.T) {
 	for _, key := range []string{"peer-a", "remote-machine"} {
-		for _, legacy := range []bool{false, true} {
-			t.Run(fmt.Sprintf("%s/legacy=%v", key, legacy), func(t *testing.T) {
-				dir, _ := pairIdentity(t)
-				ctx := context.Background()
-				st, err := store.Open(filepath.Join(dir, "driga.db"), store.ReadWrite)
-				if err != nil {
-					t.Fatal(err)
+		t.Run(key, func(t *testing.T) {
+			dir, _ := pairIdentity(t)
+			ctx := context.Background()
+			st, err := store.Open(filepath.Join(dir, "driga.db"), store.ReadWrite)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer st.Close()
+			if err := st.Tx(ctx, func(tx *store.Tx) error {
+				return tx.ForMachine("remote-machine").UpsertMachine(model.Machine{Name: "peer-a", DeviceID: "old"})
+			}); err != nil {
+				t.Fatal(err)
+			}
+			if err := SavePeers(filepath.Join(dir, "fleet"), []Peer{{Name: "peer-a", MachineID: "remote-machine", DeviceID: "old"}}); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := RemovePeer(ctx, dir, "peer-a", false); err != nil {
+				t.Fatal(err)
+			}
+
+			if _, err := RemovePeer(ctx, dir, key, true); err != nil {
+				t.Fatal(err)
+			}
+			ms, err := st.Machines()
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, m := range ms {
+				if m.MachineID == "remote-machine" {
+					t.Fatal("cached machine retained")
 				}
-				defer st.Close()
-				if err := st.Tx(ctx, func(tx *store.Tx) error {
-					return tx.ForMachine("remote-machine").UpsertMachine(model.Machine{Name: "peer-a", DeviceID: "old"})
-				}); err != nil {
-					t.Fatal(err)
-				}
-				if err := SavePeers(filepath.Join(dir, "fleet"), []Peer{{Name: "peer-a", MachineID: "remote-machine", DeviceID: "old"}}); err != nil {
-					t.Fatal(err)
-				}
-				if _, err := RemovePeer(ctx, dir, "peer-a", false); err != nil {
-					t.Fatal(err)
-				}
-				if legacy {
-					if err := os.Remove(filepath.Join(dir, "fleet", "removed-peers.json")); err != nil {
-						t.Fatal(err)
-					}
-				}
-				if _, err := RemovePeer(ctx, dir, key, true); err != nil {
-					t.Fatal(err)
-				}
-				ms, err := st.Machines()
-				if err != nil {
-					t.Fatal(err)
-				}
-				for _, m := range ms {
-					if m.MachineID == "remote-machine" {
-						t.Fatal("cached machine retained")
-					}
-				}
-			})
-		}
+			}
+		})
+	}
+}
+
+func TestPairRejectsInvalidViewerMachineID(t *testing.T) {
+	s, addr, _ := pairServer(t)
+	id, err := createIdentity(t.TempDir(), "not-a-uuid")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.OpenEnrollment(time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	c, err := dialPair(ctx, addr, id, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	var response pairMessage
+	if err := c.post(ctx, "commit", pairMessage{Commit: strings.Repeat("a", 64)}, &response); err == nil || !strings.Contains(err.Error(), "incompatible") {
+		t.Fatalf("invalid viewer accepted: %v", err)
+	}
+	// A refused pairing must release the enrollment lock.
+	if !s.Status().EnrollmentOpen {
+		t.Fatal("enrollment unexpectedly closed")
 	}
 }

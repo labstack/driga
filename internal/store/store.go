@@ -186,6 +186,9 @@ func Open(path string, mode Mode) (_ *Store, retErr error) {
 	if err := db.QueryRowContext(ctx, "SELECT value FROM meta WHERE key = 'machine_id'").Scan(&id); err != nil {
 		return nil, fmt.Errorf("machine identity: %w", err)
 	}
+	if err := ValidateMachineID(id); err != nil {
+		return nil, err
+	}
 	return &Store{querier: querier{conn: db, ctx: ctx, machineID: id, localID: id, dataDir: dataDir}, db: db}, nil
 }
 
@@ -195,6 +198,15 @@ func randomID() (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(b[:]), nil
+}
+
+// ValidateMachineID requires a canonical UUIDv7 machine identity.
+func ValidateMachineID(id string) error {
+	parsed, err := uuid.Parse(id)
+	if err != nil || parsed.Version() != 7 || parsed.Variant() != uuid.RFC4122 || parsed.String() != id {
+		return fmt.Errorf("machine_id must be a canonical UUIDv7")
+	}
+	return nil
 }
 
 func newMachineID() (string, error) {

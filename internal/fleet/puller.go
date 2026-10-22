@@ -105,6 +105,10 @@ func (p *Puller) Run(ctx context.Context) {
 		p.status(ctx, "untrusted", fmt.Errorf("invalid peer identity; run driga fleet rekey on the peer, then remove and pair again"))
 		return
 	}
+	if err := validatePeerMachineID(p.peer.MachineID); err != nil {
+		p.status(ctx, "incompatible", err)
+		return
+	}
 	ackCtx, stopAcks := context.WithCancel(ctx)
 	ackDone := make(chan struct{})
 	go func() { defer close(ackDone); p.runAcks(ackCtx) }()
@@ -170,6 +174,12 @@ func (p *Puller) get(ctx context.Context, path string, cursor Cursor) (*http.Res
 	if err != nil {
 		return nil, err
 	}
+	if resp.TLS != nil && len(resp.TLS.PeerCertificates) > 0 {
+		if err := validatePeerMachineID(resp.TLS.PeerCertificates[0].Subject.CommonName); err != nil {
+			resp.Body.Close()
+			return nil, err
+		}
+	}
 	if resp.TLS == nil || len(resp.TLS.PeerCertificates) == 0 || resp.TLS.PeerCertificates[0].Subject.CommonName != p.peer.MachineID {
 		resp.Body.Close()
 		return nil, fmt.Errorf("peer machine_id mismatch; run driga fleet rekey on the peer (pairings must be redone)")
@@ -228,6 +238,9 @@ func (p *Puller) connect(ctx context.Context) error {
 		skew := h.ObservedAt.Sub(started.Add(received.Sub(started) / 2)).Milliseconds()
 		p.skewMS = &skew
 	}
+	if err := validatePeerMachineID(h.MachineID); err != nil {
+		return err
+	}
 	if h.MachineID != p.peer.MachineID {
 		return fmt.Errorf("hello machine_id mismatch; run driga fleet rekey on the peer (pairings must be redone)")
 	}
@@ -250,7 +263,11 @@ func (p *Puller) connect(ctx context.Context) error {
 			if err != nil {
 				return err
 			}
-			if _, err := snapshotMachine(&snap); err != nil {
+			machine, err := snapshotMachine(&snap)
+			if err != nil {
+				return err
+			}
+			if err := validatePeerMachineID(machine.MachineID); err != nil {
 				return err
 			}
 			if err = p.emit(ctx, Batch{Snapshot: &snap, Cursor: snap.Data.Cursor, ContactAt: p.now(), ClockSkewMS: p.skewMS, Resnapshot: p.resnapshot}); err != nil {

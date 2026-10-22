@@ -137,7 +137,7 @@ func TestCleanupJSONKeepsPerTargetOutcomes(t *testing.T) {
 func TestCleanupConfigShown(t *testing.T) {
 	readEnv(t)
 	out, _ := readRun(t, "config", "show")
-	for _, s := range []string{"[cleanup]", "worktree_idle = '168h'", "low_disk_bytes = '10737418240'", "regenerable ="} {
+	for _, s := range []string{"[cleanup]", "worktree_idle = '168h'", "regenerable ="} {
 		if !strings.Contains(out, s) {
 			t.Fatal("missing", s, out)
 		}

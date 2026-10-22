@@ -114,11 +114,7 @@ func RemovePeer(ctx context.Context, dataDir, name string, purge bool) (Peer, er
 		return zero, err
 	}
 	if removed == nil && purge {
-		cached, err := cachedPeers(dataDir)
-		if err != nil {
-			return zero, err
-		}
-		for _, p := range append(retired, cached...) {
+		for _, p := range retired {
 			if p.Name == name || p.MachineID == name || p.DeviceID == name {
 				if removed != nil && removed.MachineID != p.MachineID {
 					return zero, fmt.Errorf("ambiguous peer %q", name)

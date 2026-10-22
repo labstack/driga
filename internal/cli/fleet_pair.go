@@ -116,7 +116,7 @@ func (c FleetRevokeCmd) Run(g *Globals) error {
 
 // FleetRemoveCmd removes a peer locally, optionally deleting its cached rows.
 type FleetRemoveCmd struct {
-	Name  string `arg:"" help:"Peer name, device ID or machine ID (cached peers with --purge)."`
+	Name  string `arg:"" help:"Peer name, device ID or machine ID (removed peers with --purge)."`
 	Purge bool   `help:"Delete this peer's cached rows."`
 }
 

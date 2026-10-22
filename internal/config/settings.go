@@ -46,7 +46,6 @@ var settings = []Setting{
 	{"summaries.enabled", "Summaries.Enabled", "bool", false, "Enable optional local Claude summaries.", "true or false"},
 	{"summaries.model", "Summaries.Model", "string", "haiku", "Model selection passed to the Claude CLI.", "nonempty"},
 	{"cleanup.worktree_idle", "Cleanup.WorktreeIdle", "duration", "168h", "Idle worktree cleanup eligibility.", "0..2562047h47m16.854775807s; zero = no idle minimum"},
-	{"cleanup.low_disk_bytes", "Cleanup.LowDiskBytes", "size", "10GiB", "Legacy cleanup threshold; machine warnings now use machine.disk_free_min.", "0..18446744073709551615 bytes; compatibility only"},
 	{"cleanup.regenerable", "Cleanup.Regenerable", "list", []string{"node_modules/", "target/", ".venv/", "venv/", "dist/", "build/", ".next/", "__pycache__/", ".gradle/", ".terraform/"}, "Additional regenerable relative directories (merged with defaults).", "file-only; empty = built-in directories"},
 	{"fleet.serve", "Fleet.Serve", "bool", false, "Enable optional fleet serving.", "true or false; requires fleet.listen"},
 	{"fleet.listen", "Fleet.Listen", "string", "", "Fleet TCP listener address.", "required with fleet.serve; explicit private IP/interface, public addresses require allow_any_address"},
