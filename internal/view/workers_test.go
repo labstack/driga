@@ -177,8 +177,12 @@ func TestWorkerItemsNotListedInInbox(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(v.Rows) != 2 {
-			t.Fatalf("all=%v: want only parent completion and worker attention: %+v", all, v.Rows)
+		want := 1
+		if all {
+			want = 2
+		}
+		if len(v.Rows) != want {
+			t.Fatalf("all=%v: want parent completion plus historical worker wait only with --all: %+v", all, v.Rows)
 		}
 		for _, row := range v.Rows {
 			if row.Kind == "worker_finished" {
@@ -187,20 +191,20 @@ func TestWorkerItemsNotListedInInbox(t *testing.T) {
 		}
 	}
 	summary, err := view.Summary(s, view.Filter{}, workerNow)
-	if err != nil || summary.Inbox != 2 {
-		t.Fatalf("summary inbox=%d, want 2: %v", summary.Inbox, err)
+	if err != nil || summary.Inbox != 1 {
+		t.Fatalf("summary inbox=%d, want 1: %v", summary.Inbox, err)
 	}
 	var out bytes.Buffer
 	if err := view.Render(&out, summary, view.RenderOpts{}); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out.String(), "· inbox 2 ·") {
+	if !strings.Contains(out.String(), "· inbox 1 ·") {
 		t.Fatalf("summary line counts workers: %s", out.String())
 	}
 	source := tui.NewStoreSource(s, t.TempDir(), view.Filter{})
 	source.Now = func() time.Time { return workerNow }
 	snap, err := source.Load(context.Background())
-	if err != nil || snap.Summary.Inbox != 2 || len(snap.Inbox.Rows) != 2 {
+	if err != nil || snap.Summary.Inbox != 1 || len(snap.Inbox.Rows) != 1 {
 		t.Fatalf("TUI inbox counts workers: summary=%d, rows=%d, err=%v", snap.Summary.Inbox, len(snap.Inbox.Rows), err)
 	}
 }

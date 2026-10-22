@@ -379,8 +379,10 @@ func (s *Scanner) Scan(ctx context.Context, repoPath string, full bool) ([]model
 		}
 		// A linked worktree whose directory was deleted stays listed until
 		// `git worktree prune`; it has nothing to scan.
-		if _, err := os.Stat(entry.Path); err != nil {
+		if _, err := os.Stat(entry.Path); errors.Is(err, fs.ErrNotExist) {
 			continue
+		} else if err != nil {
+			return nil, err
 		}
 		entries = append(entries, entry)
 	}

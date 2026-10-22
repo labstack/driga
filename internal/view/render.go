@@ -155,7 +155,11 @@ func Render(w io.Writer, v any, opts RenderOpts) error {
 		fmt.Fprintln(tw, "ID\tKIND\tAGE\tPROJECT\tSUMMARY")
 		for _, i := range x.Rows {
 			fmt.Fprint(tw, machinePrefix(multi, i.MachineID, i.MachineFresh))
-			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", cell(i.ID), label(i.Kind), age(i.Age), cell(i.Project), cell(i.Summary))
+			kind := i.Kind
+			if i.Historical && kind == "waiting" {
+				kind = "historical wait"
+			}
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", cell(i.ID), label(kind), age(i.Age), cell(i.Project), cell(i.Summary))
 		}
 	case ConflictsView:
 		fmt.Fprintln(tw, "current")
@@ -213,6 +217,10 @@ func Render(w io.Writer, v any, opts RenderOpts) error {
 				fmt.Fprintln(tw, "No MCP pile-ups.")
 			}
 			for _, p := range h.MCPServers.Pileups {
+				if !h.Full {
+					fmt.Fprintf(tw, "%s: %d processes · %s · Host: %s (PID %d) · age %s · Oldest: %s · Newest: %s\n%s\n", cell(p.Name), p.Count, humanBytes(p.Memory), cell(p.Host.Name), p.Host.PID, age(p.Host.Age), p.OldestStart.Format(time.RFC3339), p.NewestStart.Format(time.RFC3339), cell(p.Advice))
+					continue
+				}
 				for _, line := range strings.Split(MCPPileupText(p), "\n") {
 					fmt.Fprintln(tw, cell(line))
 				}
@@ -234,6 +242,17 @@ func Render(w io.Writer, v any, opts RenderOpts) error {
 			fmt.Fprintln(tw, "Vitals detail")
 			fmt.Fprintln(tw, "MEMORY\tCOMPRESSED\tSWAP\tLOAD (1/5/15)\tCORES\tDISK FREE\tPRESSURE LEVEL / FREE")
 			fmt.Fprintf(tw, "%s/%s\t%s\t%s/%s\t%s/%s/%s\t%d\t%s\t%s / %.1f\n", humanBytes(s.MemUsed), humanBytes(s.MemTotal), humanBytes(s.MemCompressed), humanBytes(s.SwapUsed), humanBytes(s.SwapTotal), FormatLoad(s.Load1, "%.1f"), FormatLoad(s.Load5, "%.1f"), FormatLoad(s.Load15, "%.1f"), s.Cores, humanBytes(s.DiskFree), s.PressureLevel, s.PressureFree)
+			if h.Full {
+				fmt.Fprintln(tw, "Retained MCP trends")
+				for _, t := range h.MCPServers.Trends {
+					fmt.Fprintf(tw, "%s · host PID %d · %s · started %d / ended %d · %s to %s\n", cell(t.Name), t.Host.PID, cell(t.State), t.StartedCount, t.EndedCount, t.FirstSample.Format(time.RFC3339), t.LastSample.Format(time.RFC3339))
+				}
+			} else {
+				fmt.Fprintln(tw, "MCP trends: last 24h · driga machine --full for retained history and process detail")
+				if h.Truncated {
+					fmt.Fprintln(tw, "Showing top 10 rows and up to 3 evidence entries per row; totals include all sampled processes.")
+				}
+			}
 			fmt.Fprintln(tw, "Agent memory by role")
 			fmt.Fprintln(tw, "AGENT\tROLE\tMEM")
 			for _, r := range h.Memory {

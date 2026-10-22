@@ -432,7 +432,7 @@ func TestStoreSource(t *testing.T) {
 		if _, err = tx.UpsertWorktree(model.Worktree{RepoID: repo, Path: filepath.Join(dir, "repo"), Branch: "main"}); err != nil {
 			return err
 		}
-		sessionID, err = tx.UpsertSession(model.Session{RepoID: &repo, SessionObs: model.SessionObs{Adapter: "claude", ExternalID: "fixture", Cwd: filepath.Join(dir, "repo"), StartedAt: now}, Label: "working"})
+		sessionID, err = tx.UpsertSession(model.Session{RepoID: &repo, SessionObs: model.SessionObs{Adapter: "claude", ExternalID: "fixture", Cwd: filepath.Join(dir, "repo"), StartedAt: now}, Label: "waiting"})
 		if err != nil {
 			return err
 		}

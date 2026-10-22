@@ -251,6 +251,15 @@ func (tx *Tx) UpsertWorktree(w model.Worktree) (int64, error) {
 	return tx.upsertID("worktrees", "machine_id,"+worktreeColumns, "machine_id,path", tx.machineID, w.RepoID, w.Path, w.Branch, w.Head, w.Ahead, w.Behind, w.Dirty, w.Untracked, unix(w.OldestDirtyMtime), unix(w.LastCommitAt), w.LastCommitSubject, unix(w.UpdatedAt))
 }
 
+// DeleteWorktree removes a checkout while retaining its sessions as history.
+// The original foreign key has NO ACTION, so detach references before deletion.
+func (tx *Tx) DeleteWorktree(id int64) error {
+	if err := tx.exec("UPDATE sessions SET worktree_id=NULL WHERE machine_id=? AND worktree_id=?", tx.machineID, id); err != nil {
+		return err
+	}
+	return tx.exec("DELETE FROM worktrees WHERE machine_id=? AND id=?", tx.machineID, id)
+}
+
 // Worktrees returns a repo's checkouts ordered by path; repoID zero selects all.
 func (q *querier) Worktrees(repoID int64) ([]model.Worktree, error) {
 	return readMany(q, "SELECT machine_id,id,"+worktreeColumns+" FROM worktrees WHERE machine_id=? AND (?=0 OR repo_id=?) ORDER BY path", []any{q.machineID, repoID, repoID}, func(s scanner) (model.Worktree, error) {
@@ -262,7 +271,7 @@ func (q *querier) Worktrees(repoID int64) ([]model.Worktree, error) {
 	})
 }
 
-const sessionColumns = "machine_id,adapter,external_id,parent_session_id,origin,version,pid,proc_start,cwd,branch,repo_id,worktree_id,title,last_prompt,registry_status,state,state_heuristic,evidence,started_at,last_activity_at,last_prompt_at,hosted,turn_open,ended_at,source_path,mixer,started_from"
+const sessionColumns = "machine_id,adapter,external_id,parent_session_id,origin,version,pid,proc_start,cwd,branch,repo_id,worktree_id,title,last_prompt,registry_status,state,state_heuristic,evidence,started_at,last_activity_at,last_prompt_at,hosted,turn_open,ended_at,source_path,mixer,started_from,registry_updated_at"
 
 // UpsertSession stores every scalar observation and derived session field.
 // Completions and FilesTouched are persisted separately by the collector.
@@ -271,20 +280,21 @@ func (tx *Tx) UpsertSession(s model.Session) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	return tx.upsertID("sessions", sessionColumns, "machine_id,adapter,external_id", tx.machineID, s.Adapter, s.ExternalID, s.ParentID, s.Origin, s.Version, s.PID, unix(s.ProcStart), s.Cwd, s.Branch, s.RepoID, s.WorktreeID, s.Title, s.LastPrompt, s.RegistryStatus, s.Label, s.Heuristic, s.Evidence, unix(s.StartedAt), unix(s.LastActivityAt), unix(s.LastPromptAt), s.Hosted, s.TurnOpen, nullableTime(s.EndedAt), s.SourcePath, string(mixer), nullableString(s.StartedFrom))
+	return tx.upsertID("sessions", sessionColumns, "machine_id,adapter,external_id", tx.machineID, s.Adapter, s.ExternalID, s.ParentID, s.Origin, s.Version, s.PID, unix(s.ProcStart), s.Cwd, s.Branch, s.RepoID, s.WorktreeID, s.Title, s.LastPrompt, s.RegistryStatus, s.Label, s.Heuristic, s.Evidence, unix(s.StartedAt), unix(s.LastActivityAt), unix(s.LastPromptAt), s.Hosted, s.TurnOpen, nullableTime(s.EndedAt), s.SourcePath, string(mixer), nullableString(s.StartedFrom), unix(s.RegistryUpdatedAt))
 }
 
 func scanSession(s scanner) (model.Session, error) {
 	var m model.Session
-	var start, procStart, activity, promptAt int64
+	var start, procStart, activity, promptAt, registryAt int64
 	var ended sql.NullInt64
 	var mixer string
 	var startedFrom sql.NullString
-	err := s.Scan(&m.ID, &m.MachineID, &m.Adapter, &m.ExternalID, &m.ParentID, &m.Origin, &m.Version, &m.PID, &procStart, &m.Cwd, &m.Branch, &m.RepoID, &m.WorktreeID, &m.Title, &m.LastPrompt, &m.RegistryStatus, &m.Label, &m.Heuristic, &m.Evidence, &start, &activity, &promptAt, &m.Hosted, &m.TurnOpen, &ended, &m.SourcePath, &mixer, &startedFrom)
+	err := s.Scan(&m.ID, &m.MachineID, &m.Adapter, &m.ExternalID, &m.ParentID, &m.Origin, &m.Version, &m.PID, &procStart, &m.Cwd, &m.Branch, &m.RepoID, &m.WorktreeID, &m.Title, &m.LastPrompt, &m.RegistryStatus, &m.Label, &m.Heuristic, &m.Evidence, &start, &activity, &promptAt, &m.Hosted, &m.TurnOpen, &ended, &m.SourcePath, &mixer, &startedFrom, &registryAt)
 	if err == nil {
 		err = json.Unmarshal([]byte(mixer), &m.Mixer)
 	}
 	m.StartedFrom = startedFrom.String
+	m.RegistryUpdatedAt = fromUnix(registryAt)
 	m.ProcStart, m.StartedAt, m.LastActivityAt, m.LastPromptAt, m.EndedAt = fromUnix(procStart), fromUnix(start), fromUnix(activity), fromUnix(promptAt), timePointer(ended)
 	return m, err
 }

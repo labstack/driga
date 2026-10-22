@@ -44,6 +44,7 @@ type adapterResult struct {
 type repoResult struct {
 	path      string
 	worktrees []model.Worktree
+	err       error
 }
 type sourceResults struct {
 	agents       []attention.Agent
@@ -84,6 +85,13 @@ func collectSources(ctx context.Context, d Deps, st *store.Store, p Plan, state 
 	ss, err := st.Sessions(store.SessionFilter{IncludeEnded: true})
 	if err != nil {
 		return r, err
+	}
+	var knownRepos []model.Repo
+	if p.Git {
+		knownRepos, err = st.Repos()
+		if err != nil {
+			return r, err
+		}
 	}
 	for _, a := range d.Adapters {
 		if d.Cfg.Adapters[a.Name()].Enabled {
@@ -223,6 +231,7 @@ func collectSources(ctx context.Context, d Deps, st *store.Store, p Plan, state 
 			// The pass reports both the scan error and any stored-read error.
 			procs, _ = state.storedProcs(st.Procs)
 		}
+		reconcileClaude(r.sessions, r.observations, now)
 		reconcileSessions(r.sessions, procs, d.Plat, now)
 		// agy and Copilot without hooks use executable, PID identity, cwd and liveness.
 		for _, proc := range procs {
@@ -261,7 +270,7 @@ func collectSources(ctx context.Context, d Deps, st *store.Store, p Plan, state 
 			s.EndedAt = nil
 		}
 		if p.Git {
-			r.git, r.gitErr = collectGit(ctx, d, r.sessions, p.GitFull, now)
+			r.git, r.gitErr = collectGit(ctx, d, r.sessions, knownRepos, p.GitFull, now)
 		}
 	})
 	wg.Wait()
@@ -283,12 +292,15 @@ func collectSources(ctx context.Context, d Deps, st *store.Store, p Plan, state 
 	return r, ctx.Err()
 }
 
-func collectGit(ctx context.Context, d Deps, ss []model.Session, full bool, now time.Time) ([]repoResult, error) {
+func collectGit(ctx context.Context, d Deps, ss []model.Session, known []model.Repo, full bool, now time.Time) ([]repoResult, error) {
 	var cwds []string
 	for _, s := range ss {
 		if !strings.HasSuffix(s.Origin, "/temporary") && (s.EndedAt == nil || !s.LastActivityAt.Before(now.Add(-7*24*time.Hour))) {
 			cwds = append(cwds, s.Cwd)
 		}
+	}
+	for _, repo := range known {
+		cwds = append(cwds, repo.Path)
 	}
 	paths, err := gitscan.DiscoverRepos(cwds, d.Cfg.Roots, d.Cfg.RootDepth, d.Cfg.Exclude)
 	errs := []error{err}
@@ -305,6 +317,7 @@ func collectGit(ctx context.Context, d Deps, ss []model.Session, full bool, now 
 			for i := range jobs {
 				results[i].path = paths[i]
 				results[i].worktrees, scanErrs[i] = scanner.Scan(ctx, paths[i], full)
+				results[i].err = scanErrs[i]
 			}
 		})
 	}
@@ -314,12 +327,25 @@ func collectGit(ctx context.Context, d Deps, ss []model.Session, full bool, now 
 	close(jobs)
 	wg.Wait()
 	errs = append(errs, scanErrs...)
+	if err == nil {
+		present := make(map[string]bool, len(paths))
+		for _, path := range paths {
+			present[path] = true
+		}
+		// Missing repositories (or removed Git metadata) have no current
+		// checkouts. Keep their repo/session history, but retire inventory.
+		for _, repo := range known {
+			if !present[repo.Path] {
+				results = append(results, repoResult{path: repo.Path})
+			}
+		}
+	}
 	return results, errors.Join(errs...)
 }
 
 func writeGit(tx *store.Tx, repos []repoResult, scanErr error, source func(string, error) error, report *PassReport) error {
 	for _, repo := range repos {
-		if len(repo.worktrees) == 0 && scanErr != nil {
+		if len(repo.worktrees) == 0 && repo.err != nil {
 			continue
 		}
 		id, err := tx.UpsertRepo(model.Repo{Path: repo.path, Name: filepath.Base(repo.path)})
@@ -331,6 +357,25 @@ func writeGit(tx *store.Tx, repos []repoResult, scanErr error, source func(strin
 			w.RepoID = id
 			if _, err := tx.UpsertWorktree(w); err != nil {
 				return err
+			}
+		}
+		// Only a complete scan can prove absence. A failed status/log read
+		// returns a partial list and must retain the last known inventory.
+		if repo.err == nil {
+			previous, err := tx.Worktrees(id)
+			if err != nil {
+				return err
+			}
+			present := make(map[string]bool, len(repo.worktrees))
+			for _, w := range repo.worktrees {
+				present[w.Path] = true
+			}
+			for _, w := range previous {
+				if !present[w.Path] {
+					if err := tx.DeleteWorktree(w.ID); err != nil {
+						return err
+					}
+				}
 			}
 		}
 	}
@@ -351,6 +396,9 @@ func reconcileSessions(ss []model.Session, procs []model.Proc, plat platform.Pla
 		}
 		if s.PID != 0 && !plat.Alive(s.PID, s.ProcStart) {
 			s.PID = 0
+			if s.Adapter == "claude" && s.RegistryStatus != "" {
+				s.Hosted = false
+			}
 		}
 	}
 	linkCodex(ss, procs, plat)
@@ -370,6 +418,33 @@ func reconcileSessions(ss []model.Session, procs []model.Proc, plat platform.Pla
 				ended = s.LastActivityAt
 			}
 			s.EndedAt = &ended
+		}
+	}
+}
+
+// A registry identifies the current conversation of a process, even after
+// /clear or /resume. A transcript in the same directory is not ownership proof.
+func reconcileClaude(ss []model.Session, observations []model.SessionObs, now time.Time) {
+	current := map[int32]model.SessionObs{}
+	ambiguous := map[int32]bool{}
+	for _, o := range observations {
+		if o.Adapter == "claude" && o.PID != 0 && o.RegistryStatus != "" {
+			if previous, ok := current[o.PID]; ok && previous.ExternalID != o.ExternalID {
+				ambiguous[o.PID] = true
+			}
+			current[o.PID] = o
+		}
+	}
+	for i := range ss {
+		s := &ss[i]
+		o, ok := current[s.PID]
+		if s.Adapter != "claude" || !ok || ambiguous[s.PID] || !platform.SameStart(s.ProcStart, o.ProcStart) || s.ExternalID == o.ExternalID {
+			continue
+		}
+		s.PID, s.Hosted, s.TurnOpen = 0, false, false
+		if s.EndedAt == nil {
+			at := now
+			s.EndedAt = &at
 		}
 	}
 }

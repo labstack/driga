@@ -23,7 +23,9 @@ func TestMachineMCPLeakMarker(t *testing.T) {
 	t.Cleanup(func() { time.Local = original })
 	s, st, _, _ := fixture(t)
 	t.Setenv("PATH", t.TempDir())
-	at := time.Date(2020, 1, 1, 8, 12, 0, 0, time.UTC)
+	at := time.Date(time.Now().Year(), time.Now().Month(), time.Now().Day(), 8, 12, 0, 0, time.UTC).Add(-24 * time.Hour)
+	source := s.source.(*viewer.StoreSource)
+	source.Now = func() time.Time { return at.Add(160 * time.Minute) }
 	ps := []model.Proc{{PID: 100, Cmdline: "codex app-server", StartTime: at.Add(-time.Hour)}}
 	for i := range 3 {
 		now := at.Add(time.Duration(i) * 80 * time.Minute)
@@ -39,7 +41,7 @@ func TestMachineMCPLeakMarker(t *testing.T) {
 		}
 	}
 	w := request(s, "GET", "/machines", s.token)
-	for _, want := range []string{"observed growth ↑ 0.75/h since 08:12", "started 2", "ended 0", "net &#43;2", "Observed: 2020-01-01T08:12:00Z to 2020-01-01T10:52:00Z"} {
+	for _, want := range []string{"observed growth ↑ 0.75/h since 08:12", "started 2", "ended 0", "net &#43;2", "Observed: " + at.Format(time.RFC3339) + " to " + at.Add(160*time.Minute).Format(time.RFC3339)} {
 		if !strings.Contains(w.Body.String(), want) {
 			t.Fatalf("missing %q: %s", want, w.Body)
 		}

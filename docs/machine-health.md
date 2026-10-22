@@ -5,10 +5,15 @@
 plus `agent_share`, `session_costs`, `agent_processes_without_session`,
 `likely_agent_work`, and `other_apps`. All additions keep schema 2. The old
 rankings and the trend state value `"leaking"` remain compatible.
-Each entry in `machines` has its own rankings; top-level rankings follow the
-selected primary machine. Each ranking contains at most ten app groups, with
-all their sampled processes. MCP retains its standard `limit`/`truncated`
-contract, which can cap nested process entries; the CLI JSON view is uncapped. These are observed processes, not an exhaustive
+Top-level rankings follow the selected primary machine. `machines` contains
+only additional hosts, avoiding a duplicate of the primary report; it is omitted
+for one host. This documented schema-2 collection change preserves field types.
+Default evidence lists contain at most ten rows and three nested process,
+command, install, or host-trend entries per row. `truncated` marks omitted entries;
+whole-machine totals remain complete. `trend_since` gives the default 24-hour
+query boundary. Use `driga machine --full` or MCP `get_machine` with `full: true`
+for retained history and uncapped evidence lists. MCP additionally retains its
+standard envelope `limit`/`truncated` contract. These are observed processes, not an exhaustive
 accounting of kernel memory or unreadable tasks.
 
 The TUI Machine tab (`5`, or `driga top --tab machine`) expands an app with
@@ -130,7 +135,7 @@ Wrappers are traversed, but nested agent hosts own their own descendants.
 Cycles, zombies, missing parents, and impossible parent start times cannot
 prove ownership. No live-process lookup or additional process scan is used.
 
-`pileups` contains **every** command with more than one instance under the same
+`pileups` contains commands with more than one instance under the same
 host. One instance under each of several hosts is not a pile-up. Findings sort
 by total measured memory, then count, with deterministic command/PID ties.
 Each includes original commands, server count, memory and measure, oldest/newest
@@ -187,7 +192,8 @@ commands receive one zero sample, including when their host exits. Failed scans
 and machine-only passes add no process evidence. Restarting a host starts a new
 history, even if its PID is reused; restarting the collector preserves history.
 
-`mcp_servers.trends` reports every retained host/command history. Each command
+`mcp_servers.trends` reports up to ten host/command histories from 24 hours by
+default; `--full` reports every retained history. Each command
 and pile-up also has `trends` for its hosts. Fields include `started_count`,
 `ended_count`, `net_growth`, `first_sample`, `last_sample`, `rate_per_hour`, and
 `identity_complete`. The first retained sample is a baseline: processes already

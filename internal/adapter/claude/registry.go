@@ -47,14 +47,16 @@ func readRegistry(path string, env adapter.Env) (model.SessionObs, error) {
 	if err != nil {
 		return model.SessionObs{}, fmt.Errorf("startedAt: %w", err)
 	}
+	var updated time.Time
 	if len(r.StatusUpdatedAt) != 0 && !bytes.Equal(r.StatusUpdatedAt, []byte("null")) {
-		if _, err := registryTime(r.StatusUpdatedAt); err != nil {
+		updated, err = registryTime(r.StatusUpdatedAt)
+		if err != nil {
 			return model.SessionObs{}, fmt.Errorf("statusUpdatedAt: %w", err)
 		}
 	}
 	o := model.SessionObs{
 		Adapter: "claude", ExternalID: r.SessionID, Cwd: r.Cwd,
-		Version: r.Version, RegistryStatus: r.Status,
+		Version: r.Version, RegistryStatus: r.Status, RegistryUpdatedAt: updated,
 		ProcStart: start, StartedAt: start, Origin: registryOrigin(r),
 	}
 	if env.Alive != nil && env.Alive(int32(pid), start) {

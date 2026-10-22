@@ -18,19 +18,21 @@ func TestInboxDenseSectionsAndCap(t *testing.T) {
 	s, _, _, _ := fixture(t)
 	now := time.Date(2026, 10, 19, 12, 0, 0, 0, time.UTC)
 	rows := []view.InboxRow{}
+	agents := []view.AgentRow{}
 	// Deliberately interleave unsorted completions and more than 50 waits.
 	for i := 0; i < 494; i++ {
 		kind := "finished"
 		if i%7 == 0 {
 			kind = "waiting"
+			agents = append(agents, view.AgentRow{MachineID: "local", ID: int64(i + 1), Label: "waiting", LastActivityAt: now.Add(-time.Duration(i) * time.Minute)})
 		}
 		rows = append(rows, view.InboxRow{MachineID: "local", MachineFresh: view.MachineFresh{MachineName: "workstation"}, InboxItem: model.InboxItem{
-			ID: fmt.Sprintf("item-%03d", i), Kind: kind, TS: now.Add(-time.Duration(i) * time.Minute), Summary: "turn finished", Reason: "permission", Tool: "Bash",
+			ID: fmt.Sprintf("item-%03d", i), SessionID: int64(i + 1), Kind: kind, TS: now.Add(-time.Duration(i) * time.Minute), Summary: "turn finished", Reason: "permission", Tool: "Bash",
 			Jump: &model.InboxJump{Cwd: "/very/long/private/project/directory", Command: "agent --resume 'long command <safe>'"},
 		}, Project: "project", Branch: "main", Title: "Review changes", Age: time.Duration(i) * time.Minute})
 	}
 	for _, scope := range []string{"all", "local"} {
-		p := pageData{Page: "/inbox", Scope: scope, Snapshot: viewer.Snapshot{ObservedAt: now, Inbox: view.InboxView{Rows: rows}}}
+		p := pageData{Page: "/inbox", Scope: scope, Snapshot: viewer.Snapshot{ObservedAt: now, Inbox: view.InboxView{Rows: rows}, Agents: view.AgentsView{Rows: agents}}}
 		p.prepare()
 		var out strings.Builder
 		if err := s.templates.ExecuteTemplate(&out, "inbox", p); err != nil {

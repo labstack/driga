@@ -143,8 +143,11 @@ func NewServer(o Options) *sdk.Server {
 	register(s, o.CaptureText, "list_orphans", "Read orphan process candidates without signaling processes.", func(ctx context.Context, in machineInput) (view.Envelope, error) {
 		return o.Read(ctx, Query{Machine: in.Machine}, func(r view.Reader, f view.Filter, now time.Time) (any, error) { return view.Orphans(r, f, now) })
 	})
-	register(s, o.CaptureText, "get_machine", "Read agents' share of machine memory and CPU, cost by session, agent processes without a session, likely agent work, other apps, MCP server roll-ups and pile-ups.", func(ctx context.Context, in machineInput) (view.Envelope, error) {
-		return o.Read(ctx, Query{Machine: in.Machine}, func(r view.Reader, f view.Filter, now time.Time) (any, error) { return view.Machine(r, f, now) })
+	register(s, o.CaptureText, "get_machine", "Read agents' share of machine memory and CPU, cost by session, agent processes without a session, likely agent work, other apps, MCP server roll-ups and pile-ups. Defaults to bounded detail and 24h trends; full includes all retained evidence.", func(ctx context.Context, in struct {
+		Machine string `json:"machine,omitempty"`
+		Full    bool   `json:"full,omitempty"`
+	}) (view.Envelope, error) {
+		return o.Read(ctx, Query{Machine: in.Machine, Filter: view.Filter{Full: in.Full}}, func(r view.Reader, f view.Filter, now time.Time) (any, error) { return view.Machine(r, f, now) })
 	})
 	register(s, o.CaptureText, "list_machines", "Read cached fleet connection health, even when collection has stopped.", func(ctx context.Context, _ struct{}) (view.Envelope, error) {
 		return o.Read(ctx, Query{CachedMachines: true}, func(r view.Reader, f view.Filter, now time.Time) (any, error) { return view.Machines(r, now, f.Scope) })

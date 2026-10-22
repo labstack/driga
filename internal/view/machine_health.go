@@ -197,15 +197,21 @@ func machineProjectSessions(sessions []model.Session, repos []model.Repo, worktr
 }
 
 func MachineSessionApps(v MachineView) []MachineApp {
-	apps := make([]MachineApp, 0, min(10, len(v.SessionCosts)))
-	for _, c := range v.SessionCosts[:min(10, len(v.SessionCosts))] {
+	limit := len(v.SessionCosts)
+	if !v.Full {
+		limit = min(10, limit)
+	}
+	apps := make([]MachineApp, 0, limit)
+	for _, c := range v.SessionCosts[:limit] {
 		name := fmt.Sprintf("%s · %s · session #%d", c.Adapter, c.Project, c.SessionID)
 		if c.StartedFrom != "" {
 			name += " · started from " + c.StartedFrom
 		}
-		a := MachineApp{ID: fmt.Sprintf("session:%d", c.SessionID), Name: name, Memory: c.Memory, CPUPercent: c.CPUPercent, Processes: c.Processes}
-		for _, p := range c.Processes {
-			a.MemoryMeasure = mergeMeasure(a.MemoryMeasure, p.MemoryMeasure)
+		a := MachineApp{ID: fmt.Sprintf("session:%d", c.SessionID), Name: name, Memory: c.Memory, MemoryMeasure: c.MemoryMeasure, CPUPercent: c.CPUPercent, Processes: c.Processes}
+		if a.MemoryMeasure == "" {
+			for _, p := range c.Processes {
+				a.MemoryMeasure = mergeMeasure(a.MemoryMeasure, p.MemoryMeasure)
+			}
 		}
 		apps = append(apps, a)
 	}

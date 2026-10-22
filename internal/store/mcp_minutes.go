@@ -79,7 +79,13 @@ func (tx *Tx) ObserveMCP(at time.Time, samples []model.MCPMinute) error {
 // ScanMCPMinutes streams retained evidence in time order: memory is bounded by
 // the active group memberships, not thirty days of process samples.
 func (q *querier) ScanMCPMinutes(until time.Time, visit func(model.MCPMinute) error) error {
-	rows, err := q.conn.QueryContext(q.ctx, `SELECT `+mcpMinuteColumns+` FROM mcp_minutes WHERE machine_id=? AND sampled_at<=? ORDER BY minute,host_pid,host_start,command_key`, q.machineID, unix(until))
+	return q.ScanMCPMinutesSince(time.Time{}, until, visit)
+}
+
+// ScanMCPMinutesSince bounds the read at the indexed minute before decoding
+// memberships. Default machine reports need recent evidence, not all retention.
+func (q *querier) ScanMCPMinutesSince(since, until time.Time, visit func(model.MCPMinute) error) error {
+	rows, err := q.conn.QueryContext(q.ctx, `SELECT `+mcpMinuteColumns+` FROM mcp_minutes WHERE machine_id=? AND minute>=? AND sampled_at<=? ORDER BY minute,host_pid,host_start,command_key`, q.machineID, unix(since.Truncate(time.Minute)), unix(until))
 	if err != nil {
 		return err
 	}
