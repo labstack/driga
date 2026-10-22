@@ -2,6 +2,11 @@ version: 2
 
 project_name: driga
 
+before:
+  hooks:
+    # Run once on the host, before parallel cross-builds (no cgo or Windows SDK).
+    - go run ./scripts/windows-resources -version {{ .Version }}
+
 release:
   prerelease: true
   make_latest: false

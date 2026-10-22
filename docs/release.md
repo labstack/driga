@@ -106,6 +106,30 @@ cgo, use `-trimpath`, and embed version, full commit, and commit date.
 The package metadata names LabStack, `support@labstack.com`, and Apache-2.0.
 Changelogs sort ascending and omit `docs:` and `test:` entries.
 
+### Windows executable resources
+
+The global GoReleaser before hook runs `go run ./scripts/windows-resources
+-version <version>` once before parallel builds. It uses the pure-Go
+`github.com/tc-hib/go-winres` tool pinned to **v0.3.3**, so cross-builds require
+neither cgo nor a Windows SDK. It generates `cmd/driga/rsrc_windows_amd64.syso`
+and `rsrc_windows_arm64.syso`; Go's filename constraints include each object
+only in its matching Windows build. These deterministic, version-specific
+objects are ignored rather than committed, avoiding stale release metadata.
+
+The icon is the canonical Murmur symbol in `internal/web/static/brand/murmur.ico`,
+checked in with 16, 24, 32, 48, 64, 128 and 256 pixel images. Regenerate it with
+`python3 scripts/generate-brand.py` using `rsvg-convert` (librsvg); repeated runs
+with the same renderer produce identical bytes, without timestamps. Release
+builds consume the ICO directly and need neither Python nor librsvg.
+
+VERSIONINFO identifies Driga and LabStack LLC, using the copyright line from
+NOTICE. FileVersion and ProductVersion retain the full release/snapshot string.
+Their numeric fields map `2026.10.5-alpha` to `2026.10.5.0`; Windows' 16-bit
+component limit makes revisions above 65535 a build error. Development resources
+use `dev` and `0.0.0.0`. For an optional branded source build on Windows, run
+`go generate ./cmd/driga` before `go build ./cmd/driga`. Plain `go build` also
+works without generated objects. Regenerate after switching versions.
+
 GoReleaser replaces the old packaging/evidence scripts and manual Homebrew
 template. This flow does not generate the former optional Syft SBOMs or Cosign
 manifest signatures. macOS code signing and notarization are required instead;
@@ -133,6 +157,10 @@ checksums, every archive's files, Debian binary installation path when
 It runs only the host binary's safe `version --json` command, checks its version
 against the tag without `v` (or the snapshot version), and requires embedded
 commit/date metadata. Verification hosts are macOS or Linux on amd64/arm64.
+It also uses Go's PE parser to inspect both archived Windows executables for
+the numeric versions, full identity strings, and all seven Murmur icon images.
+The resource generator tests compare Linux/macOS binaries before and after
+adding the objects and require identical bytes on both architectures.
 The Go tests under `scripts/` use disposable repositories and fake commands,
 never real agent CLIs or application data.
 

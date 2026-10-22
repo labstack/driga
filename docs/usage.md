@@ -278,6 +278,14 @@ driga service restart
 driga service uninstall
 ```
 
+### Service identity
+
+- **macOS:** release binaries are signed by **LabStack LLC**. The Background
+  item shows the developer name; the launchd label is `run.driga.collector`.
+- **Linux:** the systemd user unit displays **Driga collector**.
+- **Windows:** Task Scheduler lists **Driga collector** under
+  `\Driga\<user SID>`. Task Manager shows **Driga** with the Murmur icon.
+
 On macOS logs are at `~/Library/Logs/driga/collector.log`; Linux uses
 `journalctl --user -u run.driga.collector` (`driga service logs -f` wraps it).
 On a Linux VM, allow the user service to run after logout:

@@ -2,7 +2,7 @@
 """Generate brand variants from murmur.svg and wordmark.svg.
 
 Run from any directory: python3 scripts/generate-brand.py
-PNG rendering requires rsvg-convert; --svg-only skips raster exports.
+PNG/ICO rendering requires rsvg-convert; --svg-only skips raster exports.
 The two source SVGs are never overwritten.
 """
 
@@ -10,6 +10,7 @@ import argparse
 from copy import deepcopy
 from pathlib import Path
 import shutil
+import struct
 import subprocess
 from xml.etree import ElementTree as ET
 
@@ -88,6 +89,23 @@ def main():
     write("favicon.svg", 64, 64, [tile, placed(symbol, 3, 3, scale=58 / 128, color=white)])
 
     if not args.svg_only:
+        # Render each size directly from the master, never from a scaled PNG.
+        # ICO entries are PNG payloads, in fixed size order, with no timestamps
+        # or metadata added by this packer. No Pillow/ImageMagick dependency.
+        sizes = (16, 24, 32, 48, 64, 128, 256)
+        images = [subprocess.run([
+            renderer, "--width", str(size), "--height", str(size),
+            str(ASSETS / "murmur.svg"),
+        ], check=True, capture_output=True).stdout for size in sizes]
+        offset = 6 + 16 * len(sizes)
+        directory = bytearray(struct.pack("<HHH", 0, 1, len(sizes)))
+        for size, image in zip(sizes, images):
+            directory.extend(struct.pack(
+                "<BBBBHHII", size % 256, size % 256, 0, 0, 1, 32,
+                len(image), offset,
+            ))
+            offset += len(image)
+        (ASSETS / "murmur.ico").write_bytes(directory + b"".join(images))
         for source, destination, width in [
             ("favicon.svg", "favicon-32.png", 32),
             ("favicon.svg", "apple-touch-icon.png", 180),
