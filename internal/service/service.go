@@ -37,6 +37,14 @@ func configForOS(binPath, goos string) *ks.Config {
 	// LaunchdConfig supports directing both streams to the single documented file.
 	escape := strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;", "'", "&apos;", "{", "&#123;")
 	template := strings.ReplaceAll(launchdConfig, "LOG_PATH", escape.Replace(logPathForOS(goos)))
+	association := ""
+	if goos == "darwin" {
+		binPath = ExecutablePath(binPath)
+		if BundlePath(binPath) != "" {
+			association = "<key>AssociatedBundleIdentifiers</key><array><string>run.driga</string></array>"
+		}
+	}
+	template = strings.ReplaceAll(template, "BUNDLE_ASSOCIATION", association)
 	env := map[string]string{"HOME": config.ExpandHome("~")}
 	// PATH and TMUX_TMPDIR come from the installing shell: launchd and systemd
 	// start services with a bare PATH, so tmux and agent CLIs would not be found.
@@ -91,7 +99,14 @@ func New(binPath string) (Controller, error) {
 	if !filepath.IsAbs(binPath) {
 		return nil, errors.New("service binary path must be absolute")
 	}
-	return ks.New(controlOnly{}, Config(binPath))
+	controller, err := ks.New(controlOnly{}, Config(binPath))
+	if err != nil {
+		return nil, err
+	}
+	if runtime.GOOS == "darwin" {
+		return newLaunchdController(controller, binPath), nil
+	}
+	return controller, nil
 }
 
 type controlOnly struct{}
@@ -105,6 +120,7 @@ const launchdConfig = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
 <key>Label</key><string>{{Name | html}}</string>
+BUNDLE_ASSOCIATION
 <key>ProgramArguments</key><array>
 <string>{{Path | html}}</string>
 {{range Arguments}}<string>{{. | html}}</string>

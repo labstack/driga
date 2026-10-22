@@ -45,8 +45,8 @@ GitHub supplies `GITHUB_TOKEN`; the release job grants it `contents: write`
 for publishing GitHub Releases. Other jobs have read-only repository access.
 The release preflight refuses empty secrets and checks the package token's
 push access and both publication repositories' default branches. Real releases
-always enable macOS signing and notarization, even when credentials are absent,
-so missing credentials fail the release instead of publishing unsigned binaries.
+always require macOS app signing and notarization, even when credentials are absent,
+so missing credentials fail the release instead of publishing unsigned apps.
 Keep credential values in the secrets store; do not put them in commands,
 release notes, or committed files.
 
@@ -97,9 +97,10 @@ and notifications have been verified on hardware. Pre-release databases must be 
   `/usr/bin/driga` for amd64 and arm64.
 - `driga_<version>_checksums.txt`, a SHA-256 manifest of all ten downloads.
 - `Casks/driga.rb` in `labstack/homebrew-tap`, installing the signed and notarized
-  macOS binaries, and `driga.json` in `labstack/scoop-bucket` for Windows.
+  macOS app bundles, and `driga.json` in `labstack/scoop-bucket` for Windows.
 
-Each archive contains `driga` (or `driga.exe`), `README.md`, `LICENSE`, `NOTICE`,
+Each archive contains `driga` (or `driga.exe`; macOS uses
+`Driga.app/Contents/MacOS/driga`), `README.md`, `LICENSE`, `NOTICE`,
 `third-party/vendor-LICENSES.txt`, and `third-party/fonts-LICENSE.txt`. The last
 two preserve the bundled web vendor and font license notices. Builds disable
 cgo, use `-trimpath`, and embed version, full commit, and commit date.
@@ -135,6 +136,90 @@ template. This flow does not generate the former optional Syft SBOMs or Cosign
 manifest signatures. macOS code signing and notarization are required instead;
 SHA-256 manifests detect corruption but do not authenticate their own origin.
 
+## macOS bundle and signing design
+
+Each Darwin architecture has a minimal `Driga.app` containing `Contents/Info.plist`,
+`Contents/MacOS/driga`, and `Contents/Resources/Driga.icns`. Its identifier is
+`run.driga`, name/display name is Driga, executable is `driga`, and package type
+is `APPL`. `LSUIElement=true` suppresses the Dock and Force Quit entry, as
+[Apple documents](https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/LaunchServicesKeys.html).
+The structure follows Apple's
+[Bundle Programming Guide](https://developer.apple.com/library/archive/documentation/CoreFoundation/Conceptual/CFBundles/BundleTypes/BundleTypes.html).
+Both standard version keys use the tag's three numeric CalVer components;
+`DrigaReleaseVersion` and the CLI retain the full alpha/snapshot version. This
+respects Apple's numeric
+[version-key formats](https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html).
+
+The committed icon preserves the canonical Murmur geometry and color. Regenerate
+it on macOS with `python3 scripts/generate-brand.py --icns-only` (`rsvg-convert`
+and `iconutil` required). The generator renders [Apple's complete iconset](https://developer.apple.com/library/archive/documentation/GraphicsAnimation/Conceptual/HighResolutionOSX/Optimizing/Optimizing.html):
+16, 32, 128, 256 and 512 point representations at 1x/2x. `--portable-icns` explicitly encodes those same PNGs
+when ImageIO/iconutil is unavailable in a sandbox. The output has no timestamps;
+Linux CI consumes the committed ICNS and validates every representation.
+
+[Apple's helper documentation](https://developer.apple.com/documentation/servicemanagement/updating-helper-executables-from-earlier-versions-of-macos)
+explains the organization-name fallback and `AssociatedBundleIdentifiers`.
+`service install` resolves a bundled executable, associates `run.driga`, registers
+the app with Launch Services, and atomically repairs an existing stale plist.
+It stops a running collector before replacing its stale definition; the CLI
+then starts it. Reinstalling a current definition is harmless. Development
+binaries outside the app retain their ordinary path and have no association.
+The executable and app have the same signing team because the CLI is the app's
+main executable. Registration matters: Apple requires Launch Services to know
+the associated app, and Caskroom is outside the usual application directories.
+
+The entire release job runs on GitHub-hosted `macos-15`. An OSS per-build post
+hook assembles the app, then `codesign --options runtime --timestamp` signs the
+whole bundle with a Developer ID Application identity and seals its resources.
+Apple documents the [hardened-runtime and timestamp requirements](https://developer.apple.com/documentation/security/resolving-common-notarization-issues).
+It submits a temporary ZIP through `notarytool`, requires Accepted, retrieves
+the log, staples and validates the app, and verifies its signature and Gatekeeper
+assessment. Only then does GoReleaser archive it, compute checksums and publish.
+The published tarballs are extracted and checked again for signatures and
+staples. Linux/Windows archives, nFPM, Homebrew and Scoop remain in this same
+GoReleaser flow, preserving the serialized, immutable-release policy.
+
+The temporary keychain contains only the imported Application identity and the
+notary profile. Decoded certificate/API-key files are private and removed at
+setup exit; an `always()` workflow step deletes the keychain and signing directory
+even after failure. No Installer certificate or extra signing secret is needed.
+See Apple's [custom notarization workflow](https://developer.apple.com/documentation/security/customizing-the-notarization-workflow):
+ZIP is a submission format, the ticket is stapled to the app before final
+packaging, and standalone binaries cannot have tickets stapled to them.
+
+GoReleaser **v2.18.0 OSS** supports
+[per-build hooks](https://github.com/goreleaser/goreleaser/blob/v2.18.0/www/content/customization/builds/hooks.md),
+[archive paths/files](https://github.com/goreleaser/goreleaser/blob/v2.18.0/www/content/customization/package/archives.md),
+and [`homebrew_casks.binaries`](https://github.com/goreleaser/goreleaser/blob/v2.18.0/www/content/customization/publish/homebrew_casks.md).
+Its [notarization documentation](https://github.com/goreleaser/goreleaser/blob/v2.18.0/www/content/customization/sign/notarize.md)
+limits the OSS quill integration to Mach-O/universal binaries. Native app
+notarization, `app_bundles`, DMG packaging, `homebrew_casks.app`, archive hooks,
+and templated archive files are Pro-only and are not used here. A build hook
+creates the real plist instead of relying on Pro templated files.
+
+The OSS cask `custom_block` emits Homebrew's normal app artifact with an explicit
+stable destination: `app "Driga.app", target: "#{caskroom_path}/Driga.app"`.
+The `binaries` setting emits
+`binary "#{caskroom_path}/Driga.app/Contents/MacOS/driga"`.
+This is ordinary Ruby cask generation, not GoReleaser's Pro `app`/DMG feature.
+Homebrew's [app target](https://docs.brew.sh/Cask-Cookbook#target-may-contain-an-absolute-path)
+can be absolute; its [binary stanza](https://docs.brew.sh/Cask-Cookbook#stanza-binary)
+links the executable into `$(brew --prefix)/bin/driga`. The full app remains
+under `$(brew --caskroom)/driga/Driga.app`. A default `app` target would move it
+to `/Applications`; the explicit Caskroom target is functional, keeping this
+CLI-only background app managed by Homebrew without a Finder-launchable app
+in Applications. Homebrew manages the app move on upgrade and uninstall.
+The app destination, launchd path and PATH link stay stable across upgrades.
+Users with a service from a bare-binary release run `driga service install`
+once to repair it; subsequent upgrades only need `driga service restart` if
+they want a running collector to use the new version immediately. The cask
+caveat explains both. Hooks retain the same stable Homebrew link.
+
+A real signed release and macOS installation are still needed to qualify
+Gatekeeper, offline staple validation, Homebrew upgrade/service restart, and
+the actual Driga name/Murmur icon in Settings. macOS may retain older cached
+background entries; no automated BTM reset is performed.
+
 ## Local release verification
 
 With GoReleaser v2.18.0 and the Go version in `go.mod` already installed:
@@ -152,7 +237,7 @@ CI runs the same configuration check, snapshot build, and artifact inspection
 inside **Tests and build**, as well as its existing tests and cross-builds.
 
 The verifier checks the exact six-archive/four-package inventory, complete
-checksums, every archive's files, Debian binary installation path when
+checksums, every archive's files and the macOS app metadata/icon size set, Debian binary installation path when
 `dpkg-deb` is available, and the Homebrew/Scoop versions, URLs, and hashes.
 It runs only the host binary's safe `version --json` command, checks its version
 against the tag without `v` (or the snapshot version), and requires embedded
@@ -194,7 +279,9 @@ shasum -a 256 -c selected-checksum.txt
 mkdir -p release-unpacked
 tar -xzf "$archive" -C release-unpacked
 mkdir -p "$HOME/.local/bin"
-install -m 0755 release-unpacked/driga "$HOME/.local/bin/driga"
+mkdir -p "$HOME/.local/lib/driga"
+mv release-unpacked/Driga.app "$HOME/.local/lib/driga/Driga.app"
+ln -s "$HOME/.local/lib/driga/Driga.app/Contents/MacOS/driga" "$HOME/.local/bin/driga"
 "$HOME/.local/bin/driga" version --json
 ```
 

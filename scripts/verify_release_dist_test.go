@@ -3,9 +3,11 @@ package scripts_test
 import (
 	"archive/tar"
 	"archive/zip"
+	"bytes"
 	"compress/gzip"
 	"crypto/sha256"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -69,7 +71,7 @@ func requireArtifactVerifierTools(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("release artifact verification requires Unix archive tools")
 	}
-	for _, tool := range []string{"bash", "jq", "tar", "unzip"} {
+	for _, tool := range []string{"bash", "jq", "tar", "unzip", "python3"} {
 		if _, err := exec.LookPath(tool); err != nil {
 			t.Skipf("%s is unavailable: %v", tool, err)
 		}
@@ -107,7 +109,7 @@ func releaseDistFixture(t *testing.T, version, tag string) (string, string) {
 		fmt.Sprintf("driga_%s_windows_arm64.zip", version),
 	}
 	for _, platform := range []string{"darwin_amd64", "darwin_arm64", "linux_amd64", "linux_arm64"} {
-		writeTarGzipFixture(t, filepath.Join(dist, fmt.Sprintf("driga_%s_%s.tar.gz", version, platform)))
+		writeTarGzipFixture(t, filepath.Join(dist, fmt.Sprintf("driga_%s_%s.tar.gz", version, platform)), version)
 	}
 	for _, arch := range []string{"amd64", "arm64"} {
 		writeZipFixture(t, filepath.Join(dist, fmt.Sprintf("driga_%s_windows_%s.zip", version, arch)))
@@ -147,7 +149,8 @@ func releaseDistFixture(t *testing.T, version, tag string) (string, string) {
     end
   end
 
-  binary "driga"
+  app "Driga.app", target: "#{caskroom_path}/Driga.app"
+  binary "#{caskroom_path}/Driga.app/Contents/MacOS/driga"
 end
 `, version, hashes[fmt.Sprintf("driga_%s_darwin_amd64.tar.gz", version)], hashes[fmt.Sprintf("driga_%s_darwin_arm64.tar.gz", version)])
 	writeFixtureFile(t, filepath.Join(dist, "homebrew", "Casks", "driga.rb"), cask, 0o600)
@@ -173,9 +176,9 @@ func nativeBinaryFixtureDir(t *testing.T, dist string) string {
 	t.Helper()
 	switch runtime.GOOS + "/" + runtime.GOARCH {
 	case "darwin/arm64":
-		return filepath.Join(dist, "driga_darwin_arm64_v8.0")
+		return filepath.Join(dist, "driga_darwin_arm64_v8.0", "Driga.app", "Contents", "MacOS")
 	case "darwin/amd64":
-		return filepath.Join(dist, "driga_darwin_amd64_v1")
+		return filepath.Join(dist, "driga_darwin_amd64_v1", "Driga.app", "Contents", "MacOS")
 	case "linux/arm64":
 		return filepath.Join(dist, "driga_linux_arm64_v8.0")
 	case "linux/amd64":
@@ -189,12 +192,12 @@ func nativeBinaryFixtureDir(t *testing.T, dist string) string {
 func runArtifactVerifier(t *testing.T, dist, binDir string) (string, error) {
 	t.Helper()
 	cmd := exec.CommandContext(t.Context(), "bash", "verify-release-dist.sh", dist)
-	cmd.Env = append(releaseTestEnv(t), "PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	cmd.Env = append(releaseTestEnv(t), "PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"), "DRIGA_VERIFY_SIGNATURES=false")
 	output, err := cmd.CombinedOutput()
 	return string(output), err
 }
 
-func writeTarGzipFixture(t *testing.T, path string) {
+func writeTarGzipFixture(t *testing.T, path, version string) {
 	t.Helper()
 	file, err := os.Create(path)
 	if err != nil {
@@ -202,11 +205,53 @@ func writeTarGzipFixture(t *testing.T, path string) {
 	}
 	gzipWriter := gzip.NewWriter(file)
 	tarWriter := tar.NewWriter(gzipWriter)
-	for _, entry := range []struct {
+	entries := []struct {
 		name string
 		body string
 		mode int64
-	}{{"LICENSE", "license\n", 0o644}, {"NOTICE", "notice\n", 0o644}, {"README.md", "fixture\n", 0o644}, {"driga", "binary\n", 0o755}, {"third-party/fonts-LICENSE.txt", "fonts\n", 0o644}, {"third-party/vendor-LICENSES.txt", "vendor\n", 0o644}} {
+	}{{"LICENSE", "license\n", 0o644}, {"NOTICE", "notice\n", 0o644}, {"README.md", "fixture\n", 0o644}, {"driga", "binary\n", 0o755}, {"third-party/fonts-LICENSE.txt", "fonts\n", 0o644}, {"third-party/vendor-LICENSES.txt", "vendor\n", 0o644}}
+	if strings.Contains(filepath.Base(path), "_darwin_") {
+		// Assemble a synthetic app without running signing tools or launchd.
+		root := t.TempDir()
+		app := filepath.Join(root, "Driga.app")
+		binDir := filepath.Join(app, "Contents", "MacOS")
+		if err := os.MkdirAll(binDir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		writeFixtureFile(t, filepath.Join(binDir, "driga"), "fixture", 0o700)
+		cmd := exec.CommandContext(t.Context(), "python3", "macos-app.py", app, version)
+		cmd.Env = releaseTestEnv(t)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("assemble app: %v: %s", err, out)
+		}
+		var bundled []struct {
+			name string
+			body string
+			mode int64
+		}
+		for _, entry := range entries {
+			if entry.name != "driga" {
+				bundled = append(bundled, entry)
+			}
+		}
+		for _, name := range []string{"Info.plist", "Resources/Driga.icns", "MacOS/driga"} {
+			body, err := os.ReadFile(filepath.Join(app, "Contents", filepath.FromSlash(name)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			mode := int64(0o644)
+			if name == "MacOS/driga" {
+				mode = 0o755
+			}
+			bundled = append(bundled, struct {
+				name string
+				body string
+				mode int64
+			}{"Driga.app/Contents/" + name, string(body), mode})
+		}
+		entries = bundled
+	}
+	for _, entry := range entries {
 		body := []byte(entry.body)
 		if err := tarWriter.WriteHeader(&tar.Header{Name: entry.name, Mode: entry.mode, Size: int64(len(body))}); err != nil {
 			t.Fatal(err)
@@ -344,5 +389,71 @@ func TestReleaseDistVerifierRejectsMissingBundledNotices(t *testing.T) {
 	output, err := runArtifactVerifier(t, dist, binDir)
 	if err == nil || !strings.Contains(output, "unexpected contents") {
 		t.Fatalf("missing notice accepted: %v: %s", err, output)
+	}
+}
+
+func TestReleaseDistVerifierRejectsBrokenApp(t *testing.T) {
+	requireArtifactVerifierTools(t)
+	for _, name := range []string{"Driga.app/Contents/Info.plist", "Driga.app/Contents/Resources/Driga.icns", "Driga.app/Contents/MacOS/driga"} {
+		t.Run(name, func(t *testing.T) {
+			dist, binDir := releaseDistFixture(t, "2026.10.0-alpha", "v2026.10.0-alpha")
+			path := filepath.Join(dist, "driga_2026.10.0-alpha_darwin_arm64.tar.gz")
+			oldHash := fixtureSHA256(t, path)
+			raw, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			gz, err := gzip.NewReader(bytes.NewReader(raw))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var output bytes.Buffer
+			zipped := gzip.NewWriter(&output)
+			writer := tar.NewWriter(zipped)
+			reader := tar.NewReader(gz)
+			for {
+				header, err := reader.Next()
+				if err == io.EOF {
+					break
+				}
+				if err != nil {
+					t.Fatal(err)
+				}
+				body, err := io.ReadAll(reader)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if header.Name == name {
+					body = []byte("corrupt")
+					if strings.HasSuffix(name, "/driga") {
+						body = nil
+					}
+					header.Size = int64(len(body))
+				}
+				if err := writer.WriteHeader(header); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := writer.Write(body); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := writer.Close(); err != nil {
+				t.Fatal(err)
+			}
+			if err := zipped.Close(); err != nil {
+				t.Fatal(err)
+			}
+			if err := gz.Close(); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(path, output.Bytes(), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			replaceFixtureText(t, filepath.Join(dist, "driga_2026.10.0-alpha_checksums.txt"), oldHash, fixtureSHA256(t, path))
+			outputText, err := runArtifactVerifier(t, dist, binDir)
+			if err == nil {
+				t.Fatalf("accepted broken app: %s", outputText)
+			}
+		})
 	}
 }

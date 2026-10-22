@@ -38,6 +38,16 @@ On macOS, install the signed and notarized release with Homebrew:
 brew install --cask labstack/tap/driga
 ```
 
+Homebrew keeps the background-only `Driga.app` in Caskroom and links `driga`
+to `Driga.app/Contents/MacOS/driga`. The app contains the Murmur icon and the
+same CLI used by hooks and the collector; it has no Dock icon. When upgrading
+from a bare-binary release, run `driga service install` once if you use the
+collector. It repairs the plist's bundle path and attribution in System
+Settings > General > Login Items & Extensions. Later `brew upgrade` operations
+keep that path stable; use `driga service restart` to restart a running collector
+with the new version. `driga doctor` warns about a
+stale service path. Hooks keep using the stable Homebrew `driga` link.
+
 On Windows (experimental), use Scoop:
 
 ```powershell

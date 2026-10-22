@@ -65,7 +65,21 @@ artifact_hash() {
   awk -v name="$1" '$2 == name || $2 == "*" name { print $1 }' "$checksum_file"
 }
 
-for platform in darwin_amd64 darwin_arm64 linux_amd64 linux_arm64; do
+for arch in amd64 arm64; do
+  archive="${dist_dir}/driga_${release_version}_darwin_${arch}.tar.gz"
+  python3 "$(dirname "$0")/verify-macos-app.py" "$archive" "$release_version"
+  if [ "${DRIGA_VERIFY_SIGNATURES:-false}" = true ]; then
+    app_temp=$(mktemp -d)
+    trap 'rm -rf "$app_temp"' EXIT
+    tar -xzf "$archive" -C "$app_temp" Driga.app
+    codesign --verify --deep --strict --verbose=2 "$app_temp/Driga.app"
+    xcrun stapler validate "$app_temp/Driga.app"
+    spctl --assess --type execute --verbose=2 "$app_temp/Driga.app"
+    rm -rf "$app_temp"
+    trap - EXIT
+  fi
+done
+for platform in linux_amd64 linux_arm64; do
   archive="${dist_dir}/driga_${release_version}_${platform}.tar.gz"
   entries=$(tar -tzf "$archive" | LC_ALL=C sort)
   if [ "$entries" != $'LICENSE\nNOTICE\nREADME.md\ndriga\nthird-party/fonts-LICENSE.txt\nthird-party/vendor-LICENSES.txt' ]; then
@@ -131,8 +145,12 @@ if [ ! -f "$cask" ]; then
   echo "Homebrew Cask is missing: ${cask}" >&2
   exit 1
 fi
-if ! grep -Fq 'cask "driga" do' "$cask" || ! grep -Fq 'binary "driga"' "$cask"; then
+if ! grep -Fq 'cask "driga" do' "$cask" || ! grep -Fq 'binary "#{caskroom_path}/Driga.app/Contents/MacOS/driga"' "$cask"; then
   echo "Homebrew Cask does not install driga." >&2
+  exit 1
+fi
+if ! grep -Fq 'app "Driga.app", target: "#{caskroom_path}/Driga.app"' "$cask"; then
+  echo "Homebrew Cask does not keep the app at a stable Caskroom path." >&2
   exit 1
 fi
 if ! grep -Fqx "  version \"${release_version}\"" "$cask"; then
@@ -168,8 +186,8 @@ for pair in intel:amd64 arm:arm64; do
 done
 
 case "$(uname -s)-$(uname -m)" in
-  Darwin-arm64) native_binary="${dist_dir}/driga_darwin_arm64_v8.0/driga" ;;
-  Darwin-x86_64) native_binary="${dist_dir}/driga_darwin_amd64_v1/driga" ;;
+  Darwin-arm64) native_binary="${dist_dir}/driga_darwin_arm64_v8.0/Driga.app/Contents/MacOS/driga" ;;
+  Darwin-x86_64) native_binary="${dist_dir}/driga_darwin_amd64_v1/Driga.app/Contents/MacOS/driga" ;;
   Linux-aarch64 | Linux-arm64) native_binary="${dist_dir}/driga_linux_arm64_v8.0/driga" ;;
   Linux-x86_64 | Linux-amd64) native_binary="${dist_dir}/driga_linux_amd64_v1/driga" ;;
   *)
