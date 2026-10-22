@@ -8,7 +8,7 @@ import (
 	"charm.land/lipgloss/v2/compat"
 )
 
-// ThemeToken is one semantic color shared by browser and terminal readers.
+// ThemeToken is one semantic color in the browser or terminal palette.
 type ThemeToken struct{ Name, Light, Dark string }
 
 // Catppuccin palettes (MIT): Latte for light, Mocha for dark. Mocha uses the
@@ -16,8 +16,6 @@ type ThemeToken struct{ Name, Light, Dark string }
 // below 4.5:1 for text on its base, so those text roles use darker shades of
 // the same hue; bars and fills reuse them.
 var themeTokens = [...]ThemeToken{
-	{"ground", "#E6E9EF", "#181825"},
-	{"surface", "#EFF1F5", "#1E1E2E"},
 	{"sunk", "#DCE0E8", "#11111B"},
 	{"ink", "#4C4F69", "#CDD6F4"},
 	{"muted", "#5C5F77", "#A6ADC8"},
@@ -26,22 +24,16 @@ var themeTokens = [...]ThemeToken{
 	{"strong", "#4C4F69", "#CDD6F4"},
 	{"on-strong", "#EFF1F5", "#1E1E2E"},
 	{"working", "#256817", "#A6E3A1"},
-	{"working-bg", "#D3E4D5", "#364143"},
 	{"waiting", "#7A4C07", "#F9E2AF"},
-	{"waiting-bg", "#ECE1D2", "#454145"},
-	{"waiting-bar", "#DF8E1D", "#F9E2AF"},
 	{"stalled", "#B50C30", "#F38BA8"},
-	{"stalled-bg", "#EACDD7", "#443244"},
 	{"idle", "#1A5AD8", "#89B4FA"},
-	{"idle-bg", "#CEDBF5", "#313953"},
 	{"finished", "#5C5F77", "#A6ADC8"},
-	{"finished-bg", "#DADCE3", "#333446"},
 	{"crit", "#B50C30", "#F38BA8"},
 	{"warn", "#963F06", "#FAB387"},
 	{"ok", "#1A5AD8", "#89B4FA"},
 	{"accent", "#7629D6", "#CBA6F7"},
 	{"observation", "#116762", "#94E2D5"},
-	{"tool", "#04778A", "#89DCEB"}, {"rail", "#A9AEBC", "#585B70"},
+	{"tool", "#04778A", "#89DCEB"},
 }
 
 // consoleTokens maps the console's roles onto the same Catppuccin palettes.
@@ -62,7 +54,8 @@ var consoleTokens = [...]ThemeToken{
 	{"idle-bg", "#CEDBF5", "#313953"}, {"finished-bg", "#DADCE3", "#333446"},
 }
 
-func consoleCSS() string {
+// ThemeCSS supports named preferences and the system default without script.
+func ThemeCSS() string {
 	var latte, mocha strings.Builder
 	for _, t := range consoleTokens {
 		fmt.Fprintf(&latte, "--%s:%s;", t.Name, t.Light)
@@ -71,22 +64,6 @@ func consoleCSS() string {
 	return `:root,[data-theme="mocha"]{` + mocha.String() + "color-scheme:dark;}\n" +
 		`[data-theme="latte"]{` + latte.String() + "color-scheme:light;}\n" +
 		`@media (prefers-color-scheme: light){:root:not([data-theme="mocha"]):not([data-theme="latte"]){` + latte.String() + "color-scheme:light;}}\n"
-}
-
-// ThemeTokens returns a copy so callers cannot change the shared palette.
-func ThemeTokens() []ThemeToken { return append([]ThemeToken(nil), themeTokens[:]...) }
-
-// ThemeCSS supports explicit preferences and the console system default without script.
-// Keep the legacy dark media rule explicit-only so it cannot override console colors.
-func ThemeCSS() string {
-	var light, dark strings.Builder
-	for _, t := range themeTokens {
-		fmt.Fprintf(&light, "--%s:%s;", t.Name, t.Light)
-		fmt.Fprintf(&dark, "--%s:%s;", t.Name, t.Dark)
-	}
-	return ":root,[data-theme=\"light\"]{" + light.String() + "color-scheme:light;}\n" +
-		"[data-theme=\"dark\"]{" + dark.String() + "color-scheme:dark;}\n" +
-		"@media (prefers-color-scheme: dark){:root[data-theme=\"dark\"]{" + dark.String() + "color-scheme:dark;}}\n" + consoleCSS()
 }
 
 // ThemeColor adapts to Lip Gloss's terminal background detection.

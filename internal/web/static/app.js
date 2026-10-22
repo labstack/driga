@@ -150,9 +150,7 @@
   const css = name => getComputedStyle(root).getPropertyValue("--" + name).trim();
   let preference = "system", history = [], historyIndex = 0, draft = "";
   try {
-    // Earlier builds stored phosphor/paper; they are the same dark/light roles.
-    const raw = localStorage.getItem("driga-theme");
-    const saved = ({phosphor: "mocha", paper: "latte"})[raw] || raw;
+    const saved = localStorage.getItem("driga-theme");
     if (["mocha", "latte", "system"].includes(saved)) preference = saved;
     const stored = JSON.parse(localStorage.getItem("driga-command-history") || "[]");
     if (Array.isArray(stored)) history = stored.filter(s => typeof s === "string" && s.length <= 500).slice(-100);

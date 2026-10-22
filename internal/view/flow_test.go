@@ -26,7 +26,7 @@ func TestFlowDefaultAttentionOrder(t *testing.T) {
 			var want int64
 			st := fixture(t, func(tx *store.Tx) error {
 				for i, label := range labels {
-					id, err := tx.UpsertSession(model.Session{SessionObs: model.SessionObs{Adapter: "claude", ExternalID: label, PID: int32(i + 1), LastActivityAt: testNow.Add(time.Duration(i) * time.Minute)}, Label: label})
+					id, err := tx.UpsertSession(model.Session{SessionObs: model.SessionObs{Adapter: "claude", ExternalID: label, Origin: "interactive", PID: int32(i + 1), LastActivityAt: testNow.Add(time.Duration(i) * time.Minute)}, Label: label})
 					if err != nil {
 						return err
 					}
@@ -47,10 +47,10 @@ func TestFlowDefaultAttentionOrder(t *testing.T) {
 	}
 }
 
-func TestFlowDefaultExcludesHeadlessRoot(t *testing.T) {
+func TestFlowDefaultRequiresInteractiveRoot(t *testing.T) {
 	var want int64
 	st := fixture(t, func(tx *store.Tx) error {
-		for i, origin := range []string{"interactive", "headless"} {
+		for i, origin := range []string{"interactive", "headless", ""} {
 			id, err := tx.UpsertSession(model.Session{SessionObs: model.SessionObs{Adapter: "claude", ExternalID: origin, Origin: origin, PID: int32(i + 1), LastActivityAt: testNow.Add(time.Duration(i) * time.Minute)}, Label: "waiting"})
 			if err != nil {
 				return err
@@ -157,7 +157,7 @@ func TestFlowFamily(t *testing.T) {
 	var lead int64
 	st := fixture(t, func(tx *store.Tx) error {
 		var err error
-		lead, err = tx.UpsertSession(model.Session{SessionObs: model.SessionObs{Adapter: "claude", ExternalID: "lead", PID: 10, RegistryStatus: "busy", StartedAt: testNow.Add(-time.Hour), LastActivityAt: testNow}, Label: "working"})
+		lead, err = tx.UpsertSession(model.Session{SessionObs: model.SessionObs{Adapter: "claude", ExternalID: "lead", Origin: "interactive", PID: 10, RegistryStatus: "busy", StartedAt: testNow.Add(-time.Hour), LastActivityAt: testNow}, Label: "working"})
 		if err != nil {
 			return err
 		}

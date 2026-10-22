@@ -142,6 +142,13 @@ func identityFromCert(cert tls.Certificate) (Identity, error) {
 	return Identity{Cert: cert, DER: leaf.Raw, DeviceID: DeviceID(leaf.Raw)}, nil
 }
 
+func validatePeerMachineID(id string) error {
+	if err := store.ValidateMachineID(id); err != nil {
+		return fmt.Errorf("%w: %w", &schemaError{2}, err)
+	}
+	return nil
+}
+
 // EqualFingerprint compares certificate fingerprints in constant time.
 func EqualFingerprint(a, b [32]byte) bool {
 	return subtle.ConstantTimeCompare(a[:], b[:]) == 1

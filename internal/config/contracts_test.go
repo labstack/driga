@@ -20,7 +20,7 @@ func TestStrictConfiguration(t *testing.T) {
 		{"stuck_after = '1m'", "stuck_after"},
 		{"stalled_after = '-1s'", "stalled_after"},
 		{"orphan_min_age = '-1s'", "orphan_min_age"},
-		{"[cleanup]\nlow_disk_bytes = '-1'", "cleanup.low_disk_bytes"},
+		{"[cleanup]\nlow_disk_bytes = '2GiB'", "cleanup.low_disk_bytes"},
 	} {
 		t.Run(tc.key+tc.body, func(t *testing.T) {
 			p := filepath.Join(t.TempDir(), "config.toml")
@@ -192,7 +192,7 @@ func TestAllScalarEnvironmentMappings(t *testing.T) {
 		{"DRIGA_CAPTURE_TEXT", "snippets"}, {"DRIGA_OPEN_CMD", "code {cwd}"}, {"DRIGA_NO_SERVICE_HINT", "true"},
 		{"DRIGA_ADAPTERS_CLAUDE_ENABLED", "false"}, {"DRIGA_ADAPTERS_CODEX_ENABLED", "false"}, {"DRIGA_ADAPTERS_GEMINI_ENABLED", "false"},
 		{"DRIGA_SUMMARIES_ENABLED", "true"}, {"DRIGA_SUMMARIES_MODEL", "custom"},
-		{"DRIGA_CLEANUP_WORKTREE_IDLE", "1h"}, {"DRIGA_CLEANUP_LOW_DISK_BYTES", "1KiB"},
+		{"DRIGA_CLEANUP_WORKTREE_IDLE", "1h"},
 		{"DRIGA_FLEET_SERVE", "false"}, {"DRIGA_FLEET_LISTEN", "127.0.0.1:7411"}, {"DRIGA_FLEET_SHARE_TEXT", "none"},
 		{"DRIGA_FLEET_ENROLL_WINDOW", "1m"}, {"DRIGA_FLEET_ALLOW_ANY_ADDRESS", "true"},
 		{"DRIGA_INTAKE_OTLP", "true"}, {"DRIGA_INTAKE_LISTEN", "[::1]:0"},
@@ -220,7 +220,7 @@ func TestAllScalarEnvironmentMappings(t *testing.T) {
 func TestInvalidEnvironmentRangesAreRedacted(t *testing.T) {
 	for _, tc := range []struct{ name, value string }{
 		{"DRIGA_STALLED_AFTER", "-1ns"}, {"DRIGA_ORPHAN_MIN_AGE", "-1h"}, {"DRIGA_CLEANUP_WORKTREE_IDLE", "999999999999h"},
-		{"DRIGA_CLEANUP_LOW_DISK_BYTES", "18446744073709551616"}, {"DRIGA_CLEANUP_LOW_DISK_BYTES", "-1GiB"},
+		{"DRIGA_MACHINE_DISK_FREE_MIN", "18446744073709551616"}, {"DRIGA_MACHINE_DISK_FREE_MIN", "-1GiB"},
 		{"DRIGA_ROOT_DEPTH", "-1"}, {"DRIGA_CAPTURE_TEXT", "private-value"},
 		{"DRIGA_FLEET_ENROLL_WINDOW", "11m"},
 	} {

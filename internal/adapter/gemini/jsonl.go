@@ -36,8 +36,7 @@ type wireTool struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
 	Args struct {
-		FilePath     string `json:"file_path"`
-		AbsolutePath string `json:"absolute_path"`
+		FilePath string `json:"file_path"`
 	} `json:"args"`
 	Result json.RawMessage `json:"result"`
 }
@@ -67,11 +66,7 @@ func parseMessage(w wireMessage) message {
 	}
 	m.snippet = scrub.Snippet(text)
 	for _, t := range w.ToolCalls {
-		p := t.Args.FilePath
-		if p == "" {
-			p = t.Args.AbsolutePath
-		}
-		m.tools = append(m.tools, toolCall{id: t.ID, name: t.Name, path: p, result: len(t.Result) > 0})
+		m.tools = append(m.tools, toolCall{id: t.ID, name: t.Name, path: t.Args.FilePath, result: len(t.Result) > 0})
 	}
 	return m
 }
@@ -259,7 +254,7 @@ func (f conversation) observation(path, cwd string, snippets bool) model.Session
 			}
 		}
 		for _, t := range m.tools {
-			if (t.name != "write_file" && t.name != "replace" && t.name != "edit") || t.path == "" {
+			if (t.name != "write_file" && t.name != "replace") || t.path == "" {
 				continue
 			}
 			p := t.path

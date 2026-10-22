@@ -305,10 +305,16 @@ func (s *Server) pairHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		e.seen[hex.EncodeToString(commit[:])] = true
 		p := &pairAttempt{commit: commit, fpV: fp, device: DeviceID(r.TLS.PeerCertificates[0].Raw), machine: r.TLS.PeerCertificates[0].Subject.CommonName, remote: r.RemoteAddr, done: make(chan struct{}), until: s.now().Add(confirmTimeout)}
-		if p.machine == "" || p.machine == s.st.MachineID() {
+		if err := validatePeerMachineID(p.machine); err != nil {
 			s.failPairLocked(key)
 			s.mu.Unlock()
-			jsonError(w, "local machine and viewer claim the same or empty machine_id; run driga machine reset-id on the clone", 409)
+			jsonError(w, err.Error(), http.StatusConflict)
+			return
+		}
+		if p.machine == s.st.MachineID() {
+			s.failPairLocked(key)
+			s.mu.Unlock()
+			jsonError(w, "local machine and viewer claim the same machine_id; run driga machine reset-id on the clone", 409)
 			return
 		}
 		if _, err := rand.Read(p.nP[:]); err != nil {
@@ -714,7 +720,10 @@ func Add(ctx context.Context, addr string, opts AddOpts, prompt func(string) boo
 	if err != nil || !EqualFingerprint(sha256.Sum256(nP[:]), expected) {
 		return zero, fmt.Errorf("peer commitment mismatch")
 	}
-	if revealed.MachineID == "" || revealed.MachineID != certP.Subject.CommonName {
+	if err := validatePeerMachineID(revealed.MachineID); err != nil {
+		return zero, err
+	}
+	if revealed.MachineID != certP.Subject.CommonName {
 		return zero, fmt.Errorf("peer machine_id does not match certificate; run driga fleet rekey on the peer (pairings must be redone)")
 	}
 	if err := checkClone(known, Peer{MachineID: revealed.MachineID, DeviceID: DeviceID(certP.Raw), Addr: addr}, id); err != nil {

@@ -44,7 +44,6 @@ type InboxConfig struct {
 // CleanupConfig bounds eligibility and regenerable ignored directories.
 type CleanupConfig struct {
 	WorktreeIdle time.Duration
-	LowDiskBytes uint64
 	Regenerable  []string
 }
 

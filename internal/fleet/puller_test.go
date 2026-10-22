@@ -199,7 +199,7 @@ func TestPullerStopsOn204(t *testing.T) {
 
 func TestViewerMismatchMessageNamesRekey(t *testing.T) {
 	p, out, _, _, _ := pullFixture(t)
-	p.peer.MachineID = "recreated-machine"
+	p.peer.MachineID = "019a0000-0000-7000-8000-000000000000"
 	runPull(t, p)
 	b := nextBatch(t, out, func(b Batch) bool { return b.State == "untrusted" })
 	if !strings.Contains(b.Error, "driga fleet rekey") || !strings.Contains(b.Error, "on the peer") {
@@ -345,5 +345,53 @@ func TestPullerSnapshotWithoutOSIsIncompatible(t *testing.T) {
 	}
 	if p.cursor.Epoch != "" {
 		t.Fatal("incompatible snapshot advanced cursor")
+	}
+}
+
+func TestPullerInvalidMachineIDIsIncompatible(t *testing.T) {
+	for _, id := range []string{"not-a-uuid", "0123456789abcdef0123456789abcdef", "00000000-0000-4000-8000-000000000000"} {
+		t.Run(id, func(t *testing.T) {
+			p, out, _, count, _ := pullFixture(t)
+			p.peer.MachineID = id
+			runPull(t, p)
+			b := nextBatch(t, out, func(b Batch) bool { return b.State == "incompatible" })
+			if !strings.Contains(b.Error, "UUIDv7") || b.Snapshot != nil || len(b.Rows) != 0 || count.Load() != 0 {
+				t.Fatalf("batch=%+v snapshots=%d", b, count.Load())
+			}
+			viewer := remoteStore(t)
+			apply(t, viewer, b, time.Now().UTC())
+			ms, err := viewer.Machines()
+			if err != nil || len(ms) != 1 || ms[0].State != "incompatible" {
+				t.Fatalf("machines=%+v error=%v", ms, err)
+			}
+		})
+	}
+}
+
+func TestPullerInvalidHelloMachineIDIsIncompatible(t *testing.T) {
+	p, out, _, count, _ := pullFixture(t, func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"schema":2,"machine_id":"not-a-uuid"}`)
+	})
+	runPull(t, p)
+	b := nextBatch(t, out, func(b Batch) bool { return b.State == "incompatible" })
+	if !strings.Contains(b.Error, "UUIDv7") || count.Load() != 0 {
+		t.Fatalf("batch=%+v snapshots=%d", b, count.Load())
+	}
+}
+
+func TestPullerInvalidSnapshotMachineIDIsIncompatible(t *testing.T) {
+	var machine string
+	p, out, st, _, _ := pullFixture(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/hello" {
+			fmt.Fprintf(w, `{"schema":2,"machine_id":%q}`, machine)
+		} else {
+			fmt.Fprint(w, `{"schema":2,"data":{"machine":{"machine_id":"not-a-uuid","os":"linux"}}}`)
+		}
+	})
+	machine = st.MachineID()
+	runPull(t, p)
+	b := nextBatch(t, out, func(b Batch) bool { return b.State == "incompatible" })
+	if !strings.Contains(b.Error, "UUIDv7") || b.Snapshot != nil || p.cursor.Epoch != "" {
+		t.Fatalf("batch=%+v cursor=%+v", b, p.cursor)
 	}
 }
