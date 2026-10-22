@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"unicode/utf16"
 )
 
 func TestTaskXML(t *testing.T) {
@@ -82,5 +83,47 @@ func TestTaskArgs(t *testing.T) {
 	}
 	if _, err := taskArgs("bad", `\Driga\test`, ""); err == nil {
 		t.Fatal("unknown action")
+	}
+}
+
+func TestTaskEnvironment(t *testing.T) {
+	b, err := taskXML(`C:\Tools\driga.exe`, "S-1-5-21-123", `C:\data`, `USERPROFILE=C:\isolated home\`, `CLAUDE_CONFIG_DIR=`, `DRIGA_SPOOL_DIR=C:\spool & events`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var task struct {
+		Actions struct{ Exec struct{ Arguments string } }
+	}
+	if err := xml.Unmarshal(b, &task); err != nil {
+		t.Fatal(err)
+	}
+	for _, arg := range []string{`--service-env "USERPROFILE=C:\isolated home\\"`, `--service-env "CLAUDE_CONFIG_DIR="`, `--service-env "DRIGA_SPOOL_DIR=C:\spool & events"`} {
+		if !strings.Contains(task.Actions.Exec.Arguments, arg) {
+			t.Fatalf("missing %q: %s", arg, task.Actions.Exec.Arguments)
+		}
+	}
+	for _, bad := range []string{"TOKEN=secret", "PATH=C:\\tools", "HOME", "HOME=C:\\bad\npath", `HOME=C:\bad"path`} {
+		if _, err := taskXML(`C:\Tools\driga.exe`, "S-1-5-21-123", `C:\data`, bad); err == nil {
+			t.Fatalf("accepted non-path/invalid environment %q", bad)
+		}
+	}
+}
+
+func TestTaskFileIsUTF16(t *testing.T) {
+	b, err := taskXML(`C:\Tools\driga.exe`, "S-1-5-21-123", `C:\data`, `USERPROFILE=C:\Users\Zoë`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := taskFile(b)
+	if f[0] != 0xff || f[1] != 0xfe || len(f)%2 != 0 {
+		t.Fatalf("missing UTF-16LE byte order mark: % x", f[:4])
+	}
+	units := make([]uint16, (len(f)-2)/2)
+	for i := range units {
+		units[i] = uint16(f[2+2*i]) | uint16(f[3+2*i])<<8
+	}
+	got := string(utf16.Decode(units))
+	if !strings.HasPrefix(got, `<?xml version="1.0" encoding="UTF-16"?>`) || !strings.Contains(got, `Zoë`) {
+		t.Fatalf("UTF-16 task file: %.120s", got)
 	}
 }

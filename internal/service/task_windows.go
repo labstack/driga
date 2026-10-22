@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -14,6 +15,7 @@ import (
 
 	ks "github.com/kardianos/service"
 	"github.com/labstack/driga/internal/config"
+	"github.com/labstack/driga/internal/platform"
 	"github.com/labstack/driga/internal/secfile"
 	"github.com/labstack/driga/internal/wincom"
 	"golang.org/x/sys/windows"
@@ -64,7 +66,15 @@ func (s *taskService) Install() error {
 	if err := secfile.MkdirPrivate(s.dataDir); err != nil {
 		return err
 	}
-	b, err := taskXML(s.bin, s.sid, s.dataDir)
+	env := make([]string, 0, len(scheduledEnvKeys))
+	// Persist only variables that are set: an empty HOME or TEMP must not
+	// replace the login environment of a normal install.
+	for _, key := range scheduledEnvKeys {
+		if value, ok := os.LookupEnv(key); ok {
+			env = append(env, key+"="+value)
+		}
+	}
+	b, err := taskXML(s.bin, s.sid, s.dataDir, env...)
 	if err != nil {
 		return err
 	}
@@ -73,7 +83,7 @@ func (s *taskService) Install() error {
 		return err
 	}
 	defer os.Remove(f.Name())
-	_, err = f.Write(b)
+	_, err = f.Write(taskFile(b))
 	if err := errors.Join(err, f.Close()); err != nil {
 		return err
 	}
@@ -116,12 +126,28 @@ func (s *taskService) Stop() error {
 		if err != nil {
 			return err
 		}
-		if state != "running" && state != "queued" {
+		// Task Scheduler reports ready before the ended collector exits; only a
+		// released lock means a new run will not race the old instance.
+		if state != "running" && state != "queued" && !s.collectorAlive() {
 			return nil
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
 	return errors.New("collector task did not stop within 10 seconds")
+}
+
+// collectorAlive checks the PID recorded in the collector lock file.
+func (s *taskService) collectorAlive() bool {
+	b, err := os.ReadFile(filepath.Join(s.dataDir, "driga.lock"))
+	if err != nil {
+		return false
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(b)))
+	if err != nil || pid <= 0 {
+		return false
+	}
+	start, err := platform.ProcessStart(int32(pid))
+	return err == nil && platform.New().Alive(int32(pid), start)
 }
 func (s *taskService) Restart() error {
 	if err := s.Stop(); err != nil {
@@ -198,7 +224,16 @@ func (s *taskService) TaskState() (string, error) {
 }
 
 // PrepareScheduled detaches only the scheduler-launched collector console.
-func PrepareScheduled(dataDir string) error {
+func PrepareScheduled(dataDir string, env ...string) error {
+	for _, value := range env {
+		key, value, ok := strings.Cut(value, "=")
+		if !ok || !scheduledEnvKey(key) {
+			return errors.New("invalid scheduled collector environment")
+		}
+		if err := os.Setenv(key, value); err != nil {
+			return err
+		}
+	}
 	if !filepath.IsAbs(dataDir) {
 		return errors.New("scheduled collector requires an absolute data directory")
 	}

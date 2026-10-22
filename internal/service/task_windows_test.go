@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf16"
 
 	ks "github.com/kardianos/service"
 )
@@ -29,8 +30,16 @@ func TestWindowsTaskInstallUsesPrivateTemporaryXML(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !strings.Contains(string(b), "LeastPrivilege") || !strings.Contains(string(b), s.sid) {
-			t.Fatal(string(b))
+		if len(b) < 2 || b[0] != 0xff || b[1] != 0xfe {
+			t.Fatalf("task file is not UTF-16LE: % x", b[:min(len(b), 4)])
+		}
+		units := make([]uint16, (len(b)-2)/2)
+		for i := range units {
+			units[i] = uint16(b[2+2*i]) | uint16(b[3+2*i])<<8
+		}
+		text := string(utf16.Decode(units))
+		if !strings.Contains(text, "LeastPrivilege") || !strings.Contains(text, s.sid) {
+			t.Fatal(text)
 		}
 		return nil, nil
 	}

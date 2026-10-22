@@ -336,8 +336,8 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 		add("kill", "ok", "proven orphan trees; PID-specific WM_CLOSE, grace period, optional TerminateProcess", "")
 		add("cleanup apply", "ok", "verified worktrees to Recycle Bin (IFileOperation); confirmation and audit log required", "")
 		add("socket probers", "ok", "IP Helper TCP/UDP owner tables (IPv4 and IPv6); probe errors leave evidence unknown", "")
-		add("file probers", "info", "unknown: no reliable unprivileged open-file API; cleanup fails closed", "")
-		add("Claude scratch", "info", "refused: Windows scratch layout unverified in repository fixtures; open-file inspection unavailable", "")
+		add("file probers", "ok", "Restart Manager; bounded file batches, probe errors leave evidence unknown", "")
+		add("Claude scratch", "info", "refused: Windows scratch layout unverified in repository fixtures", "")
 		state := "per-user Task Scheduler (not queried)"
 		if d.ServiceState != nil {
 			var err error

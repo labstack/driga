@@ -20,6 +20,7 @@ import (
 // CollectCmd runs the daemon, or one persistent pass with --once.
 type CollectCmd struct {
 	Scheduled      bool          `hidden:""`
+	ServiceEnv     []string      `hidden:"" sep:"none"`
 	ServiceDataDir string        `hidden:""`
 	Once           bool          `help:"Collect once into the persistent database and exit."`
 	CPUProfile     string        `name:"cpu-profile" type:"path" help:"Write a CPU profile of the collector to this file."`
@@ -29,7 +30,7 @@ type CollectCmd struct {
 // Run loads collection sources and handles graceful termination signals.
 func (c CollectCmd) Run(g *Globals) error {
 	if c.Scheduled {
-		if err := service.PrepareScheduled(c.ServiceDataDir); err != nil {
+		if err := service.PrepareScheduled(c.ServiceDataDir, c.ServiceEnv...); err != nil {
 			return err
 		}
 	}

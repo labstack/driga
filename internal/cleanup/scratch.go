@@ -79,7 +79,7 @@ func scratchCandidates(ctx context.Context, e Env, s snapshot) []Candidate {
 }
 func inspectScratch(ctx context.Context, e Env, s snapshot, c Candidate) (Candidate, error) {
 	if runtime.GOOS == "windows" {
-		return Candidate{}, fmt.Errorf("Claude scratch cleanup refused: Windows scratch layout is unverified; open-file inspection is unavailable")
+		return Candidate{}, fmt.Errorf("Claude scratch cleanup refused: Windows scratch layout is unverified")
 	}
 	id := strings.TrimPrefix(c.ID, "scratch:")
 	if !validSessionID(id) {
