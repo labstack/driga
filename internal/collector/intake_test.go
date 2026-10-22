@@ -152,7 +152,7 @@ func TestIntakeDaemonHTTP(t *testing.T) {
 		}
 	}
 	// A well-formed export for a session the adapters haven't discovered yet
-	// is acknowledged; the unmatched counter explains why no event is stored.
+	// is rejected with partial success without creating a session.
 	raw, err := os.ReadFile("../../testdata/fixtures/otlp/claude-code-2.1.303/05_v1_logs.json")
 	if err != nil {
 		t.Fatal(err)
@@ -163,11 +163,52 @@ func TestIntakeDaemonHTTP(t *testing.T) {
 	}
 	body, err := io.ReadAll(resp.Body)
 	resp.Body.Close()
-	if err != nil || resp.StatusCode != 200 || strings.TrimSpace(string(body)) != "{}" {
+	if err != nil || resp.StatusCode != 200 || !strings.Contains(string(body), `"rejectedLogRecords":"1"`) || !strings.Contains(string(body), `"errorMessage":"unmatched sessions"`) {
 		t.Fatal(resp.StatusCode, string(body), err)
 	}
 	if n, err := st.Meta("otlp:unmatched"); err != nil || n != "1" {
 		t.Fatal(n, err)
+	}
+	// Mix one known and one unknown session in the same scope.
+	var doc map[string]any
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatal(err)
+	}
+	scope := doc["resourceLogs"].([]any)[0].(map[string]any)["scopeLogs"].([]any)[0].(map[string]any)
+	var known map[string]any
+	if err := json.Unmarshal(bytes.ReplaceAll(raw, []byte("fixture-session"), []byte("one")), &known); err != nil {
+		t.Fatal(err)
+	}
+	records := known["resourceLogs"].([]any)[0].(map[string]any)["scopeLogs"].([]any)[0].(map[string]any)["logRecords"].([]any)
+	scope["logRecords"] = append(scope["logRecords"].([]any), records...)
+	mixed, _ := json.Marshal(doc)
+	resp, err = client.Post("http://"+addr+"/v1/logs", "application/json", bytes.NewReader(mixed))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err = io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil || resp.StatusCode != 200 || !bytes.Contains(body, []byte(`"rejectedLogRecords":"1"`)) {
+		t.Fatal(resp.StatusCode, string(body), err)
+	}
+	metrics := `{"resourceMetrics":[{"scopeMetrics":[{"metrics":[{"name":"claude_code.token.usage","sum":{"dataPoints":[{"asInt":"12"},{"asInt":"34"}]}}]}]}]}`
+	resp, err = client.Post("http://"+addr+"/v1/metrics", "application/json", strings.NewReader(metrics))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err = io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil || resp.StatusCode != 200 || !bytes.Contains(body, []byte(`"rejectedDataPoints":"2"`)) || !bytes.Contains(body, []byte(`"errorMessage":"metrics are not used"`)) {
+		t.Fatal(resp.StatusCode, string(body), err)
+	}
+	for key, want := range map[string]string{"accepted": "3", "unmatched": "2", "metrics_rejected": "2", "records_rejected": "4"} {
+		if got, err := st.Meta("otlp:" + key); err != nil || got != want {
+			t.Fatalf("%s = %q; want %q (%v)", key, got, want, err)
+		}
+	}
+	ss, err = st.Sessions(store.SessionFilter{IncludeEnded: true})
+	if err != nil || len(ss) != 1 {
+		t.Fatal(ss, err)
 	}
 }
 
