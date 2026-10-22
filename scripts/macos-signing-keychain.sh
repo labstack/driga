@@ -15,7 +15,8 @@ mkdir -m 700 "$signing_dir"
 keychain="$signing_dir/signing.keychain-db"
 password=$(openssl rand -hex 32)
 # The workflow's always() cleanup also covers failures during this setup.
-trap 'rm -f "$signing_dir/certificate.p12" "$signing_dir/notary.p8"' EXIT
+# notary.p8 stays for the build hook; the workflow's cleanup removes the directory.
+trap 'rm -f "$signing_dir/certificate.p12"' EXIT
 printf '%s' "$MACOS_SIGN_P12" | base64 --decode > "$signing_dir/certificate.p12"
 printf '%s' "$MACOS_NOTARY_KEY" | base64 --decode > "$signing_dir/notary.p8"
 security create-keychain -p "$password" "$keychain"
@@ -30,10 +31,10 @@ if [ "$(printf '%s\n' "$identity" | sed '/^$/d' | wc -l | tr -d ' ')" != 1 ]; th
   echo 'Expected exactly one Developer ID Application signing identity.' >&2
   exit 1
 fi
-xcrun notarytool store-credentials driga --keychain "$keychain" \
-  --key "$signing_dir/notary.p8" --key-id "$MACOS_NOTARY_KEY_ID" \
-  --issuer "$MACOS_NOTARY_ISSUER_ID" >/dev/null
 {
   echo "DRIGA_SIGNING_KEYCHAIN=$keychain"
   echo "DRIGA_SIGNING_IDENTITY=$identity"
+  echo "DRIGA_NOTARY_KEY=$signing_dir/notary.p8"
+  echo "DRIGA_NOTARY_KEY_ID=$MACOS_NOTARY_KEY_ID"
+  echo "DRIGA_NOTARY_ISSUER=$MACOS_NOTARY_ISSUER_ID"
 } >> "$GITHUB_ENV"
