@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate brand variants from murmur.svg and wordmark.svg.
 
-Run from any directory: rtk python3 scripts/generate-brand.py
+Run from any directory: python3 scripts/generate-brand.py
 PNG rendering requires rsvg-convert; --svg-only skips raster exports.
 The two source SVGs are never overwritten.
 """
