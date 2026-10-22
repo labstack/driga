@@ -24,6 +24,14 @@ security set-keychain-settings -lut 21600 "$keychain"
 security unlock-keychain -p "$password" "$keychain"
 security import "$signing_dir/certificate.p12" -k "$keychain" -P "$MACOS_SIGN_PASSWORD" -T /usr/bin/codesign >/dev/null
 security set-key-partition-list -S apple-tool:,apple:,codesign: -k "$password" "$keychain" >/dev/null
+# codesign on hosted runners resolves the identity through the user search
+# list even with --keychain; add ours ahead of the existing keychains.
+existing=()
+while IFS= read -r line; do
+  line=${line#"${line%%[![:space:]]*}"}; line=${line#\"}; line=${line%\"}
+  [ -n "$line" ] && existing+=("$line")
+done < <(security list-keychains -d user)
+security list-keychains -d user -s "$keychain" "${existing[@]}"
 # Do not accept an Installer identity or silently choose between certificates.
 identities=$(security find-identity -v -p codesigning "$keychain")
 identity=$(sed -n 's/.* \([0-9A-F]\{40\}\) "Developer ID Application:.*"/\1/p' <<< "$identities")
