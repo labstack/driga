@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -14,6 +15,7 @@ import (
 
 	ks "github.com/kardianos/service"
 	"github.com/labstack/driga/internal/config"
+	"github.com/labstack/driga/internal/platform"
 	"github.com/labstack/driga/internal/secfile"
 	"github.com/labstack/driga/internal/wincom"
 	"golang.org/x/sys/windows"
@@ -124,12 +126,28 @@ func (s *taskService) Stop() error {
 		if err != nil {
 			return err
 		}
-		if state != "running" && state != "queued" {
+		// Task Scheduler reports ready before the ended collector exits; only a
+		// released lock means a new run will not race the old instance.
+		if state != "running" && state != "queued" && !s.collectorAlive() {
 			return nil
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
 	return errors.New("collector task did not stop within 10 seconds")
+}
+
+// collectorAlive checks the PID recorded in the collector lock file.
+func (s *taskService) collectorAlive() bool {
+	b, err := os.ReadFile(filepath.Join(s.dataDir, "driga.lock"))
+	if err != nil {
+		return false
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(b)))
+	if err != nil || pid <= 0 {
+		return false
+	}
+	start, err := platform.ProcessStart(int32(pid))
+	return err == nil && platform.New().Alive(int32(pid), start)
 }
 func (s *taskService) Restart() error {
 	if err := s.Stop(); err != nil {
