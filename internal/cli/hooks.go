@@ -67,47 +67,65 @@ func (c HooksStatusCmd) Run(g *Globals) error {
 		return err
 	}
 	out := hooksOutput(g)
-	if agent == "copilot" || agent == "all" {
-		exe, err := os.Executable()
-		if err != nil {
-			return err
-		}
-		status, err := hooks.CopilotStatus(copilotHookPath(), stablePath(exe))
-		if err != nil {
-			return err
-		}
-		if _, err := fmt.Fprintln(out, "Copilot:", status); err != nil {
-			return err
-		}
+	exe, err := os.Executable()
+	if err != nil {
+		return err
 	}
-	if agent == "claude" || agent == "all" {
-		events, err := hooks.ClaudeStatus(claude)
+	for _, entry := range []struct{ agent, label, path string }{
+		{"copilot", "Copilot", copilotHookPath()}, {"claude", "Claude", claude}, {"codex", "Codex", codex},
+	} {
+		if agent != "all" && agent != entry.agent {
+			continue
+		}
+		_, detail, err := hookStatus(entry.agent, entry.path, stablePath(exe))
 		if err != nil {
 			return err
 		}
-		status := "not installed"
-		if len(events) > 0 {
-			status = strings.Join(events, ", ")
+		if strings.Contains(detail, "stale") {
+			detail += "; fix: driga hooks install " + entry.agent
 		}
-		if _, err := fmt.Fprintln(out, "Claude:", status); err != nil {
-			return err
-		}
-	}
-	if agent == "codex" || agent == "all" {
-		// A removal preview identifies our exact notify argv without writing.
-		d, err := hooks.CodexUninstall(codex, true)
-		if err != nil {
-			return err
-		}
-		status := "not installed"
-		if d.Changed {
-			status = "installed"
-		}
-		if _, err := fmt.Fprintln(out, "Codex:", status); err != nil {
+		if _, err := fmt.Fprintln(out, entry.label+":", detail); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// hookStatus is shared by status and doctor so binary drift has one diagnosis.
+func hookStatus(agent, path, driga string) (status, detail string, err error) {
+	status = "warn"
+	switch agent {
+	case "claude":
+		var events []string
+		events, err = hooks.ClaudeStatus(path)
+		detail = "optional hooks incomplete or absent"
+		if len(events) > 0 {
+			detail = strings.Join(events, ", ")
+		}
+		if err == nil {
+			var stale bool
+			stale, err = hooks.ClaudeStale(path, driga)
+			if stale {
+				detail = "stale binary; " + detail
+			} else if len(events) >= 4 {
+				status = "ok"
+			}
+		}
+	case "codex":
+		detail, err = hooks.CodexStatus(path, driga)
+		if detail != "not installed" && !strings.HasPrefix(detail, "stale") {
+			status = "ok"
+		}
+	case "copilot":
+		detail, err = hooks.CopilotStatus(path, driga)
+		if detail == "installed" {
+			status = "ok"
+		}
+	}
+	if err != nil {
+		status = "fail"
+	}
+	return
 }
 
 func (c HooksOptions) agent() (string, error) {

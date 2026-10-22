@@ -38,7 +38,10 @@ func doctorFixture(t *testing.T) (DoctorDeps, *store.Store) {
 	if err := st.SetMeta("last_pass_at", now.Format(time.RFC3339Nano)); err != nil {
 		t.Fatal(err)
 	}
-	return DoctorDeps{DataDir: dir, Store: st, Config: config.Default(), Home: home, Now: now, LockProbe: func(string) (bool, error) { return true, nil }}, st
+	if err := os.WriteFile(filepath.Join(dir, "driga.lock"), []byte("1\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	return DoctorDeps{ProcessAlive: func(pid int32, _ time.Time) bool { return pid == 1 }, DataDir: dir, Store: st, Config: config.Default(), Home: home, Now: now, LockProbe: func(string) (bool, error) { return true, nil }}, st
 }
 
 func requireCheck(t *testing.T, checks []Check, name, status, fix string) Check {
@@ -199,6 +202,9 @@ func TestDoctorPermissionsAndLockProbe(t *testing.T) {
 	}
 
 	d, _ := doctorFixture(t)
+	if err := os.Remove(filepath.Join(d.DataDir, "driga.lock")); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.Chmod(d.DataDir, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -239,7 +245,7 @@ func TestDoctorCollectorPaths(t *testing.T) {
 		t.Fatal(err)
 	}
 	c := requireCheck(t, Doctor(context.Background(), d), "collector_rss", "ok", "")
-	if c.Detail != "20.0 MB" {
+	if c.Detail != "10.0 MB" {
 		t.Fatal(c)
 	}
 }

@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/labstack/driga/internal/config"
 	"io"
 	"os"
 	"path/filepath"
@@ -114,10 +115,10 @@ func TestHooksInstallUsesUnresolvedExecutable(t *testing.T) {
 func TestHooksConfiguredEndpoint(t *testing.T) {
 
 	g, out := initFixture(t, "y\n")
-	if err := os.MkdirAll(filepath.Dir(os.Getenv("DRIGA_CONFIG")), 0700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(config.Path()), 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(os.Getenv("DRIGA_CONFIG"), []byte("[intake]\nlisten = \"127.0.0.1:8743\"\n"), 0600); err != nil {
+	if err := os.WriteFile(config.Path(), []byte("[intake]\nlisten = \"127.0.0.1:8743\"\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	err := (HooksInstallCmd{HooksOptions: HooksOptions{Agent: "all", OTLP: true, DryRun: true}}).Run(g)

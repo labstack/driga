@@ -38,6 +38,9 @@ func readEnv(t *testing.T) {
 	t.Setenv("DRIGA_DATA_DIR", filepath.Join(home, "data"))
 	t.Setenv("DRIGA_SPOOL_DIR", filepath.Join(home, "spool"))
 	t.Setenv("DRIGA_CONFIG", filepath.Join(home, "config.toml"))
+	if err := os.WriteFile(config.Path(), nil, 0600); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func readDB(t *testing.T, seed func(*store.Tx) error) *store.Store {

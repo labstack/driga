@@ -175,6 +175,35 @@ func ClaudeInstall(settingsPath, driga string, dryRun bool, now time.Time) (Diff
 	if err != nil {
 		return d, err
 	}
+	// Ownership permits repair, but does not mean the executable is current.
+	for _, value := range h {
+		groups, _ := value.([]any)
+		for _, value := range groups {
+			group, _ := value.(map[string]any)
+			entries, _ := group["hooks"].([]any)
+			for _, value := range entries {
+				if !isClaudeHook(value, driga) {
+					continue
+				}
+				entry := value.(map[string]any)
+				command, _ := entry["command"].(string)
+				if runtime.GOOS == "windows" && entry["args"] != nil {
+					if !sameBinary(command, driga) {
+						entry["command"] = driga
+						d.Changed = true
+					}
+				} else if program, rest, ok := hookProgram(command); ok && !sameBinary(program, driga) {
+					// Retain the event, matcher and any extra entry settings.
+					prefix, err := hookCommand(driga, "claude", "", runtime.GOOS)
+					if err != nil {
+						return d, err
+					}
+					entry["command"] = strings.TrimSuffix(prefix, " hook claude ") + rest
+					d.Changed = true
+				}
+			}
+		}
+	}
 	for _, event := range claudeEvents {
 		var groups []any
 		if value, exists := h[event]; exists {
@@ -285,6 +314,59 @@ func ClaudeStatus(settingsPath string) (installed []string, err error) {
 	}
 	sort.Strings(installed)
 	return installed, nil
+}
+
+// ClaudeStale reports owned entries pointing at a missing or different binary.
+func ClaudeStale(path, driga string) (bool, error) {
+	_, settings, err := readClaude(path)
+	if err != nil {
+		return false, err
+	}
+	h, err := claudeHooks(settings)
+	if err != nil {
+		return false, err
+	}
+	for _, value := range h {
+		groups, _ := value.([]any)
+		for _, value := range groups {
+			group, _ := value.(map[string]any)
+			entries, _ := group["hooks"].([]any)
+			for _, value := range entries {
+				if !isClaudeHook(value, driga) {
+					continue
+				}
+				entry := value.(map[string]any)
+				command, _ := entry["command"].(string)
+				program := command
+				if runtime.GOOS != "windows" || entry["args"] == nil {
+					program, _, _ = hookProgram(command)
+				}
+				if !binaryCurrent(program, driga) {
+					return true, nil
+				}
+			}
+		}
+	}
+	return false, nil
+}
+
+// sameBinary follows symlinks and also recognizes hard links. Exact paths stay
+// idempotent during preview even when an executable is not available yet.
+func sameBinary(a, b string) bool {
+	if a == b || runtime.GOOS == "windows" && pathx.Equal(a, b) {
+		return true
+	}
+	left, err := os.Stat(a)
+	if err != nil {
+		return false
+	}
+	right, err := os.Stat(b)
+	return err == nil && os.SameFile(left, right)
+}
+
+func binaryCurrent(program, driga string) bool {
+	info, err := os.Stat(program)
+	return err == nil && info.Mode().IsRegular() && sameBinary(program, driga)
 }
 
 func readClaude(path string) (Diff, map[string]any, error) {

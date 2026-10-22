@@ -86,7 +86,7 @@ func TestClaudeInstallIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := hooks.ClaudeInstall(path, testBinary("/new/driga"), false, testNow.Add(time.Second))
+	second, err := hooks.ClaudeInstall(path, testBinary("/old/driga"), false, testNow.Add(time.Second))
 	if err != nil || second.Changed || second.Before != first.After || second.After != first.After {
 		t.Fatalf("repeat = %+v, %v", second, err)
 	}

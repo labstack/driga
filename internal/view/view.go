@@ -78,23 +78,7 @@ func newEnvelopeLocal(r Reader, mode string, now time.Time, intervals Intervals,
 		return e, err
 	}
 	for _, s := range sources {
-		interval := SourceInterval(s.Name, intervals)
-		age := max(time.Duration(0), now.Sub(s.LastOKAt))
-		if s.LastOKAt.IsZero() {
-			age = 0
-		}
-		// A snapshot is fresh by construction, except for a source that has
-		// never succeeded: its data is missing, not current.
-		stale := s.LastOKAt.IsZero() || mode != "snapshot" && age > 3*interval
-		status := ""
-		if s.Name == "otlp" || s.Name == "sockets" {
-			stale = s.LastError != ""
-			status = "last_event"
-			if s.LastOKAt.IsZero() && !stale {
-				status = "not_yet_receiving"
-			}
-		}
-		e.Freshness[s.Name] = Fresh{LastOKAt: s.LastOKAt, AgeMS: age.Milliseconds(), Stale: stale, LastError: s.LastError, Status: status}
+		e.Freshness[s.Name] = SourceFreshness(s, mode, now, intervals)
 	}
 	gaps, err := r.Gaps(now.Add(-24 * time.Hour))
 	if err != nil {
@@ -102,6 +86,26 @@ func newEnvelopeLocal(r Reader, mode string, now time.Time, intervals Intervals,
 	}
 	e.CoverageGaps = nonNil(gaps)
 	return e, nil
+}
+
+// SourceFreshness defines polling deadlines and event-driven source health for
+// every view and diagnostic. Quiet event sources have no polling deadline.
+func SourceFreshness(s model.SourceStatus, mode string, now time.Time, intervals Intervals) Fresh {
+	interval := SourceInterval(s.Name, intervals)
+	age := max(time.Duration(0), now.Sub(s.LastOKAt))
+	if s.LastOKAt.IsZero() {
+		age = 0
+	}
+	stale := s.LastOKAt.IsZero() || mode != "snapshot" && age > 3*interval
+	status := ""
+	if s.Name == "otlp" || s.Name == "sockets" {
+		stale = s.LastError != ""
+		status = "last_event"
+		if s.LastOKAt.IsZero() && !stale {
+			status = "not_yet_receiving"
+		}
+	}
+	return Fresh{LastOKAt: s.LastOKAt, AgeMS: age.Milliseconds(), Stale: stale, LastError: s.LastError, Status: status}
 }
 
 // Filter scopes a view to a canonical repo path and an optional time window.

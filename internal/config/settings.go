@@ -287,8 +287,13 @@ func load(path string, overrides map[string]any) (Config, map[string]string, err
 		}
 	}
 	b, err := os.ReadFile(path)
-	if err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return c, sources, err
+	if err != nil {
+		if os.Getenv("DRIGA_CONFIG") != "" && path == Path() {
+			return c, sources, fmt.Errorf("load DRIGA_CONFIG: %w", err)
+		}
+		if !errors.Is(err, fs.ErrNotExist) {
+			return c, sources, err
+		}
 	}
 	if err == nil {
 		var values map[string]any

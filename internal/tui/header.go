@@ -269,6 +269,9 @@ func (m *app) confirmationText() string {
 	return wrapText(strings.Join(lines, "\n"), m.width)
 }
 func (m *app) View() tea.View {
+	if m.width <= 0 {
+		return tea.NewView("")
+	}
 	body := m.table.View()
 	if m.tab == 4 {
 		body = m.machineTable(body)
@@ -300,7 +303,7 @@ func (m *app) View() tea.View {
 		body = m.viewport.View()
 	}
 	if m.help {
-		body = wrapText("0 Home · 1–7 tabs · ↑/↓ or j/k move · enter detail · esc back\n7 Flow · j/k session · enter jump · [/] family · -/+ zoom · tab needs · C resume · c Chat\nm cycle machine scope · / filter · enter apply · esc clear · s sort: state, age, mem, project · S summarize selected project\ng group by project · →/← expand/collapse families and worktrees\nx/space acknowledge Needs you / Inbox · X acknowledge all Inbox (confirm)\nclick select · click selected row to open · wheel scroll\npgup/pgdown scroll Home · k kill orphan (confirm) · K force (two confirmations)\no open terminal · ? close help · q / ctrl+c quit", m.width)
+		body = wrapText("0 Home · 1–8 tabs · ↑/↓ or j/k move · enter detail · esc back\n7 Flow · 8 Chat · j/k session · enter jump · [/] family · -/+ zoom · tab needs · C resume · c Chat\nm cycle machine scope · / filter · enter apply · esc clear · s sort: state, age, mem, project · S summarize selected project\ng group by project · →/← expand/collapse families and worktrees\nx/space acknowledge Needs you / Inbox · X acknowledge all Inbox (confirm)\nclick select · click selected row to open · wheel scroll\npgup/pgdown scroll Home · k kill orphan (confirm) · K force (two confirmations)\no open terminal · ? close help · q / ctrl+c quit", m.width)
 		if m.tmuxTarget() != "" {
 			body += "\na attach tmux"
 		}

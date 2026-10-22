@@ -140,6 +140,10 @@ func run(args []string, version string, stdin io.Reader, stdout, stderr io.Write
 			if strings.Contains(err.Error(), "--json is not supported") {
 				name = "unsupported_output"
 			}
+			var missing notFoundError
+			if errors.As(err, &missing) {
+				name = "not_found"
+			}
 			_ = json.NewEncoder(stdout).Encode(map[string]any{"schema": 2, "error": map[string]string{"code": name, "message": scrub.Scrub(err.Error())}})
 		}
 	}
@@ -148,6 +152,7 @@ func run(args []string, version string, stdin io.Reader, stdout, stderr io.Write
 		kong.Name("driga"),
 		kong.Description("Watch every AI coding agent session on this machine."),
 		kong.Writers(stdout, stderr),
+		kong.Help(commandHelp),
 		kong.Exit(func(code int) { exit = code; panic(exitPanic{}) }),
 		kong.Bind(&root.Globals),
 	)
@@ -209,7 +214,7 @@ func supportsJSON(command string) bool {
 	case "inbox", "orphans", "machine":
 		return len(words) < 2 || words[1] == "list" || words[1] == "show"
 	case "config":
-		return len(words) > 1 && (words[1] == "path" || words[1] == "show")
+		return len(words) > 1 && words[1] == "path"
 	case "fleet":
 		return len(words) > 1 && (words[1] == "id" || words[1] == "status" || words[1] == "viewers" || words[1] == "peers" || words[1] == "add")
 	}
@@ -220,3 +225,25 @@ type usageError struct{ error }
 
 func (usageError) ExitCode() int                    { return 2 }
 func invalidUsage(format string, args ...any) error { return usageError{fmt.Errorf(format, args...)} }
+
+// commandHelp keeps global parsing compatible while showing only supported output.
+func commandHelp(options kong.HelpOptions, ctx *kong.Context) error {
+	selected := ctx.Selected()
+	if selected == nil || supportsJSON(ctx.Command()) {
+		return kong.DefaultHelpPrinter(options, ctx)
+	}
+	for _, flag := range ctx.Model.Flags {
+		if flag.Name == "json" {
+			hidden := flag.Hidden
+			flag.Hidden = true
+			defer func() { flag.Hidden = hidden }()
+		}
+	}
+	return kong.DefaultHelpPrinter(options, ctx)
+}
+
+type notFoundError struct{ error }
+
+func missingAgent(id int64) error {
+	return notFoundError{fmt.Errorf("agent %d not found; list ids with driga agents", id)}
+}

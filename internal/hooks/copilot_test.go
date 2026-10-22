@@ -85,7 +85,7 @@ func TestCopilotOwnedFile(t *testing.T) {
 		t.Fatal(status, err)
 	}
 	status, err = hooks.CopilotStatus(path, "/new/driga")
-	if err != nil || status != "installed" {
+	if err != nil || status != "stale" {
 		t.Fatal(status, err)
 	}
 	d, err = hooks.CopilotUninstall(path, true)
@@ -181,7 +181,11 @@ func TestCopilotStatusOwnership(t *testing.T) {
 		if _, err := hooks.CopilotInstall(path, binary, false, time.Now()); err != nil {
 			t.Fatal(err)
 		}
-		got, err := hooks.CopilotStatus(path, "/different/driga")
+		current := binary
+		if tc.name == "other" {
+			current = "/different/driga"
+		}
+		got, err := hooks.CopilotStatus(path, current)
 		if err != nil || got != tc.want {
 			t.Fatal(tc, got, err)
 		}
@@ -202,7 +206,7 @@ func TestCopilotStatusDoesNotCallConfigurationDriftStale(t *testing.T) {
 		if err := os.WriteFile(path, tc.body, 0600); err != nil {
 			t.Fatal(err)
 		}
-		if got, err := hooks.CopilotStatus(path, "/another/driga"); err != nil || got != tc.want {
+		if got, err := hooks.CopilotStatus(path, binary); err != nil || got != tc.want {
 			t.Fatal(string(tc.body), got, err)
 		}
 	}

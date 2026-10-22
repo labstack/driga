@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -29,6 +30,7 @@ import (
 	"github.com/labstack/driga/internal/service"
 	"github.com/labstack/driga/internal/signatures"
 	"github.com/labstack/driga/internal/store"
+	"github.com/labstack/driga/internal/view"
 )
 
 // Check is an actionable setup or collection diagnostic.
@@ -60,6 +62,7 @@ type DoctorDeps struct {
 	CodexHome          string // Optional override; defaults to Home/.codex.
 	CopilotHome        string // Optional override; defaults to Home/.copilot.
 	Now                time.Time
+	ProcessAlive       func(int32, time.Time) bool // Optional PID/start validation for fixtures.
 	LockProbe          func(dataDir string) (held bool, err error)
 	NotifierLookup     func() string          // Optional cached notifier lookup for fixtures.
 	ServiceState       func() (string, error) // Windows Task Scheduler, read-only.
@@ -134,27 +137,26 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 			if source.Name == "otlp" {
 				continue
 			} // Event-driven intake has no polling freshness deadline.
-			interval := intervals.Procs
-			switch source.Name {
-			case "git":
-				interval = intervals.Git
-			case "machine":
-				interval = intervals.Machine
-			case "cwds":
-				interval = intervals.Cwds
-			}
-			age := d.Now.Sub(source.LastOKAt)
+			fresh := view.SourceFreshness(source, "daemon", d.Now, intervals)
+			age := time.Duration(fresh.AgeMS) * time.Millisecond
 			status, fix := "ok", ""
 			detail := "last success " + age.Round(time.Second).String() + " ago"
+			if fresh.Status == "last_event" {
+				detail = "last event " + age.Round(time.Second).String() + " ago"
+			}
 			if source.LastOKAt.IsZero() {
 				detail = "no successful collection"
 			}
-			if source.LastOKAt.IsZero() || age < 0 || age > 3*interval || source.LastErrorAt.After(source.LastOKAt) {
+			if fresh.Status == "not_yet_receiving" {
+				detail = "not yet receiving events"
+			}
+			if fresh.Stale || fresh.Status == "" && (source.LastOKAt.After(d.Now) || source.LastErrorAt.After(source.LastOKAt)) {
 				status, fix = "warn", "driga service restart"
 			}
 			if source.LastError != "" {
 				detail += "; last error: " + source.LastError
 			}
+
 			add("source:"+source.Name, status, detail, fix)
 		}
 		procs, err := d.Store.Procs()
@@ -180,19 +182,33 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 			// also counts clean, shared code pages and swings with each GC.
 			var rss, footprint, budget uint64
 			found, measured := false, false
-			for _, p := range procs {
-				if isCollectorProc(p) {
-					rss += p.RSS
-					if p.Footprint > 0 {
-						footprint += p.Footprint
-						budget += p.Footprint
-						measured = true
-					} else {
-						budget += p.RSS
-					}
-					found = true
-				}
+			owner, _ := os.ReadFile(filepath.Join(d.DataDir, "driga.lock"))
+			ownerPID, _ := strconv.ParseInt(strings.TrimSpace(string(owner)), 10, 32)
+			alive := d.ProcessAlive
+			if alive == nil {
+				alive = platform.New().Alive
 			}
+			others := 0
+			for _, p := range procs {
+				if !isCollectorProc(p) {
+					continue
+				}
+				if !held || p.PID <= 0 || int64(p.PID) != ownerPID || !alive(p.PID, p.StartTime) {
+					others++
+					continue
+				}
+				rss = p.RSS
+				if p.Footprint > 0 {
+					footprint, budget, measured = p.Footprint, p.Footprint, true
+				} else {
+					budget = p.RSS
+				}
+				found = true
+			}
+			if others > 0 {
+				add("other_collectors", "info", fmt.Sprintf("%d other collector processes; excluded from this data directory's memory budget", others), "")
+			}
+
 			status, fix, detail := "ok", "", fmt.Sprintf("%.1f MB", float64(rss)/1e6)
 			if measured {
 				detail = fmt.Sprintf("%.1f MB footprint (RSS %.1f MB)", float64(footprint)/1e6, float64(rss)/1e6)
@@ -246,18 +262,17 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 				}
 			}
 			exe, err := os.Executable()
-			status := "missing"
+			status, detail := "fail", ""
 			if err == nil {
-				status, err = hooks.CopilotStatus(hooks.CopilotPath(d.Home, d.CopilotHome), stablePath(exe))
+				status, detail, err = hookStatus("copilot", hooks.CopilotPath(d.Home, d.CopilotHome), stablePath(exe))
 			}
 			fix := "driga hooks install copilot"
 			if err != nil {
-				add("hooks:copilot", "fail", err.Error(), fix)
-			} else if status == "installed" {
-				add("hooks:copilot", "ok", "installed", "")
-			} else {
-				add("hooks:copilot", "warn", status+"; without hooks, process-level sessions have unknown state", fix)
+				detail = err.Error()
+			} else if status == "ok" {
+				fix = ""
 			}
+			add("hooks:copilot", status, detail, fix)
 			continue
 		}
 		switch name {
@@ -301,29 +316,27 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 				add("version:"+name, "fail", err.Error(), "check database access")
 			}
 		}
-		switch name {
-		case "claude":
-			claudeHome := filepath.Join(d.Home, ".claude")
-			if goos == "windows" && os.Getenv("CLAUDE_CONFIG_DIR") != "" {
-				claudeHome = os.Getenv("CLAUDE_CONFIG_DIR")
+		if name == "claude" || name == "codex" {
+			path := filepath.Join(codexHome, "config.toml")
+			if name == "claude" {
+				claudeHome := filepath.Join(d.Home, ".claude")
+				if goos == "windows" && os.Getenv("CLAUDE_CONFIG_DIR") != "" {
+					claudeHome = os.Getenv("CLAUDE_CONFIG_DIR")
+				}
+				path = filepath.Join(claudeHome, "settings.json")
 			}
-			events, err := hooks.ClaudeStatus(filepath.Join(claudeHome, "settings.json"))
+			exe, err := os.Executable()
+			status, detail := "fail", ""
+			if err == nil {
+				status, detail, err = hookStatus(name, path, stablePath(exe))
+			}
+			fix := "driga hooks install " + name
 			if err != nil {
-				add("hooks:claude", "fail", err.Error(), "driga hooks install --agent claude")
-			} else if len(events) < 4 {
-				add("hooks:claude", "warn", "optional hooks incomplete or absent", "driga hooks install --agent claude")
-			} else {
-				add("hooks:claude", "ok", strings.Join(events, ", "), "")
+				detail = err.Error()
+			} else if status == "ok" {
+				fix = ""
 			}
-		case "codex":
-			diff, err := hooks.CodexUninstall(filepath.Join(codexHome, "config.toml"), true)
-			if err != nil {
-				add("hooks:codex", "fail", err.Error(), "driga hooks install --agent codex")
-			} else if !diff.Changed {
-				add("hooks:codex", "warn", "optional notify hook absent; rollout tailing remains available", "driga hooks install --agent codex")
-			} else {
-				add("hooks:codex", "ok", "notify installed", "")
-			}
+			add("hooks:"+name, status, detail, fix)
 		}
 	}
 	info, err := os.Stat(d.DataDir)
