@@ -71,8 +71,10 @@ func TestUsageDocumentsTabsAndInboxConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Windows checkouts may convert the docs to CRLF line endings.
+	doc := strings.ReplaceAll(string(b), "\r\n", "\n")
 	for _, want := range []string{"`0`–`8`", "Flow, Chat", "$XDG_CONFIG_HOME/driga/config.toml", "[inbox]\nalerts = \"off\"", "`inbox.alert_after`", "`inbox.alert_repeat`"} {
-		if !strings.Contains(string(b), want) {
+		if !strings.Contains(doc, want) {
 			t.Errorf("usage missing %s", want)
 		}
 	}
