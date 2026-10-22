@@ -372,11 +372,24 @@ func inboxLocal(r Reader, f Filter, now time.Time) (InboxView, error) {
 		if f.CaptureText != "" {
 			item = inbox.Policy(item, f.CaptureText)
 		}
-		s := byID[item.SessionID]
+		s, known := byID[item.SessionID]
+		historical := item.Kind == "waiting" && (item.EndedAt != nil || item.AckedAt != nil || !known || (s.EndedAt != nil || s.Label != "waiting" || len(visibleSessions([]model.Session{s}, false, now)) == 0))
+		if !f.All {
+			if historical {
+				continue
+			}
+			since := f.Since
+			if since.IsZero() {
+				since = now.Add(-24 * time.Hour)
+			}
+			if item.Kind == "finished" && item.TS.Before(since) {
+				continue
+			}
+		}
 		if f.Project != "" && !sessionProject(s, repos, f.Project) {
 			continue
 		}
-		v.Rows = append(v.Rows, InboxRow{MachineID: r.MachineID(), InboxItem: item, Age: max(0, now.Sub(item.TS)), Waited: inbox.Waited(item, now), Project: projectName(s, repos), Adapter: s.Adapter, Title: s.Title, Branch: s.Branch})
+		v.Rows = append(v.Rows, InboxRow{Historical: historical, MachineID: r.MachineID(), InboxItem: item, Age: max(0, now.Sub(item.TS)), Waited: inbox.Waited(item, now), Project: projectName(s, repos), Adapter: s.Adapter, Title: s.Title, Branch: s.Branch})
 	}
 	return v, nil
 }
@@ -484,7 +497,7 @@ func orphansLocal(r Reader, f Filter, now time.Time) (OrphansView, error) {
 
 // machineLocal reads existing snapshots; app ranking never triggers a host scan.
 func machineLocal(r Reader, f Filter, now time.Time) (MachineView, error) {
-	v := MachineView{MachineID: r.MachineID(), Memory: []MemoryRow{}}
+	v := MachineView{MachineID: r.MachineID(), Memory: []MemoryRow{}, Full: f.Full}
 	sample, err := r.LatestSample()
 	if err != nil && !errors.Is(err, store.ErrNotFound) {
 		return v, err
@@ -515,7 +528,15 @@ func machineLocal(r Reader, f Filter, now time.Time) (MachineView, error) {
 	v.MCPServers = derive.MCPServers(procs, nil, now)
 	buildAgentShare(&v, procs, ss, placements)
 	trends := derive.NewMCPTrendBuilder()
-	if err := r.ScanMCPMinutes(now, func(s model.MCPMinute) error { trends.Add(s); return nil }); err != nil {
+	scan := func(s model.MCPMinute) error { trends.Add(s); return nil }
+	var trendErr error
+	if f.Full {
+		trendErr = r.ScanMCPMinutes(now, scan)
+	} else {
+		v.TrendSince = now.Truncate(time.Minute).Add(-24 * time.Hour)
+		trendErr = r.ScanMCPMinutesSince(v.TrendSince, now, scan)
+	}
+	if err := trendErr; err != nil {
 		return v, err
 	}
 	derive.ApplyMCPTrends(&v.MCPServers, trends.Trends())
@@ -558,6 +579,9 @@ func machineLocal(r Reader, f Filter, now time.Time) (MachineView, error) {
 		}
 		return a.Role < b.Role
 	})
+	if !f.Full {
+		compactMachine(&v)
+	}
 	return v, nil
 }
 
@@ -585,16 +609,11 @@ func summaryLocal(r Reader, f Filter, now time.Time) (SummaryView, error) {
 		}
 	}
 	count(agents.Rows)
-	inbox, err := inboxLocal(r, f, now)
-	if err != nil {
+	sample, err := r.LatestSample()
+	if err != nil && !errors.Is(err, store.ErrNotFound) {
 		return v, err
 	}
-	v.Inbox = len(inbox.Rows)
-	machine, err := machineLocal(r, f, now)
-	if err != nil {
-		return v, err
-	}
-	v.Sample = machine.Sample
+	v.Sample = sample
 	orphans, err := orphansLocal(r, f, now)
 	if err != nil {
 		return v, err

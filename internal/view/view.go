@@ -33,6 +33,7 @@ type Reader interface {
 	EventCounts(time.Time, time.Time) ([]store.EventCount, error)
 	ObservationMinutes(int64, time.Time) ([]store.ObservationMinute, error)
 	ScanMCPMinutes(time.Time, func(model.MCPMinute) error) error
+	ScanMCPMinutesSince(time.Time, time.Time, func(model.MCPMinute) error) error
 	Sources() ([]model.SourceStatus, error)
 	Gaps(time.Time) ([]model.Gap, error)
 }
@@ -105,6 +106,7 @@ func newEnvelopeLocal(r Reader, mode string, now time.Time, intervals Intervals,
 
 // Filter scopes a view to a canonical repo path and an optional time window.
 type Filter struct {
+	Full        bool
 	FlowMinutes int
 	CaptureText string
 	Scope       store.Scope
@@ -236,6 +238,7 @@ type WhereView struct {
 
 // InboxRow is an event with its project and age.
 type InboxRow struct {
+	Historical bool `json:"historical,omitempty"`
 	MachineFresh
 	MachineID string `json:"machine_id"`
 	model.InboxItem
@@ -289,16 +292,21 @@ type MemoryRow struct {
 
 // MachineView contains host totals, whole-machine app rankings, and agent role totals.
 type MachineView struct {
-	AgentShare     AgentShare    `json:"agent_share"`
-	SessionCosts   []SessionCost `json:"session_costs"`
-	AgentNoSession []MachineApp  `json:"agent_processes_without_session"`
-	LikelyAgent    []MachineApp  `json:"likely_agent_work"`
-	OtherApps      MachineApp    `json:"other_apps"`
+	Full       bool      `json:"full,omitempty"`
+	Truncated  bool      `json:"truncated,omitempty"`
+	TrendSince time.Time `json:"trend_since,omitzero"`
+	// Machines serves human fleet views; the wire includes only additional hosts.
+	AdditionalMachines []MachineView `json:"machines,omitempty"`
+	AgentShare         AgentShare    `json:"agent_share"`
+	SessionCosts       []SessionCost `json:"session_costs"`
+	AgentNoSession     []MachineApp  `json:"agent_processes_without_session"`
+	LikelyAgent        []MachineApp  `json:"likely_agent_work"`
+	OtherApps          MachineApp    `json:"other_apps"`
 	MachineFresh
 	MCPServers derive.MCPServerView `json:"mcp_servers"`
 	TopMemory  []MachineApp         `json:"top_memory"`
 	TopCPU     []MachineApp         `json:"top_cpu"`
-	Machines   []MachineView        `json:"machines,omitempty"`
+	Machines   []MachineView        `json:"-"`
 	MachineID  string               `json:"machine_id"`
 	Sample     model.MachineSample  `json:"sample"`
 	Memory     []MemoryRow          `json:"memory"`

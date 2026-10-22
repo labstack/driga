@@ -307,6 +307,9 @@ func (m *app) rebuild() {
 			if r.Kind == "waiting" {
 				reason = "[" + reason + "]"
 			}
+			if r.Historical {
+				reason = "historical wait"
+			}
 			age := r.Age
 			if r.Kind == "waiting" {
 				age = inbox.Waited(item, m.opts.Now())

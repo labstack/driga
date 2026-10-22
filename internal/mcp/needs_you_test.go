@@ -15,10 +15,18 @@ func TestNeedsYouCLIAndMCPContract(t *testing.T) {
 	st, id := fixture(t)
 	at := time.Date(2031, 1, 1, 0, 0, 0, 0, time.UTC)
 	if err := st.Tx(context.Background(), func(tx *store.Tx) error {
+		session, err := tx.Session(id)
+		if err != nil {
+			return err
+		}
+		session.Label = "waiting"
+		if _, err := tx.UpsertSession(session); err != nil {
+			return err
+		}
 		if err := tx.UpsertInboxItem(model.InboxItem{ID: "needs-new", SessionID: id, Kind: "waiting", Reason: "question", Tool: "AskUserQuestion", Detail: "private pending command", Summary: "private pending command", TS: at, WaitingSinceAt: at, Source: "hook"}); err != nil {
 			return err
 		}
-		sid, err := tx.UpsertSession(model.Session{SessionObs: model.SessionObs{Adapter: "claude", ExternalID: "old-wait"}})
+		sid, err := tx.UpsertSession(model.Session{SessionObs: model.SessionObs{Adapter: "claude", ExternalID: "old-wait"}, Label: "waiting"})
 		if err != nil {
 			return err
 		}

@@ -11,6 +11,7 @@ import (
 
 func TestNeedsYouInboxJumpAndHeader(t *testing.T) {
 	f := fixture()
+	f.snap.Agents.Rows[0].Label = "waiting"
 	f.snap.Inbox.Rows[0].Reason = "permission"
 	f.snap.Inbox.Rows[0].Tool = "Bash"
 	f.snap.Inbox.Rows[0].WaitingSinceAt = f.snap.ObservedAt.Add(-time.Minute)

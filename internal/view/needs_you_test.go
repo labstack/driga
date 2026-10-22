@@ -11,6 +11,11 @@ import (
 
 func TestNeedsYouSharedOrderingAndDuration(t *testing.T) {
 	st := fixture(t, func(tx *store.Tx) error {
+		for _, id := range []string{"old", "new"} {
+			if _, err := tx.UpsertSession(model.Session{SessionObs: model.SessionObs{Adapter: "claude", ExternalID: id}, Label: "waiting"}); err != nil {
+				return err
+			}
+		}
 		for _, i := range []model.InboxItem{{ID: "done", Kind: "finished", TS: testNow}, {ID: "new", SessionID: 2, Kind: "waiting", Reason: "question", WaitingSinceAt: testNow.Add(-time.Minute), TS: testNow.Add(-time.Minute)}, {ID: "old", SessionID: 1, Kind: "waiting", Reason: "permission", WaitingSinceAt: testNow.Add(-time.Hour), TS: testNow.Add(-time.Hour)}} {
 			if err := tx.UpsertInboxItem(i); err != nil {
 				return err

@@ -25,7 +25,7 @@ func (tx *Tx) SetIntakeState(id int64, s IntakeState) error {
 	return tx.exec("UPDATE sessions SET last_decision_at=?,last_api_request_at=?,last_api_error=? WHERE machine_id=? AND id=?", unix(s.LastDecision), unix(s.LastAPIRequest), s.LastAPIError, tx.machineID, id)
 }
 
-// CloseAttentionBefore closes older waiting requests after an explicit user signal.
+// CloseAttentionBefore closes older waits after an explicit user or completion signal.
 func (tx *Tx) CloseAttentionBefore(sessionID int64, at time.Time) error {
 	return tx.exec(`UPDATE inbox_items SET ended_at=? WHERE machine_id=? AND session_id=?
 	AND kind='waiting' AND waiting_since_at<? AND acked_at IS NULL AND ended_at IS NULL`, unix(at), tx.machineID, sessionID, unix(at))

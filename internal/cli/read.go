@@ -58,7 +58,7 @@ type InboxCmd struct {
 
 // InboxListCmd lists active attention and completions, optionally including history.
 type InboxListCmd struct {
-	All bool `help:"Include acknowledged and automatically ended events."`
+	All bool `help:"Show all history, including acknowledged and ended events (default: current waits and up to 50 completions from 24h)."`
 }
 
 // ConflictsCmd shows current collisions separately from recent overlap.
@@ -80,7 +80,9 @@ type MachineCmd struct {
 }
 
 // MachineShowCmd shows health and top agent memory users.
-type MachineShowCmd struct{}
+type MachineShowCmd struct {
+	Full bool `help:"Show all retained MCP trends and full process detail."`
+}
 
 // Run renders the summary.
 func (SummaryCmd) Run(g *Globals) error {
@@ -146,8 +148,8 @@ func (OrphansListCmd) Run(g *Globals) error {
 }
 
 // Run renders machine health.
-func (MachineShowCmd) Run(g *Globals) error {
-	return runRead(g, view.Filter{}, "", func(r view.Reader, f view.Filter, now time.Time) (any, error) { return view.Machine(r, f, now) })
+func (c MachineShowCmd) Run(g *Globals) error {
+	return runRead(g, view.Filter{Full: c.Full}, "", func(r view.Reader, f view.Filter, now time.Time) (any, error) { return view.Machine(r, f, now) })
 }
 
 type readBuilder func(view.Reader, view.Filter, time.Time) (any, error)

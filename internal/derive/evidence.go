@@ -20,7 +20,7 @@ func LabelWithEvidence(in StateInput, now time.Time, th Thresholds) model.StateM
 	}
 	// Retain only inputs the label table consumes: no prompt text, paths or
 	// process command lines. These travel with the verdict, including in feeds.
-	in.Obs = model.SessionObs{Adapter: in.Obs.Adapter, PID: in.Obs.PID, RegistryStatus: in.Obs.RegistryStatus, LastActivityAt: in.Obs.LastActivityAt, StartedAt: in.Obs.StartedAt, Hosted: in.Obs.Hosted, TurnOpen: in.Obs.TurnOpen}
+	in.Obs = model.SessionObs{Adapter: in.Obs.Adapter, PID: in.Obs.PID, RegistryStatus: in.Obs.RegistryStatus, RegistryUpdatedAt: in.Obs.RegistryUpdatedAt, LastActivityAt: in.Obs.LastActivityAt, StartedAt: in.Obs.StartedAt, Hosted: in.Obs.Hosted, TurnOpen: in.Obs.TurnOpen}
 	if in.Proc != nil {
 		in.Proc = &model.Proc{PID: in.Proc.PID, CPUPercent: in.Proc.CPUPercent}
 	}
@@ -43,7 +43,11 @@ func LabelWithEvidence(in StateInput, now time.Time, th Thresholds) model.StateM
 		}
 		m.Rows = append(m.Rows, row)
 	}
-	add("registry", in.Obs.RegistryStatus, in.Obs.LastActivityAt, in.Obs.RegistryStatus != "")
+	registryAt := in.Obs.RegistryUpdatedAt
+	if registryAt.IsZero() {
+		registryAt = in.Obs.LastActivityAt
+	}
+	add("registry", in.Obs.RegistryStatus, registryAt, in.Obs.RegistryStatus != "")
 	hookAt := time.Time{}
 	hookName := "unavailable"
 	for _, v := range []struct {

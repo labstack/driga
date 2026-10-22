@@ -96,7 +96,9 @@ func (m *app) header() string {
 				rows = append(rows, i)
 			}
 		}
-		identityParts = append(identityParts, view.WaitingHeader(rows, m.opts.Now()))
+		var agents []view.AgentRow
+		m.eachAgent(func(a view.AgentRow) { a.Children = nil; agents = append(agents, a) })
+		identityParts = append(identityParts, view.AgentWaitingHeader(rows, agents, m.opts.Now()))
 	}
 	if state, _ := m.intake(); state != "" {
 		identityParts = append(identityParts, "intake · "+view.TokenStyle(map[string]string{"receiving": "working", "waiting": "muted", "attention": "warn"}[state], m.opts.NoColor).Render(state))

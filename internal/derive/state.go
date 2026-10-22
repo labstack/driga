@@ -92,16 +92,13 @@ func label(in StateInput, now time.Time, th Thresholds) (label string, heuristic
 		return "unknown", false, "no recognized Copilot hook state"
 	case "claude":
 		cleared := in.LastUserPrompt
-		for _, ts := range []*time.Time{in.LastDecision, in.LastToolResult} {
+		for _, ts := range []*time.Time{in.LastDecision, in.LastToolResult, in.LastStop} {
 			if ts != nil && ts.After(cleared) {
 				cleared = *ts
 			}
 		}
-		if in.LastNotification != nil && in.LastNotification.After(in.Obs.LastActivityAt) && in.LastNotification.After(cleared) {
-			return "waiting", false, "Notification newer than last activity"
-		}
 		finished := in.LastStop != nil && in.LastStop.After(in.LastUserPrompt) && in.Unseen
-		// A dead registry must not look busy. Move its liveness check before
+		// A dead registry must not look waiting or busy. Check liveness before
 		// busy rules, but preserve an unseen Stop as finished even after exit.
 		// Live sessions retain the table's busy-before-Stop rule order.
 		if in.Obs.PID == 0 && in.Obs.RegistryStatus != "" {
@@ -109,6 +106,9 @@ func label(in StateInput, now time.Time, th Thresholds) (label string, heuristic
 				return "finished", false, "unacknowledged Stop newer than last user prompt; process gone"
 			}
 			return "dead", false, "registry present, process gone"
+		}
+		if in.LastNotification != nil && in.LastNotification.After(in.Obs.LastActivityAt) && in.LastNotification.After(cleared) {
+			return "waiting", false, "Notification newer than last activity"
 		}
 		if in.Obs.PID != 0 && in.LastToolResult != nil && !in.LastToolResult.Before(in.Obs.LastActivityAt) && (in.LastStop == nil || in.LastToolResult.After(*in.LastStop)) && now.Sub(*in.LastToolResult) < th.StalledAfter {
 			return "working", false, "OTLP activity " + stateDuration(now.Sub(*in.LastToolResult)) + " ago"
@@ -128,6 +128,9 @@ func label(in StateInput, now time.Time, th Thresholds) (label string, heuristic
 				return "unknown", false, evidence
 			}
 			return "stalled", false, evidence
+		}
+		if in.Obs.PID != 0 && (in.Obs.RegistryStatus == "idle" || in.Obs.RegistryStatus == "shell") && in.LastStop != nil && !in.Obs.RegistryUpdatedAt.Before(*in.LastStop) {
+			return "idle", false, "registry " + in.Obs.RegistryStatus + " newer than Stop"
 		}
 		if finished {
 			return "finished", false, "unacknowledged Stop newer than last user prompt"

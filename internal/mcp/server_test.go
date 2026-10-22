@@ -193,6 +193,7 @@ func canonical(t *testing.T, v any) []byte {
 		switch x := x.(type) {
 		case map[string]any:
 			delete(x, "observed_at")
+			delete(x, "trend_since")
 			if _, flow := x["window_minutes"]; flow {
 				delete(x, "from_at")
 			}

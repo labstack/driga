@@ -953,6 +953,8 @@ func mergeObs(dst *model.SessionObs, src model.SessionObs) {
 	}
 	if src.Adapter == "claude" && src.RegistryStatus != "" {
 		dst.PID, dst.ProcStart, dst.RegistryStatus = src.PID, src.ProcStart, src.RegistryStatus
+		dst.RegistryUpdatedAt = src.RegistryUpdatedAt
+		dst.Hosted = false
 	}
 	if !src.StartedAt.IsZero() {
 		dst.StartedAt = src.StartedAt

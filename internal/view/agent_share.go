@@ -20,13 +20,14 @@ type AgentShare struct {
 	MCPServers    int     `json:"mcp_servers"`
 }
 type SessionCost struct {
-	SessionID   int64            `json:"session_id"`
-	Adapter     string           `json:"adapter"`
-	Project     string           `json:"project"`
-	StartedFrom string           `json:"started_from,omitempty"`
-	Memory      uint64           `json:"memory_bytes"`
-	CPUPercent  float64          `json:"cpu_percent"`
-	Processes   []MachineProcess `json:"processes"`
+	MemoryMeasure string           `json:"memory_measure"`
+	SessionID     int64            `json:"session_id"`
+	Adapter       string           `json:"adapter"`
+	Project       string           `json:"project"`
+	StartedFrom   string           `json:"started_from,omitempty"`
+	Memory        uint64           `json:"memory_bytes"`
+	CPUPercent    float64          `json:"cpu_percent"`
+	Processes     []MachineProcess `json:"processes"`
 }
 
 func mergeMeasure(current, next string) string {
@@ -114,6 +115,7 @@ func buildAgentShare(v *MachineView, procs []model.Proc, sessions []model.Sessio
 				costs[a.SessionID] = c
 			}
 			c.Memory += row.Memory
+			c.MemoryMeasure = mergeMeasure(c.MemoryMeasure, row.MemoryMeasure)
 			c.CPUPercent += p.CPUPercent
 			c.Processes = append(c.Processes, row)
 		case derive.BucketAgent, derive.BucketLikely:

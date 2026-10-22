@@ -7,13 +7,14 @@ driga agents --all                 # include sessions ended within 24 hours
 driga agents --json --project .
 driga agent <id>                   # numeric ID from the agents table or --json
 driga where <project>
-driga inbox                       # unacknowledged events; "inbox list" also works
-driga inbox --all
+driga inbox                       # current waits and recent completions; "inbox list" also works
+driga inbox --all                  # complete history, including acks and ended waits
 driga inbox ack <item-id>          # explicit acknowledgment
 driga conflicts
 driga orphans                     # "orphans list" also works
 driga orphans kill <candidate-id>  # previews the tree and requires y
-driga machine
+driga machine                     # compact report with 24h trends
+driga machine --full              # all retained trends and process detail
 driga machines                     # local + paired machine health
 driga agents --machine vm-1
 driga agents --watch=2s
@@ -58,6 +59,26 @@ Low-disk and sustained critical-memory-pressure warnings open Machine, with
 pressure text naming agents' share and observed growth. Open it directly with
 `driga top --tab machine`. See [machine health](machine-health.md) for rules,
 measurements, JSON fields, and deferred editor integrations.
+
+The default inbox puts current waits first, followed by up to 50 unacknowledged
+completions from the last 24 hours. `--since` selects another completion window;
+`driga inbox --all` removes the default window/count bound and includes acknowledged
+and ended events. Waits for sessions that ended, moved on, or aged out of the
+visible agents are labelled **historical wait** in history. Reading or hiding
+history never acknowledges it. TUI waiting counts use the same visible session
+states as Agents, including waiting sessions without a captured inbox event.
+The web inbox has a **show all history** link and pages of at most 100 rows.
+
+Machine text and JSON default to ten rows per evidence list and three nested
+process/command/install entries per row. MCP trends read only the last 24 hours;
+`trend_since` gives that boundary and `truncated` marks omitted entries. Totals
+still include every sampled process. `driga machine --full` (MCP `get_machine`
+with `full: true`) returns all retained trends and uncapped evidence lists.
+Schema 2 is retained: field types and the envelope are unchanged; the `machines`
+array now contains only additional hosts, because the primary host is already
+reported at the top level. A single-host response omits `machines`. Consumers
+should read the top-level primary report plus any additional `machines` entries.
+Summary reads only the latest health sample and does not build machine trends.
 
 Remote orphans cannot be killed here; run the kill command on their machine.
 Remote inbox acknowledgments require the peer's `--ack` grant; unreachable peers

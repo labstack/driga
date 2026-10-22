@@ -37,7 +37,7 @@ func NeedsYou(inbox []InboxRow, agents []AgentRow, details map[int64]AgentView) 
 	}
 	walk(agents)
 	for _, i := range inbox {
-		if i.AckedAt != nil || i.EndedAt != nil || i.Kind != "waiting" && i.Kind != "finished" && i.Kind != "worker_finished" {
+		if i.Historical || i.AckedAt != nil || i.EndedAt != nil || i.Kind != "waiting" && i.Kind != "finished" && i.Kind != "worker_finished" {
 			continue
 		}
 		key := sessionKey{i.MachineID, i.SessionID}
@@ -128,7 +128,7 @@ func WaitingHeader(rows []InboxRow, now time.Time) string {
 	count := 0
 	var oldest time.Duration
 	for _, i := range rows {
-		if attention.Active(i.InboxItem) {
+		if attention.Active(i.InboxItem) && !i.Historical {
 			count++
 			oldest = max(oldest, attention.Waited(i.InboxItem, now))
 		}
@@ -137,6 +137,42 @@ func WaitingHeader(rows []InboxRow, now time.Time) string {
 		return "0 waiting"
 	}
 	return fmt.Sprintf("%d waiting · oldest %s", count, oldest.Round(time.Second))
+}
+
+// AgentWaitingHeader counts the same visible family rows as Summary and Agents.
+// Inbox timestamps supply duration only; an old generation cannot add a waiter.
+func AgentWaitingHeader(rows []InboxRow, agents []AgentRow, now time.Time) string {
+	waiting := map[sessionKey]time.Time{}
+	var walk func([]AgentRow)
+	walk = func(agents []AgentRow) {
+		for _, a := range agents {
+			if strings.TrimSuffix(strings.TrimPrefix(a.Label, "~"), "?") == "waiting" {
+				waiting[sessionKey{a.MachineID, a.ID}] = a.LastActivityAt
+			}
+			walk(a.Children)
+		}
+	}
+	walk(agents)
+	var oldest time.Duration
+	for _, i := range rows {
+		key := sessionKey{i.MachineID, i.SessionID}
+		if _, ok := waiting[key]; ok && attention.Active(i.InboxItem) && !i.Historical {
+			at := i.WaitingSinceAt
+			if at.IsZero() {
+				at = i.TS
+			}
+			waiting[key] = at
+		}
+	}
+	for _, at := range waiting {
+		if !at.IsZero() {
+			oldest = max(oldest, now.Sub(at))
+		}
+	}
+	if len(waiting) == 0 {
+		return "0 waiting"
+	}
+	return fmt.Sprintf("%d waiting · oldest %s", len(waiting), oldest.Round(time.Second))
 }
 
 // StateCount aggregates heuristic and confirmed labels in a fixed display order.

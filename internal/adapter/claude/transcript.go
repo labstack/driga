@@ -98,7 +98,8 @@ func readTranscriptIdentity(ctx context.Context, path string, o *model.SessionOb
 		if json.Unmarshal(line, &e) != nil {
 			return
 		}
-		if e.SessionID != "" {
+		// Registry ownership must survive old identities retained in a resumed log.
+		if e.SessionID != "" && o.RegistryStatus == "" {
 			o.ExternalID = e.SessionID
 		}
 		if e.Cwd != "" {

@@ -46,6 +46,7 @@ type pageData struct {
 	Needs                                        []view.Attention
 	NeedsMore                                    int
 	InboxWaiting, InboxRecent                    []view.InboxRow
+	InboxPrevious, InboxNext                     string
 	All                                          bool
 	StaleSources, StaleDetails, PendingSources   string
 	States                                       []view.StateCount
@@ -110,7 +111,7 @@ func (s *Server) loadPage(r *http.Request) (pageData, int, error) {
 	q := r.URL.Query()
 	refresh, _ := url.Parse(p.RefreshURL)
 	values := refresh.Query()
-	for _, key := range []string{"state", "project", "why", "id"} {
+	for _, key := range []string{"state", "project", "why", "id", "page"} {
 		if q.Has(key) {
 			values.Set(key, q.Get(key))
 		}
@@ -247,6 +248,28 @@ func (s *Server) loadPage(r *http.Request) (pageData, int, error) {
 			}
 		}
 	}
+	if p.Page == "/inbox" {
+		const pageSize = 100
+		page := 1
+		if q.Has("page") {
+			var err error
+			page, err = strconv.Atoi(q.Get("page"))
+			if err != nil || page < 1 {
+				return p, 400, fmt.Errorf("page must be a positive integer")
+			}
+		}
+		// Clamp before multiplying so untrusted page numbers cannot overflow.
+		page = min(page, max(1, (len(p.Inbox.Rows)+pageSize-1)/pageSize))
+		start := (page - 1) * pageSize
+		end := min(start+pageSize, len(p.Inbox.Rows))
+		if start > 0 {
+			p.InboxPrevious = pageLink("/inbox", p.Scope, p.All) + "&page=" + strconv.Itoa(page-1)
+		}
+		if end < len(p.Inbox.Rows) {
+			p.InboxNext = pageLink("/inbox", p.Scope, p.All) + "&page=" + strconv.Itoa(page+1)
+		}
+		p.Inbox.Rows = p.Inbox.Rows[start:end]
+	}
 	p.prepare()
 	if p.Page == "/agents" {
 		rows := []view.AgentRow{}
@@ -276,13 +299,13 @@ func flatten(rows []view.AgentRow) []view.AgentRow {
 func (p *pageData) prepare() {
 	visibleInbox := []view.InboxRow{}
 	for _, i := range p.Inbox.Rows {
-		if i.AckedAt == nil && i.EndedAt == nil {
+		if p.All || i.AckedAt == nil && i.EndedAt == nil {
 			visibleInbox = append(visibleInbox, i)
 		}
 	}
 	p.Inbox.Rows = visibleInbox
 	for _, row := range visibleInbox {
-		if inbox.Active(row.InboxItem) {
+		if inbox.Active(row.InboxItem) && !row.Historical {
 			row.Waited = inbox.Waited(row.InboxItem, p.ObservedAt)
 			p.InboxWaiting = append(p.InboxWaiting, row)
 		} else {
@@ -411,7 +434,7 @@ func templateFuncs() template.FuncMap {
 				ObservedAt  time.Time
 			}{rows, p.Scope, p.All, recent, p.ObservedAt}
 		},
-		"waitingHeader": view.WaitingHeader,
+		"waitingHeader": view.AgentWaitingHeader,
 		"dollars": func(v *float64) string {
 			if v == nil {
 				return ""

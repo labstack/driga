@@ -152,3 +152,18 @@ func TestBaselineSkipsLargeOldTranscript(t *testing.T) {
 		t.Fatalf("offset=%+v exists=%v err=%v", o, ok, err)
 	}
 }
+
+func TestRegistryIdentitySurvivesBacklogHeader(t *testing.T) {
+	old := maxTailBytes
+	maxTailBytes = 1024
+	t.Cleanup(func() { maxTailBytes = old })
+	env, path := backlogEnv(t)
+	env.Alive = func(int32, time.Time) bool { return true }
+	writeBacklog(t, filepath.Join(env.Home, ".claude", "sessions", "42.json"), `{"sessionId":"fallback","startedAt":"2026-10-18T10:00:00Z","status":"idle","version":"2.1.307","kind":"interactive"}`)
+	// A resumed/compacted transcript can retain an earlier sessionId in its head.
+	writeBacklog(t, path, backlogHead+backlogPadding()+backlogTail)
+	obs, _ := collectBacklog(t, env)
+	if obs.PID != 42 || obs.ExternalID != "fallback" {
+		t.Fatalf("transcript header replaced the current registry identity: %+v", obs)
+	}
+}

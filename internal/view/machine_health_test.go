@@ -23,7 +23,7 @@ func TestMCPRollupSummaryAndDetails(t *testing.T) {
 	}
 	servers := derive.MCPServers(ps, nil, time.Time{})
 	var buf bytes.Buffer
-	if err := Render(&buf, MachineView{MCPServers: servers}, RenderOpts{NoColor: true}); err != nil {
+	if err := Render(&buf, MachineView{MCPServers: servers, Full: true}, RenderOpts{NoColor: true}); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(buf.String(), "firecrawl-mcp  2 servers · 60.0M · 1 hosts · 1 duplicates") {

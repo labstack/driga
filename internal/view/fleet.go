@@ -235,7 +235,31 @@ func Inbox(r Reader, f Filter, now time.Time, scopes ...store.Scope) (InboxView,
 		v.Rows = append(v.Rows, a.Rows...)
 		return e
 	})
-	sort.SliceStable(v.Rows, func(i, j int) bool { return inbox.Less(v.Rows[i].InboxItem, v.Rows[j].InboxItem) })
+	sort.SliceStable(v.Rows, func(i, j int) bool {
+		a, b := v.Rows[i], v.Rows[j]
+		aw, bw := inbox.Active(a.InboxItem) && !a.Historical, inbox.Active(b.InboxItem) && !b.Historical
+		if aw != bw {
+			return aw
+		}
+		if !aw && !a.TS.Equal(b.TS) {
+			return a.TS.After(b.TS)
+		}
+		return inbox.Less(a.InboxItem, b.InboxItem)
+	})
+	if !f.All {
+		rows := v.Rows[:0]
+		completions := 0
+		for _, row := range v.Rows {
+			if row.Kind == "finished" {
+				completions++
+				if completions > 50 {
+					continue
+				}
+			}
+			rows = append(rows, row)
+		}
+		v.Rows = rows
+	}
 	return v, e
 }
 
@@ -293,6 +317,12 @@ func Machine(r Reader, f Filter, now time.Time, scopes ...store.Scope) (MachineV
 			v.MachineFresh = a.MachineFresh
 		}
 		v.Machines = append(v.Machines, a)
+		v.Full, v.Truncated = f.Full, v.Truncated || a.Truncated
+		if m.MachineID == v.MachineID {
+			v.TrendSince = a.TrendSince
+		} else {
+			v.AdditionalMachines = append(v.AdditionalMachines, a)
+		}
 		v.Memory = append(v.Memory, a.Memory...)
 		return nil
 	})
@@ -312,7 +342,6 @@ func Summary(r Reader, f Filter, now time.Time, scopes ...store.Scope) (SummaryV
 		v.Working += a.Working
 		v.Waiting += a.Waiting
 		v.Stalled += a.Stalled
-		v.Inbox += a.Inbox
 		v.Orphans += a.Orphans
 		v.Reclaim += a.Reclaim
 		if first || m.MachineID == r.MachineID() {
@@ -322,6 +351,12 @@ func Summary(r Reader, f Filter, now time.Time, scopes ...store.Scope) (SummaryV
 		first = false
 		return nil
 	})
+	if e != nil {
+		return v, e
+	}
+	f.All = false
+	items, e := Inbox(r, f, now, scopeOf(f, scopes))
+	v.Inbox = len(items.Rows)
 	return v, e
 }
 

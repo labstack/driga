@@ -112,26 +112,27 @@ type Worktree struct {
 
 // SessionObs is what an adapter observed about one agent session.
 type SessionObs struct {
-	ParentExternalID string            `json:"parent_external_id,omitempty"`
-	Adapter          string            `json:"adapter"`
-	ExternalID       string            `json:"external_id"`
-	Origin           string            `json:"origin"`
-	Version          string            `json:"version,omitempty"`
-	PID              int32             `json:"pid"`
-	ProcStart        time.Time         `json:"proc_started_at"`
-	Cwd              string            `json:"cwd"`
-	Branch           string            `json:"branch,omitempty"`
-	Title            string            `json:"title,omitempty"`
-	LastPrompt       string            `json:"last_prompt,omitempty"`
-	RegistryStatus   string            `json:"registry_status,omitempty"`
-	StartedAt        time.Time         `json:"started_at"`
-	LastActivityAt   time.Time         `json:"last_activity_at"`
-	LastPromptAt     time.Time         `json:"last_prompt_at"`
-	Hosted           bool              `json:"hosted"`
-	Completions      []CompletionEvent `json:"completions,omitempty"`
-	FilesTouched     []FileTouch       `json:"files_touched,omitempty"`
-	TurnOpen         bool              `json:"turn_open"`
-	SourcePath       string            `json:"source_path,omitempty"`
+	ParentExternalID  string            `json:"parent_external_id,omitempty"`
+	Adapter           string            `json:"adapter"`
+	ExternalID        string            `json:"external_id"`
+	Origin            string            `json:"origin"`
+	Version           string            `json:"version,omitempty"`
+	PID               int32             `json:"pid"`
+	ProcStart         time.Time         `json:"proc_started_at"`
+	Cwd               string            `json:"cwd"`
+	Branch            string            `json:"branch,omitempty"`
+	Title             string            `json:"title,omitempty"`
+	LastPrompt        string            `json:"last_prompt,omitempty"`
+	RegistryUpdatedAt time.Time         `json:"registry_updated_at,omitzero"`
+	RegistryStatus    string            `json:"registry_status,omitempty"`
+	StartedAt         time.Time         `json:"started_at"`
+	LastActivityAt    time.Time         `json:"last_activity_at"`
+	LastPromptAt      time.Time         `json:"last_prompt_at"`
+	Hosted            bool              `json:"hosted"`
+	Completions       []CompletionEvent `json:"completions,omitempty"`
+	FilesTouched      []FileTouch       `json:"files_touched,omitempty"`
+	TurnOpen          bool              `json:"turn_open"`
+	SourcePath        string            `json:"source_path,omitempty"`
 }
 
 // CompletionEvent is one finished turn.
