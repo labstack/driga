@@ -175,18 +175,31 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 					break
 				}
 			}
-			var rss uint64
-			found := false
+			// The 50 MB budget is the platform's own-memory measure (physical
+			// footprint on macOS, private bytes on Windows) when recorded. RSS
+			// also counts clean, shared code pages and swings with each GC.
+			var rss, footprint, budget uint64
+			found, measured := false, false
 			for _, p := range procs {
 				if isCollectorProc(p) {
 					rss += p.RSS
+					if p.Footprint > 0 {
+						footprint += p.Footprint
+						budget += p.Footprint
+						measured = true
+					} else {
+						budget += p.RSS
+					}
 					found = true
 				}
 			}
 			status, fix, detail := "ok", "", fmt.Sprintf("%.1f MB", float64(rss)/1e6)
+			if measured {
+				detail = fmt.Sprintf("%.1f MB footprint (RSS %.1f MB)", float64(footprint)/1e6, float64(rss)/1e6)
+			}
 			if !found {
 				status, detail, fix = "warn", "collector absent from process snapshot", "driga service start"
-			} else if rss > 50_000_000 {
+			} else if budget > 50_000_000 {
 				status, fix = "warn", "driga service restart; inspect driga service logs"
 			}
 			add("collector_rss", status, detail, fix)

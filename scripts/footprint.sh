@@ -131,6 +131,14 @@ sample_wakeups() {
 # Physical footprint is what Activity Monitor shows. Unlike RSS it excludes
 # memory the Go runtime has already returned to macOS (MADV_FREE_REUSABLE),
 # which RSS keeps counting until the system reclaims it. Reported, not gated.
+# peak_footprint prints a process's lifetime peak physical footprint in bytes.
+peak_footprint() {
+	vmmap -summary "$1" 2>/dev/null | awk -F: '/^Physical footprint \(peak\)/ {
+		v = $2; gsub(/ /, "", v); n = v + 0; u = substr(v, length(v))
+		if (u == "K") n *= 1024; else if (u == "M") n *= 1048576; else if (u == "G") n *= 1073741824
+		printf "%d\n", n }'
+}
+
 sample_footprint() {
 	local pid=${2:-$collector_pid} lines
 	lines=$(vmmap -summary "$pid" 2>/dev/null | awk -F: '/^Physical footprint/ { gsub(/^ +/, "", $2); printf "%s=%s ", $1, $2 }') || lines=''
@@ -183,6 +191,8 @@ done
 printf 'viewer phase peak: collector %s KiB; collector + descendants %s KiB\n' "$phase_collector" "$phase_tree"
 # Restart only our collector with an explicit loopback listener; retain its
 # representative history while measuring fleet overhead on the same workload.
+# Keep the first collector's lifetime footprint peak before it exits.
+first_peak=$(peak_footprint "$collector_pid")
 stop_started
 cp "$scratch/collection.toml" "$scratch/collector/config.toml"
 cat >>"$scratch/collector/config.toml" <<'CONFIG'
@@ -273,8 +283,24 @@ for i in 0 1 2; do
 done
 printf 'Sampled peak RSS: collector %s KiB; children %s KiB; combined %s KiB\n' "$peak_collector" "$peak_children" "$peak_tree"
 printf '%s\n' '5-second sampling can miss short-lived subprocess peaks; RSS includes shared pages.'
-if ((peak_collector * 1024 > 50000000)); then
-	printf '%s\n' 'FAIL: peak collector RSS exceeds 50 MB.' >&2
+# The budget is physical footprint, the memory macOS charges to the process;
+# RSS above also counts clean code pages and is reported for comparison only.
+if [[ -z $first_peak ]]; then
+	printf '%s\n' 'FAIL: physical footprint unavailable for the first collector.' >&2
 	exit 1
 fi
-printf '%s\n' 'PASS: sampled peak collector RSS <= 50 MB (review combined RSS separately).'
+peak_owned=$first_peak
+for pid in "${started_pids[@]}"; do
+	peak=$(peak_footprint "$pid")
+	if [[ -z $peak ]]; then
+		printf 'FAIL: physical footprint unavailable for pid %s.\n' "$pid" >&2
+		exit 1
+	fi
+	((peak > peak_owned)) && peak_owned=$peak
+done
+printf 'Peak physical footprint: collector %s KiB\n' "$((peak_owned / 1024))"
+if ((peak_owned > 50000000)); then
+	printf '%s\n' 'FAIL: peak collector physical footprint exceeds 50 MB.' >&2
+	exit 1
+fi
+printf '%s\n' 'PASS: peak collector physical footprint <= 50 MB (review combined RSS separately).'

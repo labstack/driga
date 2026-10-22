@@ -8,7 +8,7 @@ import (
 
 // collectorMemoryLimit is the collector's soft Go memory limit. Its live heap
 // is a few MB; without a limit the runtime retains enough freed memory to push
-// RSS past the 50 MB footprint budget during the initial import.
+// its footprint past the 50 MB budget during the initial import.
 const collectorMemoryLimit = 32 << 20
 
 // collectorGCPercent halves the heap headroom between collections. The live
