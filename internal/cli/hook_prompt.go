@@ -39,19 +39,20 @@ func endPromptSession(session, cwd string) {
 }
 func (h HookCmd) permission(g *Globals) error {
 	started := time.Now()
-	if g == nil || g.Stdin == nil || g.Stdout == nil {
+	if g == nil || g.Stdin == nil {
 		return nil
 	}
-	// Dial first so an absent collector never waits for stdin or transcript IO.
+	// Drain a bounded payload even when no collector or output is available:
+	// exiting before reading can break the agent's pipe with EPIPE.
+	data, err := hookReadInput(g.Stdin)
+	if err != nil || g.Stdout == nil {
+		return nil
+	}
 	c, err := promptBroker()
 	if err != nil {
 		return nil
 	}
 	defer c.Close()
-	data, err := hookReadInput(g.Stdin)
-	if err != nil {
-		return nil
-	}
 	var in permissionPayload
 	if json.Unmarshal(data, &in) != nil || in.Session == "" || in.Tool == "" || !json.Valid(in.Input) {
 		return nil

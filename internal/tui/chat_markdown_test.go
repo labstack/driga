@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -76,6 +77,7 @@ func TestChatMarkdownElements(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	input = bytes.ReplaceAll(input, []byte("\r\n"), []byte("\n"))
 	defer view.SetTheme("auto")
 	for _, width := range []int{120, 60, 24} {
 		t.Run(fmt.Sprint(width), func(t *testing.T) {
@@ -90,7 +92,8 @@ func TestChatMarkdownElements(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if plain+"\n" != string(want) {
+			// A Windows checkout may turn the golden's line endings into CRLF.
+			if plain+"\n" != strings.ReplaceAll(string(want), "\r\n", "\n") {
 				t.Fatalf("Markdown layout differs from %s:\n%s", path, plain)
 			}
 			var mocha string

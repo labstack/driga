@@ -81,11 +81,11 @@ func (s *Store) ChatMessages(id string) ([]ChatMessage, error) {
 	return out, rows.Err()
 }
 func (s *Store) InterruptChat(ctx context.Context) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE messages SET status=CASE WHEN role='action' THEN 'denied' ELSE 'interrupted' END WHERE machine_id=? AND (status IN ('queued','streaming') OR (role='action' AND status='pending'))`, s.MachineID())
+	_, err := s.db.ExecContext(ctx, `UPDATE messages SET status=CASE WHEN role='action' THEN 'denied' ELSE 'interrupted' END WHERE machine_id=? AND status IN ('queued','streaming')`, s.MachineID())
 	if err != nil {
 		return err
 	}
-	_, err = s.db.ExecContext(ctx, `UPDATE messages SET status=CASE status WHEN 'pending' THEN 'denied' ELSE 'failed' END, text=CASE WHEN text='' THEN '' ELSE text || ' · interrupted' END WHERE machine_id=? AND role='action' AND status IN ('pending','allowed')`, s.MachineID())
+	_, err = s.db.ExecContext(ctx, `UPDATE messages SET status=CASE status WHEN 'pending' THEN 'denied' ELSE 'failed' END, text=CASE WHEN text='' THEN '' ELSE replace(text, ' · ' || status, CASE status WHEN 'pending' THEN ' · denied' ELSE ' · failed' END) || ' · interrupted' END WHERE machine_id=? AND role='action' AND status IN ('pending','allowed')`, s.MachineID())
 	return err
 }
 

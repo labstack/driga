@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -83,6 +84,9 @@ func TestChatSessionKillKeepsIdentity(t *testing.T) {
 	}
 }
 func TestChatJumpUsesStoredDestination(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the stored destination is a tmux pane; Windows jumps go to Windows Terminal")
+	}
 	readEnv(t)
 	t.Setenv("TMUX", "/tmp/fake,1,0")
 	var id int64

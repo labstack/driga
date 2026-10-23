@@ -120,7 +120,7 @@ Chat should be able to do what the maintainer would do at the keyboard:
 | Mode | Runs without asking | Asks |
 |---|---|---|
 | **Confirm** (default) | Reads only | Every other call |
-| **Auto** | Reads, plus `ack_inbox`, `jump`, `summarize`, and Edit or Write inside the conversation's working directory | Bash, `kill`, `cleanup`, WebFetch, writes outside the working directory, anything new |
+| **Auto** | Auto allows reads, inbox acknowledgments, jumps and summaries, and allows Edit/Write only inside a git project working directory that is neither home, the driga data directory nor an ancestor of either, with no hidden components or agent instruction names (`claude*.md`, `agents*.md`, `gemini*.md`, `copilot-instructions.md`, case-insensitive) in the given or resolved relative path after trimming trailing dots and spaces, and always asks on colons. | Everything else asks |
 | **Full auto** | Everything | Nothing; header shows it in red |
 
 - The mode belongs to one conversation and starts as Confirm.

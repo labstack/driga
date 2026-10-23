@@ -66,9 +66,9 @@ func (tx *Tx) PruneRemote(now time.Time) error {
 	return nil
 }
 
-// SessionByKey resolves a session within this writer's machine only.
-func (tx *Tx) SessionByKey(adapter, external string) (model.Session, error) {
-	return scanSession(tx.conn.QueryRowContext(tx.ctx, "SELECT id,"+sessionColumns+" FROM sessions WHERE machine_id=? AND adapter=? AND external_id=?", tx.machineID, adapter, external))
+// SessionByKey resolves a session within this machine only, using sessions_identity.
+func (q *querier) SessionByKey(adapter, external string) (model.Session, error) {
+	return scanSession(q.conn.QueryRowContext(q.ctx, "SELECT id,"+sessionColumns+" FROM sessions WHERE machine_id=? AND adapter=? AND external_id=?", q.machineID, adapter, external))
 }
 
 // ApplyInbox replaces authoritative peer fields while retaining a pending ack

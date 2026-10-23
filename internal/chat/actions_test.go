@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -213,6 +214,9 @@ func TestTrustModesAndClaims(t *testing.T) {
 }
 func TestAutoRules(t *testing.T) {
 	dir := t.TempDir()
+	if out, err := exec.Command("git", "init", dir).CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v: %s", err, out)
+	}
 	outside := t.TempDir()
 	if err := os.Symlink(outside, filepath.Join(dir, "escape")); err != nil {
 		t.Fatal(err)
@@ -243,11 +247,11 @@ func TestAutoRules(t *testing.T) {
 		{"mcp__driga__ack_inbox", "", true}, {"mcp__driga__jump", "", true}, {"mcp__driga__summarize", "", true},
 	} {
 		raw, _ := json.Marshal(map[string]string{"file_path": tc.path})
-		if got := autoAllowed(tc.tool, raw, dir); got != tc.want {
+		if got := autoAllowed(tc.tool, raw, dir, outside); got != tc.want {
 			t.Errorf("%s %s: %v", tc.tool, tc.path, got)
 		}
 	}
-	if autoAllowed("Write", json.RawMessage(`{}`), dir) {
+	if autoAllowed("Write", json.RawMessage(`{}`), dir, outside) {
 		t.Fatal("missing path allowed")
 	}
 }

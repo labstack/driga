@@ -181,7 +181,7 @@ func TestPromptCollectedSessionEnd(t *testing.T) {
 		if p.Behavior != "" {
 			t.Fatal(p)
 		}
-	case <-time.After(2 * time.Second):
+	case <-time.After(7 * time.Second):
 		t.Fatal("collected session end did not retire prompt")
 	}
 }

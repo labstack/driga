@@ -94,6 +94,7 @@ type turn struct {
 }
 type conversation struct {
 	mode             Mode
+	used             uint64    // Broker use count at last load, for eviction.
 	until            time.Time // When Full auto drops back to Auto.
 	expire           *time.Timer
 	actions          []*pendingAction
@@ -117,6 +118,7 @@ type Broker struct {
 	agent               Agent
 	opts                Options
 	conversations       map[string]*conversation
+	uses                uint64
 	socket, clientToken string
 	approvalTTL         time.Duration
 	fullAutoTTL         time.Duration
@@ -136,7 +138,10 @@ func New(ctx context.Context, st *store.Store, a Agent, o Options) (*Broker, err
 		}
 	}
 	ctx, cancel := context.WithCancel(ctx)
-	return &Broker{ctx: ctx, cancel: cancel, st: st, agent: a, opts: o, conversations: map[string]*conversation{}}, nil
+	b := &Broker{ctx: ctx, cancel: cancel, st: st, agent: a, opts: o, conversations: map[string]*conversation{}}
+	b.wg.Add(1)
+	go b.watchPrompts()
+	return b, nil
 }
 func (b *Broker) Close() {
 	b.mu.Lock()
@@ -189,14 +194,17 @@ func (b *Broker) load(id string) (*conversation, error) {
 	if b.closed {
 		return nil, errors.New("chat closed")
 	}
+	// Uses are counted, not timed: clocks can be too coarse to order them.
+	b.uses++
 	if c := b.conversations[id]; c != nil {
+		c.used = b.uses
 		return c, nil
 	}
 	if len(b.conversations) >= MaxConversations {
 		var oldest *conversation
 		var key string
 		for id, c := range b.conversations {
-			if c.cancel == nil && (oldest == nil || c.row.UpdatedAt.Before(oldest.row.UpdatedAt)) {
+			if c.cancel == nil && (oldest == nil || c.used < oldest.used) {
 				oldest = c
 				key = id
 			}
@@ -217,11 +225,21 @@ func (b *Broker) load(id string) (*conversation, error) {
 	}
 	// A new epoch makes old SSE cursors force a complete snapshot after a restart.
 	for i := range messages {
+		m := &messages[i]
+		if m.Role == "action" && m.Status == "pending" {
+			m.Status = "denied"
+			if m.Text != "" {
+				m.Text = strings.TrimSuffix(m.Text, " · pending") + " · denied · interrupted"
+			}
+			if err := b.save(context.Background(), *m); err != nil {
+				return nil, err
+			}
+		}
 		if messages[i].Role != "tool" {
 			messages[i].Text = b.capture(messages[i].Text)
 		}
 	}
-	c := &conversation{changed: make(chan struct{}), mode: Confirm, row: row, messages: messages, seq: uint64(time.Now().UnixMicro())}
+	c := &conversation{used: b.uses, changed: make(chan struct{}), mode: Confirm, row: row, messages: messages, seq: uint64(time.Now().UnixMicro())}
 	for _, m := range messages {
 		if m.Role == "action" && m.Tool != "" {
 			title := m.Tool
@@ -544,11 +562,12 @@ func (b *Broker) Read(ctx context.Context, id string, after uint64) (State, erro
 	}
 	b.expireFullAuto(c)
 	s := State{Mode: c.mode, Until: c.until, Actions: []Action{}, Result: append(json.RawMessage{}, c.result...), Conversation: c.row, Messages: append([]store.ChatMessage{}, c.messages...), Events: []Event{}, Cursor: c.seq, Active: c.cancel != nil, Queued: len(c.queue), Ephemeral: b.opts.Ephemeral}
-	for _, a := range c.actions {
-		s.Actions = append(s.Actions, a.Action)
-	}
 	s.Reset = after == 0 || after > c.seq || len(c.events) == 0 || after < c.events[0].Seq-1
-	if !s.Reset {
+	if s.Reset {
+		for _, a := range c.actions {
+			s.Actions = append(s.Actions, a.Action)
+		}
+	} else {
 		for _, e := range c.events {
 			if e.Seq > after {
 				s.Events = append(s.Events, e)

@@ -8,11 +8,13 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/labstack/driga/internal/gitscan"
 	"github.com/labstack/driga/internal/scrub"
 	"github.com/labstack/driga/internal/store"
 )
@@ -128,7 +130,13 @@ func (b *Broker) Decide(ctx context.Context, id, action string, allow bool) erro
 func (b *Broker) actionEvent(c *conversation, a *pendingAction) error {
 	a.Title = scrub.Snippet(strings.Join(strings.Fields(a.Title), " "))
 	a.Result = scrub.Snippet(strings.Join(strings.Fields(a.Result), " "))
-	m := store.ChatMessage{ID: a.ID, MachineID: c.row.MachineID, ConversationID: c.row.ID, Role: "action", Tool: scrub.Snippet(a.Tool), DecidedBy: a.DecidedBy, Text: a.Title + " · " + a.Status, Status: a.Status, CreatedAt: time.Now().UTC()}
+	title := a.Title
+	if a.Tool == "mcp__driga__answer_prompt" {
+		// Another session's prompt input stays in memory, including its card title.
+		id, _, _ := ParsePromptAnswer(a.Input)
+		title = "answer_prompt " + id
+	}
+	m := store.ChatMessage{ID: a.ID, MachineID: c.row.MachineID, ConversationID: c.row.ID, Role: "action", Tool: scrub.Snippet(a.Tool), DecidedBy: a.DecidedBy, Text: title + " · " + a.Status, Status: a.Status, CreatedAt: time.Now().UTC()}
 	if a.DecidedBy != "" {
 		m.Text += " · " + a.DecidedBy
 	}
@@ -144,6 +152,9 @@ func (b *Broker) actionEvent(c *conversation, a *pendingAction) error {
 	return nil
 }
 func (b *Broker) resolve(c *conversation, a *pendingAction, allow bool, who, reason string) error {
+	if a.answer == nil {
+		allow, reason = false, "interrupted"
+	}
 	a.Status, a.DecidedBy, a.Result = "denied", who, reason
 	p := Permission{Behavior: "deny", Message: reason}
 	if p.Message == "" {
@@ -161,7 +172,9 @@ func (b *Broker) resolve(c *conversation, a *pendingAction, allow bool, who, rea
 		p = Permission{Behavior: "deny", Message: "Could not retain action log"}
 		a.Status = "denied"
 	}
-	a.answer <- p
+	if a.answer != nil {
+		a.answer <- p
+	}
 	return err
 }
 func (b *Broker) denyPending(c *conversation, reason string) {
@@ -188,10 +201,20 @@ func (b *Broker) Approve(ctx context.Context, in Approval) (Permission, error) {
 		b.mu.Unlock()
 		return Permission{}, err
 	}
+	directory := c.directory
+	b.mu.Unlock()
+	title, remote := b.actionTitle(in), b.remoteTarget(in)
+	auto := autoAllowed(in.Tool, in.Input, directory, b.opts.DataDir)
+	b.mu.Lock()
+	c, err = b.approvalConversation(in)
+	if err != nil {
+		b.mu.Unlock()
+		return Permission{}, err
+	}
 	// Historical cards must never consume the outstanding-work budget.
 	// Their audit messages remain in storage after leaving this live window.
 	size := func(a *pendingAction) int { return len(a.Input) + len(a.Title) + len(a.Directory) + len(a.Result) }
-	bytes := len(in.Input) + len(b.actionTitle(in)) + len(c.directory)
+	bytes := len(in.Input) + len(title) + len(c.directory)
 	for _, a := range c.actions {
 		bytes += size(a)
 	}
@@ -210,14 +233,14 @@ func (b *Broker) Approve(ctx context.Context, in Approval) (Permission, error) {
 		b.mu.Unlock()
 		return Permission{}, errors.New("too many actions in conversation")
 	}
-	a := &pendingAction{Action: Action{ID: uuid.NewString(), Tool: in.Tool, Title: b.actionTitle(in), Input: append(json.RawMessage(nil), in.Input...), Directory: c.directory, Status: "pending"}, token: c.token, toolUseID: in.ToolUseID, answer: make(chan Permission, 1)}
+	a := &pendingAction{Action: Action{ID: uuid.NewString(), Tool: in.Tool, Title: title, Input: append(json.RawMessage(nil), in.Input...), Directory: c.directory, Status: "pending"}, token: c.token, toolUseID: in.ToolUseID, answer: make(chan Permission, 1)}
 	c.actions = append(c.actions, a)
 	b.expireFullAuto(c)
-	if c.remote || b.remoteTarget(in) {
+	if c.remote || remote {
 		err = b.resolve(c, a, false, "", "Actions on another machine are unavailable; run driga there")
 	} else if c.mode == FullAuto {
 		err = b.resolve(c, a, true, "full auto", "")
-	} else if c.mode == Auto && autoAllowed(in.Tool, in.Input, c.directory) {
+	} else if c.mode == Auto && auto {
 		err = b.resolve(c, a, true, "auto", "")
 	} else {
 		err = b.actionEvent(c, a)
@@ -307,15 +330,34 @@ func (b *Broker) actionTitle(in Approval) string {
 		SessionID int64  `json:"session_id"`
 		Project   string `json:"project"`
 		All       bool   `json:"all"`
+		Allow     bool   `json:"allow"`
 	}
 	_ = json.Unmarshal(in.Input, &args)
 	name := strings.TrimPrefix(in.Tool, "mcp__driga__")
-	if args.SessionID > 0 && (name == "kill" || name == "jump") {
-		sessions, _ := b.stateStore().Sessions(store.SessionFilter{IncludeEnded: true})
-		for _, s := range sessions {
-			if s.ID == args.SessionID {
-				return fmt.Sprintf("%s %s #%d · %s", name, s.Adapter, s.ID, s.Cwd)
+	if name == "answer_prompt" {
+		decision := "Deny"
+		if args.Allow {
+			decision = "Allow"
+		}
+		b.mu.Lock()
+		p := b.prompts[args.ID]
+		var prompt Prompt
+		if p != nil {
+			prompt = p.Prompt
+		}
+		b.mu.Unlock()
+		if p != nil {
+			session := prompt.Session
+			if prompt.SessionID > 0 {
+				session = fmt.Sprintf("#%d (%s)", prompt.SessionID, session)
 			}
+			return fmt.Sprintf("%s · claude %s · %s · %s · %s", decision, session, prompt.Tool, prompt.Detail(), prompt.Cwd)
+		}
+		return fmt.Sprintf("%s prompt %s · unavailable", decision, args.ID)
+	}
+	if args.SessionID > 0 && (name == "kill" || name == "jump") {
+		if s, err := b.stateStore().Session(args.SessionID); err == nil {
+			return fmt.Sprintf("%s %s #%d · %s", name, s.Adapter, s.ID, s.Cwd)
 		}
 	}
 	if strings.HasPrefix(in.Tool, "mcp__driga__") {
@@ -367,7 +409,7 @@ func (b *Broker) actionTitle(in Approval) string {
 	}
 	return strings.Join(strings.Fields(title), " ")
 }
-func autoAllowed(tool string, input json.RawMessage, dir string) bool {
+func autoAllowed(tool string, input json.RawMessage, dir, dataDir string) bool {
 	switch tool {
 	case "mcp__driga__ack_inbox", "mcp__driga__jump", "mcp__driga__summarize":
 		return true
@@ -375,26 +417,58 @@ func autoAllowed(tool string, input json.RawMessage, dir string) bool {
 		var in struct {
 			Path string `json:"file_path"`
 		}
-		if json.Unmarshal(input, &in) != nil || in.Path == "" {
+		if json.Unmarshal(input, &in) != nil || in.Path == "" || !autoProject(dir, dataDir) {
 			return false
 		}
 		// Check the resolved path too: a link inside the project may point at .git.
 		rel, ok := insideDirectory(dir, in.Path)
-		return ok && !configPath(in.Path) && !configPath(rel)
+		given := strings.TrimPrefix(in.Path, strings.TrimRight(dir, `/\`)+string(filepath.Separator))
+		given = strings.TrimPrefix(given, filepath.VolumeName(given))
+		return ok && !configPath(given) && !configPath(rel)
 	}
 	return false
 }
 
-// configPath reports files that run code or steer agents with no command:
-// git hooks, agent settings and instructions, editor tasks, direnv, MCP
-// servers and CI. Writes there always ask, even in Auto, so an edit cannot
-// become an unasked command.
+// autoProject excludes broad working directories even if they contain a repo.
+func autoProject(dir, dataDir string) bool {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" || dataDir == "" || dir == "" {
+		return false
+	}
+	for _, protected := range []string{home, dataDir} {
+		if _, inside := insideDirectory(dir, gitscan.NormalizePath(protected)); inside {
+			return false
+		}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "git", "-C", dir, "rev-parse", "--is-inside-work-tree")
+	// A caller's Git overrides must not make an unrelated directory a project.
+	cmd.Env = []string{}
+	for _, env := range os.Environ() {
+		if !strings.HasPrefix(strings.ToUpper(env), "GIT_") {
+			cmd.Env = append(cmd.Env, env)
+		}
+	}
+	out, err := cmd.Output()
+	return err == nil && strings.TrimSpace(string(out)) == "true"
+}
+
+// Hidden components and agent instructions always ask, using Win32's spelling
+// rules on every platform so trailing dots/spaces and streams cannot bypass it.
 func configPath(path string) bool {
-	for _, part := range strings.FieldsFunc(filepath.ToSlash(path), func(r rune) bool { return r == '/' }) {
-		switch strings.ToLower(part) {
-		case ".git", ".claude", ".codex", ".gemini", ".copilot", ".github", ".vscode", ".idea", ".husky", ".devcontainer",
-			".mcp.json", ".envrc", "claude.md", "agents.md", "gemini.md":
+	for _, part := range strings.FieldsFunc(path, func(r rune) bool { return r == '/' || r == '\\' }) {
+		if strings.Contains(part, ":") {
 			return true
+		}
+		part = strings.ToLower(strings.TrimRight(part, ". "))
+		if strings.HasPrefix(part, ".") || part == "copilot-instructions.md" {
+			return true
+		}
+		for _, prefix := range []string{"claude", "agents", "gemini"} {
+			if strings.HasPrefix(part, prefix) && strings.HasSuffix(part, ".md") {
+				return true
+			}
 		}
 	}
 	return false

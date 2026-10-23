@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/labstack/driga/internal/chat"
+	"github.com/labstack/driga/internal/store"
 )
 
 type actionClient struct {
@@ -16,6 +17,28 @@ type actionClient struct {
 	mode     chat.Mode
 	decision string
 	allow    bool
+}
+
+func TestChatActionsApplyEventUpdates(t *testing.T) {
+	m := setup(t, fixture(), Options{}).(*app)
+	m.tab = chatTab
+	row := store.Conversation{ID: "conversation"}
+	card := chat.Action{ID: "card", Tool: "Write", Status: "pending", Input: json.RawMessage(`{"file_path":"file","content":"large input"}`)}
+	m.Update(chatStateMsg{state: chat.State{Conversation: row, Reset: true, Cursor: 10, Actions: []chat.Action{card}}})
+	m.Update(chatStateMsg{state: chat.State{Conversation: row, Cursor: 11, Events: []chat.Event{{Seq: 11, Kind: "delta", MessageID: "reply", Text: "token"}}}})
+	if len(m.chatActions) != 1 || m.chatActions[0].Status != "pending" {
+		t.Fatal("text delta dropped action", m.chatActions)
+	}
+	card.Status = "allowed"
+	m.Update(chatStateMsg{state: chat.State{Conversation: row, Cursor: 12, Events: []chat.Event{{Seq: 12, Kind: "action", Action: &card}}}})
+	if len(m.chatActions) != 1 || m.chatActions[0].Status != "allowed" || len(m.chatActions[0].Input) == 0 {
+		t.Fatal("action event did not update card", m.chatActions)
+	}
+	// A reset replaces the live card window, including clearing obsolete cards.
+	m.Update(chatStateMsg{state: chat.State{Conversation: row, Reset: true, Cursor: 20, Actions: []chat.Action{}}})
+	if len(m.chatActions) != 0 {
+		t.Fatal(m.chatActions)
+	}
 }
 
 func (c *actionClient) SetMode(_ context.Context, _ string, m chat.Mode) error {

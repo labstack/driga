@@ -9,8 +9,6 @@ import (
 	"io"
 	"sort"
 	"time"
-
-	"github.com/labstack/driga/internal/store"
 )
 
 // Prompt inputs live only in memory, independently of conversations and their logs.
@@ -86,6 +84,15 @@ func (b *Broker) WaitPrompt(ctx context.Context, in Prompt) (PromptDecision, err
 	if in.ID == "" || len(in.ID) > 128 || in.Session == "" || len(in.Session) > 256 || in.Tool == "" || len(in.Tool) > 256 || len(in.Cwd) > 4096 || len(in.Input) > MaxText || !json.Valid(in.Input) {
 		return PromptDecision{}, errors.New("invalid prompt")
 	}
+	// One indexed lookup on registration supplies the UI's session link.
+	if s, err := b.stateStore().SessionByKey("claude", in.Session); err == nil && s.Cwd == in.Cwd {
+		if s.EndedAt != nil {
+			return PromptDecision{}, nil
+		}
+		in.SessionID = s.ID
+	} else {
+		in.SessionID = 0
+	}
 	b.mu.Lock()
 	if b.closed || ctx.Err() != nil {
 		b.mu.Unlock()
@@ -120,46 +127,66 @@ func (b *Broker) WaitPrompt(ctx context.Context, in Prompt) (PromptDecision, err
 	}()
 	timer := time.NewTimer(ttl)
 	defer timer.Stop()
-	tick := time.NewTicker(time.Second)
+	select {
+	case out := <-p.answer:
+		return out, nil
+	case <-ctx.Done():
+		return PromptDecision{}, ctx.Err()
+	case <-b.ctx.Done():
+		return PromptDecision{}, b.ctx.Err()
+	case <-timer.C:
+		return PromptDecision{}, nil
+	}
+}
+
+// SessionEnd retires prompts immediately. This single slow ticker covers ends
+// observed by the collector when a hook could not reach the broker.
+func (b *Broker) watchPrompts() {
+	defer b.wg.Done()
+	tick := time.NewTicker(5 * time.Second)
 	defer tick.Stop()
 	for {
 		select {
-		case out := <-p.answer:
-			return out, nil
-		case <-ctx.Done():
-			return PromptDecision{}, ctx.Err()
 		case <-b.ctx.Done():
-			return PromptDecision{}, b.ctx.Err()
-		case <-timer.C:
-			return PromptDecision{}, nil
+			return
 		case <-tick.C:
-			sessions, err := b.stateStore().Sessions(store.SessionFilter{IncludeEnded: true})
-			if err != nil {
-				return PromptDecision{}, err
-			}
-			for _, s := range sessions {
-				if s.Adapter == "claude" && s.ExternalID == in.Session && s.Cwd == in.Cwd && s.EndedAt != nil {
-					return PromptDecision{}, nil
-				}
-			}
+			b.refreshPrompts()
 		}
 	}
 }
+
+func (b *Broker) refreshPrompts() {
+	b.mu.Lock()
+	sessions := map[string]bool{}
+	for _, p := range b.prompts {
+		sessions[p.Session] = true
+	}
+	b.mu.Unlock()
+	for session := range sessions {
+		s, err := b.stateStore().SessionByKey("claude", session)
+		if err != nil {
+			continue
+		}
+		b.mu.Lock()
+		for id, p := range b.prompts {
+			if p.Session == session && p.Cwd == s.Cwd {
+				p.SessionID = s.ID
+				if s.EndedAt != nil {
+					delete(b.prompts, id)
+					p.answer <- PromptDecision{}
+				}
+			}
+		}
+		b.mu.Unlock()
+	}
+}
+
 func (b *Broker) Prompts(ctx context.Context) ([]Prompt, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	out := []Prompt{}
-	sessions, err := b.stateStore().Sessions(store.SessionFilter{IncludeEnded: true})
-	if err != nil {
-		return nil, err
-	}
 	for _, p := range b.prompts {
 		copy := p.Prompt
-		for _, s := range sessions {
-			if s.Adapter == "claude" && s.ExternalID == p.Session && s.Cwd == p.Cwd {
-				copy.SessionID = s.ID
-			}
-		}
 		copy.Input = append(json.RawMessage(nil), copy.Input...)
 		out = append(out, copy)
 	}

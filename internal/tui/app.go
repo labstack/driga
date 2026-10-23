@@ -303,7 +303,29 @@ func (m *app) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.chatID = msg.state.Conversation.ID
 		m.chatMessages = msg.state.Messages
-		m.chatActions, m.chatMode, m.chatUntil = msg.state.Actions, msg.state.Mode, msg.state.Until
+		if msg.state.Reset {
+			m.chatActions = msg.state.Actions
+		} else {
+			for _, event := range msg.state.Events {
+				if event.Action == nil || event.Seq <= m.chatEventSeq {
+					continue
+				}
+				found := false
+				for i := range m.chatActions {
+					if m.chatActions[i].ID == event.Action.ID {
+						m.chatActions[i], found = *event.Action, true
+						break
+					}
+				}
+				if !found {
+					m.chatActions = append(m.chatActions, *event.Action)
+				}
+			}
+			if len(m.chatActions) > chat.MaxMessages {
+				m.chatActions = m.chatActions[len(m.chatActions)-chat.MaxMessages:]
+			}
+		}
+		m.chatMode, m.chatUntil = msg.state.Mode, msg.state.Until
 		m.chatHistory = msg.history
 		m.chatEphemeral = msg.state.Ephemeral
 		m.updateChatActivity(msg.state)

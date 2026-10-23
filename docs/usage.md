@@ -636,7 +636,7 @@ buttons or **m** in TUI navigate mode:
 | Mode | Runs without asking | Asks |
 |---|---|---|
 | Confirm | Reads | Every other call |
-| Auto | Reads, inbox acknowledgments, jumps, summaries, Edit/Write inside the conversation working directory | Bash, kill, cleanup, WebFetch, outside writes and unknown tools |
+| Auto | Auto allows reads, inbox acknowledgments, jumps and summaries, and allows Edit/Write only inside a git project working directory that is neither home, the driga data directory nor an ancestor of either, with no hidden components or agent instruction names (`claude*.md`, `agents*.md`, `gemini*.md`, `copilot-instructions.md`, case-insensitive) in the given or resolved relative path after trimming trailing dots and spaces, and always asks on colons. | Everything else asks |
 | Full auto | Everything | Nothing |
 
 Full auto requires confirmation and is shown in red with its remaining time.

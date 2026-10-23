@@ -5,9 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -67,6 +69,9 @@ func writePromptTranscript(t *testing.T, path, text string) {
 func TestPermissionHookBuiltBinary(t *testing.T) {
 	readEnv(t)
 	bin := filepath.Join(t.TempDir(), "driga")
+	if runtime.GOOS == "windows" {
+		bin += ".exe"
+	}
 	build := exec.Command("go", "build", "-o", bin, "../../cmd/driga")
 	if out, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("build: %v: %s", err, out)
@@ -317,5 +322,28 @@ func TestClaudePromptHookStatus(t *testing.T) {
 	status, _, err = hookStatus("claude", path, bin)
 	if err != nil || status != "warn" {
 		t.Fatal("missing prompt hook should need repair", status, err)
+	}
+}
+
+func TestPermissionHookDrainsBeforeEarlyReturn(t *testing.T) {
+	readEnv(t)
+	for _, scenario := range []string{"no broker", "no stdout", "invalid payload"} {
+		t.Run(scenario, func(t *testing.T) {
+			payload := `{"session_id":"session","cwd":"/repo","tool_name":"Write","tool_input":{"content":"` + strings.Repeat("x", 256<<10) + `"}}`
+			if scenario == "invalid payload" {
+				payload = strings.Repeat("x", 256<<10)
+			}
+			input := strings.NewReader(payload)
+			var output io.Writer = io.Discard
+			if scenario == "no stdout" {
+				output = nil
+			}
+			if err := (HookCmd{}).permission(&Globals{Stdin: input, Stdout: output}); err != nil {
+				t.Fatal(err)
+			}
+			if input.Len() != 0 {
+				t.Fatalf("returned with %d unread bytes", input.Len())
+			}
+		})
 	}
 }

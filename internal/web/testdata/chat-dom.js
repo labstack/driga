@@ -141,6 +141,10 @@ async function runChatTests(){
  change({seq:30.3,kind:'message',message:{id:'tool-b',role:'tool',text:'read more'}});
  assert.equal(walk(get('chat-log')).find(n=>n.tagName==='details'),disclosure,'stream replaced disclosure');
  assert.equal(disclosure.open,true,'stream collapsed tools');
+ change({seq:30.4,kind:'message',message:{id:'card-reply',role:'assistant',status:'streaming',text:''}});
+ change({seq:30.5,kind:'delta',message_id:'card-reply',text:'token',html:'token'});
+ assert.equal(document.activeElement,buttons[1],'text delta removed approval focus');
+ assert.equal(walk(get('chat-log')).filter(n=>n.tagName==='button').length,2,'text delta lost unchanged action');
  await buttons[0].handlers.click();
  const decision=payloads.find(p=>p.path==='/chat/api/decide');
  assert(decision&&JSON.parse(decision.options.body).allow===true,'Allow did not decide');
