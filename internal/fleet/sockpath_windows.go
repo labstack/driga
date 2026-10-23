@@ -20,7 +20,7 @@ func socketUserDir() string {
 	return "driga-" + hex.EncodeToString(sum[:4])
 }
 
-func shortSocketPath(name string) string {
+func shortSocketPath(name string, nameLen int) string {
 	root := os.TempDir()
 	// GetShortPathName helps when TEMP has a long profile component.
 	if p, err := windows.UTF16PtrFromString(root); err == nil {
@@ -28,7 +28,7 @@ func shortSocketPath(name string) string {
 		if n, err := windows.GetShortPathName(p, &buf[0], uint32(len(buf))); err == nil && n < uint32(len(buf)) && n > 0 {
 			short := windows.UTF16ToString(buf[:n])
 			p := filepath.Join(short, socketUserDir(), name)
-			if len(p) <= maxSocketPath {
+			if len(p)+nameLen-len(name) <= maxSocketPath {
 				return p
 			}
 		}

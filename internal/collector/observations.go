@@ -11,13 +11,32 @@ import (
 )
 
 type logBaseline struct {
-	path string
-	info os.FileInfo
+	path   string
+	info   os.FileInfo
+	growth int64
 }
 
-// observeSessions stats files only. Its baselines advance with the pass commit,
+// collectLogBaselines captures filesystem evidence before the write transaction.
+func collectLogBaselines(ss []model.Session, previous map[string]logBaseline) map[string]logBaseline {
+	logs := make(map[string]logBaseline, len(ss))
+	for _, s := range ss {
+		if s.SourcePath != "" {
+			if info, err := os.Stat(s.SourcePath); err == nil && info.Mode().IsRegular() {
+				key := sessionKey(s.Adapter, s.ExternalID)
+				var growth int64
+				if prev, ok := previous[key]; ok && prev.path == s.SourcePath && os.SameFile(prev.info, info) {
+					growth = max(0, info.Size()-prev.info.Size())
+				}
+				logs[key] = logBaseline{path: s.SourcePath, info: info, growth: growth}
+			}
+		}
+	}
+	return logs
+}
+
+// observeSessions uses precollected file metadata. Its baselines advance with the pass commit,
 // so a failed transaction can be retried without losing measured growth.
-func observeSessions(tx *store.Tx, work *State, ss []model.Session, procs []model.Proc, previous map[int32]model.Proc, fresh bool, now time.Time) error {
+func observeSessions(tx *store.Tx, work *State, ss []model.Session, logs map[string]logBaseline, procs []model.Proc, previous map[int32]model.Proc, fresh bool, now time.Time) error {
 	next := make(map[string]logBaseline, len(ss))
 	byPID := make(map[int32]model.Proc, len(procs))
 	owners := make(map[int32]int, len(ss))
@@ -32,14 +51,9 @@ func observeSessions(tx *store.Tx, work *State, ss []model.Session, procs []mode
 	for _, s := range ss {
 		key := sessionKey(s.Adapter, s.ExternalID)
 		var growth, cpu int64
-		if s.SourcePath != "" {
-			if info, err := os.Stat(s.SourcePath); err == nil && info.Mode().IsRegular() {
-				prev, ok := work.logs[key]
-				if ok && prev.path == s.SourcePath && os.SameFile(prev.info, info) {
-					growth = max(0, info.Size()-prev.info.Size())
-				}
-				next[key] = logBaseline{s.SourcePath, info}
-			}
+		if baseline, ok := logs[key]; ok {
+			growth = baseline.growth
+			next[key] = baseline
 		}
 		// Attribute only a session's own process. Shared hosts and helper trees
 		// cannot honestly supply per-session CPU measurements.

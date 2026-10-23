@@ -143,7 +143,7 @@
     if(cmd)panel.append(html("pre","metro-command",cmd));
     panel.append(html("h2","","Recent events"));const log=html("ul","metro-log");
     for(const e of recentEvents(node.events||[])){const li=html("li");li.append(html("time","",e.more?"":clock(stamp(e.occurred_at))),html("span",e.more?"d":"",e.more?"+"+e.more+" more "+e.kind+" · "+clock(stamp(e.from))+" – "+clock(stamp(e.to)):[e.kind,e.metadata?.tool,e.summary].filter(Boolean).join(" · ")));log.append(li);}
-    if(!log.childElementCount)log.append(html("li","d","No retained events in window."));panel.append(log);
+    if(!log.childElementCount)log.append(html("li","metro-log-empty d","No retained events in window."));panel.append(log);
   }
   const jumpTarget=j=>j?.target?[j.kind,j.target].join(" "):j?.kind||"";
   async function copy(cmd) {try {await navigator.clipboard.writeText(cmd);info("Resume command copied.");}catch{info("Clipboard unavailable. Select the resume command in the detail panel.");}}

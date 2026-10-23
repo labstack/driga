@@ -5,7 +5,7 @@
 .metro-header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .metro h1{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;font:600 17px/1.2 var(--mono,monospace);margin:0}.metro h1 b{color:var(--accent)}.metro-sep{color:var(--line)}
 .metro h2{display:flex;align-items:center;gap:8px;font:600 11px/1.3 var(--mono,monospace);letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin:0}
-.metro-controls{display:flex;gap:10px;align-items:center;font:12px var(--mono,monospace);color:var(--dim)}.metro-controls a{display:inline-flex;align-items:center;gap:6px;color:var(--mid);text-decoration:none}.metro-controls label{display:flex;gap:6px;align-items:center}
+.metro-controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center;font:12px var(--mono,monospace);color:var(--dim)}.metro-controls a{display:inline-flex;align-items:center;gap:6px;color:var(--mid);text-decoration:none}.metro-controls label{display:flex;gap:6px;align-items:center}
 .metro kbd{font:500 11px/1 var(--mono,monospace);color:var(--mid);background:var(--raise);border:1px solid var(--line);border-bottom-width:2px;border-radius:3px;padding:2px 5px}
 .metro button,.metro select{font:500 12px/1 var(--mono,monospace);color:var(--fg);background:var(--raise);border:1px solid var(--line);border-radius:3px;padding:6px 10px;cursor:pointer}.metro button.primary{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}.metro button.ghost{background:transparent}.metro button:disabled{opacity:.5;cursor:default}
 .metro button:focus-visible,.metro a:focus-visible,.metro select:focus-visible,.metro-scroll:focus-visible,.metro-quiet:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
@@ -42,5 +42,6 @@
 @media(max-width:1000px){.metro-main{grid-template-columns:minmax(0,1fr)}}
 
 .metro-summary{font:12px/1.4 var(--mono);color:var(--dim);margin-top:4px}
+.metro-log li.metro-log-empty{display:block}
 .metro-lead-chip{fill:color-mix(in srgb,var(--accent) 14%,transparent)}.metro-lead-label{font:600 11px var(--mono);fill:var(--accent)}
 .metro-wait-diamond{fill:var(--waiting-bar);stroke:var(--bg);stroke-width:1.5}.metro-event{stroke:var(--bg);stroke-width:1.5;fill:var(--finished)}.metro-event.prompt{fill:var(--bg);stroke:var(--accent);stroke-width:1.75}.metro-wait-label{font-weight:600}

@@ -123,6 +123,17 @@ func TestChatSingleTurnStatus(t *testing.T) {
 	}
 }
 
+func TestChatTUIBackendErrorVisible(t *testing.T) {
+	m := setup(t, fixture(), Options{}).(*app)
+	m.tab = chatTab
+	message := "driga MCP server did not connect; refusing Chat"
+	m.Update(chatStateMsg{state: chat.State{Messages: []store.ChatMessage{{ID: "failed", Role: "assistant", Text: message, Status: "error"}}}})
+	got := m.View().Content
+	if !strings.Contains(got, message) || strings.Contains(got, "Claude is answering") {
+		t.Fatalf("backend error was hidden or still shown as answering: %s", got)
+	}
+}
+
 type partialTUIAgent struct {
 	emitted chan struct{}
 	release chan struct{}

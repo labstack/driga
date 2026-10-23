@@ -74,11 +74,14 @@ func WatchSocketPath(dataDir, kind string) string {
 	}
 	sum := sha256.Sum256([]byte(filepath.Clean(dataDir)))
 	name := kind + "-" + hex.EncodeToString(sum[:8]) + ".sock"
+	// Choose the same fallback directory for chat and fleet even when only
+	// the shorter chat name would fit. Both clients share this IPC namespace.
+	nameLen := max(len(name), len("fleet-")+16+len(".sock"))
 	p = filepath.Join(os.TempDir(), socketUserDir(), name)
-	if len(p) <= maxSocketPath && filepath.IsAbs(p) {
+	if len(p)+nameLen-len(name) <= maxSocketPath && filepath.IsAbs(p) {
 		return p
 	}
-	return shortSocketPath(name)
+	return shortSocketPath(name, nameLen)
 }
 
 // EnsureSocketDir and CheckSocketDir enforce the private IPC directory for both services.

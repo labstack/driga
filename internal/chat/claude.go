@@ -77,22 +77,12 @@ func (a *Claude) Run(ctx context.Context, r Request, emit func(Delta) error) err
 	}
 	// Paths are explicit so an MCP child launched from a selected project still
 	// reads the same data/config as its broker, independent of its cwd.
-	dataPath, err := filepath.Abs(a.DataDir)
+	env, err := mcpEnvironment(a.DataDir)
 	if err != nil {
 		f.Close()
 		return err
 	}
-	configPath, err := filepath.Abs(config.Path())
-	if err != nil {
-		f.Close()
-		return err
-	}
-	spoolPath, err := filepath.Abs(config.SpoolDir())
-	if err != nil {
-		f.Close()
-		return err
-	}
-	conf := map[string]any{"mcpServers": map[string]any{"driga": map[string]any{"command": exe, "args": []string{"mcp", "--chat"}, "env": map[string]string{"DRIGA_DATA_DIR": dataPath, "DRIGA_CONFIG": configPath, "DRIGA_SPOOL_DIR": spoolPath}}}}
+	conf := map[string]any{"mcpServers": map[string]any{"driga": map[string]any{"command": exe, "args": []string{"mcp", "--chat"}, "env": env}}}
 	encodeErr := json.NewEncoder(f).Encode(conf)
 	if err := errors.Join(encodeErr, f.Close()); err != nil {
 		return err
@@ -118,6 +108,27 @@ func (a *Claude) Run(ctx context.Context, r Request, emit func(Delta) error) err
 		return runErr
 	}
 	return s.finish()
+}
+
+func mcpEnvironment(dataDir string) (map[string]string, error) {
+	dataPath, err := filepath.Abs(dataDir)
+	if err != nil {
+		return nil, err
+	}
+	spoolPath, err := filepath.Abs(config.SpoolDir())
+	if err != nil {
+		return nil, err
+	}
+	env := map[string]string{"DRIGA_DATA_DIR": dataPath, "DRIGA_SPOOL_DIR": spoolPath}
+	// Preserve the distinction between an optional default config and an
+	// explicit override when Claude starts the MCP child from a project cwd.
+	if os.Getenv("DRIGA_CONFIG") != "" {
+		env["DRIGA_CONFIG"], err = filepath.Abs(config.Path())
+		if err != nil {
+			return nil, err
+		}
+	}
+	return env, nil
 }
 
 // stream is the bounded JSONL parser from ask, extended for partial text and

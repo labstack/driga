@@ -205,7 +205,8 @@ func (s *StoreSource) load(ctx context.Context, mode string, scope store.Scope, 
 }
 
 // LiveSnapshotSource collects into disposable memory while no daemon is available.
-// Its mutex serializes passes, reads, and pass-counter changes.
+// The database serializes commits and reads. Its mutex protects publication
+// metadata, never slow filesystem/subprocess collection.
 type LiveSnapshotSource struct {
 	*StoreSource
 	deps      collector.Deps
@@ -305,7 +306,8 @@ func (a projectAdapter) Collect(ctx context.Context, env adapter.Env) ([]model.S
 	return selected, warnings, nil
 }
 
-// Start begins a full pass followed by five-second passes until cancellation.
+// Start publishes project identities, sessions and machine health before Git enrichment, followed
+// by five-second passes until cancellation.
 // Call Start exactly once, before reading, and Close after cancelling the viewer.
 func (s *LiveSnapshotSource) Start(ctx context.Context) {
 	ctx, s.cancel = context.WithCancel(ctx)
@@ -321,11 +323,18 @@ func (s *LiveSnapshotSource) Start(ctx context.Context) {
 			due := func(last time.Time, d time.Duration) bool { return last.IsZero() || now.Sub(last) >= d }
 			p := collector.Plan{Procs: due(procs, intervals.Procs), Machine: due(machine, intervals.Machine), Git: due(git, intervals.Git), GitFull: due(full, intervals.GitFull), Cwds: due(cwds, intervals.Cwds), Sockets: due(procs, intervals.Procs)}
 			p.Git = p.Git || p.GitFull
-			s.mu.Lock()
-			_, s.lastErr = collector.Pass(ctx, s.deps, s.st, p)
-			if s.lastErr == nil {
-				s.lastErr = s.st.Tx(ctx, func(tx *store.Tx) error { return tx.PruneSnapshot(now) })
+			if first {
+				// Repository status (especially untracked files) and socket
+				// probes must not delay the first populated interactive frame.
+				p.Git, p.GitFull, p.Sockets = false, false, false
+				p.GitIdentity = true
 			}
+			_, passErr := collector.Pass(ctx, s.deps, s.st, p)
+			if passErr == nil {
+				passErr = s.st.Tx(ctx, func(tx *store.Tx) error { return tx.PruneSnapshot(now) })
+			}
+			s.mu.Lock()
+			s.lastErr = passErr
 			if s.lastErr == nil {
 				s.version++
 				if p.Procs {

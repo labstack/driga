@@ -13,6 +13,22 @@ import (
 	"time"
 )
 
+func TestSocketFallbackUsesCommonNameBudget(t *testing.T) {
+	// At this boundary chat fits exactly but fleet is one byte too long.
+	// Neither service should independently choose a different directory.
+	dir := filepath.Join(t.TempDir(), strings.Repeat("data", 40))
+	volume := filepath.VolumeName(os.TempDir()) + string(filepath.Separator)
+	rootLen := maxSocketPath - len(socketUserDir()) - len("chat-") - 16 - len(".sock") - 2
+	root := volume + strings.Repeat("x", rootLen-len(volume))
+	for _, key := range []string{"TMPDIR", "TEMP", "TMP"} {
+		t.Setenv(key, root)
+	}
+	chat, fleet := WatchSocketPath(dir, "chat"), ControlSocketPath(dir)
+	if filepath.Dir(chat) != filepath.Dir(fleet) || len(chat) > maxSocketPath || len(fleet) > maxSocketPath {
+		t.Fatalf("inconsistent fallback: chat=%q fleet=%q", chat, fleet)
+	}
+}
+
 // macOS limits Unix socket paths to 104 bytes (Linux: 108); a long data dir
 // must not stop serving.
 func TestControlSocketPathFitsLimit(t *testing.T) {

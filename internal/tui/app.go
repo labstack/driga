@@ -187,7 +187,7 @@ func New(src Source, opts Options) tea.Model {
 
 func (m *app) Init() tea.Cmd {
 	m.pollPending = true
-	return tea.Batch(m.poll(), nextTick())
+	return tea.Batch(m.poll(), nextTick(), tea.RequestBackgroundColor)
 }
 func nextTick() tea.Cmd { return tea.Tick(time.Second, func(time.Time) tea.Msg { return tickMsg{} }) }
 
@@ -242,6 +242,10 @@ func heartbeat(dir string, now time.Time) error {
 
 func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.BackgroundColorMsg:
+		view.SetDarkBackground(msg.IsDark())
+		m.rebuild()
+		return m, nil
 	case chatStateMsg:
 		if msg.generation != m.chatGeneration {
 			if m.tab == chatTab {

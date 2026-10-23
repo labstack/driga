@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"charm.land/lipgloss/v2"
-	"charm.land/lipgloss/v2/compat"
 )
 
 func TestThemeCSSContainsEveryToken(t *testing.T) {
@@ -24,12 +23,12 @@ func TestThemeCSSContainsEveryToken(t *testing.T) {
 }
 
 func TestThemeTerminalParity(t *testing.T) {
-	original := compat.HasDarkBackground
-	defer func() { compat.HasDarkBackground = original }()
+	original := lightBackground.Load()
+	defer lightBackground.Store(original)
 	for _, token := range themeTokens {
 		adaptive := ThemeColor(token.Name)
 		for _, dark := range []bool{false, true} {
-			compat.HasDarkBackground = dark
+			SetDarkBackground(dark)
 			expected := token.Light
 			if dark {
 				expected = token.Dark

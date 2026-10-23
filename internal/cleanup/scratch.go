@@ -148,6 +148,10 @@ func inspectScratchSession(ctx context.Context, e Env, s snapshot, c Candidate, 
 	if err != nil {
 		return c, err
 	}
+	c.identity, err = captureIdentity(c.Path)
+	if err != nil {
+		return c, err
+	}
 	info, err := os.Lstat(c.Path)
 	if err != nil {
 		return c, err
@@ -171,7 +175,6 @@ func inspectScratchSession(ctx context.Context, e Env, s snapshot, c Candidate, 
 	if open {
 		return c, fmt.Errorf("process has an open file inside scratch")
 	}
-	c.identity = info
 	c.Status = "ready"
 	c.Evidence = []string{"stored Claude session " + session.ExternalID + " ended at " + latest.UTC().Format(time.RFC3339), "inside attributed temp root; no open files or process cwd"}
 	return c, nil

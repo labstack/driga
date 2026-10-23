@@ -46,4 +46,8 @@ async function runChatTests(){
  assert.equal(walk(get('chat-log')).find(n=>n.tagName==='strong').textContent,'Hello');
  change({seq:13,kind:'message',message:{id:'stream',role:'assistant',status:'complete',text:'**Hello**'}});
  assert(!get('chat-log').textContent.includes('Hellolo'));
+ reset([{id:'identifier',role:'assistant',status:'complete',text:'DRIGA_SMOKE_OK and _italic_ and __bold__'}]);
+ assert(get('chat-log').textContent.includes('DRIGA_SMOKE_OK'),'identifier underscores were consumed');
+ assert(walk(get('chat-log')).some(n=>n.tagName==='em'&&n.textContent==='italic'));
+ assert(walk(get('chat-log')).some(n=>n.tagName==='strong'&&n.textContent==='bold'));
 }

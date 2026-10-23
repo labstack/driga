@@ -2,10 +2,11 @@ package view
 
 import (
 	"fmt"
+	"image/color"
 	"strings"
+	"sync/atomic"
 
 	"charm.land/lipgloss/v2"
-	"charm.land/lipgloss/v2/compat"
 )
 
 // ThemeToken is one semantic color in the browser or terminal palette.
@@ -67,14 +68,33 @@ func ThemeCSS() string {
 		`@media (prefers-color-scheme: light){:root:not([data-theme="mocha"]):not([data-theme="latte"]){` + latte.String() + "color-scheme:light;}}\n"
 }
 
-// ThemeColor adapts to Lip Gloss's terminal background detection.
-func ThemeColor(name string) compat.AdaptiveColor {
+// Background detection belongs to the interactive event loop. Import-time
+// terminal queries can block indefinitely when a Windows MCP client has no console.
+var lightBackground atomic.Bool
+
+// HasDarkBackground reports the last TUI observation, or the default dark theme.
+func HasDarkBackground() bool { return !lightBackground.Load() }
+
+// SetDarkBackground records an asynchronous terminal background response.
+func SetDarkBackground(dark bool) { lightBackground.Store(!dark) }
+
+type adaptiveColor struct{ light, dark color.Color }
+
+func (c adaptiveColor) RGBA() (uint32, uint32, uint32, uint32) {
+	if lightBackground.Load() {
+		return c.light.RGBA()
+	}
+	return c.dark.RGBA()
+}
+
+// ThemeColor adapts to the background reported by the TUI, defaulting to dark.
+func ThemeColor(name string) color.Color {
 	for _, t := range themeTokens {
 		if t.Name == name {
-			return compat.AdaptiveColor{Light: lipgloss.Color(t.Light), Dark: lipgloss.Color(t.Dark)}
+			return adaptiveColor{light: lipgloss.Color(t.Light), dark: lipgloss.Color(t.Dark)}
 		}
 	}
-	return compat.AdaptiveColor{}
+	return lipgloss.NoColor{}
 }
 
 // TokenStyle colors text with a shared token. An unknown name renders plain:

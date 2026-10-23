@@ -121,9 +121,16 @@ func restoredPath(path string) string {
 func copyHome(t *testing.T, src string) string {
 	t.Helper()
 	dst := t.TempDir()
+	// Git canonicalizes Windows 8.3 temp aliases. Expand the fixture home
+	// before embedding it, so recorded paths and local Git inventory describe
+	// the same directory without changing observation spelling in production.
+	dst, err := filepath.EvalSymlinks(dst)
+	if err != nil {
+		t.Fatal(err)
+	}
 	var mtimes map[string]time.Time
 	readJSON(t, filepath.Join(src, "mtimes.json"), &mtimes)
-	err := filepath.WalkDir(src, func(path string, entry fs.DirEntry, err error) error {
+	err = filepath.WalkDir(src, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}

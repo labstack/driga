@@ -2,7 +2,6 @@ package tui
 
 import (
 	"charm.land/lipgloss/v2"
-	"charm.land/lipgloss/v2/compat"
 	"context"
 	"fmt"
 	"github.com/charmbracelet/x/ansi"
@@ -36,9 +35,9 @@ func TestFlowGoldenFrames(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.Lead.StartedFrom = "Editor"
-	original := compat.HasDarkBackground
-	compat.HasDarkBackground = true
-	defer func() { compat.HasDarkBackground = original }()
+	original := view.HasDarkBackground()
+	view.SetDarkBackground(true)
+	defer view.SetDarkBackground(original)
 	for _, width := range []int{80, 100, 140} {
 		for _, color := range []bool{false, true} {
 			name := fmt.Sprintf("flow-%d-color-%t.golden", width, color)
