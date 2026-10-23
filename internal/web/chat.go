@@ -16,7 +16,7 @@ import (
 )
 
 func isChatPOST(path string) bool {
-	return path == "/chat/api/send" || path == "/chat/api/stop" || path == "/chat/api/new" || path == "/chat/api/mode" || path == "/chat/api/decide"
+	return path == "/chat/api/prompt-answer" || path == "/chat/api/send" || path == "/chat/api/stop" || path == "/chat/api/new" || path == "/chat/api/mode" || path == "/chat/api/decide"
 }
 func (s *Server) chatAPI(w http.ResponseWriter, r *http.Request) {
 	if isChatPOST(r.URL.Path) {
@@ -45,6 +45,28 @@ func (s *Server) chatAPI(w http.ResponseWriter, r *http.Request) {
 	var out any
 	var err error
 	switch r.URL.Path {
+	case "/chat/api/prompts":
+		if client, ok := s.opts.Chat.(chat.PromptClient); ok {
+			out, err = client.Prompts(ctx)
+		} else {
+			out = []chat.Prompt{}
+		}
+	case "/chat/api/prompt-answer":
+		var in struct {
+			ID    string `json:"id"`
+			Allow bool   `json:"allow"`
+		}
+		decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096))
+		decoder.DisallowUnknownFields()
+		err = decoder.Decode(&in)
+		if err == nil {
+			if client, ok := s.opts.Chat.(chat.PromptClient); ok {
+				err = client.AnswerPrompt(ctx, in.ID, in.Allow)
+			} else {
+				err = errors.New("Prompts unavailable")
+			}
+		}
+		out = map[string]bool{"ok": err == nil}
 	case "/chat/api/new":
 		out, err = s.opts.Chat.Create(ctx)
 	case "/chat/api/history":

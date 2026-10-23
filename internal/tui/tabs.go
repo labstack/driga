@@ -9,6 +9,7 @@ import (
 
 	"charm.land/bubbles/v2/table"
 	"charm.land/lipgloss/v2"
+	"github.com/labstack/driga/internal/chat"
 	"github.com/labstack/driga/internal/cleanup"
 	"github.com/labstack/driga/internal/derive"
 	"github.com/labstack/driga/internal/inbox"
@@ -17,6 +18,7 @@ import (
 )
 
 type tabRow struct {
+	prompt      *chat.Prompt
 	machineText string
 	mcpCommand  *derive.MCPCommand
 	pileup      *derive.MCPPileup
@@ -46,7 +48,7 @@ func (m *app) tabVisible(tab int) bool {
 	case 1:
 		return len(m.snap.Projects.Rows) > 0
 	case 2:
-		return len(m.snap.Inbox.Rows) > 0
+		return len(m.snap.Inbox.Rows) > 0 || len(m.prompts) > 0
 	case 3:
 		return len(m.snap.Orphans.Rows) > 0
 	case 4:
@@ -78,6 +80,9 @@ func (m *app) tabLayout() (string, []tabHit) {
 		if m.machineVisible(r.MachineID) {
 			orphans++
 		}
+	}
+	if m.machineVisible(m.localMachine()) {
+		inbox += len(m.prompts)
 	}
 	cleanupCount := 0
 	if m.machineVisible(m.localMachine()) {
@@ -298,6 +303,16 @@ func (m *app) rebuild() {
 	case 2:
 		titles = []string{"", "REASON", "TOOL", "WAIT / AGE", "PROJECT · BRANCH", "TITLE / DETAIL"}
 		weights = []int{2, 18, 8, 10, 18, 32}
+		for _, p := range m.prompts {
+			if m.opts.Project != "" && p.Cwd != m.opts.Project {
+				continue
+			}
+			session := p.Session
+			if p.SessionID > 0 {
+				session = fmt.Sprintf("#%d", p.SessionID)
+			}
+			add(tabRow{machine: m.localMachine(), key: "prompt:" + p.ID, agent: p.SessionID, prompt: &p, cwd: p.Cwd, cells: []string{"", "permission " + session, p.Tool, duration(m.opts.Now().Sub(p.CreatedAt)), p.Cwd, p.Detail()}})
+		}
 		for _, r := range m.snap.Inbox.Rows {
 			item := r.InboxItem
 			reason := r.Reason

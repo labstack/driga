@@ -121,6 +121,8 @@ type Broker struct {
 	approvalTTL         time.Duration
 	fullAutoTTL         time.Duration
 	closeSocket         func()
+	prompts             map[string]*pendingPrompt
+	promptTTL           time.Duration
 	closed              bool
 }
 

@@ -37,11 +37,17 @@ type HookCmd struct {
 func (h HookCmd) Run(g *Globals) error {
 	defer func() {
 		if recover() != nil {
-			hookLogError(errors.New("hook panic recovered"))
+			if h.Event != "PermissionRequest" {
+				hookLogError(errors.New("hook panic recovered"))
+			}
 		}
 	}()
 	if os.Getenv("DRIGA_INTERNAL") == "1" {
 		return nil
+	}
+	if h.Adapter == "claude" && h.Event == "PermissionRequest" {
+		// Permission inputs and all failures stay off disk, including panic errors.
+		return h.permission(g)
 	}
 	if err := h.append(g); err != nil {
 		hookLogError(err)
@@ -90,6 +96,13 @@ func (h HookCmd) append(g *Globals) error {
 		return fmt.Errorf("decode hook payload: %w", err)
 	}
 	ev := model.HookEvent{TS: time.Now().UTC(), Adapter: h.Adapter, SessionID: payload.SessionID, Cwd: payload.Cwd, Event: h.Event}
+	if h.Adapter == "claude" && (h.Event == "SessionEnd" || payload.Event == "SessionEnd") {
+		endPromptSession(payload.SessionID, payload.Cwd)
+	}
+	// An event supplied on stdin must never fall through to spool capture.
+	if h.Adapter == "claude" && payload.Event == "PermissionRequest" {
+		return nil
+	}
 	ev.NotificationType, ev.Tool = payload.NotificationType, scrub.Snippet(payload.Tool)
 	if ev.Tool == "" && ev.NotificationType == "permission_prompt" {
 		ev.Tool = scrub.Snippet(permissionTool(payload.Message))
@@ -110,11 +123,13 @@ func (h HookCmd) append(g *Globals) error {
 		snippets = false
 	}
 	if ev.Tool == "" && h.Adapter == "claude" && ev.Event == "Notification" && ev.NotificationType == "permission_prompt" {
-		tool, input := permissionTranscript(payload.TranscriptPath)
+		tool, _ := permissionTranscript(payload.TranscriptPath)
 		ev.Tool = scrub.Snippet(tool)
-		if tool != "" {
-			payload.ToolInput = input
-		}
+	}
+	if h.Adapter == "claude" && ev.Event == "Notification" && ev.NotificationType == "permission_prompt" {
+		// The companion PermissionRequest owns the exact input in memory.
+		// Notification is only the durable needs-you marker, in every policy.
+		return spool.Append(config.SpoolDir(), ev)
 	}
 	if snippets {
 		ev.Message = scrub.Snippet(message)

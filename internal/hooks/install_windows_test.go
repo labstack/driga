@@ -54,7 +54,7 @@ func TestWindowsAllHookTargetsRoundTrip(t *testing.T) {
 			switch agent {
 			case "claude":
 				events, err := hooks.ClaudeStatus(path)
-				if err != nil || len(events) != 4 {
+				if err != nil || len(events) != 5 {
 					t.Fatal(events, err)
 				}
 				_, err = hooks.ClaudeUninstall(path, false)

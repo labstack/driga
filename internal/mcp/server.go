@@ -12,6 +12,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/labstack/driga/internal/chat"
 	"github.com/labstack/driga/internal/view"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -37,6 +38,7 @@ type Options struct {
 	Read        func(context.Context, Query, Builder) (view.Envelope, error)
 	Doctor      func(context.Context) (view.Envelope, error)
 	Cleanup     func(context.Context, string, bool) (view.Envelope, error)
+	Prompts     func(context.Context) ([]chat.Prompt, error)
 	Chat        bool
 	Action      func(context.Context, string, json.RawMessage) (string, error)
 	Approve     func(context.Context, json.RawMessage) (json.RawMessage, error)
@@ -170,6 +172,36 @@ func NewServer(o Options) *sdk.Server {
 		}
 		return o.Cleanup(ctx, in.Kind, in.Sizes)
 	})
+	if o.Prompts != nil {
+		sdk.AddTool(s, &sdk.Tool{Name: "list_prompts", Description: "Read pending local Claude permission prompts. Inputs are visible only under snippets capture.", Annotations: &sdk.ToolAnnotations{ReadOnlyHint: true}}, func(ctx context.Context, req *sdk.CallToolRequest, in struct{}) (*sdk.CallToolResult, any, error) {
+			prompts, err := o.Prompts(ctx)
+			if err != nil {
+				return nil, nil, err
+			}
+			// Redact at the final MCP boundary, even with an over-sharing source.
+			if o.CaptureText != "snippets" {
+				for i := range prompts {
+					prompts[i].Input = nil
+				}
+			}
+			raw, err := json.Marshal(prompts)
+			if err != nil {
+				return nil, nil, err
+			}
+			var value any
+			decoder := json.NewDecoder(bytes.NewReader(raw))
+			decoder.UseNumber()
+			if err = decoder.Decode(&value); err != nil {
+				return nil, nil, err
+			}
+			value = captureEvidence(value, o.CaptureText)
+			raw, err = json.Marshal(value)
+			if wire, ok := ctx.Value(envelopeKey{}).(*json.RawMessage); ok {
+				*wire = raw
+			}
+			return &sdk.CallToolResult{Content: []sdk.Content{&sdk.TextContent{Text: string(raw)}}}, value, err
+		})
+	}
 	if o.Chat {
 		registerActions(s, o)
 	}

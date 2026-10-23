@@ -55,7 +55,7 @@ func TestClaudeRepairDiffPreservesForeignLines(t *testing.T) {
 			}
 		}
 	}
-	if minus != 4 || plus != 4 {
+	if minus != 5 || plus != 5 {
 		t.Fatalf("want one pair per changed command, got %d/%d:\n%s", minus, plus, d.Unified())
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/labstack/driga/internal/chat"
 	"github.com/labstack/driga/internal/collector"
 	"github.com/labstack/driga/internal/config"
 	drigamcp "github.com/labstack/driga/internal/mcp"
@@ -110,8 +111,18 @@ func newMCPServer(g *Globals, actions bool, capture ...string) *sdk.Server {
 			return runtimeDoctor(ctx, cfg, now, r.(DoctorReader)), nil
 		})
 	}
+	var prompts func(context.Context) ([]chat.Prompt, error)
+	if policy != "" {
+		prompts = func(ctx context.Context) ([]chat.Prompt, error) {
+			in, err := chatApproval(json.RawMessage(`{}`))
+			if err != nil {
+				return nil, err
+			}
+			return chat.ChatPrompts(ctx, os.Getenv("DRIGA_CHAT_SOCKET"), in)
+		}
+	}
 	// Neither the SDK logger nor snapshot hints may write to protocol stdout.
-	return drigamcp.NewServer(drigamcp.Options{Chat: actions, Action: chatAction(&base), Approve: chatApprove, CaptureText: policy, Version: base.Version, Logger: slog.New(slog.NewTextHandler(stderr, nil)), Read: read, Doctor: doctor, Cleanup: func(ctx context.Context, kind string, sizes bool) (view.Envelope, error) {
+	return drigamcp.NewServer(drigamcp.Options{Prompts: prompts, Chat: actions, Action: chatAction(&base), Approve: chatApprove, CaptureText: policy, Version: base.Version, Logger: slog.New(slog.NewTextHandler(stderr, nil)), Read: read, Doctor: doctor, Cleanup: func(ctx context.Context, kind string, sizes bool) (view.Envelope, error) {
 		return cleanupRead(ctx, &base, kind, sizes, false)
 	}})
 }

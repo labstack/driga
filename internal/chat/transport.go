@@ -106,7 +106,7 @@ func handler(b *Broker) http.Handler {
 		w.Header().Set("Content-Type", "application/json")
 		var out any
 		var err error
-		bridge := r.URL.Path == "/approve" || r.URL.Path == "/claim" || r.URL.Path == "/complete"
+		bridge := r.URL.Path == "/approve" || r.URL.Path == "/claim" || r.URL.Path == "/complete" || r.URL.Path == "/chat-prompts" || r.URL.Path == "/answer-approved-prompt"
 		if !bridge && (b.clientToken == "" || subtle.ConstantTimeCompare([]byte(r.Header.Get("Authorization")), []byte(b.clientToken)) != 1) {
 			http.Error(w, "invalid client token", 403)
 			return
@@ -127,6 +127,10 @@ func handler(b *Broker) http.Handler {
 					out, err = b.Approve(r.Context(), in.Approval)
 				case "/claim":
 					out, err = b.Claim(in.Approval)
+				case "/chat-prompts":
+					out, err = b.ChatPrompts(in.Approval)
+				case "/answer-approved-prompt":
+					err = b.AnswerApprovedPrompt(in.Approval, in.ID)
 				case "/complete":
 					err = b.Complete(in.Approval, in.ID, in.Result, in.Failed)
 				}
@@ -146,6 +150,29 @@ func handler(b *Broker) http.Handler {
 				} else {
 					err = b.Decide(r.Context(), in.ID, in.Action, in.Allow)
 				}
+			}
+		case r.Method == "POST" && r.URL.Path == "/hook-prompt":
+			var in Prompt
+			err = json.NewDecoder(http.MaxBytesReader(w, r.Body, MaxText+8192)).Decode(&in)
+			if err == nil {
+				out, err = b.WaitPrompt(r.Context(), in)
+			}
+		case r.Method == "POST" && r.URL.Path == "/hook-end":
+			var in struct{ Session, Cwd string }
+			err = json.NewDecoder(http.MaxBytesReader(w, r.Body, 8192)).Decode(&in)
+			if err == nil {
+				b.EndPrompts(in.Session, in.Cwd)
+			}
+		case r.Method == "GET" && r.URL.Path == "/prompts":
+			out, err = b.Prompts(r.Context())
+		case r.Method == "POST" && r.URL.Path == "/prompt-answer":
+			var in struct {
+				ID    string
+				Allow bool
+			}
+			err = json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&in)
+			if err == nil {
+				err = b.AnswerPrompt(r.Context(), in.ID, in.Allow)
 			}
 		case r.Method == "GET" && r.URL.Path == "/health":
 			out = map[string]bool{"ok": true}

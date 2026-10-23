@@ -30,6 +30,8 @@ func (m *app) openDetail(r tabRow) {
 		}
 	}
 	switch {
+	case r.prompt != nil:
+		fmt.Fprintf(&buf, "Permission · %s · %s\n%s\ny allow · n deny\n", clean(r.prompt.Session), clean(r.prompt.Tool), wrapText(r.prompt.InputText(), m.width))
 	case r.mcpCommand != nil:
 		fmt.Fprintln(&buf, wrapText(view.MCPCommandText(*r.mcpCommand), m.width))
 	case r.pileup != nil:

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/labstack/driga/internal/chat"
 	"github.com/labstack/driga/internal/inbox"
 )
 
@@ -55,5 +56,20 @@ func (m *app) jumpInbox(r tabRow) tea.Cmd {
 			}
 		}
 		return actionMsg{status: status, err: err}
+	}
+}
+
+func (m *app) answerPrompt(p chat.Prompt, allow bool) tea.Cmd {
+	client, ok := m.opts.Chat.(chat.PromptClient)
+	if !ok {
+		return nil
+	}
+	m.busy = true
+	ctx := m.opts.Context
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(ctx, time.Second)
+		defer cancel()
+		err := client.AnswerPrompt(ctx, p.ID, allow)
+		return actionMsg{status: "Prompt answered", err: err}
 	}
 }

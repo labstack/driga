@@ -77,6 +77,7 @@ type app struct {
 	chatMode       chat.Mode
 	chatUntil      time.Time // Full auto end, from the broker.
 	chatFullAsk    bool      // m pressed once on the way to Full auto.
+	prompts        []chat.Prompt
 	chatActions    []chat.Action
 	chatHistory    []store.Conversation
 	chatDrafts     []string
@@ -143,6 +144,7 @@ type confirmation struct {
 type tickMsg struct{}
 type heartbeatMsg struct{ err error }
 type refreshMsg struct {
+	prompts []chat.Prompt
 	snap    Snapshot
 	version int64
 	changed bool
@@ -214,6 +216,11 @@ func (m *app) poll() tea.Cmd {
 	src, opts, loaded, version := m.src, m.opts, m.loaded, m.version
 	return func() tea.Msg {
 		r := refreshMsg{version: version}
+		if client, ok := opts.Chat.(chat.PromptClient); ok {
+			ctx, cancel := context.WithTimeout(opts.Context, time.Second)
+			r.prompts, _ = client.Prompts(ctx)
+			cancel()
+		}
 		if err := heartbeat(opts.DataDir, opts.Now()); err != nil {
 			r.err = err
 			return r
@@ -431,6 +438,21 @@ func (m *app) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status = "heartbeat: " + msg.err.Error()
 		}
 	case refreshMsg:
+		if m.detailRow != nil && m.detailRow.prompt != nil {
+			found := false
+			for _, p := range msg.prompts {
+				if p.ID == m.detailRow.prompt.ID {
+					found = true
+				}
+			}
+			if !found {
+				m.detail = false
+				m.detailRow = nil
+				m.detailText = ""
+				m.viewport.SetContent("")
+			}
+		}
+		m.prompts = msg.prompts
 		m.pollPending = false
 		if msg.err != nil {
 			m.status = "refresh: " + msg.err.Error()
@@ -827,6 +849,12 @@ func (m *app) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				} else if cwd := m.selectedCwd(); cwd != "" {
 					args := openCommand(m.opts.OpenCmd, m.opts.TermProgram, cwd)
 					return m, m.execute(args, false)
+				}
+			}
+		case "y", "n":
+			if m.tab == 2 && !m.busy {
+				if r, ok := m.selected(); ok && r.prompt != nil {
+					return m, m.answerPrompt(*r.prompt, k == "y")
 				}
 			}
 		case "a":

@@ -124,6 +124,9 @@ func (m *app) footer() string {
 		hints = append(hints, "x/space ack")
 	}
 	if m.tab == 2 {
+		if r, ok := m.selected(); ok && r.prompt != nil {
+			hints = append(hints, "y allow / n deny")
+		}
 		hints = append(hints, "X ack all")
 	}
 	if m.tab == homeTab {

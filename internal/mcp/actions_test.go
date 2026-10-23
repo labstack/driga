@@ -38,7 +38,7 @@ func TestChatToolsOnlyWithChat(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			for _, name := range []string{"ack_inbox", "jump", "kill", "cleanup", "summarize", "approve"} {
+			for _, name := range []string{"answer_prompt", "ack_inbox", "jump", "kill", "cleanup", "summarize", "approve"} {
 				found := false
 				for _, tool := range list.Tools {
 					if tool.Name == name {

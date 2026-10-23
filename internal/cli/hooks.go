@@ -107,7 +107,7 @@ func hookStatus(agent, path, driga string) (status, detail string, err error) {
 			stale, err = hooks.ClaudeStale(path, driga)
 			if stale {
 				detail = "stale binary; " + detail
-			} else if len(events) >= 4 {
+			} else if len(events) >= 5 {
 				status = "ok"
 			}
 		}

@@ -19,7 +19,7 @@ import (
 // Keep read authority explicit, including when the permission bridge is unavailable.
 var ReadBuiltins = []string{"Read", "Glob", "Grep", "LS", "TodoWrite", "NotebookRead"}
 
-var ReadTools = []string{"get_flow", "get_activity", "get_summary", "list_agents", "get_agent", "list_projects", "inspect_project", "list_inbox", "list_conflicts", "list_orphans", "get_machine", "list_machines", "inspect_setup", "list_cleanup_candidates"}
+var ReadTools = []string{"get_flow", "get_activity", "get_summary", "list_agents", "get_agent", "list_projects", "inspect_project", "list_inbox", "list_conflicts", "list_orphans", "get_machine", "list_machines", "inspect_setup", "list_cleanup_candidates", "list_prompts"}
 
 func readTool(name string) bool {
 	for _, t := range ReadTools {
@@ -380,7 +380,7 @@ func (s *stream) validTool(name string) bool {
 		return true
 	}
 	switch name {
-	case "mcp__driga__ack_inbox", "mcp__driga__jump", "mcp__driga__kill", "mcp__driga__cleanup", "mcp__driga__summarize", "mcp__driga__approve":
+	case "mcp__driga__answer_prompt", "mcp__driga__ack_inbox", "mcp__driga__jump", "mcp__driga__kill", "mcp__driga__cleanup", "mcp__driga__summarize", "mcp__driga__approve":
 		return true
 	}
 	return false

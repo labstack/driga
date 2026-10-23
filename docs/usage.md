@@ -233,11 +233,13 @@ driga hooks uninstall
 Installation shows a line-level unified diff with three context lines and `@@`
 hunk ranges, then asks for confirmation. Existing Claude and Codex
 files are backed up to `*.driga-bak-<timestamp>`.
-Claude installation appends commands for Stop, Notification, SessionStart, and
-SessionEnd to `~/.claude/settings.json`, preserving existing hooks. Codex
+Claude installation appends commands for Stop, Notification, SessionStart,
+SessionEnd and PermissionRequest to `~/.claude/settings.json`, preserving existing
+hooks. Codex
 installation manages only the `[[hooks.PermissionRequest]]` block in
 `config.toml`, preserving comments and existing `notify` settings. Uninstall
-removes only Driga entries. Hooks append events to the spool; the collector alone writes SQLite.
+removes only Driga entries. Capture hooks append events to the spool; the collector
+alone writes SQLite. Claude PermissionRequest uses the in-memory broker instead.
 
 Copilot installation manages only `$COPILOT_HOME/hooks/driga.json`, falling back
 to `~/.copilot/hooks/driga.json`. It captures sessionStart, userPromptSubmitted,
@@ -818,3 +820,30 @@ theme = 'latte'
 terminal background detection; `--no-color` keeps the layout without ANSI styling.
 The web console's Mocha, Latte, and System choices use the same Catppuccin tokens,
 including assistant Markdown. Web System follows the browser's color preference.
+
+### Answer Claude permission prompts
+
+With the collector running, `driga hooks install claude` offers a settings diff
+that includes `PermissionRequest` with a 660-second timeout. Repair updates it;
+uninstall removes it. Restart existing Claude sessions after changing hooks.
+
+Pending local Claude prompts appear above the inbox waits with the session,
+tool, and exact input. In the TUI select a prompt and press `y` to allow or `n`
+to deny (`a` remains attach); Enter opens the full input. In the web inbox use
+Allow or Deny. Browser decisions require the authenticated session, Origin and
+CSRF token.
+
+Chat's `list_prompts` shows inputs only with `capture_text = "snippets"`;
+other capture policies show tool metadata. `answer_prompt(id, allow)` uses the
+same action gate as other Chat actions: Confirm and Auto require a card;
+Full auto runs it immediately. The standalone `driga mcp` stays read-only.
+
+Prompts live in memory only, never in the database, logs or fleet. Claude
+permission notifications retain only the tool and needs-you metadata, even with
+snippets capture. First answer
+wins. A matching transcript tool result retires a terminal-answered prompt within
+about a second; session end, hook exit and ten minutes also retire it. Any error,
+timeout or absent collector exits the hook successfully without output, leaving
+the terminal to decide. Denials say “Denied from driga”. Driga never creates
+“always allow” rules or emits `updatedPermissions`. Codex, Copilot, Gemini and
+paired-machine prompts are outside this feature.

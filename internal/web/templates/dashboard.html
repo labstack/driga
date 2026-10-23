@@ -186,6 +186,9 @@
 </section>{{end}}{{end}}
 
 {{define "inbox"}}
+{{if or (eq .Scope "all") (eq .Scope .LocalMachineID)}}<section{{if .Prompts}} class="pane"{{end}} data-prompts aria-label="Permission prompts">
+{{range .Prompts}}<article class="item" data-prompt="{{.ID}}"><h3>{{.Tool}} · {{.Session}}</h3><p>{{.Cwd}}</p><pre>{{.Detail}}</pre><details><summary>Exact input</summary><pre>{{.InputText}}</pre></details><button type="button" data-prompt-answer="allow" data-prompt-id="{{.ID}}">Allow</button> <button type="button" data-prompt-answer="deny" data-prompt-id="{{.ID}}">Deny</button><span role="status"></span></article>{{end}}
+</section>{{end}}
 <p>{{if .All}}history · <a href="{{link "/inbox" .Scope false}}">current inbox</a>{{else}}Current waits and up to 50 completions from 24h · <a href="{{link "/inbox" .Scope true}}">show all history</a>{{end}}{{if .InboxPrevious}} · <a href="{{.InboxPrevious}}">previous page</a>{{end}}{{if .InboxNext}} · <a href="{{.InboxNext}}">next page</a>{{end}}</p>
 {{if .AttentionOnly}}
 <section data-pane tabindex="0" class="pane"><div class="pt"><b>needs-you · {{len .Needs}}</b><span>enter open</span></div>{{$p := .}}{{range .Needs}}<article data-row tabindex="-1" class="item stripe {{stateClass .State}}">{{template "chip" .State}}<h3><a data-row href="{{link (agentPath .ID) $p.Scope $p.All}}">{{.Title}}</a></h3><p>{{.Project}} · {{.Summary}}</p><small>{{relative .At $p.ObservedAt}}</small></article>{{else}}<p class="empty">Nothing needs you.</p>{{end}}</section>

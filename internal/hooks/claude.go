@@ -32,7 +32,7 @@ type Diff struct {
 	owned               bool // A standalone Driga file: no backups; empty After deletes it.
 }
 
-var claudeEvents = []string{"Stop", "Notification", "SessionStart", "SessionEnd"}
+var claudeEvents = []string{"Stop", "Notification", "SessionStart", "SessionEnd", "PermissionRequest"}
 
 // ErrTelemetryInUse prevents replacing any existing agent telemetry destination.
 var ErrTelemetryInUse = errors.New("telemetry is already configured; Driga cannot replace or relay it")
@@ -144,7 +144,7 @@ func ClaudeInstall(settingsPath, driga string, dryRun bool, now time.Time) (Diff
 		return d, err
 	}
 	// Ownership permits repair, but does not mean the executable is current.
-	for _, value := range h {
+	for event, value := range h {
 		groups, _ := value.([]any)
 		for _, value := range groups {
 			group, _ := value.(map[string]any)
@@ -154,6 +154,10 @@ func ClaudeInstall(settingsPath, driga string, dryRun bool, now time.Time) (Diff
 					continue
 				}
 				entry := value.(map[string]any)
+				if event == "PermissionRequest" && entry["timeout"] != json.Number("660") {
+					entry["timeout"] = 660
+					d.Changed = true
+				}
 				command, _ := entry["command"].(string)
 				if runtime.GOOS == "windows" && entry["args"] != nil {
 					if !sameBinary(command, driga) {

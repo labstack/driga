@@ -55,6 +55,13 @@ func chatAction(base *Globals) func(context.Context, string, json.RawMessage) (s
 		if err != nil {
 			return "", err
 		}
+		if name == "answer_prompt" {
+			err = chat.AnswerApprovedPrompt(ctx, os.Getenv("DRIGA_CHAT_SOCKET"), approval, action)
+			if err != nil {
+				return "", err
+			}
+			return "Prompt answered", nil
+		}
 		var out bytes.Buffer
 		g := *base
 		g.Machine = "local"
