@@ -15,7 +15,7 @@ import (
 	"io/fs"
 	"net"
 	"net/http"
-"path"
+	"path"
 	"strings"
 	"sync"
 	"time"
@@ -201,29 +201,32 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unauthorized", 401)
 		return
 	}
- // Match the decoded path, as the dashboard routes have always done.
- if r.URL.RawPath!="" {
-  r=r.Clone(r.Context())
-  r.URL.RawPath=""
- }
- // ServeMux redirects noncanonical paths before matching. These routes retain
- // their direct responses (including API errors and static file handling).
- clean:=path.Clean(r.URL.Path)
- if clean!=r.URL.Path && clean+"/"!=r.URL.Path {
-  switch {
-  case strings.HasPrefix(r.URL.Path,"/chat/api/"):s.chatAPI(w,r)
-  case strings.HasPrefix(r.URL.Path,"/static/"):s.static.ServeHTTP(w,r)
-  default:s.page(w,r)
-  }
-  return
- }
- s.routes.ServeHTTP(w,r)
+	// Match the decoded path, as the dashboard routes have always done.
+	if r.URL.RawPath != "" {
+		r = r.Clone(r.Context())
+		r.URL.RawPath = ""
+	}
+	// ServeMux redirects noncanonical paths before matching. These routes retain
+	// their direct responses (including API errors and static file handling).
+	clean := path.Clean(r.URL.Path)
+	if clean != r.URL.Path && clean+"/" != r.URL.Path {
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/chat/api/"):
+			s.chatAPI(w, r)
+		case strings.HasPrefix(r.URL.Path, "/static/"):
+			s.static.ServeHTTP(w, r)
+		default:
+			s.page(w, r)
+		}
+		return
+	}
+	s.routes.ServeHTTP(w, r)
 }
 
 func (s *Server) newRoutes() *http.ServeMux {
 	mux := http.NewServeMux()
- mux.HandleFunc("GET /static", s.page)
- mux.HandleFunc("GET /chat/api", s.page)
+	mux.HandleFunc("GET /static", s.page)
+	mux.HandleFunc("GET /chat/api", s.page)
 	mux.HandleFunc("GET /chat/api/", s.chatAPI)
 	for _, path := range []string{"/chat/api/new", "/chat/api/send", "/chat/api/stop"} {
 		mux.HandleFunc("POST "+path, s.chatAPI)
