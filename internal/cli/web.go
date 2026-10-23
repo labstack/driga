@@ -17,6 +17,7 @@ import (
 
 // WebCmd serves the browser viewer in its own process.
 type WebCmd struct {
+	WebOptions
 	Listen string `default:"127.0.0.1:0" help:"Loopback address and port for the dashboard."`
 	Open   bool   `help:"Open the dashboard in your browser."`
 }

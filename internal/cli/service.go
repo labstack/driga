@@ -22,15 +22,53 @@ import (
 
 // ServiceCmd controls the optional per-user collector.
 type ServiceCmd struct {
-	Action string `arg:"" enum:"install,uninstall,start,stop,restart,status,logs" help:"Service action: install, uninstall, start, stop, restart, status, logs."`
-	Follow bool   `short:"f" help:"Follow collector log output (logs only)."`
+	Install   ServiceInstallCmd   `cmd:"" help:"Install and start the collector service."`
+	Start     ServiceStartCmd     `cmd:"" help:"Start the collector service."`
+	Stop      ServiceStopCmd      `cmd:"" help:"Stop the collector service."`
+	Restart   ServiceRestartCmd   `cmd:"" help:"Restart the collector service."`
+	Status    ServiceStatusCmd    `cmd:"" help:"Show collector service status."`
+	Logs      ServiceLogsCmd      `cmd:"" help:"Print collector logs."`
+	Uninstall ServiceUninstallCmd `cmd:"" help:"Uninstall the collector service."`
+}
+type ServiceInstallCmd struct{}
+
+func (ServiceInstallCmd) Run(g *Globals) error { return (serviceControl{Action: "install"}).Run(g) }
+
+type ServiceStartCmd struct{}
+
+func (ServiceStartCmd) Run(g *Globals) error { return (serviceControl{Action: "start"}).Run(g) }
+
+type ServiceStopCmd struct{}
+
+func (ServiceStopCmd) Run(g *Globals) error { return (serviceControl{Action: "stop"}).Run(g) }
+
+type ServiceRestartCmd struct{}
+
+func (ServiceRestartCmd) Run(g *Globals) error { return (serviceControl{Action: "restart"}).Run(g) }
+
+type ServiceStatusCmd struct{}
+
+func (ServiceStatusCmd) Run(g *Globals) error { return (serviceControl{Action: "status"}).Run(g) }
+
+type ServiceLogsCmd struct {
+	Follow bool `short:"f" help:"Follow collector log output."`
+}
+
+func (c ServiceLogsCmd) Run(g *Globals) error {
+	return (serviceControl{Action: "logs", Follow: c.Follow}).Run(g)
+}
+
+type ServiceUninstallCmd struct{}
+
+func (ServiceUninstallCmd) Run(g *Globals) error { return (serviceControl{Action: "uninstall"}).Run(g) }
+
+type serviceControl struct {
+	Action string
+	Follow bool
 }
 
 // Run controls the user service or prints the last 50 collector log lines.
-func (c ServiceCmd) Run(g *Globals) error {
-	if c.Follow && c.Action != "logs" {
-		return errors.New("-f is only supported by service logs")
-	}
+func (c serviceControl) Run(g *Globals) error {
 	if c.Action == "logs" {
 		ctx, stop := notifyContext(context.Background())
 		defer stop()

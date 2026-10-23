@@ -181,3 +181,10 @@ through [SECURITY.md](SECURITY.md). Participation follows the
 
 [Apache License 2.0](LICENSE) · Copyright 2026 LabStack LLC. The Driga name is
 covered by the [trademark policy](TRADEMARK.md).
+
+Command groups default to `list`; session detail is `driga agents show <session-id>`,
+project detail is `driga projects show <project>`, and local machine detail is
+`driga machines show`. Destructive actions ask for confirmation; `--yes/-y`
+allows non-interactive use while retaining safety checks. See the
+[command reference](docs/usage.md#command-reference) and
+[old-to-new command table](docs/usage.md#command-migration) for this breaking alpha change.

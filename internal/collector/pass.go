@@ -19,12 +19,12 @@ import (
 	"github.com/labstack/driga/internal/pathx"
 
 	"github.com/labstack/driga/internal/adapter"
+	attention "github.com/labstack/driga/internal/attention"
 	"github.com/labstack/driga/internal/config"
 	"github.com/labstack/driga/internal/derive"
 	"github.com/labstack/driga/internal/feed"
 	"github.com/labstack/driga/internal/fleet"
 	"github.com/labstack/driga/internal/gitscan"
-	attention "github.com/labstack/driga/internal/inbox"
 	"github.com/labstack/driga/internal/jsonx"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/platform"

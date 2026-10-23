@@ -68,10 +68,15 @@ func SuggestRoots(home string) []string {
 }
 
 // InitCmd guides optional setup; every prompt defaults to No.
-type InitCmd struct{}
+type InitCmd struct {
+	Yes bool `short:"y" help:"Accept each optional setup change without asking."`
+}
 
 // Run explains and previews changes before writing configuration or agent settings.
-func (InitCmd) Run(g *Globals) error {
+func (c InitCmd) Run(g *Globals) error {
+	if !c.Yes && !terminalInput(g) {
+		return invalidUsage("not applied; pass --yes to apply without asking")
+	}
 	input := g.Stdin
 	if input == nil {
 		input = strings.NewReader("")
@@ -81,8 +86,12 @@ func (InitCmd) Run(g *Globals) error {
 	r := bufio.NewReader(input)
 	local := *g
 	local.Stdin = r
+	local.inputTerminal = terminalInput(g)
 	out := commandOutput(g)
 	ask := func(prompt string) (bool, error) {
+		if c.Yes {
+			return true, nil
+		}
 		if _, err := fmt.Fprint(out, prompt+" [y/N] "); err != nil {
 			return false, err
 		}
@@ -170,7 +179,7 @@ func (InitCmd) Run(g *Globals) error {
 		return err
 	}
 	if yes {
-		if err := (ServiceCmd{Action: "install"}).Run(&local); err != nil {
+		if err := (ServiceInstallCmd{}).Run(&local); err != nil {
 			return err
 		}
 	}
@@ -180,7 +189,7 @@ func (InitCmd) Run(g *Globals) error {
 		return err
 	}
 	if yes {
-		return (HooksInstallCmd{HooksOptions: HooksOptions{Agent: "all"}}).Run(&local)
+		return (HooksInstallCmd{HooksOptions: HooksOptions{Target: "all", Yes: c.Yes}}).Run(&local)
 	}
 	return nil
 }

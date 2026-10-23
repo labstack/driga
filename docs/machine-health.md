@@ -1,6 +1,6 @@
 # Machine health
 
-`driga machine --json` and MCP `get_machine` use the same schema 2 view:
+`driga machines show --json` and MCP `get_machine` use the same schema 2 view:
 `sample`, `top_memory`, `top_cpu`, `mcp_servers`, and the existing `memory` agent-role totals,
 plus `agent_share`, `session_costs`, `agent_processes_without_session`,
 `likely_agent_work`, and `other_apps`. All additions keep schema 2. The old
@@ -11,7 +11,7 @@ for one host. This documented schema-2 collection change preserves field types.
 Default evidence lists contain at most ten rows and three nested process,
 command, install, or host-trend entries per row. `truncated` marks omitted entries;
 whole-machine totals remain complete. `trend_since` gives the default 24-hour
-query boundary. Use `driga machine --full` or MCP `get_machine` with `full: true`
+query boundary. Use `driga machines show --full` or MCP `get_machine` with `full: true`
 for retained history and uncapped evidence lists. MCP additionally retains its
 standard envelope `limit`/`truncated` contract. These are observed processes, not an exhaustive
 accounting of kernel memory or unreadable tasks.
@@ -269,7 +269,7 @@ interval; delayed viewer/event passes cannot create extra samples. Health text
 survives the titles-only policy, since it contains operational readings rather
 than agent transcript text.
 
-Notification clicks use the existing terminal-notifier `driga jump <id>` path.
+Notification clicks use the existing terminal-notifier `driga inbox jump <id>` path.
 The stored destination is `machine`. On macOS, the click opens Terminal and runs
 the installed executable's `top --tab machine`; on Linux, a manual jump uses
 `x-terminal-emulator -e`. This avoids requiring a running web server. As with

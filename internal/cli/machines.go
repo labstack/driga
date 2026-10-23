@@ -14,10 +14,15 @@ import (
 )
 
 // MachinesCmd lists cached fleet state, including when collection has stopped.
-type MachinesCmd struct{}
+type MachinesCmd struct {
+	List    MachinesListCmd   `cmd:"" default:"withargs" help:"List known machines and connection health."`
+	Show    MachineShowCmd    `cmd:"" help:"Show one machine (default: local)."`
+	ResetID MachineResetIDCmd `cmd:"" name:"reset-id" help:"Regenerate the local machine identity."`
+}
+type MachinesListCmd struct{ MachineListOptions }
 
 // Run renders known machines without requiring a fresh collector pass.
-func (MachinesCmd) Run(g *Globals) error {
+func (MachinesListCmd) Run(g *Globals) error {
 	copy := *g
 	copy.cachedMachines = true
 	return runRead(&copy, view.Filter{}, "", func(r view.Reader, f view.Filter, now time.Time) (any, error) {

@@ -1,4 +1,4 @@
-// Package view builds read-only, shared CLI and TUI presentation models.
+// Package view builds shared presentation models for CLI, TUI, web and MCP consumers.
 package view
 
 import (

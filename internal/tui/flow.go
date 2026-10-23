@@ -7,7 +7,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/labstack/driga/internal/inbox"
+	"github.com/labstack/driga/internal/attention"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/store"
 	"github.com/labstack/driga/internal/view"
@@ -176,7 +176,7 @@ func (m *app) jumpFlowAttention(w view.InboxRow) tea.Cmd {
 func (m *app) flowDetailLines() []string {
 	if m.flowAttention && len(m.flow.Attention.Waits) > 0 {
 		w := m.flow.Attention.Waits[min(m.flowAskCursor, len(m.flow.Attention.Waits)-1)]
-		return []string{clean(w.Title) + " · " + w.Adapter, "◆ needs you · " + duration(inbox.Waited(w.InboxItem, m.opts.Now())), clean(flowWaitReason(w)), "Copy resume: " + clean(inbox.JumpCommand(w.Jump)), ""}
+		return []string{clean(w.Title) + " · " + w.Adapter, "◆ needs you · " + duration(attention.Waited(w.InboxItem, m.opts.Now())), clean(flowWaitReason(w)), "Copy resume: " + clean(attention.JumpCommand(w.Jump)), ""}
 	}
 
 	n := m.flowSelected()
@@ -225,7 +225,7 @@ func (m *app) flowDetailLines() []string {
 	for _, r := range n.Mixer.Rows {
 		lines = append(lines, clean(r.Name+": "+r.Reading))
 	}
-	if command := inbox.JumpCommand(n.Jump); command != "" {
+	if command := attention.JumpCommand(n.Jump); command != "" {
 		lines = append(lines, "Copy resume: "+clean(command))
 	}
 	if n.Observed != nil && !n.Observed.LastGrowthAt.IsZero() {
@@ -298,7 +298,7 @@ func (m *app) flowLayout() (string, []flowHit) {
 		if m.flowAttention && i == m.flowAskCursor {
 			prefix = "› "
 		}
-		needs = append(needs, prefix+view.TokenStyle("waiting", m.opts.NoColor).Render("◆ "+flowWaitAge(inbox.Waited(w.InboxItem, m.opts.Now())))+"  "+clean(w.Title)+"  "+strings.TrimPrefix(strings.TrimPrefix(clean(flowWaitReason(w)), "◆ Asked for input · "), "◆ "))
+		needs = append(needs, prefix+view.TokenStyle("waiting", m.opts.NoColor).Render("◆ "+flowWaitAge(attention.Waited(w.InboxItem, m.opts.Now())))+"  "+clean(w.Title)+"  "+strings.TrimPrefix(strings.TrimPrefix(clean(flowWaitReason(w)), "◆ Asked for input · "), "◆ "))
 	}
 	if len(m.flow.Attention.Waits) == 0 {
 		needs = append(needs, fmt.Sprintf("Nothing needs you · %d working", m.flow.Attention.Working))

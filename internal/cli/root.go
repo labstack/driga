@@ -17,19 +17,20 @@ import (
 	"github.com/labstack/driga/internal/scrub"
 )
 
-// Globals are flags shared by every command.
+// Globals carries resolved command options and runtime dependencies.
 type Globals struct {
+	inputTerminal bool   `kong:"-"`
+	Machine       string `kong:"-"`
 	// CleanupPlatform injects read-only inspection for embedded callers/tests.
 	CleanupPlatform platform.Platform `kong:"-"`
-	Machine         string            `default:"all" help:"Scope views to a machine name, ID, device-ID prefix, local, or all."`
 	cachedMachines  bool              `kong:"-"`
-	JSON            bool              `help:"Print versioned JSON instead of tables."`
-	Project         string            `help:"Scope views to one project (path, name, or '.')."`
-	Since           string            `help:"Only show items since a duration ago or 'yesterday'."`
-	Snapshot        bool              `help:"Force snapshot mode (one-shot collect, no history)."`
-	Theme           *string           `enum:"auto,mocha,latte" help:"TUI theme: auto, mocha or latte (overrides ui.theme)."`
-	NoColor         bool              `name:"no-color" help:"Disable colors."`
-	Watch           time.Duration     `help:"Re-render every interval (e.g. 2s)." placeholder:"DUR"`
+	JSON            bool              `kong:"-"`
+	Project         string            `kong:"-"`
+	Since           string            `kong:"-"`
+	Snapshot        bool              `kong:"-"`
+	Theme           *string           `kong:"-"`
+	NoColor         bool              `kong:"-"`
+	Watch           time.Duration     `kong:"-"`
 
 	Version string    `kong:"-"`
 	Commit  string    `kong:"-"`
@@ -42,44 +43,37 @@ type Globals struct {
 // Root is the full command tree.
 type Root struct {
 	Globals
+	VersionFlag kong.VersionFlag `name:"version" help:"Print the driga version."`
 
-	Summary   SummaryCmd     `cmd:"" default:"1" help:"Show a one-screen summary."`
-	Flow      FlowCmd        `cmd:"" help:"Show a session family and its state signals."`
-	Activity  ActivityCmd    `cmd:"" help:"Show the last hour of machine activity."`
-	Agents    AgentsCmd      `cmd:"" help:"List agents grouped by family."`
-	Agent     AgentCmd       `cmd:"" help:"Show session detail."`
-	Projects  ProjectsCmd    `cmd:"" help:"List project status."`
-	Summarize SummarizeCmd   `cmd:"" help:"Refresh opt-in local project summaries through Claude."`
-	Ask       AskCmd         `cmd:"" help:"Ask a one-shot Chat question through Claude and driga's read-only tools."`
-	Cleanup   CleanupCmd     `cmd:"" help:"Inspect and explicitly clean local agent disk candidates."`
-	Where     WhereCmd       `cmd:"" help:"Show where a project stands."`
-	Inbox     InboxCmd       `cmd:"" help:"List attention and completion events."`
-	Jump      JumpCmd        `cmd:"" help:"Jump to a local inbox item without acknowledging it."`
-	Conflicts ConflictsCmd   `cmd:"" help:"Show current and recent overlaps."`
-	Orphans   OrphansCmd     `cmd:"" help:"List orphan process trees."`
-	Kill      OrphansKillCmd `cmd:"" help:"Confirm and kill driga-proven local orphan trees (alias of orphans kill)."`
-	Machines  MachinesCmd    `cmd:"" help:"List known machines and their connection health."`
-	Machine   MachineCmd     `cmd:"" help:"Show machine health."`
-	Web       WebCmd         `cmd:"" help:"Open a read-only browser dashboard on loopback."`
-	Top       TopCmd         `cmd:"" help:"Open the interactive session viewer."`
-	MCP       MCPCmd         `cmd:"" name:"mcp" help:"Serve read-only MCP tools over stdio."`
-
-	Service    ServiceCmd `cmd:"" help:"Manage the collector service."`
-	Doctor     DoctorCmd  `cmd:"" help:"Check setup and collection health."`
-	Init       InitCmd    `cmd:"" help:"Guide optional setup."`
-	Config     ConfigCmd  `cmd:"" help:"Inspect or edit configuration."`
-	Collect    CollectCmd `cmd:"" help:"Run the collector (what launchd runs)."`
-	Serve      ServeCmd   `cmd:"" help:"Run the collector with fleet serving enabled."`
-	Fleet      FleetCmd   `cmd:"" help:"Inspect fleet identity, serving status and viewers."`
-	Hook       HookCmd    `cmd:"" hidden:"" help:"Record an agent hook."`
-	Hooks      HooksCmd   `cmd:"" help:"Manage agent hooks."`
-	Feed       FeedCmd    `cmd:"" hidden:"" help:"Inspect the local fleet feed."`
-	Dev        DevCmd     `cmd:"" hidden:"" help:"Inspect unsupported agent formats."`
-	VersionCmd VersionCmd `cmd:"" name:"version" help:"Print the driga version."`
+	Summary    SummaryCmd   `cmd:"" default:"withargs" help:"Show a one-screen summary."`
+	Flow       FlowCmd      `cmd:"" help:"Show a session family and its state signals."`
+	Activity   ActivityCmd  `cmd:"" help:"Show the last hour of machine activity."`
+	Agents     AgentsCmd    `cmd:"" help:"List agents grouped by family."`
+	Projects   ProjectsCmd  `cmd:"" help:"List project status."`
+	Inbox      InboxCmd     `cmd:"" help:"List attention and completion events."`
+	Conflicts  ConflictsCmd `cmd:"" help:"Show current and recent overlaps."`
+	Orphans    OrphansCmd   `cmd:"" help:"List orphan process trees."`
+	Machines   MachinesCmd  `cmd:"" help:"List known machines and their connection health."`
+	Cleanup    CleanupCmd   `cmd:"" help:"Inspect and explicitly clean local agent disk candidates."`
+	Top        TopCmd       `cmd:"" help:"Open the interactive session viewer."`
+	Web        WebCmd       `cmd:"" help:"Serve the interactive browser dashboard on loopback."`
+	Ask        AskCmd       `cmd:"" help:"Ask a one-shot Chat question through Claude and driga's read-only tools."`
+	MCP        MCPCmd       `cmd:"" name:"mcp" help:"Serve read-only MCP tools over stdio."`
+	Doctor     DoctorCmd    `cmd:"" help:"Check setup and collection health."`
+	Init       InitCmd      `cmd:"" help:"Guide optional setup."`
+	Config     ConfigCmd    `cmd:"" help:"Inspect or edit configuration."`
+	Collect    CollectCmd   `cmd:"" help:"Run the collector (what launchd runs)."`
+	Service    ServiceCmd   `cmd:"" help:"Manage the collector service."`
+	Hooks      HooksCmd     `cmd:"" help:"Manage agent hooks."`
+	Fleet      FleetCmd     `cmd:"" help:"Inspect fleet identity, serving status and viewers."`
+	Hook       HookCmd      `cmd:"" hidden:"" help:"Record an agent hook."`
+	Feed       FeedCmd      `cmd:"" hidden:"" help:"Inspect the local fleet feed."`
+	Dev        DevCmd       `cmd:"" hidden:"" help:"Inspect unsupported agent formats."`
+	VersionCmd VersionCmd   `cmd:"" name:"version" help:"Print the driga version."`
 }
 
 // VersionCmd prints the version and release build metadata.
-type VersionCmd struct{}
+type VersionCmd struct{ JSONOptions }
 
 func (VersionCmd) Run(g *Globals) error {
 	if g.JSON {
@@ -159,9 +153,9 @@ func run(args []string, version string, stdin io.Reader, stdout, stderr io.Write
 	exit := -1
 	parser, err := kong.New(&root,
 		kong.Name("driga"),
-		kong.Description("Watch every AI coding agent session on this machine."),
+		kong.Vars{"version": "driga " + version},
+		kong.Description("Watch AI coding agent sessions across your machines and projects."),
 		kong.Writers(stdout, stderr),
-		kong.Help(commandHelp),
 		kong.Exit(func(code int) { exit = code; panic(exitPanic{}) }),
 		kong.Bind(&root.Globals),
 	)
@@ -218,14 +212,28 @@ func supportsJSON(command string) bool {
 		return false
 	}
 	switch words[0] {
-	case "flow", "summary", "activity", "agents", "agent", "projects", "where", "conflicts", "machines", "cleanup", "ask", "summarize", "doctor", "version", "dev", "feed":
+	case "flow", "summary", "activity", "conflicts", "ask", "doctor", "version", "dev", "feed":
 		return true
-	case "inbox", "orphans", "machine":
+	case "agents":
 		return len(words) < 2 || words[1] == "list" || words[1] == "show"
+	case "projects":
+		return true
+	case "machines":
+		return len(words) < 2 || words[1] == "list" || words[1] == "show"
+	case "cleanup":
+		return true
+	case "inbox", "orphans":
+		return len(words) < 2 || words[1] == "list"
 	case "config":
 		return len(words) > 1 && words[1] == "path"
 	case "fleet":
-		return len(words) > 1 && (words[1] == "id" || words[1] == "status" || words[1] == "viewers" || words[1] == "peers" || words[1] == "add")
+		if len(words) < 2 {
+			return false
+		}
+		if words[1] == "id" || words[1] == "status" {
+			return true
+		}
+		return len(words) > 2 && (words[1] == "peers" && (words[2] == "list" || words[2] == "add") || words[1] == "viewers" && words[2] == "list")
 	}
 	return false
 }
@@ -234,22 +242,6 @@ type usageError struct{ error }
 
 func (usageError) ExitCode() int                    { return 2 }
 func invalidUsage(format string, args ...any) error { return usageError{fmt.Errorf(format, args...)} }
-
-// commandHelp keeps global parsing compatible while showing only supported output.
-func commandHelp(options kong.HelpOptions, ctx *kong.Context) error {
-	selected := ctx.Selected()
-	if selected == nil || supportsJSON(ctx.Command()) {
-		return kong.DefaultHelpPrinter(options, ctx)
-	}
-	for _, flag := range ctx.Model.Flags {
-		if flag.Name == "json" {
-			hidden := flag.Hidden
-			flag.Hidden = true
-			defer func() { flag.Hidden = hidden }()
-		}
-	}
-	return kong.DefaultHelpPrinter(options, ctx)
-}
 
 type notFoundError struct{ error }
 

@@ -19,7 +19,7 @@ import (
 
 func TestFleetPairCommandWiring(t *testing.T) {
 	readEnv(t)
-	for _, args := range [][]string{{"fleet", "enroll", "--help"}, {"fleet", "add", "--help"}, {"fleet", "revoke", "--help"}, {"fleet", "remove", "--help"}, {"fleet", "rekey", "--help"}, {"machine", "reset-id", "--help"}} {
+	for _, args := range [][]string{{"fleet", "enroll", "--help"}, {"fleet", "peers", "add", "--help"}, {"fleet", "viewers", "revoke", "--help"}, {"fleet", "peers", "remove", "--help"}, {"fleet", "rekey", "--yes", "--help"}, {"machines", "reset-id", "--yes", "--help"}} {
 		var out, errs bytes.Buffer
 		if code := run(args, "test", strings.NewReader(""), &out, &errs); code != 0 {
 			t.Errorf("%v: %d %s", args, code, &errs)
@@ -45,7 +45,7 @@ func TestFleetRemoveKeepsRowsAndPurgeDeletesRemoteOnly(t *testing.T) {
 		if err := fleet.SavePeers(dir, []fleet.Peer{{Name: "vm", MachineID: "remote"}}); err != nil {
 			t.Fatal(err)
 		}
-		args := []string{"fleet", "remove", "vm"}
+		args := []string{"fleet", "peers", "remove", "vm", "--yes"}
 		if purge {
 			args = append(args, "--purge")
 		}
@@ -75,16 +75,16 @@ func TestFleetIdentityMaintenanceRequiresStoppedCollector(t *testing.T) {
 		t.Fatal(err)
 	}
 	var out, errs bytes.Buffer
-	if code := run([]string{"fleet", "rekey"}, "test", strings.NewReader(""), &out, &errs); code == 0 || !strings.Contains(errs.String(), "stop the collector") {
+	if code := run([]string{"fleet", "rekey", "--yes"}, "test", strings.NewReader(""), &out, &errs); code == 0 || !strings.Contains(errs.String(), "stop the collector") {
 		t.Fatalf("%d %s", code, &errs)
 	}
 	lock.Close()
-	readRun(t, "fleet", "rekey")
+	readRun(t, "fleet", "rekey", "--yes")
 	fresh, err := fleet.LoadOrCreateIdentity(filepath.Join(config.DataDir(), "fleet"))
 	if err != nil || fresh.DeviceID == id.DeviceID {
 		t.Fatal(err)
 	}
-	readRun(t, "machine", "reset-id")
+	readRun(t, "machines", "reset-id", "--yes")
 }
 
 func TestAddShowsGrantedPermissions(t *testing.T) {
@@ -158,7 +158,7 @@ func TestFleetDiagnosticsShowSnapshotError(t *testing.T) {
 	if err := fleet.SavePeers(filepath.Join(config.DataDir(), "fleet"), []fleet.Peer{{Name: "peer-a", MachineID: "remote"}}); err != nil {
 		t.Fatal(err)
 	}
-	for _, args := range [][]string{{"fleet", "peers"}, {"machines"}} {
+	for _, args := range [][]string{{"fleet", "peers", "list"}, {"machines"}} {
 		var out, errs bytes.Buffer
 		if code := run(args, "test", strings.NewReader(""), &out, &errs); code != 0 {
 			t.Fatalf("%v: %d %s", args, code, &errs)

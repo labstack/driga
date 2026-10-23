@@ -192,7 +192,7 @@ func TestSmoke(t *testing.T) {
 	}
 	local.run("inbox")
 	local.run("orphans")
-	local.run("machine")
+	local.run("machines", "show")
 	local.run("doctor")
 	// Cleanup refuses when a live agent hides its cwd (non-dumpable agents
 	// on Linux); unreadable non-agent processes are reported as evidence. That is the
@@ -238,7 +238,7 @@ func TestSmoke(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	var serveLog logBuffer
-	serve := local.cmd(ctx, "serve")
+	serve := local.cmd(ctx, "collect", "--serve")
 	serve.Stdout, serve.Stderr = &serveLog, &serveLog
 	if err := serve.Start(); err != nil {
 		t.Fatal(err)
@@ -257,8 +257,8 @@ func TestSmoke(t *testing.T) {
 	viewer := newNode(t, bin, "viewer")
 	write(t, viewer.path("config.toml"), "[adapters.claude]\nenabled = false\n[adapters.codex]\nenabled = false\n[fleet]\nserve = false\n[intake]\notlp = false\n[adapters.copilot]\nenabled = false\n")
 	viewerID := strings.TrimSpace(viewer.run("fleet", "id"))
-	local.run("fleet", "enroll", "--allow", viewerID)
-	viewer.run("fleet", "add", addr, "--name", "smoke-peer", "--id", peerID)
+	local.run("fleet", "enroll", "--allow-viewer", viewerID)
+	viewer.run("fleet", "peers", "add", addr, "--name", "smoke-peer", "--device-id", peerID)
 	var viewerLog logBuffer
 	pull := viewer.cmd(ctx, "collect")
 	pull.Stdout, pull.Stderr = &viewerLog, &viewerLog

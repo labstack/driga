@@ -180,7 +180,7 @@ func TestReadsNeverAck(t *testing.T) {
 		return tx.UpsertInboxItem(model.InboxItem{ID: "completion", SessionID: id, Kind: "finished", TS: time.Now()})
 	})
 	readRun(t, "inbox", "--json")
-	readRun(t, "agent", fmt.Sprint(id))
+	readRun(t, "agents", "show", fmt.Sprint(id))
 	items, err := s.Inbox(time.Time{}, true)
 	if err != nil || len(items) != 1 || items[0].AckedAt != nil {
 		t.Fatalf("%+v %v", items, err)
@@ -193,7 +193,7 @@ func TestReadCommands(t *testing.T) {
 		_, err := tx.UpsertRepo(model.Repo{Path: "/fixture", Name: "fixture"})
 		return err
 	})
-	for _, args := range [][]string{{}, {"summary"}, {"agents", "--all"}, {"projects", "--active"}, {"projects", "--at-risk"}, {"where", "fixture"}, {"inbox"}, {"inbox", "--all"}, {"inbox", "list", "--all"}, {"conflicts"}, {"orphans"}, {"orphans", "list"}, {"machine"}} {
+	for _, args := range [][]string{{}, {"summary"}, {"agents", "--all"}, {"projects", "--active"}, {"projects", "--at-risk"}, {"projects", "show", "fixture"}, {"inbox"}, {"inbox", "--all"}, {"inbox", "list", "--all"}, {"conflicts"}, {"orphans"}, {"orphans", "list"}, {"machines", "show"}} {
 		readRun(t, args...)
 		readRun(t, append(append([]string{}, args...), "--json")...)
 	}
@@ -236,7 +236,7 @@ func TestReadFallbackPolicies(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			args := []string{"machine", "--json"}
+			args := []string{"machines", "show", "--json"}
 			if kind == "forced" {
 				args = append(args, "--snapshot")
 			}

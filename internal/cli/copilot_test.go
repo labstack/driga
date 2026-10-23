@@ -79,14 +79,14 @@ func TestCopilotHooksCLIAndDoctor(t *testing.T) {
 	path := hooks.CopilotPath(home, os.Getenv("COPILOT_HOME"))
 	var out bytes.Buffer
 	opts := HooksOptions{Target: "copilot"}
-	if err := (HooksInstallCmd{opts}).Run(&Globals{Stdin: strings.NewReader("n\n"), Stdout: &out}); err != nil {
+	if err := (HooksInstallCmd{opts}).Run(&Globals{inputTerminal: true, Stdin: strings.NewReader("n\n"), Stdout: &out}); err == nil || err.Error() != "not applied" {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatal("decline wrote", err)
 	}
 	out.Reset()
-	if err := (HooksInstallCmd{opts}).Run(&Globals{Stdin: strings.NewReader("yes\n"), Stdout: &out}); err != nil {
+	if err := (HooksInstallCmd{opts}).Run(&Globals{inputTerminal: true, Stdin: strings.NewReader("yes\n"), Stdout: &out}); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(out.String(), "Apply?") {
@@ -114,7 +114,7 @@ func TestCopilotHooksCLIAndDoctor(t *testing.T) {
 		t.Fatal(c)
 	}
 	out.Reset()
-	if err := (HooksUninstallCmd{opts}).Run(&Globals{Stdin: strings.NewReader("y\n"), Stdout: &out}); err != nil {
+	if err := (HooksUninstallCmd{opts}).Run(&Globals{inputTerminal: true, Stdin: strings.NewReader("y\n"), Stdout: &out}); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(out.String(), "until restarted") {

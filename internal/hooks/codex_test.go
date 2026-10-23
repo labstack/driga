@@ -120,6 +120,9 @@ func runHooksCLI(t *testing.T, input string, args ...string) string {
 		t.Fatal(err)
 	}
 	if err := ctx.Run(); err != nil {
+		if strings.Contains(err.Error(), "not applied; pass --yes") && input == "no\n" {
+			return output.String()
+		}
 		t.Fatal(err)
 	}
 	return output.String()
@@ -144,7 +147,7 @@ func TestHooksCLIConfirmationAndStatus(t *testing.T) {
 			t.Fatal("unconfirmed install wrote Codex files")
 		}
 	}
-	if out := runHooksCLI(t, "yes\n", "install"); !strings.Contains(out, "Apply? [y/N]") {
+	if out := runHooksCLI(t, "yes\n", "install", "--yes"); strings.Contains(out, "Apply? [y/N]") {
 		t.Fatalf("missing prompt: %q", out)
 	}
 	claudeBefore, codexBefore := readFixture(t, claude), readFixture(t, codex)
@@ -158,11 +161,11 @@ func TestHooksCLIConfirmationAndStatus(t *testing.T) {
 	if readFixture(t, claude) != claudeBefore || readFixture(t, codex) != codexBefore {
 		t.Fatal("dry uninstall wrote files")
 	}
-	runHooksCLI(t, "Y\n", "uninstall", "--agent", "claude")
+	runHooksCLI(t, "Y\n", "uninstall", "claude", "--yes")
 	if readFixture(t, codex) != codexBefore || strings.Contains(readFixture(t, claude), "hook claude") {
 		t.Fatal("agent selection not respected")
 	}
-	runHooksCLI(t, "y\n", "uninstall", "--agent", "codex")
+	runHooksCLI(t, "y\n", "uninstall", "codex", "--yes")
 	if strings.Contains(readFixture(t, codex), "hooks.PermissionRequest") {
 		t.Fatal("Codex permission hook not removed")
 	}
@@ -176,9 +179,9 @@ func TestHooksCLICodexForeignNotify(t *testing.T) {
 	path := filepath.Join(codexHome, "config.toml")
 	before := "notify = ['another-tool']\n"
 	writeFixture(t, path, before)
-	out := runHooksCLI(t, "yes\n", "install", "--agent", "codex")
+	out := runHooksCLI(t, "yes\n", "install", "codex", "--yes")
 	got := readFixture(t, path)
-	if !strings.Contains(out, "Apply?") || !strings.HasPrefix(got, before) || !strings.Contains(got, "hook codex PermissionRequest") {
+	if strings.Contains(out, "Apply?") || !strings.HasPrefix(got, before) || !strings.Contains(got, "hook codex PermissionRequest") {
 		t.Fatalf("install = %q; file %q", out, got)
 	}
 	if _, err := os.Stat(filepath.Join(home, ".claude")); !os.IsNotExist(err) {

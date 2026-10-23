@@ -5,18 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
-	"time"
+
+	"github.com/labstack/driga/internal/actions"
 
 	"github.com/labstack/driga/internal/chat"
-	"github.com/labstack/driga/internal/config"
-	"github.com/labstack/driga/internal/derive"
-	"github.com/labstack/driga/internal/inbox"
-	"github.com/labstack/driga/internal/model"
-	"github.com/labstack/driga/internal/store"
 )
 
 func chatApproval(raw json.RawMessage) (chat.Approval, error) {
@@ -104,7 +98,7 @@ func runChatAction(ctx context.Context, g *Globals, name string, raw json.RawMes
 		if in.ID == "" {
 			return errors.New("candidate id required")
 		}
-		return (CleanupCmd{ID: in.ID, Yes: true}).Run(g)
+		return (CleanupRemoveCmd{ID: in.ID, Yes: true}).Run(g)
 	case "summarize":
 		if in.Project == "" {
 			return errors.New("project required")
@@ -115,109 +109,11 @@ func runChatAction(ctx context.Context, g *Globals, name string, raw json.RawMes
 			return errors.New("provide a session or orphan id")
 		}
 		if in.SessionID > 0 {
-			return killChatSession(ctx, g, in.SessionID, in.Force)
+			return actions.KillSession(ctx, actionEnvironment(g, true), in.SessionID, in.Force)
 		}
-		return (OrphansKillCmd{ID: in.ID, Force: in.Force, approved: true}).run(ctx, g)
+		return (OrphansKillCmd{ID: in.ID, Force: in.Force, Yes: true}).run(ctx, g)
 	case "jump":
-		if in.SessionID <= 0 {
-			return errors.New("session_id must be positive")
-		}
-		st, err := store.Open(filepath.Join(config.DataDir(), "driga.db"), store.ReadOnly)
-		if err != nil {
-			return err
-		}
-		defer st.Close()
-		sessions, err := st.Sessions(store.SessionFilter{IncludeEnded: true})
-		if err != nil {
-			return err
-		}
-		items, err := st.Inbox(time.Time{}, true)
-		if err != nil {
-			return err
-		}
-		for _, s := range sessions {
-			if s.ID == in.SessionID {
-				procs, err := st.Procs()
-				if err != nil {
-					return err
-				}
-				tty := ""
-				for _, p := range procs {
-					if p.PID == s.PID && derive.SameStart(p.StartTime, s.ProcStart) {
-						tty = p.TTY
-					}
-				}
-				j := inbox.ResolveJump(s, tty, inbox.ReadPanes(ctx, newInboxRunner()))
-				for _, item := range items {
-					if item.SessionID == s.ID && item.Jump != nil {
-						j = item.Jump
-						break
-					}
-				}
-				return runChatJump(ctx, g, j)
-			}
-		}
-		return missingAgent(in.SessionID)
+		return actions.JumpSession(ctx, actionEnvironment(g, true), newInboxRunner(), in.SessionID)
 	}
 	return errors.New("unknown Chat action")
-}
-func runChatJump(ctx context.Context, g *Globals, j *model.InboxJump) error {
-	cfg, err := config.Load(config.Path())
-	if err != nil {
-		return err
-	}
-	exe, err := os.Executable()
-	if err != nil {
-		return err
-	}
-	opts := inbox.JumpOptions{DrigaPath: exe, Tmux: os.Getenv("TMUX"), Terminal: cfg.Inbox.JumpTerminal}
-	notice, err := inbox.RunJump(ctx, newInboxRunner(), j, opts)
-	if err != nil {
-		return err
-	}
-	if command := inbox.JumpCommand(j); command != "" {
-		fmt.Fprintln(g.Stdout, command)
-	}
-	if notice != "" {
-		fmt.Fprintln(g.Stdout, notice)
-	}
-	return nil
-}
-func killChatSession(ctx context.Context, g *Globals, id int64, force bool) error {
-	st, err := store.Open(filepath.Join(config.DataDir(), "driga.db"), store.ReadOnly)
-	if err != nil {
-		return err
-	}
-	defer st.Close()
-	sessions, err := st.Sessions(store.SessionFilter{IncludeEnded: true})
-	if err != nil {
-		return err
-	}
-	procs, err := st.Procs()
-	if err != nil {
-		return err
-	}
-	cfg, err := config.Load(config.Path())
-	if err != nil {
-		return err
-	}
-	for _, s := range sessions {
-		if s.ID == id {
-			if s.PID <= 1 || s.ProcStart.IsZero() || s.EndedAt != nil {
-				return errors.New("session process identity unavailable")
-			}
-			idx := derive.NewProcIndex(procs)
-			root, ok := idx.Get(s.PID)
-			if !ok || !derive.SameStart(root.StartTime, s.ProcStart) {
-				return errors.New("session process changed or exited")
-			}
-			o := model.Orphan{ID: fmt.Sprintf("session:%d", id), RootPID: s.PID, StartTime: root.StartTime, Young: time.Since(root.StartTime) < cfg.OrphanMinAge, ProcessStarts: map[int32]time.Time{s.PID: root.StartTime}, PIDs: []int32{s.PID}}
-			for _, p := range idx.Descendants(s.PID) {
-				o.PIDs = append(o.PIDs, p.PID)
-				o.ProcessStarts[p.PID] = p.StartTime
-			}
-			return (OrphansKillCmd{Force: force, approved: true}).killCandidates(ctx, g, cfg, procs, []model.Orphan{o})
-		}
-	}
-	return missingAgent(id)
 }

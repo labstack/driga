@@ -26,7 +26,7 @@ func TestStartedFromMCPAndCLIJSON(t *testing.T) {
 	cs := connect(t, globals())
 	for _, tc := range []toolCase{
 		{name: "list_agents", args: map[string]any{"machine": "local"}, cli: []string{"agents", "--machine", "local"}},
-		{name: "get_agent", args: map[string]any{"id": id}, cli: []string{"agent", fmt.Sprint(id)}},
+		{name: "get_agent", args: map[string]any{"id": id}, cli: []string{"agents", "show", fmt.Sprint(id)}},
 		{name: "get_flow", args: map[string]any{"id": id}, cli: []string{"flow", fmt.Sprint(id)}},
 	} {
 		r := call(t, cs, tc)

@@ -44,7 +44,7 @@ func TestRemoteAckWithoutPermission(t *testing.T) {
 	}
 	var out bytes.Buffer
 	err = (cli.InboxAckCmd{ID: "item"}).Run(&cli.Globals{Stdout: &out, Machine: "vm-1"})
-	if err == nil || err.Error() != "no ack permission on vm-1 (re-pair with --ack)" {
+	if err == nil || err.Error() != "no ack permission on vm-1 (re-pair with --allow-ack)" {
 		t.Fatalf("unexpected permission error: %v", err)
 	}
 	events, _, err := spool.Drain(spoolDir, nil)

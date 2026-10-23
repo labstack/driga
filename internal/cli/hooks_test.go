@@ -15,7 +15,7 @@ import (
 func TestHooksOTLPCLI(t *testing.T) {
 
 	g, out := initFixture(t, "y\n")
-	cmd := HooksInstallCmd{HooksOptions: HooksOptions{Agent: "claude", OTLP: true, Traces: true, DryRun: true}}
+	cmd := HooksInstallCmd{HooksOptions: HooksOptions{Target: "claude", OTLP: true, Traces: true, DryRun: true}}
 	if err := cmd.Run(g); err != nil {
 		t.Fatal(err)
 	}
@@ -46,7 +46,7 @@ func TestHooksOTLPCLI(t *testing.T) {
 		t.Fatal("must refuse existing telemetry")
 	}
 	g.Stdin = strings.NewReader("y\n")
-	if err := (HooksUninstallCmd{HooksOptions: HooksOptions{Agent: "claude", OTLP: true}}).Run(g); err != nil {
+	if err := (HooksUninstallCmd{HooksOptions: HooksOptions{Target: "claude", OTLP: true}}).Run(g); err != nil {
 		t.Fatal(err)
 	}
 	b, _ = os.ReadFile(p)
@@ -96,7 +96,7 @@ func TestHooksInstallUsesUnresolvedExecutable(t *testing.T) {
 				}
 			}
 			var out bytes.Buffer
-			cmd := HooksInstallCmd{HooksOptions: HooksOptions{Agent: "all", DryRun: true}}
+			cmd := HooksInstallCmd{HooksOptions: HooksOptions{Target: "all", DryRun: true}}
 			if err := cmd.Run(&Globals{Stdin: strings.NewReader(""), Stdout: &out}); err != nil {
 				t.Fatal(err)
 			}
@@ -121,7 +121,7 @@ func TestHooksConfiguredEndpoint(t *testing.T) {
 	if err := os.WriteFile(config.Path(), []byte("[intake]\nlisten = \"127.0.0.1:8743\"\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	err := (HooksInstallCmd{HooksOptions: HooksOptions{Agent: "all", OTLP: true, DryRun: true}}).Run(g)
+	err := (HooksInstallCmd{HooksOptions: HooksOptions{Target: "all", OTLP: true, DryRun: true}}).Run(g)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,7 +156,7 @@ func TestHooksCLIRejectsEditAfterPreview(t *testing.T) {
 		t.Fatal(err)
 	}
 	g.Stdin = &editingPrompt{path: path}
-	err := (HooksInstallCmd{HooksOptions: HooksOptions{Agent: "claude"}}).Run(g)
+	err := (HooksInstallCmd{HooksOptions: HooksOptions{Target: "claude"}}).Run(g)
 	if err == nil || !strings.Contains(err.Error(), "settings changed since preview; rerun") {
 		t.Fatalf("guard error: %v", err)
 	}

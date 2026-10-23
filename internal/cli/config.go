@@ -27,7 +27,7 @@ type ConfigCmd struct {
 }
 
 // ConfigPathCmd prints the resolved configuration path.
-type ConfigPathCmd struct{}
+type ConfigPathCmd struct{ JSONOptions }
 
 // Run prints the path without creating a file.
 func (ConfigPathCmd) Run(g *Globals) error {

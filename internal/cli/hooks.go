@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -26,9 +25,9 @@ type HooksCmd struct {
 
 // HooksOptions selects agents and controls preview-only operation.
 type HooksOptions struct {
-	Target string `arg:"" optional:"" help:"Agent name (claude, codex, copilot, or all); overrides --agent."`
+	Target string `arg:"" name:"adapter" optional:"" default:"all" enum:"claude,codex,copilot,all" help:"Adapter: claude, codex, copilot, or all."`
 	DryRun bool   `help:"Print the diff without writing or prompting."`
-	Agent  string `enum:"claude,codex,copilot,all" default:"all" help:"Agent to configure: claude, codex, copilot, or all."`
+	Yes    bool   `short:"y" help:"Apply without asking for confirmation."`
 	OTLP   bool   `help:"Configure optional metadata-only loopback OTLP instead of hooks."`
 	Traces bool   `help:"Include Claude beta spans (requires --otlp)."`
 }
@@ -48,10 +47,14 @@ type HooksUninstallCmd struct{ HooksOptions }
 func (c HooksUninstallCmd) Run(g *Globals) error { return c.HooksOptions.change(g, false) }
 
 // HooksStatusCmd reports installed hooks without writing settings.
-type HooksStatusCmd struct{ HooksOptions }
+type HooksStatusCmd struct {
+	Target string `arg:"" name:"adapter" optional:"" default:"all" enum:"claude,codex,copilot,all" help:"Adapter: claude, codex, copilot, or all."`
+	OTLP   bool   `help:"Show optional loopback OTLP status."`
+}
 
 // Run prints the selected agents' hook status.
-func (c HooksStatusCmd) Run(g *Globals) error {
+func (s HooksStatusCmd) Run(g *Globals) error {
+	c := HooksOptions{Target: s.Target, OTLP: s.OTLP}
 	if g.JSON {
 		return errors.New("hooks status: --json is not supported")
 	}
@@ -129,16 +132,13 @@ func hookStatus(agent, path, driga string) (status, detail string, err error) {
 }
 
 func (c HooksOptions) agent() (string, error) {
-	if c.Target != "" {
-		c.Agent = c.Target
-	}
-	switch c.Agent {
+	switch c.Target {
 	case "":
 		return "all", nil
 	case "claude", "codex", "copilot", "all":
-		return c.Agent, nil
+		return c.Target, nil
 	default:
-		return "", fmt.Errorf("unknown hook agent %q (use claude, codex, copilot, or all)", c.Agent)
+		return "", invalidUsage("unknown hook adapter %q (use claude, codex, copilot, or all)", c.Target)
 	}
 }
 
@@ -177,14 +177,14 @@ func hooksOutput(g *Globals) io.Writer {
 
 func (c HooksOptions) change(g *Globals, install bool) error {
 	if c.Traces && !c.OTLP {
-		return fmt.Errorf("--traces requires --otlp")
+		return invalidUsage("--traces requires --otlp")
 	}
 	agent, err := c.agent()
 	if err != nil {
 		return err
 	}
 	if c.OTLP && agent == "copilot" {
-		return errors.New("Copilot supports hooks only; OTLP is not supported")
+		return invalidUsage("Copilot supports hooks only; OTLP is not supported")
 	}
 	claude, codex, err := hookPaths()
 	if err != nil {
@@ -268,19 +268,8 @@ func (c HooksOptions) change(g *Globals, install bool) error {
 	if len(changes) == 0 || c.DryRun {
 		return nil
 	}
-	if _, err := fmt.Fprint(out, "Apply? [y/N] "); err != nil {
+	if err := requireConfirmation(g, c.Yes, "Apply?"); err != nil {
 		return err
-	}
-	if g.Stdin == nil {
-		return nil
-	}
-	answer, err := bufio.NewReader(g.Stdin).ReadString('\n')
-	if err != nil && !errors.Is(err, io.EOF) {
-		return err
-	}
-	answer = strings.ToLower(strings.TrimSpace(answer))
-	if answer != "y" && answer != "yes" {
-		return nil
 	}
 	// Check all files before writing any preview, then guard each atomic write again.
 	for _, change := range changes {
@@ -306,7 +295,7 @@ func (c HooksOptions) otlpStatus(g *Globals) error {
 		return err
 	}
 	if agent == "copilot" {
-		return errors.New("Copilot supports hooks only; OTLP is not supported")
+		return invalidUsage("Copilot supports hooks only; OTLP is not supported")
 	}
 	claude, codex, err := hookPaths()
 	if err != nil {

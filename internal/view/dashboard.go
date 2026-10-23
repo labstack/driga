@@ -2,7 +2,7 @@ package view
 
 import (
 	"fmt"
-	attention "github.com/labstack/driga/internal/inbox"
+	attention "github.com/labstack/driga/internal/attention"
 	"sort"
 	"strings"
 	"time"

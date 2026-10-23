@@ -1,4 +1,4 @@
-// Package web serves the read-only browser dashboard.
+// Package web serves the interactive dashboard, read views and approved Chat actions.
 package web
 
 import (

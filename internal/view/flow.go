@@ -9,8 +9,8 @@ import (
 
 	"github.com/labstack/driga/internal/textfmt"
 
+	"github.com/labstack/driga/internal/attention"
 	"github.com/labstack/driga/internal/derive"
-	"github.com/labstack/driga/internal/inbox"
 	"github.com/labstack/driga/internal/jsonx"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/scrub"
@@ -298,11 +298,11 @@ func Flow(r Reader, f Filter, sessionID int64, now time.Time) (FlowView, error) 
 			}
 		}
 		for _, item := range items {
-			if inbox.Active(item) && !item.TS.After(now) {
-				item = inbox.Policy(item, f.CaptureText)
+			if attention.Active(item) && !item.TS.After(now) {
+				item = attention.Policy(item, f.CaptureText)
 				s := sessions[item.SessionID]
 				project := projectName(s, repos)
-				v.Attention.Waits = append(v.Attention.Waits, InboxRow{InboxItem: item, MachineID: mr.MachineID(), Adapter: s.Adapter, Title: flowAttentionTitle(s, project, f.CaptureText), Project: project, Branch: s.Branch, Age: max(0, now.Sub(item.TS)), Waited: inbox.Waited(item, now)})
+				v.Attention.Waits = append(v.Attention.Waits, InboxRow{InboxItem: item, MachineID: mr.MachineID(), Adapter: s.Adapter, Title: flowAttentionTitle(s, project, f.CaptureText), Project: project, Branch: s.Branch, Age: max(0, now.Sub(item.TS)), Waited: attention.Waited(item, now)})
 			}
 		}
 		ss, err := mr.Sessions(store.SessionFilter{IncludeEnded: true, RepoPath: f.Project})
@@ -341,7 +341,7 @@ func Flow(r Reader, f Filter, sessionID int64, now time.Time) (FlowView, error) 
 		if a.Waited != b.Waited {
 			return a.Waited > b.Waited
 		}
-		return inbox.Less(a.InboxItem, b.InboxItem)
+		return attention.Less(a.InboxItem, b.InboxItem)
 	})
 	if selectedReader == nil {
 		if sessionID != 0 {
@@ -391,7 +391,7 @@ func Flow(r Reader, f Filter, sessionID int64, now time.Time) (FlowView, error) 
 	}
 	reasons := map[int64]string{}
 	for _, i := range waits {
-		if inbox.Active(i) {
+		if attention.Active(i) {
 			reasons[i.SessionID] = i.Reason
 		}
 	}
@@ -411,7 +411,7 @@ func Flow(r Reader, f Filter, sessionID int64, now time.Time) (FlowView, error) 
 		n.Events = []model.Event{}
 		n.Waits = []FlowWait{}
 		n.Handoffs = []model.CompletionEvent{}
-		n.Jump = inbox.ResolveJump(s, "", nil)
+		n.Jump = attention.ResolveJump(s, "", nil)
 		n.RetainedFromAt = time.Time{}
 		for _, e := range events {
 			if !e.TS.After(now) && (n.RetainedFromAt.IsZero() || e.TS.Before(n.RetainedFromAt)) {
@@ -436,7 +436,7 @@ func Flow(r Reader, f Filter, sessionID int64, now time.Time) (FlowView, error) 
 			if item.Kind != "waiting" || item.SessionID != s.ID {
 				continue
 			}
-			item = inbox.Policy(item, f.CaptureText)
+			item = attention.Policy(item, f.CaptureText)
 			w := flowWait(item)
 			if w.StartedAt.After(now) || w.EndedAt != nil && w.EndedAt.Before(v.FromAt) {
 				continue

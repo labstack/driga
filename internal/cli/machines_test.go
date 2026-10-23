@@ -91,7 +91,7 @@ func TestKillRefusesRemoteOrphan(t *testing.T) {
 		t.Fatal(e)
 	}
 	var out, errs bytes.Buffer
-	code := run([]string{"orphans", "kill", "remote-orphan"}, "test", strings.NewReader("y\n"), &out, &errs)
+	code := run([]string{"orphans", "kill", "remote-orphan", "--yes"}, "test", strings.NewReader("y\n"), &out, &errs)
 	if code == 0 || !strings.Contains(errs.String(), "orphan is on vm; run driga orphans kill there") || strings.Contains(out.String(), "Kill ") {
 		t.Fatalf("%d %s %s", code, out.String(), errs.String())
 	}
@@ -102,13 +102,13 @@ func TestFleetPeersShowsStateAndLastSeen(t *testing.T) {
 	if e := fleet.SavePeers(filepath.Join(config.DataDir(), "fleet"), []fleet.Peer{{Name: "vm", MachineID: "remote-id", Addr: "127.0.0.1:7411", DeviceID: "DEVICE-remote"}}); e != nil {
 		t.Fatal(e)
 	}
-	out, _ := readRun(t, "fleet", "peers")
+	out, _ := readRun(t, "fleet", "peers", "list")
 	for _, want := range []string{"STATE", "LAST SEEN", "stale", "12m", "connection lost"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q: %s", want, out)
 		}
 	}
-	out, _ = readRun(t, "fleet", "peers", "--json")
+	out, _ = readRun(t, "fleet", "peers", "list", "--json")
 	for _, want := range []string{`"state":"stale"`, `"last_seen_at":`, `"last_error":"connection lost"`} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q: %s", want, out)

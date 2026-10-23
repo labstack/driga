@@ -4,7 +4,7 @@
 <body class="c"><a class="skip" href="#main">Skip to content</a>
 <main id="main" tabindex="-1" hx-get="{{.RefreshURL}}" hx-trigger="console:refresh" hx-swap="innerHTML">{{template "content" .}}</main>
 {{template "chat" .}}
-<form class="cmd" id="command-form" role="search"><div class="menu" id="command-menu" role="listbox" aria-label="Commands" hidden></div><label for="cmdline">driga ❯</label><input id="cmdline" type="text" autocomplete="off" spellcheck="false" role="combobox" aria-controls="command-menu" aria-expanded="false" aria-autocomplete="list" aria-describedby="command-error" placeholder="type a command · agents --state waiting · where driga · theme latte"><span class="keys"><kbd>:</kbd> command  <kbd>/</kbd> filter  <kbd>?</kbd> help  <kbd>0-8</kbd> windows</span><button type="submit" class="sr-only">Run command</button></form><p id="command-error" role="status" aria-live="polite" hidden></p>
+<form class="cmd" id="command-form" role="search"><div class="menu" id="command-menu" role="listbox" aria-label="Commands" hidden></div><label for="cmdline">driga ❯</label><input id="cmdline" type="text" autocomplete="off" spellcheck="false" role="combobox" aria-controls="command-menu" aria-expanded="false" aria-autocomplete="list" aria-describedby="command-error" placeholder="type a command · agents --state waiting · projects show driga · theme latte"><span class="keys"><kbd>:</kbd> command  <kbd>/</kbd> filter  <kbd>?</kbd> help  <kbd>0-8</kbd> windows</span><button type="submit" class="sr-only">Run command</button></form><p id="command-error" role="status" aria-live="polite" hidden></p>
 <dialog id="help" aria-labelledby="help-title"><h2 id="help-title">driga console · keys</h2><dl><dt>0–8</dt><dd>switch windows</dd><dt>[ / ]</dt><dd>previous / next Flow session</dd><dt>c · 8</dt><dd>Chat · understands this page</dd><dt>7</dt><dd>Flow · lead, signal mixer and workers; pulses mark real family events</dd><dt>j / k · ↑ / ↓</dt><dd>move selection</dd><dt>Enter</dt><dd>open selected row</dd><dt>Tab / Shift Tab</dt><dd>cycle panes</dd><dt>/</dt><dd>filter focused pane</dd><dt>:</dt><dd>command line</dd><dt>p</dt><dd>pause / resume events</dd><dt>?</dt><dd>toggle help</dd><dt>Esc</dt><dd>close / clear filter</dd></dl><p>Chat offers local actions through approval cards. Use the CLI for hooks install.</p><button type="button" data-close-help>close · Esc</button></dialog>
 </body></html>{{end}}
 
@@ -142,7 +142,7 @@
 </section>{{end}}{{end}}
 
 {{define "project"}}{{$scope := .Scope}}{{$all := .All}}{{with .Project}}
-<section data-pane tabindex="0" class="pane detail"><div class="pt"><b>where · {{.Status.Repo.Name}}</b><span>stored evidence</span></div>
+<section data-pane tabindex="0" class="pane detail"><div class="pt"><b>project · {{.Status.Repo.Name}}</b><span>stored evidence</span></div>
 <p class="eyebrow">WHERE THINGS STAND
 </p>
 <h2>{{.Status.Repo.Name}}
@@ -310,7 +310,7 @@
 <div class="pt">
 <b>cleanup candidates</b><span class="muted">Local inspection · includes --why reasons</span>
 </div>
-<p>Review candidates here. Run <code>driga cleanup</code> in your terminal to act.
+<p>Review candidates here. Run <code>driga cleanup remove &lt;candidate-id&gt;</code> in your terminal to act.
 </p>{{if .CleanupError}}
 <p class="notice">Cleanup unavailable: {{.CleanupError}}
 </p>{{end}}{{range .Cleanup}}

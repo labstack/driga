@@ -9,10 +9,10 @@ import (
 
 	"charm.land/bubbles/v2/table"
 	"charm.land/lipgloss/v2"
+	"github.com/labstack/driga/internal/attention"
 	"github.com/labstack/driga/internal/chat"
 	"github.com/labstack/driga/internal/cleanup"
 	"github.com/labstack/driga/internal/derive"
-	"github.com/labstack/driga/internal/inbox"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/view"
 )
@@ -327,7 +327,7 @@ func (m *app) rebuild() {
 			}
 			age := r.Age
 			if r.Kind == "waiting" {
-				age = inbox.Waited(item, m.opts.Now())
+				age = attention.Waited(item, m.opts.Now())
 			}
 			title := r.Title
 			if title == "" {

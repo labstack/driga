@@ -104,7 +104,7 @@ func TestSummarizeDisabled(t *testing.T) {
 	readEnv(t)
 	record := fakeClaude(t, claudeHelp, "exit 99")
 	var out, errout bytes.Buffer
-	code := run([]string{"summarize"}, "test", nil, &out, &errout)
+	code := run([]string{"projects", "summarize", "--all"}, "test", nil, &out, &errout)
 	want := "summaries are off; set [summaries] enabled = true in " + config.Path()
 	if code == 0 || !strings.Contains(errout.String(), want) {
 		t.Fatal(code, errout.String())
@@ -120,7 +120,7 @@ func TestSummarizeArgsAndInputs(t *testing.T) {
 			st, dir, _ := summaryFixture(t)
 			writeSummaryConfig(t, capture)
 			record := fakeClaude(t, claudeHelp, `printf '%s\n' '{"type":"result","structured_output":{"summary":"Ready to review."},"result":"ignored"}'`)
-			readRun(t, "summarize", "fixture", "--json")
+			readRun(t, "projects", "summarize", "fixture", "--json")
 			data, err := os.ReadFile(record + ".args")
 			if err != nil {
 				t.Fatal(err)
@@ -214,7 +214,7 @@ func TestSummarizeBadOutput(t *testing.T) {
 				t.Setenv("PATH", t.TempDir())
 			}
 			var out, errout bytes.Buffer
-			if code := run([]string{"summarize", "fixture"}, "test", nil, &out, &errout); code == 0 || !strings.Contains(errout.String(), tc.want) {
+			if code := run([]string{"projects", "summarize", "fixture"}, "test", nil, &out, &errout); code == 0 || !strings.Contains(errout.String(), tc.want) {
 				t.Fatal(code, out.String(), errout.String())
 			}
 			events, _, err := spool.Drain(config.SpoolDir(), nil)
@@ -229,7 +229,7 @@ func TestSummaryIngestAndStale(t *testing.T) {
 	st, dir, repo := summaryFixture(t)
 	writeSummaryConfig(t, "titles")
 	fakeClaude(t, claudeHelp, `echo '{"result":"{\"summary\":\"Ready to review.\"}"}'`)
-	readRun(t, "summarize", "fixture")
+	readRun(t, "projects", "summarize", "fixture")
 	cfg, err := config.Load(config.Path())
 	if err != nil {
 		t.Fatal(err)
@@ -284,7 +284,7 @@ func TestSummarizeSkipsMissingWorktree(t *testing.T) {
 	}
 	writeSummaryConfig(t, "titles")
 	record := fakeClaude(t, claudeHelp, `printf '%s\n' '{"type":"result","structured_output":{"summary":"Ready to review."}}'`)
-	readRun(t, "summarize", "fixture")
+	readRun(t, "projects", "summarize", "fixture")
 	input, err := os.ReadFile(record + ".inputs")
 	if err != nil || !bytes.Contains(input, []byte("removed-branch")) || !bytes.Contains(input, []byte("second subject")) {
 		t.Fatalf("input: %s %v", input, err)

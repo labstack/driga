@@ -24,5 +24,5 @@ func CheckAckPermission(dataDir, machineID string) error {
 		}
 		break
 	}
-	return fmt.Errorf("no ack permission on %s (re-pair with --ack)", name)
+	return fmt.Errorf("no ack permission on %s (re-pair with --allow-ack)", name)
 }

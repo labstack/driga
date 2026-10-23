@@ -7,13 +7,13 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/labstack/driga/internal/attention"
 	"github.com/labstack/driga/internal/chat"
-	"github.com/labstack/driga/internal/inbox"
 )
 
 func (m *app) jumpInbox(r tabRow) tea.Cmd {
 	j := r.inbox.Jump
-	m.status = inbox.JumpCommand(j)
+	m.status = attention.JumpCommand(j)
 	if m.remote(r.machine) {
 		m.status = m.machineName(r.machine) + ": " + m.status
 		return nil
@@ -24,7 +24,7 @@ func (m *app) jumpInbox(r tabRow) tea.Cmd {
 		m.rebuild()
 		return nil
 	}
-	commands, err := inbox.JumpCommands(j, inbox.JumpOptions{Tmux: m.opts.Tmux, Terminal: m.opts.JumpTerminal})
+	commands, err := attention.JumpCommands(j, attention.JumpOptions{Tmux: m.opts.Tmux, Terminal: m.opts.JumpTerminal})
 	if err != nil {
 		m.status = err.Error()
 		return nil
@@ -48,7 +48,7 @@ func (m *app) jumpInbox(r tabRow) tea.Cmd {
 				err = run(args)
 			} else {
 				cmd := exec.CommandContext(ctx, args[0], args[1:]...)
-				inbox.ConfigureCommand(cmd)
+				attention.ConfigureCommand(cmd)
 				err = cmd.Run()
 			}
 			if err != nil {

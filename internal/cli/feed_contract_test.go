@@ -33,7 +33,7 @@ func TestFeedTailUsesExclusiveSequenceFlag(t *testing.T) {
 	}
 	out.Reset()
 	diagnostic.Reset()
-	if code := run([]string{"feed", "tail", "--since", "1", "--json"}, "test", nil, &out, &diagnostic); code != 2 || !json.Valid(out.Bytes()) || !strings.Contains(out.String(), "--after-seq") {
+	if code := run([]string{"feed", "tail", "--since", "1", "--json"}, "test", nil, &out, &diagnostic); code != 2 || !json.Valid(out.Bytes()) || !strings.Contains(out.String(), "unknown flag --since") {
 		t.Fatal(code, &out, &diagnostic)
 	}
 }

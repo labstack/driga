@@ -18,8 +18,11 @@ import (
 
 // MCPCmd serves read-only tools over stdio.
 type MCPCmd struct {
-	Chat bool `hidden:"" help:"Apply Chat capture policy to every response."`
+	Snapshot bool `help:"Force one-shot snapshot collection for read tools (no history)."`
+	Chat     bool `hidden:"" help:"Apply Chat capture policy to every response."`
 }
+
+func (c *MCPCmd) AfterApply(g *Globals) error { g.Snapshot = c.Snapshot; return nil }
 
 // Help documents client registration without changing client configuration.
 func (MCPCmd) Help() string {

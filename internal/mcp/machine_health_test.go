@@ -29,7 +29,7 @@ func TestMachineLeakFieldsCLIParity(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	tc := toolCase{"get_machine", map[string]any{"machine": "local", "limit": 500, "full": true}, []string{"machine", "--machine", "local", "--full"}}
+	tc := toolCase{"get_machine", map[string]any{"machine": "local", "limit": 500, "full": true}, []string{"machines", "show", "local", "--full"}}
 	got := call(t, connect(t, globals()), tc)
 	var tool, cli map[string]any
 	if err := json.Unmarshal(canonical(t, got.StructuredContent), &tool); err != nil {
@@ -77,7 +77,7 @@ func TestMachineWholeHostCLIParity(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	tc := toolCase{"get_machine", map[string]any{"machine": "local"}, []string{"machine", "--machine", "local"}}
+	tc := toolCase{"get_machine", map[string]any{"machine": "local"}, []string{"machines", "show", "local"}}
 	got := call(t, connect(t, globals()), tc)
 	cli := cliJSON(t, tc.cli)
 	var wire map[string]any

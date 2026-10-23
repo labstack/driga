@@ -25,7 +25,9 @@ import (
 )
 
 type SummarizeCmd struct {
-	Projects []string `arg:"" optional:"" help:"Local project names or paths; defaults to all local projects."`
+	JSONOptions
+	All      bool     `help:"Summarize every collected local project."`
+	Projects []string `arg:"" name:"project" optional:"" help:"Local project names or paths; requires names or --all."`
 }
 
 const summarySchema = `{"type":"object","properties":{"summary":{"type":"string","minLength":1,"maxLength":120}},"required":["summary"],"additionalProperties":false}`
@@ -33,6 +35,9 @@ const summarySchema = `{"type":"object","properties":{"summary":{"type":"string"
 func (s SummarizeCmd) Run(g *Globals) error { return s.run(context.Background(), g) }
 
 func (s SummarizeCmd) run(ctx context.Context, g *Globals) error {
+	if (len(s.Projects) == 0) == !s.All {
+		return invalidUsage("provide project names or --all")
+	}
 	cfg, err := config.Load(config.Path())
 	if err != nil {
 		return err
@@ -55,9 +60,6 @@ func (s SummarizeCmd) run(ctx context.Context, g *Globals) error {
 	}
 	selected := []model.Repo{}
 	names := s.Projects
-	if len(names) == 0 && g.Project != "" {
-		names = []string{g.Project}
-	}
 	if len(names) == 0 {
 		selected = repos
 	} else {

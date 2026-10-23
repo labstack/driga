@@ -17,6 +17,7 @@ type FeedCmd struct {
 
 // FeedTailCmd reads the local feed without collecting or acknowledging anything.
 type FeedTailCmd struct {
+	JSONOptions
 	AfterSeq int64 `name:"after-seq" help:"Print rows after this non-negative sequence (default retained beginning)."`
 	Follow   bool  `help:"Keep printing new rows until interrupted." short:"f"`
 }
