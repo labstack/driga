@@ -18,6 +18,8 @@
   const pattern=/(`+)([\s\S]*?)\1|\*\*([^\n]+?)\*\*|__([^\n]+?)__|\*([^*\n]+?)\*|_([^_\n]+?)_|\[([^\]\n]+)\]\(([^)\n]*)\)/g;
   let end=0;
   for(const m of text.matchAll(pattern)){
+   // Underscores inside identifiers are literal, not Markdown emphasis.
+   if((m[4]!==undefined||m[6]!==undefined)&&(/[\p{L}\p{N}]/u.test(text[m.index-1]||"")||/[\p{L}\p{N}]/u.test(text[m.index+m[0].length]||"")))continue;
    content(node,text.slice(end,m.index));
    if(m[1]){const code=document.createElement("code");code.textContent=m[2];node.append(code);}
    else if(m[7]!==undefined){content(node,m[7]+" ("+m[8]+")");}

@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -181,7 +182,13 @@ func TestConfigCommentedRoundTrip(t *testing.T) {
 
 func TestConfigEditCreatesDefaults(t *testing.T) {
 	g, out := initFixture(t, "")
-	t.Setenv("EDITOR", "cat")
+	// Use this test binary as the editor; Windows need not have Unix cat.
+	bin, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("GO_WANT_CONFIG_EDITOR", "1")
+	t.Setenv("EDITOR", "\""+filepath.ToSlash(bin)+"\" -test.run=^TestConfigEditorHelper$ --")
 	if err := (ConfigEditCmd{}).Run(g); err != nil {
 		t.Fatal(err)
 	}
@@ -192,6 +199,22 @@ func TestConfigEditCreatesDefaults(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(cfg, config.Default()) {
 		t.Fatalf("%+v %v", cfg, err)
 	}
+}
+
+func TestConfigEditorHelper(t *testing.T) {
+	if os.Getenv("GO_WANT_CONFIG_EDITOR") != "1" {
+		return
+	}
+	f, err := os.Open(os.Args[len(os.Args)-1])
+	if err != nil {
+		os.Exit(1)
+	}
+	_, err = io.Copy(os.Stdout, f)
+	_ = f.Close()
+	if err != nil {
+		os.Exit(1)
+	}
+	os.Exit(0)
 }
 
 func TestTask18CommandParsing(t *testing.T) {

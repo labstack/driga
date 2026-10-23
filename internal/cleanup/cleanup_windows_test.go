@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -14,6 +15,32 @@ import (
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/store"
 )
+
+func TestWindowsRecycleRefusesRedirectedParent(t *testing.T) {
+	root := t.TempDir()
+	target, link := filepath.Join(root, "target"), filepath.Join(root, "redirect")
+	if err := os.Mkdir(target, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := exec.Command("cmd.exe", "/d", "/c", "mklink", "/J", link, target).CombinedOutput(); err != nil {
+		t.Fatalf("junction: %v: %s", err, out)
+	}
+	path := filepath.Join(link, "keep.txt")
+	if err := os.WriteFile(path, []byte("must not be recycled"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = trash(context.Background(), Env{}, Candidate{Path: path, identity: info}, ApplyOpts{}, Result{})
+	if err == nil || (!strings.Contains(err.Error(), "reparse point") && !strings.Contains(err.Error(), "not redirected")) {
+		t.Fatalf("redirected parent accepted: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(target, "keep.txt")); err != nil {
+		t.Fatal("refusal touched the target", err)
+	}
+}
 
 func TestWindowsScratchRemainsRefused(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "absent")

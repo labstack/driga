@@ -30,4 +30,4 @@ func makePrivateFile(string) error { return nil }
 
 func socketUserDir() string { return fmt.Sprintf("driga-%d", os.Getuid()) }
 
-func shortSocketPath(name string) string { return filepath.Join("/tmp", socketUserDir(), name) }
+func shortSocketPath(name string, _ int) string { return filepath.Join("/tmp", socketUserDir(), name) }

@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"os/exec"
-	"runtime"
 	"time"
 
 	"github.com/labstack/driga/internal/chat"
@@ -74,7 +72,9 @@ func (c WebCmd) run(ctx context.Context, g *Globals) error {
 	}
 	if c.Open {
 		if err := openWebBrowser(ctx, dashboard.URL()); err != nil {
-			return err
+			if g.Stderr != nil {
+				fmt.Fprintln(g.Stderr, "driga: could not open browser:", err, "— open the URL above manually")
+			}
 		}
 	}
 	server := &http.Server{Handler: dashboard, ReadHeaderTimeout: 5 * time.Second, IdleTimeout: time.Minute, BaseContext: func(net.Listener) context.Context { return ctx }}
@@ -105,12 +105,4 @@ func (c WebCmd) run(ctx context.Context, g *Globals) error {
 		return nil
 	}
 	return err
-}
-
-func openWebBrowser(ctx context.Context, address string) error {
-	name := "xdg-open"
-	if runtime.GOOS == "darwin" {
-		name = "open"
-	}
-	return exec.CommandContext(ctx, name, address).Run()
 }

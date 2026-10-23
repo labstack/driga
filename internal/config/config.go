@@ -166,15 +166,18 @@ func absolutePath(p string) string {
 	return filepath.Clean(ExpandHome(p))
 }
 
-// ResolvePaths freezes process paths at startup, before any worker or child
-// process can change directories. Explicit and platform-derived paths follow
-// the same rule; children inherit the resolved overrides.
+// ResolvePaths freezes data/spool paths and explicit config overrides at startup,
+// before any worker or child process can change directories. The platform default
+// config remains optional; setting DRIGA_CONFIG would make it a required override.
 func ResolvePaths() error {
 	for _, entry := range []struct{ key, path string }{
 		{"DRIGA_DATA_DIR", DataDir()},
 		{"DRIGA_SPOOL_DIR", SpoolDir()},
 		{"DRIGA_CONFIG", Path()},
 	} {
+		if entry.key == "DRIGA_CONFIG" && os.Getenv(entry.key) == "" {
+			continue
+		}
 		p, err := filepath.Abs(entry.path)
 		if err != nil {
 			return err

@@ -50,17 +50,16 @@ func (c ServiceCmd) Run(g *Globals) error {
 	if err != nil {
 		return err
 	}
-	bin, err = filepath.EvalSymlinks(bin)
+	serviceBin, err := serviceBinaryPath(bin)
 	if err != nil {
-		return err
+		return fmt.Errorf("resolve service executable %q: %w", bin, err)
 	}
-	serviceBin := stablePath(bin)
 	if runtime.GOOS == "darwin" {
 		serviceBin = service.ExecutablePath(serviceBin)
 	}
 	s, err := service.New(serviceBin)
 	if err != nil {
-		return err
+		return fmt.Errorf("initialize service controller: %w", err)
 	}
 	switch c.Action {
 	case "install":
@@ -104,11 +103,11 @@ func (c ServiceCmd) Run(g *Globals) error {
 		if task, ok := s.(interface{ TaskState() (string, error) }); ok {
 			state, stateErr := task.TaskState()
 			if stateErr != nil && !errors.Is(stateErr, ks.ErrNotInstalled) {
-				return stateErr
+				return fmt.Errorf("query collector task: %w", stateErr)
 			}
 			held, err := probeCollectorLock(config.DataDir())
 			if err != nil {
-				return err
+				return fmt.Errorf("probe collector lock: %w", err)
 			}
 			pidText, _ := os.ReadFile(filepath.Join(config.DataDir(), "driga.lock"))
 			pid, _ := strconv.Atoi(strings.TrimSpace(string(pidText)))
@@ -139,6 +138,20 @@ func (c ServiceCmd) Run(g *Globals) error {
 	}
 	_, err = fmt.Fprintln(commandOutput(g), "collector:", c.Action)
 	return err
+}
+
+func serviceBinaryPath(bin string) (string, error) {
+	if runtime.GOOS == "windows" {
+		// Keep Scoop's stable current junction. The OS can execute this path
+		// even when filepath.EvalSymlinks cannot walk the reparse point, and
+		// persisting a version-specific target would break after an upgrade.
+		return filepath.Abs(bin)
+	}
+	resolved, err := filepath.EvalSymlinks(bin)
+	if err != nil {
+		return "", err
+	}
+	return stablePath(resolved), nil
 }
 
 // Native log tail for Windows; no dependency on Unix tail or PowerShell.

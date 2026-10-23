@@ -32,6 +32,8 @@ setImmediate(async()=>{
   const cards=root.querySelector("[data-flow-attention]");
   for(const wait of waits)assert(allText(cards).includes(wait.title),"live card lost session hint "+wait.title);
   const detail=root.querySelector("[data-flow-detail]");
+  const emptyLog=detail.children.find(el=>el.className==="metro-log").children[0];
+  assert(emptyLog.className.includes("metro-log-empty"),"empty event message must span the log rather than the timestamp column");
   for(const copy of ["verdict as of","telemetry unavailable","Why finished","1 of 4 signals agree","✓","✗","–"])assert(allText(detail).includes(copy),"missing detail copy "+copy);
   assert(allText(cards).includes("what it asked wasn't captured"));
   const walk=el=>[el,...el.children.flatMap(walk)];

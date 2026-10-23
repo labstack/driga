@@ -24,7 +24,21 @@ func trash(ctx context.Context, _ Env, c Candidate, opts ApplyOpts, r Result) (R
 	if err := ctx.Err(); err != nil {
 		return r, err
 	}
-	if !filepath.IsAbs(c.Path) || !pathx.Equal(resolved(c.Path), filepath.Clean(c.Path)) {
+	if !filepath.IsAbs(c.Path) {
+		return r, fmt.Errorf("recycle path must be absolute and not redirected")
+	}
+	// Expand harmless 8.3 aliases before comparing with EvalSymlinks, which
+	// expands aliases as well as reparse points. Keep the redirection refusal.
+	u, err := windows.UTF16PtrFromString(c.Path)
+	if err != nil {
+		return r, err
+	}
+	buf := make([]uint16, 32768)
+	n, err := windows.GetLongPathName(u, &buf[0], uint32(len(buf)))
+	if err != nil {
+		return r, err
+	}
+	if n == 0 || n >= uint32(len(buf)) || !pathx.Equal(resolved(c.Path), windows.UTF16ToString(buf[:n])) {
 		return r, fmt.Errorf("recycle path must be absolute and not redirected")
 	}
 	info, err := os.Lstat(c.Path)
