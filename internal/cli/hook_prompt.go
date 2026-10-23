@@ -38,6 +38,7 @@ func endPromptSession(session, cwd string) {
 	_ = c.EndPrompts(ctx, session, cwd)
 }
 func (h HookCmd) permission(g *Globals) error {
+	started := time.Now()
 	if g == nil || g.Stdin == nil || g.Stdout == nil {
 		return nil
 	}
@@ -57,7 +58,7 @@ func (h HookCmd) permission(g *Globals) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), chat.ApprovalTTL)
 	defer cancel()
-	watch, err := newPromptTranscript(in)
+	watch, err := newPromptTranscript(in, started)
 	if err != nil {
 		return nil
 	}
@@ -118,6 +119,8 @@ type promptTranscript struct {
 	input             string
 	tool, id          string
 	matched, finished bool
+	started           time.Time
+	initial, current  bool
 }
 
 func canonicalPromptInput(raw json.RawMessage) (string, error) {
@@ -130,7 +133,7 @@ func canonicalPromptInput(raw json.RawMessage) (string, error) {
 	b, err := json.Marshal(v)
 	return string(b), err
 }
-func newPromptTranscript(in permissionPayload) (*promptTranscript, error) {
+func newPromptTranscript(in permissionPayload, started time.Time) (*promptTranscript, error) {
 	f, err := openTranscript(in.Transcript)
 	if err != nil {
 		return nil, err
@@ -150,7 +153,7 @@ func newPromptTranscript(in permissionPayload) (*promptTranscript, error) {
 		f.Close()
 		return nil, err
 	}
-	w := &promptTranscript{ReadCloser: f, file: f, input: input, tool: in.Tool}
+	w := &promptTranscript{ReadCloser: f, input: input, tool: in.Tool, started: started, initial: true}
 	if start > 0 { // Discard the first, possibly truncated, line.
 		var one [1]byte
 		for {
@@ -164,6 +167,22 @@ func newPromptTranscript(in permissionPayload) (*promptTranscript, error) {
 			}
 		}
 	}
+	pos, err := f.Seek(0, io.SeekCurrent)
+	if err != nil {
+		w.Close()
+		return nil, err
+	}
+	// Read only the initial snapshot as history. Appends, including a partial
+	// line completed later, belong to the live watcher.
+	w.file = io.LimitReader(f, max(0, info.Size()-pos))
+	if _, err := w.answered(); err != nil {
+		w.Close()
+		return nil, err
+	}
+	if w.finished && !w.current {
+		w.id, w.matched, w.finished = "", false, false
+	}
+	w.file, w.initial = f, false
 	return w, nil
 }
 func (w *promptTranscript) answered() (bool, error) {
@@ -197,8 +216,9 @@ func (w *promptTranscript) answered() (bool, error) {
 }
 func (w *promptTranscript) line(data []byte) {
 	var line struct {
-		Type    string
-		Message struct {
+		Type      string
+		Timestamp time.Time
+		Message   struct {
 			Content []struct {
 				Type, ID, Name string
 				Input          json.RawMessage
@@ -210,12 +230,15 @@ func (w *promptTranscript) line(data []byte) {
 		return
 	}
 	for _, block := range line.Message.Content {
-		if line.Type == "assistant" && block.Type == "tool_use" && block.Name == w.tool && block.ID != "" {
+		// Bootstrap selects the latest matching use. Once watching live, a
+		// subsequent identical command belongs to another permission request.
+		if line.Type == "assistant" && block.Type == "tool_use" && block.Name == w.tool && block.ID != "" && (w.initial || !w.matched) {
 			input, err := canonicalPromptInput(block.Input)
 			if err == nil && input == w.input {
 				w.id = block.ID
 				w.matched = true
 				w.finished = false
+				w.current = !w.initial || !line.Timestamp.IsZero() && !line.Timestamp.Before(w.started)
 			}
 		}
 		if line.Type == "user" && block.Type == "tool_result" && w.matched && block.ToolUseID == w.id {

@@ -176,6 +176,9 @@ func (m *app) chatKey(msg tea.KeyPressMsg) tea.Cmd {
 	case "pgdown":
 		m.scrollChat(-1, true)
 		return nil
+	case "ctrl+end":
+		m.chatOffset = 0
+		return nil
 	case "alt+up":
 		if len(m.chatDrafts) > 0 {
 			m.chatInput.SetValue(m.chatDrafts[len(m.chatDrafts)-1])
@@ -290,7 +293,12 @@ func (m *app) chatView() string {
 	offset := m.chatOffset
 	end := len(body) - offset
 	start := max(0, end-h)
-	return header + "\n" + strings.Repeat("─", m.width) + "\n" + strings.Join(body[start:end], "\n") + strings.Repeat("\n", max(0, h-(end-start))) + "\n" + composer
+	separator := strings.Repeat("─", m.width)
+	if offset > 0 {
+		position := truncate(fmt.Sprintf("Lines %d–%d/%d · ctrl+end latest ", start+1, end, len(body)), m.width)
+		separator = dim.Render(position + strings.Repeat("─", max(0, m.width-ansi.StringWidth(position))))
+	}
+	return header + "\n" + separator + "\n" + strings.Join(body[start:end], "\n") + strings.Repeat("\n", max(0, h-(end-start))) + "\n" + composer
 }
 
 func (m *app) chatContextLine() string {

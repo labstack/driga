@@ -559,7 +559,7 @@ func (m *app) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, m.chatInput.Focus()
 			}
 			switch k {
-			case "ctrl+enter", "super+enter", "alt+enter", "ctrl+n", "ctrl+h", "ctrl+x", "ctrl+t", "ctrl+0", "pgup", "pgdown", "alt+up", "y", "n", "alt+y", "alt+n", "m":
+			case "ctrl+enter", "super+enter", "alt+enter", "ctrl+n", "ctrl+h", "ctrl+x", "ctrl+t", "ctrl+0", "pgup", "pgdown", "ctrl+end", "alt+up", "y", "n", "alt+y", "alt+n", "m":
 				return m, m.chatKey(msg)
 			}
 		}

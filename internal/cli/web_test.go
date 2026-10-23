@@ -2,6 +2,8 @@ package cli
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -14,5 +16,32 @@ func TestWebRejectsNonLoopback(t *testing.T) {
 		if code == 0 || !strings.Contains(errout.String(), "loopback") {
 			t.Errorf("%s: %d %s", addr, code, &errout)
 		}
+	}
+}
+
+func BenchmarkWebIdleHeartbeat(b *testing.B) {
+	b.Setenv("DRIGA_DATA_DIR", b.TempDir())
+	b.ReportAllocs()
+	for range b.N {
+		webHeartbeat(false)
+	}
+}
+
+func TestWebHeartbeatRequiresBrowser(t *testing.T) {
+	readEnv(t)
+	path := filepath.Join(os.Getenv("DRIGA_DATA_DIR"), "viewer.heartbeat")
+	webHeartbeat(false)
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatal("idle web process kept viewer cadence", err)
+	}
+	webHeartbeat(true)
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	webHeartbeat(false)
+	next, err := os.Stat(path)
+	if err != nil || !next.ModTime().Equal(info.ModTime()) {
+		t.Fatal("disconnected browser refreshed heartbeat", err)
 	}
 }

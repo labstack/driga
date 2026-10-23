@@ -52,6 +52,7 @@ type Deps struct {
 	spoolSince time.Time
 	snapshot   bool
 	clock      daemonClock
+	classifier *derive.Classifier
 }
 
 func (d Deps) now() time.Time {
@@ -83,6 +84,9 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 	state.mu.Lock()
 	defer state.mu.Unlock()
 	work := state.copy()
+	if p.Procs {
+		d.classifier = derive.NewClassifier(d.Sigs, len(work.prev))
+	}
 	now := d.now()
 	r := PassReport{ObservedAt: now, SourceErrors: make(map[string]string)}
 	collected, err := collectSources(ctx, d, st, p, work, now)
@@ -417,7 +421,7 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 			for _, o := range old {
 				prev[o.ID] = o
 			}
-			orphanOpts := []derive.OrphanOption{derive.WithSpawnMemory(memory)}
+			orphanOpts := []derive.OrphanOption{derive.WithSpawnMemory(memory), derive.WithClassifier(d.classifier)}
 			if collected.subreaper > 1 {
 				orphanOpts = append(orphanOpts, derive.WithSubreaper(collected.subreaper))
 			}

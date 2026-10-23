@@ -107,6 +107,10 @@ func (s *Set) appendFile(path string, data []byte, agent string) error {
 		}
 		s.entries = append(s.entries, entry)
 	}
+	// Hooks classify their parent agent; they never label MCP servers.
+	if agent != "" {
+		return nil
+	}
 	for _, signature := range file.MCPServers {
 		entry := compiledSignature{signature: signature}
 		for _, pattern := range signature.Match {

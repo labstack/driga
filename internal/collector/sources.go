@@ -164,7 +164,7 @@ func collectSources(ctx context.Context, d Deps, st *store.Store, p Plan, state 
 		}
 		for i := range r.procs {
 			if d.Sigs != nil && p.Procs {
-				sig, _ := d.Sigs.Match(r.procs[i].Cmdline, r.procs[i].Exe)
+				sig, _ := d.classifier.Match(r.procs[i])
 				r.procs[i].Role, r.procs[i].Agent = string(sig.Role), sig.Agent
 			}
 		}
@@ -597,7 +597,7 @@ func collectSocketPeers(ctx context.Context, d Deps, st *store.Store, state *Sta
 			memory[key] = id
 		}
 	}
-	candidates := derive.FindOrphans(idx, sessions, d.Sigs, now, d.Cfg.OrphanMinAge, prev, derive.WithSpawnMemory(memory), derive.WithSubreaper(subreaper))
+	candidates := derive.FindOrphans(idx, sessions, d.Sigs, now, d.Cfg.OrphanMinAge, prev, derive.WithSpawnMemory(memory), derive.WithSubreaper(subreaper), derive.WithClassifier(d.classifier))
 	var pids []int32
 	for _, o := range candidates {
 		pids = append(pids, o.PIDs...)

@@ -177,3 +177,46 @@ func TestChatFooterSaysStopDuringReply(t *testing.T) {
 		t.Fatal(got)
 	}
 }
+
+func TestEmptyStatesExplainTabAndFilter(t *testing.T) {
+	m := setup(t, fixture(), Options{}).(*app)
+	for tab := 0; tab <= 5; tab++ {
+		m.tab = tab
+		m.rows = nil
+		if got := m.View().Content; strings.Contains(got, "No items") || !strings.Contains(got, "No ") {
+			t.Fatal(tab, got)
+		}
+		m.filter.SetValue("no-match")
+		if got := m.View().Content; !strings.Contains(got, "No matching items") {
+			t.Fatal(tab, got)
+		}
+		m.filter.SetValue("")
+	}
+}
+
+func TestChatPositionAndLatestShortcut(t *testing.T) {
+	for _, typing := range []bool{false, true} {
+		m := chatPagingFixture(t)
+		if typing {
+			m.chatInput.Focus()
+		}
+		m.chatInput.SetValue("unsent draft")
+		m.chatKey(tea.KeyPressMsg{Code: tea.KeyPgUp})
+		if got := m.View().Content; !strings.Contains(got, "Lines ") || !strings.Contains(got, "ctrl+end latest") {
+			t.Fatal(got)
+		}
+		m.Update(tea.KeyPressMsg{Code: tea.KeyEnd, Mod: tea.ModCtrl})
+		if got := m.View().Content; m.chatOffset != 0 || strings.Contains(got, "ctrl+end latest") || !strings.Contains(got, "QA-line-40") || m.chatInput.Value() != "unsent draft" {
+			t.Fatal(got)
+		}
+	}
+}
+
+func TestHelpAndUserMessagesWrapWords(t *testing.T) {
+	if got := wrapText("ordinary words remain together", 15); got != "ordinary words\nremain together" {
+		t.Fatal(got)
+	}
+	if got := wrapText("12345678901234567890", 10); got != "1234567890\n1234567890" {
+		t.Fatal("long tokens must still fit", got)
+	}
+}

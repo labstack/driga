@@ -57,7 +57,7 @@ func (c WebCmd) run(ctx context.Context, g *Globals) error {
 	if ephemeral && g.Stderr != nil {
 		fmt.Fprintln(g.Stderr, "Chat runs in-process; conversations end with it.")
 	}
-	dashboard, err := web.New(source, web.Options{Chat: chatClient, ChatEphemeral: ephemeral, Host: listener.Addr().String(), Machine: g.Machine, CleanupList: func(ctx context.Context) ([]cleanup.Candidate, error) {
+	dashboard, err := web.New(source, web.Options{Chat: chatClient, ChatEphemeral: ephemeral, Host: listener.Addr().String(), Machine: g.Machine, Activity: webHeartbeat, CleanupList: func(ctx context.Context) ([]cleanup.Candidate, error) {
 		envelope, err := cleanupRead(ctx, &local, "", false, true)
 		if err != nil {
 			return nil, err
@@ -82,27 +82,18 @@ func (c WebCmd) run(ctx context.Context, g *Globals) error {
 	defer stopClose()
 	watchDone := make(chan struct{})
 	go func() { defer close(watchDone); dashboard.Watch(ctx) }()
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		ticker := time.NewTicker(time.Second)
-		defer ticker.Stop()
-		for {
-			_ = touchHeartbeat()
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-			}
-		}
-	}()
 	err = server.Serve(listener)
 	stopped := ctx.Err() != nil
 	cancel()
-	<-done
 	<-watchDone
 	if errors.Is(err, http.ErrServerClosed) || stopped {
 		return nil
 	}
 	return err
+}
+
+func webHeartbeat(active bool) {
+	if active {
+		_ = touchHeartbeat()
+	}
 }

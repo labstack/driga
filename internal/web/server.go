@@ -45,6 +45,7 @@ type Options struct {
 	Host          string
 	Machine       string
 	CleanupList   func(context.Context) ([]cleanup.Candidate, error)
+	Activity      func(bool)
 }
 
 type Server struct {
@@ -59,7 +60,7 @@ type Server struct {
 	static          http.Handler
 	themeCSS        string
 	mu              sync.Mutex
-	clients         map[chan struct{}]bool
+	clients         map[chan struct{}]bool // Value records a pending data refresh.
 	ready           chan struct{}
 	cacheMu         sync.Mutex
 	cache           map[snapshotKey]cachedSnapshot
@@ -136,16 +137,19 @@ func (s *Server) Watch(ctx context.Context) {
 			if activity, ok := s.source.(interface{ SetActive(bool) }); ok {
 				activity.SetActive(active)
 			}
-			if err != nil {
-				continue
+			if s.opts.Activity != nil {
+				s.opts.Activity(active)
 			}
-			if initialized && next == version && time.Since(lastRefresh) < s.refreshInterval {
-				continue
+			refresh := err == nil && (!initialized || next != version || time.Since(lastRefresh) >= s.refreshInterval)
+			if refresh {
+				version, initialized = next, true
+				lastRefresh = time.Now()
 			}
-			version, initialized = next, true
-			lastRefresh = time.Now()
 			s.mu.Lock()
 			for ch := range s.clients {
+				// Keep a refresh pending if a slow client still has an earlier
+				// tick queued. Every tick also schedules that client's tail.
+				s.clients[ch] = s.clients[ch] || refresh
 				select {
 				case ch <- struct{}{}:
 				default:
@@ -260,7 +264,7 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 	}
 	ch := make(chan struct{}, 1)
 	s.mu.Lock()
-	s.clients[ch] = true
+	s.clients[ch] = false
 	s.mu.Unlock()
 	defer func() { s.mu.Lock(); delete(s.clients, ch); s.mu.Unlock() }()
 	writePayload := func(event, payload string) error {
@@ -277,7 +281,7 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 	seen := map[string]bool{}
 	var lastTail time.Time
 	sendTail := func() error {
-		if !lastTail.IsZero() && time.Since(lastTail) < time.Second {
+		if !lastTail.IsZero() && time.Since(lastTail) < s.watchInterval {
 			return nil
 		}
 		clone := r.Clone(r.Context())
@@ -320,21 +324,24 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 	if err := sendTail(); err != nil {
 		return
 	}
-	tailTick := time.NewTicker(time.Second)
-	defer tailTick.Stop()
 	for {
 		select {
-		case <-tailTick.C:
-			if err := sendTail(); err != nil {
-				return
-			}
 		case <-r.Context().Done():
 			return
 		case <-ch:
-			if err := writeEvent("refresh"); err != nil {
-				return
+			s.mu.Lock()
+			refresh := s.clients[ch]
+			s.clients[ch] = false
+			s.mu.Unlock()
+			if refresh {
+				if err := writeEvent("refresh"); err != nil {
+					return
+				}
+				if err := writeEvent("change"); err != nil {
+					return
+				}
 			}
-			if err := writeEvent("change"); err != nil {
+			if err := sendTail(); err != nil {
 				return
 			}
 		}

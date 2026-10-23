@@ -34,7 +34,7 @@ func pack(parts []string, width int, separator string) string {
 func wrapText(text string, width int) string {
 	var lines []string
 	for _, line := range strings.Split(text, "\n") {
-		lines = append(lines, ansi.Hardwrap(clean(line), max(1, width), true))
+		lines = append(lines, ansi.Wrap(clean(line), max(1, width), ""))
 	}
 	return strings.Join(lines, "\n")
 }
@@ -289,7 +289,7 @@ func (m *app) View() tea.View {
 		body = m.machineTable(body)
 	}
 	if len(m.rows) == 0 {
-		body = "No items"
+		body = m.emptyText()
 	}
 	if m.tab == homeTab {
 		lines := strings.Split(m.homeView(), "\n")
@@ -352,6 +352,21 @@ func (m *app) View() tea.View {
 	v.AltScreen = true
 	v.MouseMode = tea.MouseModeCellMotion
 	return v
+}
+
+func (m *app) emptyText() string {
+	if m.filter.Value() != "" {
+		return "No matching items · esc clear filter"
+	}
+	text := map[int]string{
+		0: "No agents · start an agent session to see its state here.",
+		1: "No projects · collected agent sessions appear here by project.",
+		2: "No inbox items · prompts and completions appear here.",
+		3: "No orphan processes · idle helper trees appear here for review.",
+		4: "No machine samples · waiting for collection.",
+		5: "No cleanup candidates · r refresh candidates.",
+	}
+	return wrapText(text[m.tab], m.width)
 }
 
 func (m *app) helpText() string {

@@ -17,6 +17,12 @@ type orphanOptions struct {
 	spawnMemory   map[string]int64
 	externalPeers map[int32]bool
 	subreaper     int32
+	classifier    *Classifier
+}
+
+// WithClassifier shares matches with other derivations of this process pass.
+func WithClassifier(c *Classifier) OrphanOption {
+	return func(o *orphanOptions) { o.classifier = c }
 }
 
 // WithSubreaper recognizes helpers reparented to the user's systemd instance.
@@ -51,6 +57,10 @@ func FindOrphans(idx ProcIndex, sessions []model.Session, sigs *signatures.Set, 
 			opt(&options)
 		}
 	}
+	classifier := options.classifier
+	if classifier == nil && sigs != nil {
+		classifier = NewClassifier(sigs, len(idx.pids))
+	}
 	livePIDs := familyLivePIDs(sessions, idx)
 	liveIDs := make(map[int64]bool)
 	for _, id := range livePIDs {
@@ -67,7 +77,7 @@ func FindOrphans(idx ProcIndex, sessions []model.Session, sigs *signatures.Set, 
 		p := idx.procs[pid]
 		protected[pid] = p.Role == string(signatures.RoleInternal) || p.Role == string(signatures.RoleService)
 		if sigs != nil {
-			if sig, ok := sigs.Match(p.Cmdline, p.Exe); ok {
+			if sig, ok := classifier.Match(p); ok {
 				protected[pid] = protected[pid] || sig.Role == signatures.RoleInternal || sig.Role == signatures.RoleService
 				if sig.Role != signatures.RoleApp {
 					continue
@@ -159,7 +169,7 @@ func FindOrphans(idx ProcIndex, sessions []model.Session, sigs *signatures.Set, 
 				return false
 			}
 			if sigs != nil && matched == "" {
-				if sig, ok := sigs.Match(p.Cmdline, p.Exe); ok && (sig.Role == signatures.RoleHelper || sig.Role == signatures.RoleHost || sig.Role == signatures.RoleHeadless) {
+				if sig, ok := classifier.Match(p); ok && (sig.Role == signatures.RoleHelper || sig.Role == signatures.RoleHost || sig.Role == signatures.RoleHeadless) {
 					matched = sig.Name
 				}
 			}
