@@ -12,6 +12,7 @@ import (
 
 // Config is the effective configuration (§12 of the design).
 type Config struct {
+	UI              UIConfig
 	Motion          string
 	Roots           []string
 	RootDepth       int
@@ -30,6 +31,8 @@ type Config struct {
 	Cleanup         CleanupConfig
 	Inbox           InboxConfig
 }
+
+type UIConfig struct{ Theme string }
 
 // MachineConfig controls machine warnings; zero selects the documented default.
 type MachineConfig struct{ DiskFreeMin uint64 }

@@ -28,7 +28,7 @@ with activity within the last 24 hours, alongside recently ended sessions.
 Data views merge paired machines by default. `--machine all|local|<name|id>`
 selects a scope; `--project .` resolves against local repositories only.
 Data views support `--json`, `--project <name|path|.>`, `--since <duration|yesterday>`,
-`--snapshot`, and `--no-color`; `NO_COLOR` is also honored. View JSON has schema 2,
+`--snapshot`, `--theme=auto|mocha|latte`, and `--no-color`; `NO_COLOR` is also honored. View JSON has schema 2,
 an observation time, collection mode, source freshness, coverage gaps, and data.
 `doctor --json` returns diagnostic checks rather than a view envelope.
 Use `driga <command> --help` for command-specific flags.
@@ -128,6 +128,7 @@ Defaults and their purpose:
 
 | Setting | Default | Purpose |
 | --- | --- | --- |
+| `ui.theme` | `auto` | Whole TUI palette: `auto`, `mocha`, `latte`; override with `--theme`. |
 | `roots` | none | Discover from sessions; add scanning roots only when wanted. |
 | `root_depth` | `3` | Bound discovery below configured roots. |
 | `exclude` | `**/node_modules`, `**/.tmp/**` | Avoid dependency and temporary directories. |
@@ -749,3 +750,19 @@ Extra files are read in configuration order before built-in signatures; first
 match wins. Roles are `interactive`, `headless`, `host`, `helper`, and `app`.
 Match executable tokens specifically. A match contributes helper evidence;
 process ancestry, reparenting, activity, and running app ownership also matter.
+
+
+### Themes
+
+Set `[ui] theme = 'auto'` (the default), `'mocha'`, or `'latte'` in TOML.
+For example:
+
+```toml
+[ui]
+theme = 'latte'
+```
+
+`driga --theme mocha top` overrides the config for the whole TUI. Auto follows
+terminal background detection; `--no-color` keeps the layout without ANSI styling.
+The web console's Mocha, Latte, and System choices use the same Catppuccin tokens,
+including assistant Markdown. Web System follows the browser's color preference.

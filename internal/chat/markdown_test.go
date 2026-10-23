@@ -1,97 +1,65 @@
 package chat
 
 import (
-	"encoding/json"
-	"fmt"
-	"os"
-	"reflect"
+	"strings"
 	"testing"
+	"unicode/utf8"
+
+	"github.com/yuin/goldmark/ast"
+	east "github.com/yuin/goldmark/extension/ast"
 )
 
-// The same cases run through the real browser renderer in TestChatDOM. The
-// neutral tree below compares grammar without depending on either renderer.
-type markdownTestNode struct {
-	Tag      string             `json:"tag"`
-	Text     string             `json:"text,omitempty"`
-	Children []markdownTestNode `json:"children,omitempty"`
-}
-
-func markdownTestText(text string) []markdownTestNode {
-	if text == "" {
-		return nil
-	}
-	return []markdownTestNode{{Tag: "#text", Text: text}}
-}
-
-func markdownTestSpans(spans []MarkdownSpan) []markdownTestNode {
-	var nodes []markdownTestNode
-	for _, span := range spans {
-		if span.Kind == "text" {
-			if span.Text == "" {
-				continue
-			}
-			if len(nodes) > 0 && nodes[len(nodes)-1].Tag == "#text" {
-				nodes[len(nodes)-1].Text += span.Text
-			} else {
-				nodes = append(nodes, markdownTestText(span.Text)...)
-			}
-		} else {
-			children := markdownTestSpans(span.Children)
-			if span.Kind == "code" {
-				children = markdownTestText(span.Text)
-			}
-			nodes = append(nodes, markdownTestNode{Tag: span.Kind, Children: children})
+func TestMarkdownCommonMarkGFM(t *testing.T) {
+	d := ParseMarkdown("Title\n=====\n\n> quoted\n\n3. list\n   - nested\n\n- [x] done\n\n~~gone~~ https://example.com\n\n| A | B |\n| :- | -: |\n| **a** | b |\n\n    indented\n\n---\n")
+	kinds := map[ast.NodeKind]bool{}
+	_ = ast.Walk(d.Root, func(n ast.Node, enter bool) (ast.WalkStatus, error) {
+		if enter {
+			kinds[n.Kind()] = true
+		}
+		return ast.WalkContinue, nil
+	})
+	for _, kind := range []ast.NodeKind{ast.KindHeading, ast.KindBlockquote, ast.KindList, ast.KindCodeBlock, ast.KindThematicBreak, ast.KindEmphasis, ast.KindAutoLink, east.KindTaskCheckBox, east.KindTable, east.KindStrikethrough} {
+		if !kinds[kind] {
+			t.Errorf("missing %s", kind)
 		}
 	}
-	return nodes
-}
-
-func TestMarkdownGrammar(t *testing.T) {
-	data, err := os.ReadFile("testdata/markdown.json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	var cases []struct {
-		Name, Input string
-		Want        []markdownTestNode
-	}
-	if err := json.Unmarshal(data, &cases); err != nil {
-		t.Fatal(err)
-	}
-	for _, tc := range cases {
-		t.Run(tc.Name, func(t *testing.T) {
-			var got []markdownTestNode
-			for _, block := range ParseMarkdown(tc.Input) {
-				node := markdownTestNode{Tag: block.Kind, Children: markdownTestSpans(block.Spans)}
-				switch block.Kind {
-				case "paragraph":
-					node.Tag = "p"
-				case "heading":
-					node.Tag = fmt.Sprintf("h%d", block.Level)
-				case "code":
-					node.Tag = "pre"
-					node.Children = []markdownTestNode{{Tag: "code", Children: markdownTestText(block.Text)}}
-				case "ul", "ol":
-					for _, item := range block.Items {
-						node.Children = append(node.Children, markdownTestNode{Tag: "li", Children: markdownTestSpans(item)})
-					}
-				}
-				got = append(got, node)
-			}
-			if !reflect.DeepEqual(got, tc.Want) {
-				actual, _ := json.Marshal(got)
-				want, _ := json.Marshal(tc.Want)
-				t.Fatalf("got  %s\nwant %s", actual, want)
-			}
-		})
+	if got := MarkdownHTML("**[[session:42]]**"); got != "<p><strong>#42</strong></p>\n" {
+		t.Fatal(got)
 	}
 }
 
-func TestMarkdownInlineDepthLimit(t *testing.T) {
-	if got := parseMarkdownInline("**literal**", 17); !reflect.DeepEqual(got, []MarkdownSpan{{Kind: "text", Text: "**literal**"}}) {
+func TestMarkdownHTMLSafety(t *testing.T) {
+	for _, input := range []string{
+		"<script>alert(1)</script>", "<img src=x onerror=alert(1)>", "text <b onclick='evil()'>literal</b>",
+		"[bad](javascript:alert(1))", "[bad](jav&#x61;script:alert(1))", "[bad](data:text/html,evil)",
+		"![bad](javascript:evil)", "![bad](data:image/png;base64,AAAA)", "[bad](//evil.test)", "[bad](/relative)",
+		"<javascript:alert(1)>", "[bad](vbscript:evil)", "[bad](file:///tmp/foo)",
+		"[&lt;script&gt;evil&lt;/script&gt;](javascript:evil)", "![&lt;img src=x onerror=evil&gt;](data:x)",
+	} {
+		got := MarkdownHTML(input)
+		for _, bad := range []string{"<script", "<img", `href="`, `src="`} {
+			if strings.Contains(got, bad) {
+				t.Errorf("unsafe %q => %s", input, got)
+			}
+		}
+	}
+	for _, input := range []string{"[safe](https://example.com)", "[safe](http://example.com)", "[safe](mailto:a@example.com)", "https://example.com", "<a@example.com>", "![alt](https://example.com/x.png)"} {
+		got := MarkdownHTML(input)
+		if !strings.Contains(got, "href=") && !strings.Contains(got, "src=") {
+			t.Errorf("safe link lost: %s", got)
+		}
+	}
+	if got := MarkdownHTML("[bad](javascript:evil)"); !strings.Contains(got, "bad (javascript:evil)") {
 		t.Fatal(got)
 	}
-	if got := parseMarkdownInline("**_last_**", 16); len(got) != 1 || got[0].Kind != "strong" || got[0].Children[0].Text != "_last_" {
-		t.Fatal(got)
+}
+
+func TestMarkdownPartialAndBounded(t *testing.T) {
+	for _, input := range []string{"```go\nunterminated", "| A | B |\n| --", "**partial", "[unfinished](https://", strings.Repeat("界", MaxText)} {
+		d := ParseMarkdown(input)
+		if len(d.Source) > MaxText || !utf8.Valid(d.Source) {
+			t.Fatal("unbounded or invalid source")
+		}
+		_ = MarkdownHTML(input)
 	}
 }

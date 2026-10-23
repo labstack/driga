@@ -170,7 +170,7 @@ func TestChatTUIRendersPartialsBeforeResult(t *testing.T) {
 	if err := b.Send(context.Background(), m.chatID, "question", chat.Context{}); err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"First ", "First second"} {
+	for _, want := range []string{"First", "First second"} {
 		select {
 		case <-a.emitted:
 		case <-time.After(3 * time.Second):

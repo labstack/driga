@@ -2,6 +2,8 @@ package tui
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -12,29 +14,9 @@ import (
 	"github.com/labstack/driga/internal/view"
 )
 
-func TestChatMarkdownLayout(t *testing.T) {
-	const input = "# Title\n\n**Bold** *em* `code` [link](url)\n\n- abcdefghij\n- next\n\n9) abcdefghij\n\n~~~go\n  abcdefghijklmnop\n~~~"
-	const want = "Title\n\nBold em co\nde link (u\nrl)\n\n• abcdefgh\n  ij\n• next\n\n1. abcdefg\n   hij\n\n│   abcde…"
-	if got := chatMarkdown(input, 10, true); got != want {
-		t.Fatalf("got:\n%s\nwant:\n%s", got, want)
-	}
-	colored := chatMarkdown(input, 80, false)
-	for _, styled := range []string{
-		view.TokenStyle("accent", false).Bold(true).Render("Title"),
-		view.TokenStyle("ink", false).Bold(true).Render("Bold"),
-		view.TokenStyle("ink", false).Italic(true).Render("em"),
-		view.TokenStyle("ink", false).Background(view.ThemeColor("sunk")).Render("code"),
-		view.TokenStyle("ink", false).Background(view.ThemeColor("sunk")).Render("│   abcdefghijklmnop"),
-	} {
-		if !strings.Contains(colored, styled) {
-			t.Errorf("missing style %q in %q", styled, colored)
-		}
-	}
-}
-
 func TestChatMarkdownWidthsAndNoColor(t *testing.T) {
 	const input = "# **Heading** _em_\n\n**Long bold 界界 e\u0301 👨‍👩‍👧‍👦 text** then `code` and [[session:42]].\n\n- **wrapping list 界界**\n\n1. wrapping ordered list\n\n```\n\twide 界界 and very long code\n\nraw **markdown**\n```\n\n<script>literal</script>\x1b[31m\x1b]8;;https://example.com\a"
-	for _, width := range []int{1, 2, 3, 8, 20, 80} {
+	for _, width := range []int{1, 2, 3, 8, 20, 24, 60, 120} {
 		t.Run(fmt.Sprint(width), func(t *testing.T) {
 			var plain string
 			for _, noColor := range []bool{true, false} {
@@ -86,5 +68,72 @@ func TestChatMarkdownAssistantOnly(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Fatalf("missing %q in %q", want, got)
 		}
+	}
+}
+
+func TestChatMarkdownElements(t *testing.T) {
+	input, err := os.ReadFile("testdata/markdown.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer view.SetTheme("auto")
+	for _, width := range []int{120, 60, 24} {
+		t.Run(fmt.Sprint(width), func(t *testing.T) {
+			plain := chatMarkdown(string(input), width, true)
+			path := filepath.Join("testdata", fmt.Sprintf("markdown-%d.golden", width))
+			if os.Getenv("UPDATE_GOLDEN") == "1" {
+				if err := os.WriteFile(path, []byte(plain+"\n"), 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			want, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if plain+"\n" != string(want) {
+				t.Fatalf("Markdown layout differs from %s:\n%s", path, plain)
+			}
+			var mocha string
+			for _, theme := range []string{"mocha", "latte"} {
+				_ = view.SetTheme(theme)
+				colored := chatMarkdown(string(input), width, false)
+				if ansi.Strip(colored) != plain {
+					t.Fatalf("%s changed layout", theme)
+				}
+				for _, line := range strings.Split(colored, "\n") {
+					if ansi.StringWidth(line) > width {
+						t.Fatalf("overflow: %q", line)
+					}
+				}
+				if theme == "mocha" {
+					mocha = colored
+				} else if colored == mocha {
+					t.Fatal("theme colors did not switch")
+				}
+			}
+		})
+	}
+}
+
+func TestChatMarkdownPartial(t *testing.T) {
+	for _, input := range []string{"```go\nunterminated fence", "| A | B |\n| --", "| A | B |\n| --- | --- |\n| x", "**partial"} {
+		for _, width := range []int{120, 60, 24} {
+			for _, noColor := range []bool{true, false} {
+				_ = chatMarkdown(input, width, noColor)
+			}
+		}
+	}
+}
+
+func TestChatMarkdownStructure(t *testing.T) {
+	input := "3. first\n   - nested\n\n> outer\n> > inner\n\n- [ ] pending\n- [x] done\n\n[link](https://example.com) <https://example.com> ![alt](https://example.com/a.png)\n\n<script>literal</script>\n\nline  \nbreak\nsoft\nline"
+	got := chatMarkdown(input, 120, true)
+	for _, want := range []string{"3. first\n   • nested", "│ outer\n│ \n│ │ inner", "☐ pending", "☑ done", "link (https://example.com)", "[image: alt] (https://example.com/a.png)", "<script>literal</script>", "line\nbreak soft line"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "https://example.com (https://example.com)") {
+		t.Fatal("duplicate autolink URL")
 	}
 }

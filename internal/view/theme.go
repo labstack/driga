@@ -12,11 +12,24 @@ import (
 // ThemeToken is one semantic color in the browser or terminal palette.
 type ThemeToken struct{ Name, Light, Dark string }
 
+// Markdown roles share names and colors across terminal and browser output.
+var markdownTokens = []ThemeToken{
+	{"md-heading", "#7629D6", "#CBA6F7"},
+	{"md-code", "#4C4F69", "#CDD6F4"},
+	{"md-code-bg", "#DCE0E8", "#11111B"},
+	{"md-link", "#1A5AD8", "#89B4FA"},
+	{"md-quote", "#5C5F77", "#A6ADC8"},
+	{"md-rule", "#5C5F77", "#A6ADC8"},
+	{"md-table-border", "#5C5F77", "#A6ADC8"},
+	{"md-strike", "#5C5F77", "#A6ADC8"},
+	{"md-task", "#256817", "#A6E3A1"},
+}
+
 // Catppuccin palettes (MIT): Latte for light, Mocha for dark. Mocha uses the
 // official colors. Latte's yellow, green, blue, peach and overlay grays fall
 // below 4.5:1 for text on its base, so those text roles use darker shades of
 // the same hue; bars and fills reuse them.
-var themeTokens = [...]ThemeToken{
+var themeTokens = append([]ThemeToken{
 	{"sunk", "#DCE0E8", "#11111B"},
 	{"ink", "#4C4F69", "#CDD6F4"},
 	{"muted", "#5C5F77", "#A6ADC8"},
@@ -36,10 +49,10 @@ var themeTokens = [...]ThemeToken{
 	{"observation", "#116762", "#94E2D5"},
 	{"tool", "#04778A", "#89DCEB"},
 	{"ended", "#5C5F77", "#A6ADC8"},
-}
+}, markdownTokens...)
 
 // consoleTokens maps the console's roles onto the same Catppuccin palettes.
-var consoleTokens = [...]ThemeToken{
+var consoleTokens = append([]ThemeToken{
 	{"bg", "#EFF1F5", "#1E1E2E"}, {"pane", "#E6E9EF", "#181825"},
 	{"raise", "#CCD0DA", "#313244"}, {"line", "#BCC0CC", "#45475A"},
 	{"fg", "#4C4F69", "#CDD6F4"}, {"mid", "#5C5F77", "#BAC2DE"},
@@ -54,7 +67,7 @@ var consoleTokens = [...]ThemeToken{
 	{"faint", "#5C5F77", "#A6ADC8"},
 	{"working-bg", "#D3E4D5", "#364143"}, {"stalled-bg", "#EACDD7", "#443244"},
 	{"idle-bg", "#CEDBF5", "#313953"}, {"finished-bg", "#DADCE3", "#333446"},
-}
+}, markdownTokens...)
 
 // ThemeCSS supports named preferences and the system default without script.
 func ThemeCSS() string {
@@ -71,9 +84,34 @@ func ThemeCSS() string {
 // Background detection belongs to the interactive event loop. Import-time
 // terminal queries can block indefinitely when a Windows MCP client has no console.
 var lightBackground atomic.Bool
+var themePreference atomic.Int32
+
+// SetTheme selects a palette for the entire TUI. Auto follows background events.
+func SetTheme(theme string) error {
+	switch theme {
+	case "", "auto":
+		themePreference.Store(0)
+	case "mocha":
+		themePreference.Store(1)
+	case "latte":
+		themePreference.Store(2)
+	default:
+		return fmt.Errorf("theme must be auto, mocha or latte")
+	}
+	return nil
+}
 
 // HasDarkBackground reports the last TUI observation, or the default dark theme.
-func HasDarkBackground() bool { return !lightBackground.Load() }
+func HasDarkBackground() bool {
+	switch themePreference.Load() {
+	case 1:
+		return true
+	case 2:
+		return false
+	default:
+		return !lightBackground.Load()
+	}
+}
 
 // SetDarkBackground records an asynchronous terminal background response.
 func SetDarkBackground(dark bool) { lightBackground.Store(!dark) }
@@ -81,7 +119,7 @@ func SetDarkBackground(dark bool) { lightBackground.Store(!dark) }
 type adaptiveColor struct{ light, dark color.Color }
 
 func (c adaptiveColor) RGBA() (uint32, uint32, uint32, uint32) {
-	if lightBackground.Load() {
+	if !HasDarkBackground() {
 		return c.light.RGBA()
 	}
 	return c.dark.RGBA()

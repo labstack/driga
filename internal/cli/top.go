@@ -33,7 +33,11 @@ func (c TopCmd) Run(g *Globals) error {
 	if !inOK || !outOK || !term.IsTerminal(in.Fd()) || !term.IsTerminal(out.Fd()) {
 		return invalidUsage("driga top needs an interactive terminal; use driga agents or --json")
 	}
-	cfg, err := config.Load(config.Path())
+	overrides := map[string]any{}
+	if g.Theme != nil {
+		overrides["ui.theme"] = *g.Theme
+	}
+	cfg, err := config.LoadWithOverrides(config.Path(), overrides)
 	if err != nil {
 		return err
 	}
@@ -51,7 +55,7 @@ func (c TopCmd) Run(g *Globals) error {
 		return err
 	}
 	defer closeChat()
-	opts := tui.Options{InitialTab: c.Tab, Chat: chatClient, ChatEphemeral: ephemeral, Machine: g.Machine, Project: g.Project, NoColor: g.NoColor, OpenCmd: cfg.OpenCmd, DataDir: config.DataDir(), Context: ctx}
+	opts := tui.Options{InitialTab: c.Tab, Theme: cfg.UI.Theme, Chat: chatClient, ChatEphemeral: ephemeral, Machine: g.Machine, Project: g.Project, NoColor: g.NoColor, OpenCmd: cfg.OpenCmd, DataDir: config.DataDir(), Context: ctx}
 	opts.Tmux = os.Getenv("TMUX")
 	opts.JumpTerminal = cfg.Inbox.JumpTerminal
 	opts.MotionOff = cfg.Motion == "off"

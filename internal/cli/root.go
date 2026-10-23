@@ -27,6 +27,7 @@ type Globals struct {
 	Project         string            `help:"Scope views to one project (path, name, or '.')."`
 	Since           string            `help:"Only show items since a duration ago or 'yesterday'."`
 	Snapshot        bool              `help:"Force snapshot mode (one-shot collect, no history)."`
+	Theme           *string           `enum:"auto,mocha,latte" help:"TUI theme: auto, mocha or latte (overrides ui.theme)."`
 	NoColor         bool              `name:"no-color" help:"Disable colors."`
 	Watch           time.Duration     `help:"Re-render every interval (e.g. 2s)." placeholder:"DUR"`
 

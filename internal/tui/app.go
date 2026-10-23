@@ -41,6 +41,7 @@ type Options struct {
 	JumpTerminal  bool
 	Machine       string
 	Project       string
+	Theme         string
 	NoColor       bool
 	OpenCmd       string
 	TermProgram   string
@@ -147,6 +148,7 @@ type cleanupSizeMsg struct {
 
 // New creates a Bubble Tea v2 model. Collection and actions run only in commands.
 func New(src Source, opts Options) tea.Model {
+	_ = view.SetTheme(opts.Theme)
 	if opts.Now == nil {
 		opts.Now = time.Now
 	}

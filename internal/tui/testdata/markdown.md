@@ -1,0 +1,62 @@
+# Heading one
+
+## Heading two
+
+### Heading three
+
+#### Heading four
+
+##### Heading five
+
+###### Heading six
+
+Setext heading
+--------------
+
+Paragraph with **strong**, *emphasis*, ***both***, ~~strikethrough~~, `inline code`, escaped \*asterisks\* and &amp; entities. Unicode 界界, é and 👨‍👩‍👧‍👦 keep their display widths.
+Soft line
+continues. Hard break:  
+next line.
+
+```go
+fmt.Println("code is never rewrapped even when it is much longer than the available display width at sixty or twenty-four columns")
+	return nil
+
+**literal** <script>code</script>
+```
+
+    indented code
+    another line
+
+> A block quote with **strong** text.
+>
+> > A nested quote.
+> > - Nested list
+> > - Second item
+
+3. Ordered item with a continuation long enough to wrap and show its hanging indent on narrow screens.
+   - Nested unordered item
+     - Deeply nested item
+4. Next ordered item
+
+- [ ] Pending task with `code`
+- [x] Completed task
+
+---
+
+[link text](https://example.com/docs) and <https://example.com> and https://example.org and <hello@example.com>.
+
+![picture alt](https://example.com/image.png)
+
+| Name | Description | Count |
+| :--- | :---: | ---: |
+| **Wide 界** | A long centered description with *inline spans* that wraps the widest column first. | 123 |
+| `code` | ~~removed~~ and [link](https://example.com) | 4 |
+
+| One | Two | Three | Four | Five | Six |
+| --- | --- | --- | --- | --- | --- |
+| a | b | c | d | e | f |
+
+<div onclick="evil()">literal raw HTML</div>
+
+Inline <span>HTML</span> stays literal in the terminal. [blocked](javascript:alert(1)) stays text.

@@ -22,3 +22,23 @@ func TestTerminalBackgroundUpdatesTheme(t *testing.T) {
 		}
 	}
 }
+
+func TestExplicitThemeIgnoresBackground(t *testing.T) {
+	original := view.HasDarkBackground()
+	t.Cleanup(func() { _ = view.SetTheme("auto"); view.SetDarkBackground(original) })
+	var colors [2][4]uint32
+	for i, theme := range []string{"mocha", "latte"} {
+		m := setup(t, fixture(), Options{Theme: theme}).(*app)
+		for _, background := range []color.Color{color.White, color.Black} {
+			_, _ = m.Update(tea.BackgroundColorMsg{Color: background})
+			if view.HasDarkBackground() != (theme == "mocha") {
+				t.Fatal("explicit theme lost")
+			}
+		}
+		r, g, b, a := view.ThemeColor("ink").RGBA()
+		colors[i] = [4]uint32{r, g, b, a}
+	}
+	if colors[0] == colors[1] {
+		t.Fatal("whole-TUI ink did not switch")
+	}
+}

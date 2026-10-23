@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/labstack/driga/internal/chat"
+	"github.com/labstack/driga/internal/store"
 )
 
 func isChatPOST(path string) bool {
@@ -133,11 +135,11 @@ func (s *Server) chatEvents(w http.ResponseWriter, r *http.Request) {
 	queued := -1
 	for {
 		if state.Reset {
-			if err := write(state.Cursor, "reset", state); err != nil {
+			if err := write(state.Cursor, "reset", renderChatState(state)); err != nil {
 				return
 			}
 		} else {
-			for _, e := range state.Events {
+			for _, e := range renderChatEvents(state) {
 				if err := write(e.Seq, "change", e); err != nil {
 					return
 				}
@@ -164,4 +166,69 @@ func (s *Server) chatEvents(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+}
+
+// HTML belongs to the browser transport, never persisted chat history or deltas.
+type chatHTMLMessage struct {
+	store.ChatMessage
+	HTML string `json:"html,omitempty"`
+}
+type chatHTMLEvent struct {
+	chat.Event
+	Message *chatHTMLMessage `json:"message,omitempty"`
+	HTML    string           `json:"html,omitempty"`
+}
+type chatHTMLState struct {
+	chat.State
+	Messages []chatHTMLMessage `json:"messages"`
+	Events   []chatHTMLEvent   `json:"events"`
+}
+
+func renderChatMessage(m store.ChatMessage) chatHTMLMessage {
+	out := chatHTMLMessage{ChatMessage: m}
+	if m.Role == "assistant" {
+		out.HTML = chat.MarkdownHTML(m.Text)
+	}
+	return out
+}
+func renderChatState(state chat.State) chatHTMLState {
+	out := chatHTMLState{State: state, Messages: []chatHTMLMessage{}, Events: make([]chatHTMLEvent, len(state.Events))}
+	for _, m := range state.Messages {
+		out.Messages = append(out.Messages, renderChatMessage(m))
+	}
+	out.Events = renderChatEvents(state)
+	return out
+}
+
+func renderChatEvents(state chat.State) []chatHTMLEvent {
+	events := make([]chatHTMLEvent, len(state.Events))
+	if len(events) == 0 {
+		return events
+	}
+	texts := map[string]string{}
+	for _, m := range state.Messages {
+		if m.Role == "assistant" {
+			texts[m.ID] = m.Text
+		}
+	}
+	// Read supplies the current full messages plus ordered replay events. Rewind
+	// their deltas so every replay HTML field reflects precisely that update.
+	for i := len(state.Events) - 1; i >= 0; i-- {
+		e := state.Events[i]
+		rendered := chatHTMLEvent{Event: e}
+		if e.Message != nil {
+			m := renderChatMessage(*e.Message)
+			rendered.Message = &m
+			if m.Role == "assistant" {
+				texts[m.ID] = m.Text
+			}
+		}
+		if e.Kind == "delta" {
+			text := texts[e.MessageID]
+			rendered.HTML = chat.MarkdownHTML(text)
+			texts[e.MessageID] = strings.TrimSuffix(text, e.Text)
+		}
+		events[i] = rendered
+	}
+	return events
 }

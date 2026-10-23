@@ -37,6 +37,7 @@ var settings = []Setting{
 	{"capture_text", "CaptureText", "string", "titles", "Local text capture policy.", "titles or snippets"},
 	{"open_cmd", "OpenCmd", "string", "", "Editor command; {cwd} is substituted.", "empty = auto-detect"},
 	{"no_service_hint", "NoServiceHint", "bool", false, "Suppress optional service hints.", "true or false"},
+	{"ui.theme", "UI.Theme", "string", "auto", "Palette for the whole terminal UI.", "auto, mocha or latte"},
 	{"adapters.claude.enabled", "", "bool", true, "Enable Claude session discovery.", "true or false"},
 	{"adapters.codex.enabled", "", "bool", true, "Enable Codex session discovery.", "true or false"},
 	{"adapters.gemini.enabled", "", "bool", true, "Enable Gemini session discovery.", "true or false"},
@@ -166,6 +167,10 @@ func (s Setting) assign(c *Config, raw any) error {
 			return fmt.Errorf("expected string")
 		}
 		switch s.Key {
+		case "ui.theme":
+			if text != "auto" && text != "mocha" && text != "latte" {
+				return fmt.Errorf("allowed values: %s", s.Range)
+			}
 		case "motion":
 			if text != "on" && text != "off" {
 				return fmt.Errorf("allowed values: %s", s.Range)
