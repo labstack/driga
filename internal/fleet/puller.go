@@ -127,7 +127,7 @@ func (p *Puller) Run(ctx context.Context) {
 			continue
 		}
 		if strings.Contains(err.Error(), "untrusted fleet peer certificate") || strings.Contains(err.Error(), "machine_id mismatch") {
-			p.status(ctx, "untrusted", fmt.Errorf("peer identity changed; run driga fleet rekey on the peer (pairings must be redone), then driga fleet remove and pair again: %w", err))
+			p.status(ctx, "untrusted", fmt.Errorf("peer identity changed; run driga fleet rekey on the peer (pairings must be redone), then driga fleet peers remove and pair again: %w", err))
 			return
 		}
 		var incompatible *schemaError

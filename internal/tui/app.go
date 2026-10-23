@@ -17,12 +17,12 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
+	"github.com/labstack/driga/internal/attention"
 	"github.com/labstack/driga/internal/chat"
 	"github.com/labstack/driga/internal/cleanup"
 	"github.com/labstack/driga/internal/config"
 	"github.com/labstack/driga/internal/derive"
 	"github.com/labstack/driga/internal/fleet"
-	"github.com/labstack/driga/internal/inbox"
 	"github.com/labstack/driga/internal/kill"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/pathx"
@@ -199,8 +199,11 @@ func New(src Source, opts Options) tea.Model {
 	input.Placeholder = "filter"
 	input.SetStyles(textinput.Styles{})
 	m := &app{chatInput: newChatInput(), chatSpinner: spinner.New(spinner.WithSpinner(spinner.MiniDot)), chatEphemeral: opts.ChatEphemeral, tab: homeTab, machineScope: opts.Machine, src: src, opts: opts, width: 80, height: 24, expanded: map[string]bool{}, filter: input, table: table.New(table.WithFocused(true)), viewport: viewport.New()}
-	if opts.InitialTab == "machine" {
-		m.tab = 4
+	for i, name := range []string{"agents", "projects", "inbox", "orphans", "machine", "cleanup", "home", "flow", "chat"} {
+		if opts.InitialTab == name {
+			m.tab = i
+			break
+		}
 	}
 	m.rebuild()
 	return m
@@ -673,7 +676,7 @@ func (m *app) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.flowAskCursor = (m.flowAskCursor + count - 1) % count
 					return m, nil
 				case "C":
-					m.status = inbox.JumpCommand(w.Jump)
+					m.status = attention.JumpCommand(w.Jump)
 					return m, nil
 				case "enter":
 					return m, m.jumpFlowAttention(w)
@@ -704,7 +707,7 @@ func (m *app) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, m.loadFlow()
 			case "C":
 				if n := m.flowSelected(); n != nil {
-					m.status = inbox.JumpCommand(n.Jump)
+					m.status = attention.JumpCommand(n.Jump)
 				}
 				return m, nil
 			case "enter":
@@ -773,7 +776,7 @@ func (m *app) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						return m, nil
 					}
 					if m.opts.Summarize == nil {
-						m.status = "run driga summarize for this project"
+						m.status = "run driga projects summarize <project>"
 						return m, nil
 					}
 					run, ctx, path := m.opts.Summarize, m.opts.Context, row.cwd
@@ -830,7 +833,7 @@ func (m *app) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.tab == 5 && !m.busy {
 				if r, ok := m.selected(); ok && r.cleanup != nil {
 					if r.cleanup.Status != "ready" {
-						m.status = "use driga cleanup " + r.cleanup.ID + " --include-ignored for needs-review; history is report-only"
+						m.status = "use driga cleanup remove " + r.cleanup.ID + " --include-ignored for needs-review; history is report-only"
 					} else if m.opts.CleanupApply != nil {
 						m.confirm = &confirmation{kind: "cleanup", cleanup: *r.cleanup}
 					}
@@ -1023,7 +1026,7 @@ func (m *app) ack(items []model.InboxItem) tea.Cmd {
 
 func openCommand(template, term, cwd string) []string {
 	if template == "" && runtime.GOOS == "windows" && pathx.WindowsStyle(cwd) {
-		args, _ := inbox.WindowsTerminalCommand(cwd)
+		args, _ := attention.WindowsTerminalCommand(cwd)
 		return args
 	}
 	if template == "" {
@@ -1062,7 +1065,7 @@ func (m *app) execute(args []string, attach bool) tea.Cmd {
 	ctx := m.opts.Context
 	return func() tea.Msg {
 		cmd := exec.CommandContext(ctx, args[0], args[1:]...)
-		inbox.ConfigureCommand(cmd)
+		attention.ConfigureCommand(cmd)
 		if attach {
 			return tea.ExecProcess(cmd, func(err error) tea.Msg { return actionMsg{status: command, err: err} })()
 		}

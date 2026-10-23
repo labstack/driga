@@ -23,13 +23,17 @@ import (
 
 // FleetEnrollCmd opens one bounded pairing window on the running collector.
 type FleetEnrollCmd struct {
-	Ack    bool          `help:"Allow this viewer to acknowledge inbox items."`
-	Allow  string        `help:"Pre-authorize exactly this viewer device ID (headless)."`
+	Yes    bool          `short:"y" help:"Skip confirmation only with --allow-viewer identity pinning."`
+	Ack    bool          `name:"allow-ack" help:"Allow this viewer to acknowledge inbox items."`
+	Allow  string        `name:"allow-viewer" help:"Pre-authorize exactly this viewer device ID (headless)."`
 	Window time.Duration `help:"Enrollment duration (default fleet.enroll_window, at most 10m)."`
 }
 
 // Run asks for confirmation locally or returns immediately for a pinned viewer.
 func (c FleetEnrollCmd) Run(g *Globals) error {
+	if c.Allow == "" && (c.Yes || !terminalInput(g)) {
+		return invalidUsage("not applied; pass --allow-viewer with the viewer device ID for non-interactive pairing")
+	}
 	overrides := map[string]any{}
 	if c.Window != 0 {
 		overrides["fleet.enroll_window"] = c.Window.String()
@@ -62,13 +66,18 @@ func (c FleetEnrollCmd) Run(g *Globals) error {
 
 // FleetAddCmd pairs this viewer to a serving machine.
 type FleetAddCmd struct {
+	Yes bool `short:"y" help:"Skip confirmation only with --device-id identity pinning."`
+	JSONOptions
 	Addr string `arg:"" name:"host" help:"Peer host[:port] (default port 7411)."`
 	Name string `help:"Local name for the peer."`
-	ID   string `help:"Require this peer device ID (headless)."`
+	ID   string `name:"device-id" help:"Require this peer device ID (headless)."`
 }
 
 // Run compares the code through an injected prompt and persists the peer.
 func (c FleetAddCmd) Run(g *Globals) error {
+	if c.ID == "" && (c.Yes || !terminalInput(g)) {
+		return invalidUsage("not applied; pass --device-id with the peer device ID for non-interactive pairing")
+	}
 	ctx, stop := pairCommandContext()
 	defer stop()
 	peer, err := fleet.Add(ctx, c.Addr, fleet.AddOpts{DataDir: config.DataDir(), Name: c.Name, ID: c.ID}, pairPrompt(g, "Does the peer show the same code?"))
@@ -102,11 +111,15 @@ func pairCommandContext() (context.Context, context.CancelFunc) {
 
 // FleetRevokeCmd immediately revokes a viewer by name or device ID.
 type FleetRevokeCmd struct {
+	Yes    bool   `short:"y" help:"Apply without asking for confirmation."`
 	Viewer string `arg:"" help:"Viewer name or device ID."`
 }
 
 // Run updates trust and closes the viewer's live connections.
 func (c FleetRevokeCmd) Run(g *Globals) error {
+	if err := requireConfirmation(g, c.Yes, "Revoke viewer "+c.Viewer+"?"); err != nil {
+		return err
+	}
 	v, err := fleet.RevokeViewer(context.Background(), config.DataDir(), c.Viewer)
 	if err != nil {
 		return err
@@ -117,12 +130,16 @@ func (c FleetRevokeCmd) Run(g *Globals) error {
 
 // FleetRemoveCmd removes a peer locally, optionally deleting its cached rows.
 type FleetRemoveCmd struct {
-	Name  string `arg:"" help:"Peer name, device ID or machine ID (removed peers with --purge)."`
+	Yes   bool   `short:"y" help:"Apply without asking for confirmation."`
+	Name  string `arg:"" name:"peer" help:"Peer name, device ID or machine ID (removed peers with --purge)."`
 	Purge bool   `help:"Delete this peer's cached rows."`
 }
 
 // Run removes the peer; retained rows continue to age out by retention.
 func (c FleetRemoveCmd) Run(g *Globals) error {
+	if err := requireConfirmation(g, c.Yes, "Remove peer "+c.Name+"?"); err != nil {
+		return err
+	}
 	p, err := fleet.RemovePeer(context.Background(), config.DataDir(), c.Name, c.Purge)
 	if err != nil {
 		return err
@@ -132,10 +149,15 @@ func (c FleetRemoveCmd) Run(g *Globals) error {
 }
 
 // FleetRekeyCmd replaces this device's certificate and invalidates all pairings.
-type FleetRekeyCmd struct{}
+type FleetRekeyCmd struct {
+	Yes bool `short:"y" help:"Apply without asking for confirmation."`
+}
 
 // Run performs identity maintenance under the collector's exclusive lock.
-func (FleetRekeyCmd) Run(g *Globals) error {
+func (c FleetRekeyCmd) Run(g *Globals) error {
+	if err := requireConfirmation(g, c.Yes, "Regenerate identity and invalidate all pairings?"); err != nil {
+		return err
+	}
 	if err := fleet.Rekey(context.Background(), config.DataDir()); err != nil {
 		return err
 	}
@@ -144,10 +166,15 @@ func (FleetRekeyCmd) Run(g *Globals) error {
 }
 
 // MachineResetIDCmd repairs a cloned machine's row identity and certificate.
-type MachineResetIDCmd struct{}
+type MachineResetIDCmd struct {
+	Yes bool `short:"y" help:"Apply without asking for confirmation."`
+}
 
 // Run re-stamps local rows and invalidates old trust.
-func (MachineResetIDCmd) Run(g *Globals) error {
+func (c MachineResetIDCmd) Run(g *Globals) error {
+	if err := requireConfirmation(g, c.Yes, "Reset local machine identity and invalidate all pairings?"); err != nil {
+		return err
+	}
 	if err := fleet.ResetID(context.Background(), config.DataDir()); err != nil {
 		return err
 	}
@@ -156,10 +183,15 @@ func (MachineResetIDCmd) Run(g *Globals) error {
 }
 
 // FleetPeersCmd lists locally trusted peers and any recorded trust failure.
-type FleetPeersCmd struct{}
+type FleetPeersCmd struct {
+	List   FleetPeersListCmd `cmd:"" help:"List paired machines."`
+	Add    FleetAddCmd       `cmd:"" help:"Pair with a serving machine."`
+	Remove FleetRemoveCmd    `cmd:"" help:"Remove a peer locally."`
+}
+type FleetPeersListCmd struct{ JSONOptions }
 
 // Run reads peers without contacting another machine.
-func (FleetPeersCmd) Run(g *Globals) error {
+func (FleetPeersListCmd) Run(g *Globals) error {
 	peers, err := fleet.LoadPeers(filepath.Join(config.DataDir(), "fleet"))
 	if err != nil {
 		return err

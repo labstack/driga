@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/labstack/driga/internal/attention"
 	"github.com/labstack/driga/internal/config"
-	"github.com/labstack/driga/internal/inbox"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/platform"
 	"github.com/labstack/driga/internal/spool"
@@ -105,7 +105,7 @@ func TestChatJumpUsesStoredDestination(t *testing.T) {
 	old := newInboxRunner
 	t.Cleanup(func() { newInboxRunner = old })
 	calls := 0
-	newInboxRunner = func() inbox.Runner {
+	newInboxRunner = func() attention.Runner {
 		return jumpRunner(func(_ context.Context, name string, args ...string) ([]byte, error) {
 			calls++
 			if name != "tmux" || strings.Contains(strings.Join(args, " "), "send-keys") {
@@ -163,5 +163,53 @@ func TestChatListPromptsOnlyWithActions(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestAgentsKillAndChatShareIdentityAndIdleChecks(t *testing.T) {
+	for _, scenario := range []string{"identity changed", "busy"} {
+		t.Run(scenario, func(t *testing.T) {
+			readEnv(t)
+			start := time.Now().Add(-time.Hour)
+			var id int64
+			procs := []model.Proc{{PID: 4242, PPID: 1, StartTime: start, CPUSeconds: 1}}
+			readDB(t, func(tx *store.Tx) error {
+				var err error
+				id, err = tx.UpsertSession(model.Session{SessionObs: model.SessionObs{Adapter: "claude", ExternalID: "selected", PID: 4242, ProcStart: start}})
+				if err != nil {
+					return err
+				}
+				if scenario == "identity changed" {
+					return nil
+				}
+				return tx.ReplaceProcs(procs)
+			})
+			oldPlat, oldWindow := actPlatform, verifyWindow
+			defer func() { actPlatform, verifyWindow = oldPlat, oldWindow }()
+			verifyWindow = time.Millisecond
+			for _, caller := range []string{"CLI", "Chat"} {
+				later := append([]model.Proc(nil), procs...)
+				later[0].CPUSeconds = 2
+				actPlatform = func() platform.Platform { return &cliSeqPlatform{snaps: [][]model.Proc{procs, later}} }
+				var out, diagnostic bytes.Buffer
+				var err error
+				if caller == "CLI" {
+					code := run([]string{"agents", "kill", fmt.Sprint(id), "--force", "-y"}, "test", nil, &out, &diagnostic)
+					if code != 1 {
+						t.Fatal(code, &out, &diagnostic)
+					}
+					err = fmt.Errorf("%s", diagnostic.String())
+				} else {
+					err = runChatAction(context.Background(), &Globals{Stdout: &out}, "kill", json.RawMessage(fmt.Sprintf(`{"session_id":%d,"force":true}`, id)))
+				}
+				want := "changed or exited"
+				if scenario == "busy" {
+					want = "not idle"
+				}
+				if err == nil || !strings.Contains(err.Error(), want) || strings.Contains(out.String(), "signaled") {
+					t.Fatal(caller, err, &out)
+				}
+			}
+		})
 	}
 }

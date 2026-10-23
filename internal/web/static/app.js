@@ -26,7 +26,7 @@
     if (started) tokens.push(token);
     const verb = tokens.shift();
     if (["ack", "kill"].includes(verb) || verb === "hooks" ||
-        ["inbox", "orphans", "cleanup"].includes(verb) && tokens.some(t => ["ack", "kill", "apply", "--apply"].includes(t))) return error(readOnly);
+        ["agents", "projects", "inbox", "orphans", "cleanup"].includes(verb) && tokens.some(t => ["ack", "kill", "jump", "remove", "summarize"].includes(t))) return error(readOnly);
     const query = {machine: scope};
     function url(path) {
       return {url: path + "?" + Object.keys(query).sort().map(k => encodeURIComponent(k) + "=" + encodeURIComponent(query[k]).replace(/%20/g, "+")).join("&")};
@@ -39,6 +39,11 @@
       if (tokens.length === 1 && ["mocha", "latte", "system"].includes(tokens[0])) return {theme: tokens[0]};
       return error("Use theme mocha|latte|system");
     }
+    if (["agents", "projects", "inbox", "orphans", "machines", "cleanup"].includes(verb) && tokens[0] === "list") tokens.shift();
+    if (verb === "agents" && tokens[0] === "show") {
+      if (tokens.length !== 2 || !/^[1-9][0-9]*$/.test(tokens[1])) return error("Use agents show <session-id>");
+      return url("/agents/" + tokens[1]);
+    }
     if (verb === "agents") {
       while (tokens.length) {
         const flag = tokens.shift();
@@ -49,7 +54,7 @@
       }
       return url("/agents");
     }
-    if (verb === "where" && tokens.length) { query.project = tokens.join(" "); return url("/projects"); }
+    if (verb === "projects" && tokens[0] === "show" && tokens.length > 1) { query.project = tokens.slice(1).join(" "); return url("/projects"); }
     if (verb === "cleanup" && tokens.length === 1 && tokens[0] === "--why") { query.why = "1"; return url("/cleanup"); }
     if (!tokens.length && ["home", "projects", "inbox", "orphans", "machines", "cleanup", "activity"].includes(verb)) return url(verb === "home" ? "/" : "/" + verb);
     return error("Unknown command · ? for help");
@@ -293,7 +298,7 @@
 
   const input = document.getElementById("cmdline"), menu = document.getElementById("command-menu"), error = document.getElementById("command-error"), help = document.getElementById("help");
   let suggestions = [], choice = -1;
-  const commands = ["flow", "flow <id>", "agents", ...states.map(s => "agents --state " + s), "agents --all", "agents --project <name>", "where <project>", "projects", "inbox", "orphans", "machines", "cleanup", "cleanup --why", "activity", "theme mocha", "theme latte", "theme system", "ack <id>", "inbox ack <id>", "kill <id>", "orphans kill <id>", "cleanup apply", "hooks install"];
+  const commands = ["flow", "flow <id>", "agents", ...states.map(s => "agents --state " + s), "agents --all", "agents --project <name>", "projects show <project>", "projects", "inbox", "orphans", "machines", "cleanup", "cleanup --why", "activity", "theme mocha", "theme latte", "theme system", "agents show <session-id>", "agents jump <session-id>", "agents kill <session-id>", "inbox ack <item-id>", "inbox jump <item-id>", "orphans kill <orphan-id>", "cleanup remove <candidate-id>", "hooks install"];
   const mutating = command => parseCommand(command).error === readOnly;
   function closeMenu() { menu.hidden = true; input.setAttribute("aria-expanded", "false"); input.removeAttribute("aria-activedescendant"); choice = -1; }
   function complete() {
@@ -323,7 +328,7 @@
   }
   function runCommand() {
     const text=input.value.trim(), verb=text.split(/\s+/)[0];
-    if (text && !["home","flow","agents","where","projects","inbox","orphans","machines","cleanup","activity","theme","ack","kill","hooks"].includes(verb) && window.drigaChat) {window.drigaChat.open(text);input.value="";closeMenu();return;}
+    if (text && !["home","flow","agents","projects","inbox","orphans","machines","cleanup","activity","theme","ack","kill","hooks"].includes(verb) && window.drigaChat) {window.drigaChat.open(text);input.value="";closeMenu();return;}
     const scope = document.querySelector(".status").dataset.scope || "all";
     const result = parseCommand(input.value, scope);
     if (result.error) {

@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/labstack/driga/internal/inbox"
+	"github.com/labstack/driga/internal/attention"
 )
 
 func TestWindowsActionCapabilities(t *testing.T) {
@@ -30,7 +30,7 @@ func TestWindowsActionCapabilities(t *testing.T) {
 			t.Fatal("missing doctor check", name)
 		}
 	}
-	for _, name := range []string{"service", "hooks install", "notifications", "terminal jump", "kill", "cleanup apply", "socket probers", "file probers"} {
+	for _, name := range []string{"service", "hooks install", "notifications", "terminal jump", "kill", "cleanup remove", "socket probers", "file probers"} {
 		found := false
 		for _, c := range checks {
 			if c.Name == name && !strings.Contains(c.Detail, "not yet supported") {
@@ -58,9 +58,9 @@ func TestWindowsWatchCommands(t *testing.T) {
 		t.Fatal(err)
 	}
 	previous := newInboxRunner
-	newInboxRunner = func() inbox.Runner { return windowsNoCLI{} }
+	newInboxRunner = func() attention.Runner { return windowsNoCLI{} }
 	t.Cleanup(func() { newInboxRunner = previous })
-	for _, args := range [][]string{{"collect", "--once"}, {"agents", "--snapshot", "--json"}, {"projects", "--snapshot", "--json"}, {"machine", "--snapshot", "--json"}, {"inbox", "--snapshot", "--json"}, {"doctor", "--json"}} {
+	for _, args := range [][]string{{"collect", "--once"}, {"agents", "--snapshot", "--json"}, {"projects", "--snapshot", "--json"}, {"machines", "show", "--snapshot", "--json"}, {"inbox", "--snapshot", "--json"}, {"doctor", "--json"}} {
 		var out, errout bytes.Buffer
 		if code := run(args, "test", strings.NewReader(""), &out, &errout); code != 0 {
 			t.Fatalf("%v: %d %s %s", args, code, &out, &errout)

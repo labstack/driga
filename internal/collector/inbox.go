@@ -11,10 +11,10 @@ import (
 	"time"
 
 	"github.com/labstack/driga/internal/adapter/copilot"
+	attention "github.com/labstack/driga/internal/attention"
 	"github.com/labstack/driga/internal/config"
 	"github.com/labstack/driga/internal/derive"
 	"github.com/labstack/driga/internal/fleet"
-	attention "github.com/labstack/driga/internal/inbox"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/store"
 )

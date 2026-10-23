@@ -6,8 +6,8 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/labstack/driga/internal/attention"
 	"github.com/labstack/driga/internal/config"
-	"github.com/labstack/driga/internal/inbox"
 )
 
 func TestNotifierUsesStablePath(t *testing.T) {
@@ -29,7 +29,7 @@ func TestNotifierUsesStablePath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	n := d.Notifier.(inbox.DesktopNotifier)
+	n := d.Notifier.(attention.DesktopNotifier)
 	if n.DrigaPath != link {
 		t.Fatalf("notifier path = %q, want %q", n.DrigaPath, link)
 	}

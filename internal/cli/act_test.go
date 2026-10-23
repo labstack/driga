@@ -28,7 +28,7 @@ func TestKillRefusesYoung(t *testing.T) {
 		return tx.ReplaceOrphans([]model.Orphan{{ID: "young", RootPID: 1, StartTime: time.Now().Add(-time.Minute), Young: true}})
 	})
 	var out, errout bytes.Buffer
-	if code := run([]string{"orphans", "kill", "young", "--force"}, "test", strings.NewReader("y\ny\n"), &out, &errout); code == 0 || !strings.Contains(errout.String(), "too young to kill (age 1m0s, threshold 10m0s)") {
+	if code := run([]string{"orphans", "kill", "young", "--force", "--yes"}, "test", strings.NewReader("y\ny\n"), &out, &errout); code == 0 || !strings.Contains(errout.String(), "too young to kill (age 1m0s, threshold 10m0s)") {
 		t.Fatalf("code=%d out=%s err=%s", code, &out, &errout)
 	}
 	if strings.Contains(out.String(), "Kill young?") {
@@ -87,7 +87,7 @@ func TestKillVerifiesUnverifiedOnDemand(t *testing.T) {
 			actPlatform, verifyWindow = func() platform.Platform { return tc.plat }, time.Millisecond
 			t.Cleanup(func() { actPlatform, verifyWindow = oldPlat, oldWindow })
 			var out bytes.Buffer
-			err := (OrphansKillCmd{ID: "unverified"}).Run(&Globals{Stdout: &out, Stderr: &bytes.Buffer{}, Stdin: strings.NewReader("n\n")})
+			err := (OrphansKillCmd{ID: "unverified"}).Run(&Globals{inputTerminal: true, Stdout: &out, Stderr: &bytes.Buffer{}, Stdin: strings.NewReader("n\n")})
 			message := out.String()
 			if err != nil {
 				message += err.Error()
@@ -218,10 +218,10 @@ func TestKillConfirmation(t *testing.T) {
 	for _, tc := range []struct {
 		input         string
 		force, second bool
-	}{{"\n", false, false}, {"yes\n", false, false}, {"y\nn\n", true, true}} {
+	}{{"\n", false, false}, {"no\n", false, false}, {"y\nn\n", true, true}} {
 		var out bytes.Buffer
-		err := (OrphansKillCmd{ID: "protected", Force: tc.force}).killCandidates(context.Background(), &Globals{Stdout: &out, Stderr: &bytes.Buffer{}, Stdin: strings.NewReader(tc.input)}, config.Default(), procs, candidates)
-		if err != nil {
+		err := (OrphansKillCmd{ID: "protected", Force: tc.force}).killCandidates(context.Background(), &Globals{inputTerminal: true, Stdout: &out, Stderr: &bytes.Buffer{}, Stdin: strings.NewReader(tc.input)}, config.Default(), procs, candidates)
+		if err == nil || !strings.Contains(err.Error(), "not applied") {
 			t.Fatal(err)
 		}
 		for _, text := range []string{"driga orphans kill protected", "PID", "CMD", "RSS", "fixture", "~reclaim", "Kill protected? [y/N]"} {
@@ -229,7 +229,7 @@ func TestKillConfirmation(t *testing.T) {
 				t.Fatalf("missing %q: %s", text, &out)
 			}
 		}
-		if strings.Contains(out.String(), "Really SIGKILL survivors? [y/N]") != tc.second {
+		if strings.Contains(out.String(), "Escalate survivors to SIGKILL (TerminateProcess on Windows)? [y/N]") != tc.second {
 			t.Fatal(out.String())
 		}
 	}
@@ -243,7 +243,7 @@ func TestKillAllPromptsPerCandidate(t *testing.T) {
 	readEnv(t)
 	candidates := []model.Orphan{{ID: "one", RootPID: 1, Verified: true}, {ID: "two", RootPID: 1, Verified: true}, {ID: "young", Young: true, StartTime: time.Now().Add(-time.Minute)}}
 	var out, errout bytes.Buffer
-	if err := (OrphansKillCmd{All: true}).killCandidates(context.Background(), &Globals{Stdout: &out, Stderr: &errout, Stdin: strings.NewReader("n\nn\ny\n")}, config.Default(), nil, candidates); err != nil {
+	if err := (OrphansKillCmd{All: true}).killCandidates(context.Background(), &Globals{inputTerminal: true, Stdout: &out, Stderr: &errout, Stdin: strings.NewReader("n\nn\ny\n")}, config.Default(), nil, candidates); err == nil {
 		t.Fatalf("error=%v out=%s err=%s", err, &out, &errout)
 	}
 	if strings.Count(out.String(), "? [y/N]") != 2 || !strings.Contains(out.String(), "Kill one?") || !strings.Contains(out.String(), "Kill two?") || !strings.Contains(out.String(), "too young to kill") {
@@ -294,8 +294,9 @@ func TestKillAllSkipsRemote(t *testing.T) {
 	})
 	var out, errout bytes.Buffer
 	// Decline the local candidate: this regression never signals any process.
-	code := run([]string{"orphans", "kill", "--all"}, "test", strings.NewReader("n\n"), &out, &errout)
-	if code != 0 || !strings.Contains(out.String(), "skipped 1 orphans on other machines") || !strings.Contains(out.String(), "Kill local?") || strings.Contains(out.String(), "Kill remote?") {
+	err := (OrphansKillCmd{All: true}).Run(&Globals{inputTerminal: true, Stdin: strings.NewReader("n\n"), Stdout: &out, Stderr: &errout})
+	code := 1
+	if err == nil || !strings.Contains(out.String(), "skipped 1 orphans on other machines") || !strings.Contains(out.String(), "Kill local?") || strings.Contains(out.String(), "Kill remote?") {
 		t.Fatalf("code=%d out=%s err=%s", code, &out, &errout)
 	}
 }

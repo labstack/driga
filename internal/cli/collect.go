@@ -12,6 +12,7 @@ import (
 
 	"github.com/labstack/driga/internal/collector"
 	"github.com/labstack/driga/internal/config"
+	"github.com/labstack/driga/internal/fleet"
 	"github.com/labstack/driga/internal/logfile"
 	"github.com/labstack/driga/internal/service"
 	"github.com/labstack/driga/internal/store"
@@ -19,6 +20,8 @@ import (
 
 // CollectCmd runs the daemon, or one persistent pass with --once.
 type CollectCmd struct {
+	Serve          *bool         `help:"Enable fleet serving alongside collection (overrides fleet.serve)."`
+	Listen         string        `help:"Fleet private IP or interface and port (requires serving)."`
 	Scheduled      bool          `hidden:""`
 	ServiceEnv     []string      `hidden:"" sep:"none"`
 	ServiceDataDir string        `hidden:""`
@@ -29,6 +32,9 @@ type CollectCmd struct {
 
 // Run loads collection sources and handles graceful termination signals.
 func (c CollectCmd) Run(g *Globals) error {
+	if c.Once && c.Serve != nil && *c.Serve {
+		return invalidUsage("--once and --serve cannot be combined")
+	}
 	if c.Scheduled {
 		if err := service.PrepareScheduled(c.ServiceDataDir, c.ServiceEnv...); err != nil {
 			return err
@@ -38,9 +44,27 @@ func (c CollectCmd) Run(g *Globals) error {
 	if !c.Once {
 		applyCollectorParallelism()
 	}
-	cfg, err := config.Load(config.Path())
+	overrides := map[string]any{}
+	if c.Serve != nil {
+		overrides["fleet.serve"] = *c.Serve
+	}
+	if c.Listen != "" {
+		overrides["fleet.listen"] = c.Listen
+	}
+	cfg, err := config.LoadWithOverrides(config.Path(), overrides)
 	if err != nil {
 		return err
+	}
+	if c.Once && cfg.Fleet.Serve {
+		return invalidUsage("--once cannot serve fleet; pass --serve=false to override configuration")
+	}
+	if c.Listen != "" && !cfg.Fleet.Serve {
+		return invalidUsage("--listen requires --serve")
+	}
+	if cfg.Fleet.Serve {
+		if _, err := fleet.CheckListen(cfg.Fleet.Listen, cfg.Fleet.AllowAnyAddress); err != nil {
+			return err
+		}
 	}
 	d, err := NewDeps(cfg)
 	if err != nil {

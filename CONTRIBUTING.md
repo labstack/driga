@@ -99,3 +99,18 @@ Do not open a public issue for a security vulnerability. See
 Be straightforward and civil. Critique the change, not the person. See
 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) for the standard and reporting process.
 General open-source questions can go to <opensource@labstack.com>.
+
+The Kong tree in `internal/cli` owns command parsing and confirmation. Shared
+kill, cleanup, acknowledgment and jump execution lives in `internal/actions`,
+which must not import `internal/cli`. Chat owns approval transport and permission
+waiting/transcript matching; hooks retain quiet fail-open parsing in CLI.
+`internal/attention` owns attention policy, notifications and terminal jumps;
+its configuration section remains `inbox`. `internal/view` builds presentation
+models and `internal/viewer` owns live presentation sources.
+
+Keep command hints and notification callbacks aligned with the
+[command reference](docs/usage.md#command-reference). Do not add aliases or
+compatibility shims. Group tests by behavior, retaining platform suffixes.
+Run `just check` and `just race` with their disposable HOME/data isolation;
+web DOM assertions run Node through the Go web tests. Windows vet is part of
+`just check` (`GOOS=windows go vet ./...`). Tests must use fixture agent runners.

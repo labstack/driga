@@ -35,13 +35,13 @@ func toolCases(id int64) []toolCase {
 		{"get_activity", map[string]any{"machine": "local"}, []string{"activity", "--machine", "local"}},
 		{"get_flow", map[string]any{"id": id, "machine": "local"}, []string{"flow", fmt.Sprint(id), "--machine", "local"}},
 		{"list_agents", map[string]any{"all": true, "machine": "local", "project": "api"}, []string{"agents", "--all", "--machine", "local", "--project", "api"}},
-		{"get_agent", map[string]any{"id": id, "machine": "local"}, []string{"agent", fmt.Sprint(id), "--machine", "local"}},
+		{"get_agent", map[string]any{"id": id, "machine": "local"}, []string{"agents", "show", fmt.Sprint(id), "--machine", "local"}},
 		{"list_projects", map[string]any{"active": true, "at_risk": true}, []string{"projects", "--active", "--at-risk"}},
-		{"inspect_project", map[string]any{"project": "api"}, []string{"where", "api"}},
+		{"inspect_project", map[string]any{"project": "api"}, []string{"projects", "show", "api"}},
 		{"list_inbox", map[string]any{"since": "yesterday", "all": true, "project": "api", "machine": "local"}, []string{"inbox", "--since", "yesterday", "--all", "--project", "api", "--machine", "local"}},
 		{"list_conflicts", map[string]any{"project": "api", "machine": "local"}, []string{"conflicts", "--project", "api", "--machine", "local"}},
 		{"list_orphans", map[string]any{"machine": "local"}, []string{"orphans", "--machine", "local"}},
-		{"get_machine", map[string]any{"machine": "local"}, []string{"machine", "--machine", "local"}},
+		{"get_machine", map[string]any{"machine": "local"}, []string{"machines", "show", "local"}},
 		{"list_machines", nil, []string{"machines"}},
 		{"inspect_setup", nil, []string{"doctor"}},
 		{"list_cleanup_candidates", nil, []string{"cleanup"}},
@@ -440,7 +440,7 @@ func TestStructuredContentPreservesIntegers(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer cs.Close()
-	call(t, cs, toolCase{name: "get_machine"})
+	call(t, cs, toolCase{name: "get_machine", args: map[string]any{"machine": "local"}})
 	// Inspect wire JSON before the SDK client decodes numbers into float64.
 	for _, line := range strings.Split(log.String(), "\n") {
 		var response struct {
@@ -458,7 +458,7 @@ func TestStructuredContentPreservesIntegers(t *testing.T) {
 			continue
 		}
 		got := canonical(t, response.Result.StructuredContent)
-		want := canonical(t, json.RawMessage(cliJSON(t, []string{"machine"})))
+		want := canonical(t, json.RawMessage(cliJSON(t, []string{"machines", "show"})))
 		if !bytes.Equal(got, want) {
 			t.Fatalf("structured integers differ from CLI\nMCP: %s\nCLI: %s", got, want)
 		}

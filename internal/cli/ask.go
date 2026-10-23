@@ -16,6 +16,7 @@ import (
 )
 
 type AskCmd struct {
+	AskOptions
 	Question []string `arg:"" required:"" help:"One-shot Chat question using Claude and driga's read-only tools."`
 }
 

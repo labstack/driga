@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -205,7 +206,7 @@ func TestWindowsEndToEnd(t *testing.T) {
 		if !bytes.Equal(unchanged, original) {
 			t.Fatal("hook dry-run changed settings")
 		}
-		f.run(t, "y\n", "hooks", "install", "claude")
+		f.run(t, "", "hooks", "install", "claude", "--yes")
 		installed, err := os.ReadFile(settings)
 		must(t, err)
 		var cfg struct {
@@ -267,7 +268,7 @@ func TestWindowsEndToEnd(t *testing.T) {
 		}))
 		must(t, st.Close())
 		f.assertSession(t, "snapshot", 0)
-		f.run(t, "y\n", "hooks", "uninstall", "claude")
+		f.run(t, "", "hooks", "uninstall", "claude", "--yes")
 		restored, err := os.ReadFile(settings)
 		must(t, err)
 		var before, after any
@@ -343,14 +344,18 @@ func TestWindowsEndToEnd(t *testing.T) {
 		if !slices.Equal(got, want) || candidate.Young || !pathx.Equal(candidate.Cwd, work) {
 			t.Fatalf("unsafe or incorrect candidate: %+v; owned=%v", candidate, want)
 		}
-		proof := f.run(t, "n\n", "kill", candidate.ID, "--snapshot", "--force")
-		if !strings.Contains(string(proof), "verified idle") || !strings.Contains(string(proof), "Kill "+candidate.ID) {
-			t.Fatalf("missing dry proof/confirmation: %s", proof)
+		_, refusal := f.try("n\n", "orphans", "kill", candidate.ID, "--snapshot", "--force")
+		var exit *exec.ExitError
+		if !errors.As(refusal, &exit) || exit.ExitCode() != 2 || !strings.Contains(refusal.Error(), "not applied; pass --yes to apply without asking") {
+			t.Fatalf("non-terminal kill must refuse with usage status: %v", refusal)
 		}
 		for _, h := range handles {
 			assertAlive(t, h, true)
 		}
-		f.run(t, "y\ny\n", "kill", candidate.ID, "--snapshot", "--force")
+		proof := f.run(t, "", "orphans", "kill", candidate.ID, "--snapshot", "--force", "--yes")
+		if !strings.Contains(string(proof), "verified idle") || !strings.Contains(string(proof), "driga orphans kill "+candidate.ID) {
+			t.Fatalf("missing idle verification/evidence: %s", proof)
+		}
 		for _, h := range handles {
 			assertAlive(t, h, false)
 		}
@@ -384,14 +389,14 @@ func TestWindowsEndToEnd(t *testing.T) {
 		if candidate.ID == "" || candidate.Status != "ready" {
 			t.Fatalf("merged clean worktree not eligible: %+v", envelope.Data)
 		}
-		dry := f.run(t, "", "cleanup", candidate.ID, "--dry-run", "--json")
+		dry := f.run(t, "", "cleanup", "remove", candidate.ID, "--dry-run", "--json")
 		if !bytes.Contains(dry, []byte("IFileOperation")) {
 			t.Fatalf("dry-run missing recycle command: %s", dry)
 		}
 		if _, err := os.Stat(work); err != nil {
 			t.Fatalf("dry-run removed worktree: %v", err)
 		}
-		applied := f.run(t, "", "cleanup", candidate.ID, "--yes", "--json")
+		applied := f.run(t, "", "cleanup", "remove", candidate.ID, "--yes", "--json")
 		if !bytes.Contains(applied, []byte(`"completed"`)) {
 			t.Fatalf("cleanup not completed: %s", applied)
 		}
@@ -639,7 +644,7 @@ func (f fixture) assertSession(t *testing.T, mode string, pid int, flags ...stri
 		if row.Adapter != "claude" {
 			continue
 		}
-		detail := f.run(t, "", append([]string{"agent", fmt.Sprint(row.ID), "--json"}, flags...)...)
+		detail := f.run(t, "", append([]string{"agents", "show", fmt.Sprint(row.ID), "--json"}, flags...)...)
 		var d struct {
 			Data struct{ Session model.Session }
 		}

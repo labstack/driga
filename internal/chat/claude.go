@@ -109,7 +109,7 @@ func (a *Claude) Run(ctx context.Context, r Request, emit func(Delta) error) err
 		tools = append(tools, "TodoWrite", "mcp__driga__list_prompts")
 	}
 	// --safe-mode also drops --mcp-config servers; empty setting sources keep
-	// user hooks, plugins and MCP out while the explicit driga server loads.
+	// user hooks, plugins and MCP out while the explicit driga collect --server loads.
 	args := []string{"-p", "--setting-sources", "", "--strict-mcp-config", "--mcp-config", f.Name(), "--tools", nativeTools, "--allowedTools", strings.Join(tools, ","), "--name", "driga-internal", "--output-format", "stream-json", "--verbose", "--include-partial-messages"}
 	if actions {
 		args = append(args, "--permission-prompts", "host", "--permission-prompt-tool", "mcp__driga__approve")

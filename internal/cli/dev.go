@@ -28,6 +28,7 @@ type DevCmd struct {
 
 // DevAgySchemaCmd reads only conversation database schema and row counts.
 type DevAgySchemaCmd struct {
+	JSONOptions
 	Dir string `help:"Directory containing conversation DBs, or an antigravity-cli root." type:"path"`
 }
 

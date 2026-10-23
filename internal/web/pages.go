@@ -14,9 +14,9 @@ import (
 
 	"github.com/labstack/driga/internal/textfmt"
 
+	"github.com/labstack/driga/internal/attention"
 	"github.com/labstack/driga/internal/chat"
 	"github.com/labstack/driga/internal/cleanup"
-	"github.com/labstack/driga/internal/inbox"
 	"github.com/labstack/driga/internal/store"
 	"github.com/labstack/driga/internal/view"
 	"github.com/labstack/driga/internal/viewer"
@@ -317,8 +317,8 @@ func (p *pageData) prepare() {
 	}
 	p.Inbox.Rows = visibleInbox
 	for _, row := range visibleInbox {
-		if inbox.Active(row.InboxItem) && !row.Historical {
-			row.Waited = inbox.Waited(row.InboxItem, p.ObservedAt)
+		if attention.Active(row.InboxItem) && !row.Historical {
+			row.Waited = attention.Waited(row.InboxItem, p.ObservedAt)
 			p.InboxWaiting = append(p.InboxWaiting, row)
 		} else {
 			p.InboxRecent = append(p.InboxRecent, row)
@@ -329,10 +329,10 @@ func (p *pageData) prepare() {
 		if a.Waited != b.Waited {
 			return a.Waited > b.Waited
 		}
-		return inbox.Less(a.InboxItem, b.InboxItem)
+		return attention.Less(a.InboxItem, b.InboxItem)
 	})
 	sort.SliceStable(p.InboxRecent, func(i, j int) bool {
-		return inbox.Less(p.InboxRecent[i].InboxItem, p.InboxRecent[j].InboxItem)
+		return attention.Less(p.InboxRecent[i].InboxItem, p.InboxRecent[j].InboxItem)
 	})
 	p.AgentRows = flatten(p.Agents.Rows)
 	counts := map[string]int{}

@@ -250,7 +250,7 @@ func Render(w io.Writer, v any, opts RenderOpts) error {
 					fmt.Fprintf(tw, "%s · host PID %d · %s · started %d / ended %d · %s to %s\n", cell(t.Name), t.Host.PID, cell(t.State), t.StartedCount, t.EndedCount, t.FirstSample.Format(time.RFC3339), t.LastSample.Format(time.RFC3339))
 				}
 			} else {
-				fmt.Fprintln(tw, "MCP trends: last 24h · driga machine --full for retained history and process detail")
+				fmt.Fprintln(tw, "MCP trends: last 24h · driga machines show --full for retained history and process detail")
 				if h.Truncated {
 					fmt.Fprintln(tw, "Showing top 10 rows and up to 3 evidence entries per row; totals include all sampled processes.")
 				}

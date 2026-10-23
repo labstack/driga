@@ -19,13 +19,13 @@ import (
 	"github.com/labstack/driga/internal/filelock"
 	"github.com/labstack/driga/internal/secfile"
 
+	"github.com/labstack/driga/internal/attention"
 	"github.com/labstack/driga/internal/chat"
 	"github.com/labstack/driga/internal/cleanup"
 	"github.com/labstack/driga/internal/collector"
 	"github.com/labstack/driga/internal/config"
 	"github.com/labstack/driga/internal/fleet"
 	"github.com/labstack/driga/internal/hooks"
-	"github.com/labstack/driga/internal/inbox"
 	"github.com/labstack/driga/internal/intake"
 	"github.com/labstack/driga/internal/logfile"
 	"github.com/labstack/driga/internal/model"
@@ -391,7 +391,7 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 	}
 	if goos == "windows" {
 		add("kill", "ok", "proven orphan trees; PID-specific WM_CLOSE, grace period, optional TerminateProcess", "")
-		add("cleanup apply", "ok", "verified worktrees to Recycle Bin (IFileOperation); confirmation and audit log required", "")
+		add("cleanup remove", "ok", "verified worktrees to Recycle Bin (IFileOperation); confirmation and audit log required", "")
 		add("socket probers", "ok", "IP Helper TCP/UDP owner tables (IPv4 and IPv6); probe errors leave evidence unknown", "")
 		add("file probers", "ok", "Restart Manager; bounded file batches, probe errors leave evidence unknown", "")
 		add("Claude scratch", "info", "refused: Windows scratch layout unverified in repository fixtures", "")
@@ -430,7 +430,7 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 		}
 		lookup := d.NotifierLookup
 		if lookup == nil {
-			lookup = inbox.TerminalNotifierPath
+			lookup = attention.TerminalNotifierPath
 		}
 		if lookup() != "" {
 			add("notifications", "ok", "terminal-notifier (clickable)", "")
@@ -634,7 +634,7 @@ func runtimeDoctor(ctx context.Context, cfg config.Config, now time.Time, reader
 		}
 	}
 	if runtime.GOOS == "windows" {
-		d.NotificationStatus = inbox.WindowsNotificationStatus
+		d.NotificationStatus = attention.WindowsNotificationStatus
 		d.ServiceState = func() (string, error) {
 			bin, err := os.Executable()
 			if err != nil {
@@ -651,7 +651,7 @@ func runtimeDoctor(ctx context.Context, cfg config.Config, now time.Time, reader
 }
 
 // DoctorCmd renders setup diagnostics and fails only for a failed check.
-type DoctorCmd struct{}
+type DoctorCmd struct{ JSONOptions }
 
 // Run reads existing daemon data without falling back to a collection snapshot.
 func (DoctorCmd) Run(g *Globals) error {

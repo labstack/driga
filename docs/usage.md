@@ -5,16 +5,16 @@
 ```sh
 driga agents --all                 # include sessions ended within 24 hours
 driga agents --json --project .
-driga agent <id>                   # numeric ID from the agents table or --json
-driga where <project>
+driga agents show <id>                   # numeric ID from the agents table or --json
+driga projects show <project>
 driga inbox                       # current waits and recent completions; "inbox list" also works
 driga inbox --all                  # complete history, including acks and ended waits
 driga inbox ack <item-id>          # explicit acknowledgment
 driga conflicts
 driga orphans                     # "orphans list" also works
 driga orphans kill <candidate-id>  # previews the tree and requires y
-driga machine                     # compact report with 24h trends
-driga machine --full              # all retained trends and process detail
+driga machines show                     # compact report with 24h trends
+driga machines show --full              # all retained trends and process detail
 driga machines                     # local + paired machine health
 driga agents --machine vm-1
 driga agents --watch=2s
@@ -25,10 +25,10 @@ more than one hour are hidden from default agent listings, project agent counts,
 and summary counts, including the TUI. `agents --all` includes hosted sessions
 with activity within the last 24 hours, alongside recently ended sessions.
 
-Data views merge paired machines by default. `--machine all|local|<name|id>`
+Collection views merge paired machines by default; `machines show` defaults to local. `--machine all|local|<name|id>`
 selects a scope; `--project .` resolves against local repositories only.
-Data views support `--json`, `--project <name|path|.>`, `--since <duration|yesterday>`,
-`--snapshot`, `--theme=auto|mocha|latte`, and `--no-color`; `NO_COLOR` is also honored. View JSON has schema 2,
+View flags are scoped to commands that consume them; see the [command reference](#command-reference).
+`--theme=auto|mocha|latte` belongs to `top`; `NO_COLOR` is also honored. View JSON has schema 2,
 an observation time, collection mode, source freshness, coverage gaps, and data.
 `doctor --json` returns diagnostic checks rather than a view envelope.
 Use `driga <command> --help` for command-specific flags.
@@ -60,12 +60,12 @@ In the TUI, use `0`–`8` for tabs (Home, Agents, Projects, Inbox, Orphans, Mach
 queries never acknowledge inbox items. Use `x`/Space in Inbox or `driga inbox ack`. Without a running collector,
 acknowledgments are queued for the next collection. Orphan kills recheck process
 identity and the descendant set immediately before signaling; young candidates
-are refused. `--force` requires a second confirmation before SIGKILL.
+are refused. `--force` escalates survivors to SIGKILL (TerminateProcess on Windows), with a second confirmation unless `--yes/-y` is supplied.
 The Machine tab and web Machine page lead with agents' memory and CPU, session
 costs, agent processes without a session, and likely work shared with an editor.
 Sessions expand into processes with attribution proofs and their launch app;
 Other apps starts collapsed around the existing top-ten memory and CPU lists.
-`driga machine --json` and MCP `get_machine` add the same buckets to schema 2.
+`driga machines show --json` and MCP `get_machine` add the same buckets to schema 2.
 Low-disk and sustained critical-memory-pressure warnings open Machine, with
 pressure text naming agents' share and observed growth. Open it directly with
 `driga top --tab machine`. See [machine health](machine-health.md) for rules,
@@ -83,7 +83,7 @@ The web inbox has a **show all history** link and pages of at most 100 rows.
 Machine text and JSON default to ten rows per evidence list and three nested
 process/command/install entries per row. MCP trends read only the last 24 hours;
 `trend_since` gives that boundary and `truncated` marks omitted entries. Totals
-still include every sampled process. `driga machine --full` (MCP `get_machine`
+still include every sampled process. `driga machines show --full` (MCP `get_machine`
 with `full: true`) returns all retained trends and uncapped evidence lists.
 Schema 2 is retained: field types and the envelope are unchanged; the `machines`
 array now contains only additional hosts, because the primary host is already
@@ -92,12 +92,12 @@ should read the top-level primary report plus any additional `machines` entries.
 Summary reads only the latest health sample and does not build machine trends.
 
 Remote orphans cannot be killed here; run the kill command on their machine.
-Remote inbox acknowledgments require the peer's `--ack` grant; unreachable peers
+Remote inbox acknowledgments require the peer's `--allow-ack` grant; unreachable peers
 show `ack pending` and retry on reconnect.
 
 Desktop alerts show the session title or project and why it needs you, within
 your capture policy. On macOS, `brew install terminal-notifier` enables clickable
-alerts that run `driga jump <item-id>` without acknowledging the item; otherwise
+alerts that run `driga inbox jump <item-id>` without acknowledging the item; otherwise
 alerts use Script Editor via osascript. Jumps select a proven tmux pane, focus a
 proven Terminal/iTerm window with `inbox.jump_terminal = true`, or print a resume
 command. Batch summaries and remote alerts have no click action. Notifier
@@ -146,7 +146,7 @@ Defaults and their purpose:
 | `intake.otlp` | `false` | Enable optional metadata-only OTLP/HTTP JSON. |
 | `intake.listen` | `127.0.0.1:7418` | Loopback only. |
 | `no_service_hint` | `false` | Allow a once-daily service hint in snapshot mode. |
-| `summaries.enabled` | `false` | `driga summarize` runs only after this opt-in. |
+| `summaries.enabled` | `false` | `driga projects summarize` runs only after this opt-in. |
 | `summaries.model` | `haiku` | Model passed to `claude -p` for summaries. |
 | `cleanup.worktree_idle` | `168h` | Minimum idle time before a worktree is a candidate. |
 | `machine.disk_free_min` | `"0"` (automatic) | Inbox `low_disk` warning below the smaller of 10% of the volume or decimal 20 GB; override with a byte string or KiB/MiB/GiB. Env: `DRIGA_MACHINE_DISK_FREE_MIN`. |
@@ -185,7 +185,7 @@ The Codex catalog is opened read-only. Local Git commands never fetch.
 
 MCP trend storage interns command/host text and stores state changes plus hourly
 heartbeats. It keeps full minute-observation detail for 24 hours, then hourly
-last-state endpoints to 30 days; `driga machine --full` labels the retained
+last-state endpoints to 30 days; `driga machines show --full` labels the retained
 resolution. Unchanged observations update an endpoint without adding a state
 row. Default reports and critical-pressure alerts read at most 24 hours.
 
@@ -229,7 +229,7 @@ driga hooks uninstall --dry-run
 driga hooks uninstall
 ```
 
-`--agent claude|codex|copilot|all` (or a positional agent name) selects the integration.
+A positional adapter name (`claude|codex|copilot|all`) selects the integration.
 Installation shows a line-level unified diff with three context lines and `@@`
 hunk ranges, then asks for confirmation. Existing Claude and Codex
 files are backed up to `*.driga-bak-<timestamp>`.
@@ -321,7 +321,7 @@ Windows 10 1809+ / Windows 11 support the same read interfaces, foreground
 collector, optional OTLP intake, MCP, web and fleet. Phase 3 is feature-complete
 pending real-hardware verification; Windows remains experimental.
 
-`driga kill <id>` (also `driga orphans kill <id>`) and the TUI action use the
+`driga orphans kill <id>` and the TUI action use the
 same driga-proven orphan candidates and confirmations as Unix. Windows orphans
 have a missing parent or a parent whose start time proves PID reuse; Windows
 does not reparent them to init or a Linux subreaper. Every tree member's kernel
@@ -419,7 +419,7 @@ are supported. `CLAUDE_CONFIG_DIR`, `CODEX_HOME` and `COPILOT_HOME` are respecte
 
 Alerts use WinRT with a per-user `LabStack.Driga` notification identity, registered
 on the first alert. No PowerShell or cgo is used. Toasts are plain, without click
-activation; use `driga inbox` and `driga jump <item>` for navigation. Windows
+activation; use `driga inbox` and `driga inbox jump <item>` for navigation. Windows
 notification policy, Focus Assist/Do Not Disturb, and interactive desktop state
 can suppress delivery. Doctor probes availability without registering or sending;
 it reports `notifications unavailable` for native API/setting failures.
@@ -443,7 +443,7 @@ On the peer, stop an existing collector before starting a foreground server:
 
 ```sh
 driga service stop                 # if installed/running
-driga serve --listen <private-ip>:7411
+driga collect --serve --listen <private-ip>:7411
 ```
 
 For persistent serving, put this in the peer's configuration and restart its
@@ -461,16 +461,16 @@ the six-digit code displayed by **both terminals**, and answer `y` on each:
 
 ```sh
 # Peer terminal:
-driga fleet enroll --ack           # omit --ack for read-only access
+driga fleet enroll --allow-ack           # omit --allow-ack for read-only access
 # Viewer terminal:
-driga fleet add <private-ip>:7411 --name vm-1
+driga fleet peers add <private-ip>:7411 --name vm-1
 driga service install             # or start an existing service / driga collect
 driga machines
-driga fleet peers
+driga fleet peers list
 driga agents --machine vm-1
 ```
 
-`fleet add` reports the actual grant: `read ✓ · ack ✓` or `read ✓ · ack ✗`.
+`fleet peers add` reports the actual grant: `read ✓ · ack ✓` or `read ✓ · ack ✗`.
 Enrollment lasts at most ten minutes, allows at most three attempts, and closes
 on success. For headless pairing, exchange full device IDs over a trusted channel:
 
@@ -478,12 +478,12 @@ on success. For headless pairing, exchange full device IDs over a trusted channe
 # On each machine, obtain its own ID:
 driga fleet id
 # Peer: authorize exactly the viewer's ID; this returns with the window open.
-driga fleet enroll --allow <viewer-device-id> --ack
+driga fleet enroll --allow-viewer <viewer-device-id> --allow-ack
 # Viewer: require exactly the peer's ID; neither side prompts.
-driga fleet add <private-ip>:7411 --name vm-1 --id <peer-device-id>
+driga fleet peers add <private-ip>:7411 --name vm-1 --device-id <peer-device-id>
 ```
 
-Both `--allow` and `--id` are needed to make both sides headless. Keep host firewall
+Both `--allow-viewer` and `--device-id` are needed to make both sides headless. Keep host firewall
 and cloud security-group ingress restricted to viewers on the private network
 (TCP 7411, or your configured port); allow viewer egress to that port. A private
 address alone does not open a firewall. Wildcard/public listeners are refused
@@ -495,23 +495,23 @@ For a bastion-only host, listen on the peer's loopback and tunnel from the viewe
 
 ```sh
 # Peer, in place of the private listener:
-driga serve --listen 127.0.0.1:7411
+driga collect --serve --listen 127.0.0.1:7411
 # Viewer, keep this SSH connection running (optionally add -J <bastion>):
 ssh -N -L 7411:127.0.0.1:7411 <host>
 # Pair through the tunnel while enrollment is open on the peer:
-driga fleet add 127.0.0.1:7411 --name vm-1
+driga fleet peers add 127.0.0.1:7411 --name vm-1
 ```
 
-If local port 7411 is busy, use another local port in both `-L` and `fleet add`.
+If local port 7411 is busy, use another local port in both `-L` and `fleet peers add`.
 The pinned peer certificate authenticates the endpoint through the tunnel; no
 public fleet port or inbound security-group rule is needed for loopback serving.
 An interrupted tunnel shows the peer as stale and reconnects when it returns.
 
 `driga fleet status` shows serving streams and enrollment;
-`driga fleet viewers` lists authorized viewers. `driga fleet revoke <viewer>`
-revokes access immediately. `driga fleet remove <name>` (alias `unpair`) stops
+`driga fleet viewers list` lists authorized viewers. `driga fleet viewers revoke <viewer>`
+revokes access immediately. `driga fleet peers remove <name>` stops
 pulling locally and keeps cached history; add `--purge` to delete cached rows.
-You can also run `driga fleet remove <name-or-machine-id> --purge` after a peer
+You can also run `driga fleet peers remove <name-or-machine-id> --purge` after a peer
 has already been removed. Ambiguous removed-peer names require the machine ID.
 Stopped/unreachable peers
 become stale after 45 seconds without contact; last-known rows remain visible.
@@ -519,16 +519,16 @@ Epoch/retention changes trigger a new snapshot. Clock skew over 60 seconds warns
 in `driga machines`.
 
 Before enrolling a cloned VM, stop its collector and run
-`driga machine reset-id` **on the clone**, then restart and re-pair. This creates a
+`driga machines reset-id` **on the clone**, then restart and re-pair. This creates a
 new machine ID and certificate and invalidates old pairings. `driga fleet rekey`
 rotates only the certificate, also requiring a stopped collector and re-pairing.
 On a viewer that reports the rotated peer as untrusted, deliberately remove the
 peer, reopen enrollment on the serving peer, then add it again using its new
 device ID (or compare pairing codes). Purging is unnecessary: retained history
 from the removed certificate does not block re-pairing. Two active peers claiming
-the same machine ID still require `machine reset-id` on the clone.
+the same machine ID still require `machines reset-id` on the clone.
 
-`driga fleet peers`, `driga machines` and `driga doctor` show the last fleet
+`driga fleet peers list`, `driga machines` and `driga doctor` show the last fleet
 failure, including bounded, scrubbed server diagnostics such as snapshot errors.
 Doctor also reports the actual Chat and fleet control socket paths. Both sockets
 prefer their data-directory paths (`chat.sock` and `fleet/fleet.sock`). If a path
@@ -552,9 +552,9 @@ automatically, and nothing is removed on another machine.
 driga cleanup                       # candidates with evidence
 driga cleanup --sizes               # walk sizes on demand (30 s cap per walk)
 driga cleanup --why                 # also list worktrees that don't qualify, and why
-driga cleanup <id> --dry-run        # print the exact commands
-driga cleanup <id>                  # re-verify, then ask y/N
-driga cleanup --kind worktree --all # every ready worktree; skips anything changed
+driga cleanup remove <id> --dry-run        # print the exact commands
+driga cleanup remove <id>                  # re-verify, then ask y/N
+driga cleanup remove --kind worktree --all # every ready worktree; skips anything changed
 ```
 
 - **Worktrees**: a linked worktree (never the main or a locked one) with no live
@@ -582,7 +582,7 @@ Both run your installed `claude` CLI, on demand only; Driga never calls a model 
 the background and has no API key.
 
 ```sh
-driga summarize [project...]   # needs [summaries] enabled = true
+driga projects summarize <project>... | --all   # needs [summaries] enabled = true
 driga ask "which agents are waiting on me?"
 ```
 
@@ -696,7 +696,7 @@ vendor connection.
 
 ## Web dashboard
 
-`driga web` serves a read-only dashboard for the same data in your browser:
+`driga web` serves an interactive dashboard for the same data in your browser:
 
 ```sh
 driga web            # prints a one-time URL such as http://127.0.0.1:53817/?token=…
@@ -730,7 +730,8 @@ command = "driga"
 args = ["mcp"]
 ```
 
-For local-only tools, use `args = ["mcp", "--machine", "local"]`.
+Select local data with `machine: "local"` in each tool request. MCP startup accepts
+`--snapshot` for one-shot reads; machine/project/time scopes belong to tool arguments.
 
 ## Optional OTLP intake
 
@@ -746,8 +747,8 @@ listen = "127.0.0.1:7418"
 Preview and apply exporter configuration separately from command hooks:
 
 ```sh
-driga hooks install --otlp --agent claude --dry-run
-driga hooks install --otlp --agent claude
+driga hooks install --otlp claude --dry-run
+driga hooks install --otlp claude
 driga hooks status --otlp
 # Optional Claude beta spans: add --traces to install.
 ```
@@ -755,10 +756,10 @@ driga hooks status --otlp
 For Claude, this edits the settings `env` block: telemetry is enabled, logs use
 OTLP, metrics and (by default) traces are disabled, protocol is `http/json`, and
 the endpoint is `http://127.0.0.1:7418`. It does not enable prompt/tool-content
-logging. `--traces` enables Claude spans. For Codex (`--agent codex`), it adds
+logging. `--traces` enables Claude spans. For Codex (`codex`), it adds
 `[otel]` with a JSON HTTP logs exporter to `/v1/logs` and `log_user_prompt = false`;
 Codex facts remain unmapped pending a scrubbed capture fixture. The default
-`--agent all` configures both. Installation refuses existing telemetry settings,
+`all` configures both. Installation refuses existing telemetry settings,
 previews changes, asks for confirmation, and backs up edited files. It configures
 exporters instead of installing hooks; existing hooks are left in place.
 
@@ -776,9 +777,9 @@ To undo, preview then remove Driga's intact exporter settings, disable
 `intake.otlp`, and restart the collector:
 
 ```sh
-driga hooks uninstall --otlp --agent claude --dry-run
-driga hooks uninstall --otlp --agent claude
-# Repeat with --agent codex if installed there (or use --agent all).
+driga hooks uninstall --otlp claude --dry-run
+driga hooks uninstall --otlp claude
+# Repeat with codex if installed there (or use all).
 ```
 
 Uninstall preserves unrelated settings and leaves modified exporter blocks alone.
@@ -820,7 +821,7 @@ For example:
 theme = 'latte'
 ```
 
-`driga --theme mocha top` overrides the config for the whole TUI. Auto follows
+`driga top --theme mocha` overrides the config for the whole TUI. Auto follows
 terminal background detection; `--no-color` keeps the layout without ANSI styling.
 The web console's Mocha, Latte, and System choices use the same Catppuccin tokens,
 including assistant Markdown. Web System follows the browser's color preference.
@@ -851,3 +852,120 @@ timeout or absent collector exits the hook successfully without output, leaving
 the terminal to decide. Denials say “Denied from driga”. Driga never creates
 “always allow” rules or emits `updatedPermissions`. Codex, Copilot, Gemini and
 paired-machine prompts are outside this feature.
+
+
+## Command reference
+
+`driga` defaults to `summary`. Resource groups default to `list`: `agents`,
+`projects`, `inbox`, `orphans`, `machines`, and `cleanup`. Fleet peer and viewer
+commands require an explicit verb. Session IDs are numeric stored execution IDs;
+an adapter identifies Claude, Codex, Copilot, or another integration. A family
+contains related sessions; selecting a session never selects the whole family.
+
+| Command | Purpose and options |
+| --- | --- |
+| `summary` | One-screen summary; supports machine, project, since, snapshot, watch, JSON and color options. |
+| `flow [<session-id>]` | Session-family flow; `--minutes=15\|60\|240`. Omit ID to select the newest live interactive session; `--since` limits that selection. |
+| `activity` | Last hour of activity; supports machine, project, snapshot, watch, JSON and color options. |
+| `agents list` | Sessions grouped by family; `--all` includes sessions ended within 24 hours. Supports read-view options. |
+| `agents show <session-id>` | One session; supports machine, project, snapshot, watch, JSON and color options. |
+| `agents jump <session-id>` | Confirm and jump to one local session; `--yes/-y` skips confirmation. |
+| `agents kill <session-id>` | Confirm and terminate one local idle session; `--force`, `--yes/-y`. Identity and idle checks always apply. |
+| `projects list` | Project status; `--active`, `--at-risk`, and read-view options. |
+| `projects show <project>` | Project status, worktrees and sessions; `--machine`, `--snapshot`, `--watch`, `--json`, `--no-color`. |
+| `projects summarize <project>...` or `projects summarize --all` | Refresh opt-in local summaries through Claude; `--json`. Explicit projects and `--all` are mutually exclusive. |
+| `inbox list` | Attention and completion items; `--all` includes acknowledged/history items. Supports read-view options. |
+| `inbox ack <item-id>` or `inbox ack --all` | Explicit acknowledgment; `--machine` selects the source. |
+| `inbox jump <item-id>` | Jump to a local inbox destination without acknowledgment. |
+| `conflicts` | Current/recent overlaps; supports read-view options. |
+| `orphans list` | Orphan candidates and evidence; supports read-view options. |
+| `orphans kill <orphan-id>` or `orphans kill --all` | `--all`: Select all local orphan candidates; verify and confirm each unless --yes. Supports `--machine`, `--snapshot`, `--force`, `--yes/-y`. |
+| `machines list` | Known machine connection health; `--machine`, `--snapshot`, `--watch`, `--json`, `--no-color`. |
+| `machines show [<machine>]` | Default target is `local`; `all` is rejected. `--full`, `--project`, `--snapshot`, `--watch`, `--json`, `--no-color`. |
+| `machines reset-id` | Confirm local cloned-machine identity repair; `--yes/-y`. |
+| `cleanup list` | Local candidates; `--kind=worktree\|scratch\|history`, `--sizes`, `--why`, `--json`. History is report-only. |
+| `cleanup remove <candidate-id>` | Verify and remove one candidate; `--dry-run`, `--sizes`, `--include-ignored`, `--yes/-y`, `--json`. |
+| `cleanup remove --all --kind worktree` or `--kind scratch` | Remove ready candidates of the selected kind; report completed/skipped/failed counts. `--include-ignored` requires one explicit ID. |
+| `top` | Interactive terminal dashboard; `--tab=home\|agents\|projects\|inbox\|orphans\|machine\|cleanup\|flow\|chat`, `--theme=auto\|mocha\|latte`, `--machine`, `--project`, `--since`, `--snapshot`, `--no-color`. |
+| `web` | Serve the interactive browser dashboard on loopback; `--listen`, `--open`, `--machine`, `--project`, `--since`, `--snapshot`. |
+| `ask <question>...` | One-shot Chat question; `--machine`, `--project`, `--json`. |
+| `mcp` | Serve read-only MCP tools over stdio; `--snapshot` forces one-shot collection for read tools without history. |
+| `doctor` | Setup/collection diagnostics; `--json`. |
+| `init` | Optional setup, previewing changes; `--yes/-y` accepts each prompt. |
+| `config path` / `config show` / `config edit` | Configuration path, values, or editor; only `path` supports `--json`. |
+| `collect` | Collector; `--once`, `--serve`, `--listen`, `--cpu-profile`, `--profile-for`. Explicit `--serve=false` overrides configuration. `--once` cannot serve; `--listen` requires serving. |
+| `service install` / `start` / `stop` / `restart` / `status` | Manage the collector service. |
+| `service logs [-f]` | Show logs; `--follow/-f` is scoped to this command. |
+| `service uninstall` | Remove the collector service. |
+| `hooks install [<adapter>]` / `hooks uninstall [<adapter>]` | Adapter defaults to `all`; positional `claude\|codex\|copilot\|all`. `--dry-run`, `--yes/-y`, `--otlp`, `--traces` (requires OTLP). |
+| `hooks status [<adapter>]` | Adapter defaults to `all`; `--otlp` selects telemetry status. |
+| `fleet peers list` | Trusted data-source machines; `--json`. |
+| `fleet peers add <host[:port]>` | Pair with a source; `--name`, `--device-id`, `--json`. Headless pairing requires its device ID; `--yes/-y` also requires that ID. |
+| `fleet peers remove <peer>` | Confirm local peer removal; `--purge` deletes cached rows; `--yes/-y`. |
+| `fleet viewers list` | Viewer access grants; `--json`. |
+| `fleet viewers revoke <viewer>` | Confirm viewer revocation; `--yes/-y`. |
+| `fleet enroll` | Open pairing window; `--allow-viewer`, `--allow-ack`, `--window`. Headless enrollment requires the viewer device ID; `--yes/-y` also requires that ID. |
+| `fleet rekey` | Confirm identity regeneration, invalidating all pairings; `--yes/-y`. |
+| `fleet id` / `fleet status` | Device ID or collector serving state; `--json`. |
+| `version` / `--version` | Build metadata or version discovery; `version` supports `--json`. |
+
+Read-view options are `--machine`, `--project`, `--since`, `--snapshot`,
+`--watch=<duration>`, `--json`, and `--no-color`, on the commands listed above.
+Unsupported flags and conflicting selectors are errors. `--theme` is scoped to
+`top`. Flags belong after the command or its explicit `list` verb.
+
+All prompts support `--yes/-y`. When stdin is not a terminal, a command that
+needs confirmation exits 2 with **not applied; pass --yes to apply without
+asking**. `--force` only escalates termination; it does not authorize it.
+Pairing requires its identity arguments rather than blanket consent. Hidden
+agent hooks remain quiet and fail open with exit 0.
+
+Exit codes: **0** success; **1** failure, refusal, or partial completion;
+**2** invalid usage or missing required non-interactive input. Bulk cleanup
+returns 1 if any item fails, with completed/skipped/failed counts in text or JSON.
+
+Hidden integration interfaces are unchanged: `hook <adapter> <event>`, `feed`,
+`dev`, `mcp --chat`, and the collector's scheduled-service flags. MCP tool names
+and fields, configuration keys (including `inbox`), `DRIGA_*` environment names,
+JSON field names, web routes, Chat action tool names/records and `[[session:N]]`
+citations retain their contracts. MCP `get_agent` maps to `agents show`,
+`inspect_project` to `projects show`, `inspect_setup` to `doctor`, and
+`list_cleanup_candidates` to `cleanup list`.
+
+## Command migration
+
+There are no aliases, deprecation shims, or legacy command spellings.
+
+| Old | New |
+| --- | --- |
+| `kill <id>` | `orphans kill <orphan-id>` |
+| `agent <id>` | `agents show <session-id>` |
+| `where <project>` | `projects show <project>` |
+| `summarize <project>...` | `projects summarize <project>...` |
+| `summarize` (implicit all) | `projects summarize --all` |
+| `jump <item-id>` | `inbox jump <item-id>` |
+| `cleanup <id> [--yes]` | `cleanup remove <candidate-id> [--yes]` |
+| `cleanup --all --kind <kind>` | `cleanup remove --all --kind worktree\|scratch` |
+| `cleanup` (listing) | `cleanup` or `cleanup list` |
+| `machine [show]` | `machines show [<machine=local>]` |
+| `machine show --machine <machine>` | `machines show <machine>` |
+| `machine reset-id` | `machines reset-id` |
+| `serve [--listen <address>]` | `collect --serve [--listen <address>]` |
+| `service <action>` | `service install\|start\|stop\|restart\|status\|logs\|uninstall` (real subcommands; only logs accepts `-f`) |
+| `fleet peers` | `fleet peers list` |
+| `fleet add <host[:port]>` | `fleet peers add <host[:port]>` |
+| `fleet remove <peer>` | `fleet peers remove <peer>` |
+| `fleet viewers` | `fleet viewers list` |
+| `fleet revoke <viewer>` | `fleet viewers revoke <viewer>` |
+| `fleet enroll --allow <id>` | `fleet enroll --allow-viewer <id>` |
+| `fleet enroll --ack` | `fleet enroll --allow-ack` |
+| `fleet add --id <id>` | `fleet peers add --device-id <id>` |
+| `hooks <verb> --agent <adapter>` | `hooks <verb> <adapter>` |
+| Global view flags on unrelated commands | Command-scoped view flags; unsupported combinations are rejected |
+| No CLI session jump/kill | `agents jump <session-id>` / `agents kill <session-id>` |
+| `version` only | `version` and `--version` |
+
+Machine reset, fleet rekey, peer removal and viewer revocation now require
+confirmation or `--yes/-y`. Restart collectors after upgrading. Previously
+issued desktop notifications still contain the removed `jump` spelling; dismiss
+those notifications. Newly issued notifications use `driga inbox jump`.

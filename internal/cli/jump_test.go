@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/labstack/driga/internal/attention"
 	"github.com/labstack/driga/internal/config"
-	"github.com/labstack/driga/internal/inbox"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/store"
 )
@@ -37,8 +37,8 @@ func TestJumpCommand(t *testing.T) {
 		{name: "tmux outside no client", jump: &model.InboxJump{Kind: "tmux", Server: "/tmp/socket", Target: "dev:1.2", Command: "tmux attach"}, want: [][]string{{"tmux", "-S", "/tmp/socket", "list-clients", "-F", "#{client_activity} #{client_name} #{client_tty}"}, {"tmux", "-S", "/tmp/socket", "select-pane", "-t", "dev:1.2"}}, text: "no tmux client is attached"},
 		{name: "tmux outside attached", goos: "linux", clients: "9 older /dev/ttys001\n100 newest /dev/ttys002\n20 other /dev/ttys003\n", jump: &model.InboxJump{Kind: "tmux", Server: "/tmp/socket with spaces", Target: "dev:1.2", Command: "tmux attach"}, want: [][]string{{"tmux", "-S", "/tmp/socket with spaces", "list-clients", "-F", "#{client_activity} #{client_name} #{client_tty}"}, {"tmux", "-S", "/tmp/socket with spaces", "switch-client", "-c", "newest", "-t", "dev:1.2"}, {"tmux", "-S", "/tmp/socket with spaces", "select-pane", "-t", "dev:1.2"}}, text: "tmux attach"},
 		{name: "tmux different server", tmux: "/tmp/other,1,0", jump: &model.InboxJump{Kind: "tmux", Server: "/tmp/socket", Target: "dev:1.2", Command: "tmux attach"}, want: [][]string{{"tmux", "-S", "/tmp/socket", "select-pane", "-t", "dev:1.2"}}},
-		{name: "Terminal", goos: "darwin", optIn: true, jump: &model.InboxJump{Kind: "terminal", App: "Terminal", Target: "/dev/ttys001", Command: "focus terminal"}, want: [][]string{{"osascript", "-e", inbox.TerminalActivateScript("Terminal"), "/dev/ttys001"}}},
-		{name: "iTerm", goos: "darwin", optIn: true, jump: &model.InboxJump{Kind: "terminal", App: "iTerm2", Target: "/dev/ttys002", Command: "focus iterm"}, want: [][]string{{"osascript", "-e", inbox.TerminalActivateScript("iTerm2"), "/dev/ttys002"}}},
+		{name: "Terminal", goos: "darwin", optIn: true, jump: &model.InboxJump{Kind: "terminal", App: "Terminal", Target: "/dev/ttys001", Command: "focus terminal"}, want: [][]string{{"osascript", "-e", attention.TerminalActivateScript("Terminal"), "/dev/ttys001"}}},
+		{name: "iTerm", goos: "darwin", optIn: true, jump: &model.InboxJump{Kind: "terminal", App: "iTerm2", Target: "/dev/ttys002", Command: "focus iterm"}, want: [][]string{{"osascript", "-e", attention.TerminalActivateScript("iTerm2"), "/dev/ttys002"}}},
 		{name: "terminal opt out", goos: "darwin", jump: &model.InboxJump{Kind: "terminal", App: "Terminal", Target: "/dev/ttys001", Command: "focus terminal"}, text: "focus terminal"},
 		{name: "terminal linux", goos: "linux", optIn: true, jump: &model.InboxJump{Kind: "terminal", App: "Terminal", Target: "/dev/ttys001", Command: "focus terminal"}, text: "focus terminal"},
 		{name: "resume", goos: "darwin", optIn: true, jump: &model.InboxJump{Kind: "resume", Command: "claude --resume 'session'", Cwd: "/project's dir"}, text: `cd -- '/project'"'"'s dir' && claude --resume 'session'`},
@@ -114,13 +114,13 @@ func TestJumpCLIAndRunnerFailure(t *testing.T) {
 	})
 	old := newInboxRunner
 	t.Cleanup(func() { newInboxRunner = old })
-	newInboxRunner = func() inbox.Runner {
+	newInboxRunner = func() attention.Runner {
 		return jumpRunner(func(context.Context, string, ...string) ([]byte, error) {
 			return nil, errors.New("fixture tmux failed")
 		})
 	}
 	var out, stderr bytes.Buffer
-	code := run([]string{"jump", "one"}, "test", strings.NewReader(""), &out, &stderr)
+	code := run([]string{"inbox", "jump", "one"}, "test", strings.NewReader(""), &out, &stderr)
 	if code != 1 || !strings.Contains(stderr.String(), "fixture tmux failed") {
 		t.Fatal(code, stderr.String())
 	}
@@ -133,13 +133,13 @@ func TestJumpCLIAndRunnerFailure(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	newInboxRunner = func() inbox.Runner {
+	newInboxRunner = func() attention.Runner {
 		return jumpRunner(func(context.Context, string, ...string) ([]byte, error) { return nil, nil })
 	}
-	readRun(t, "jump", "one")
+	readRun(t, "inbox", "jump", "one")
 	out.Reset()
 	stderr.Reset()
-	if code := run([]string{"jump", "gone"}, "test", strings.NewReader(""), &out, &stderr); code != 1 || !strings.Contains(stderr.String(), "no longer exists") {
+	if code := run([]string{"inbox", "jump", "gone"}, "test", strings.NewReader(""), &out, &stderr); code != 1 || !strings.Contains(stderr.String(), "no longer exists") {
 		t.Fatal(code, stderr.String())
 	}
 }
@@ -148,7 +148,7 @@ func TestJumpMissingDatabaseDoesNotCollect(t *testing.T) {
 
 	readEnv(t)
 	var out, stderr bytes.Buffer
-	if code := run([]string{"jump", "gone"}, "test", strings.NewReader(""), &out, &stderr); code != 1 || !strings.Contains(stderr.String(), "no longer exists") {
+	if code := run([]string{"inbox", "jump", "gone"}, "test", strings.NewReader(""), &out, &stderr); code != 1 || !strings.Contains(stderr.String(), "no longer exists") {
 		t.Fatal(code, stderr.String())
 	}
 	if _, err := os.Stat(config.DataDir()); !os.IsNotExist(err) {
@@ -183,7 +183,7 @@ func TestMachineNotificationClickUsesInstalledExecutable(t *testing.T) {
 	var calls int
 	err = (JumpCmd{ID: "low_disk:1"}).run(&Globals{Stdout: &bytes.Buffer{}}, jumpRunner(func(_ context.Context, name string, args ...string) ([]byte, error) {
 		calls++
-		if name != "osascript" || len(args) != 3 || args[2] != inbox.Quote(bin)+" top --tab machine" {
+		if name != "osascript" || len(args) != 3 || args[2] != attention.Quote(bin)+" top --tab machine" {
 			t.Fatalf("%s %q", name, args)
 		}
 		return nil, nil

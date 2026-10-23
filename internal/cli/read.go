@@ -21,10 +21,10 @@ import (
 )
 
 // SummaryCmd prints the default one-screen summary.
-type SummaryCmd struct{}
+type SummaryCmd struct{ ReadOptions }
 
 // ActivityCmd shows machine-wide activity over the last hour.
-type ActivityCmd struct{}
+type ActivityCmd struct{ ActivityOptions }
 
 func (ActivityCmd) Run(g *Globals) error {
 	return runRead(g, view.Filter{}, "", func(r view.Reader, f view.Filter, now time.Time) (any, error) { return view.Activity(r, f, now) })
@@ -32,22 +32,37 @@ func (ActivityCmd) Run(g *Globals) error {
 
 // AgentsCmd lists live sessions and their worker families.
 type AgentsCmd struct {
+	List AgentsListCmd `cmd:"" default:"withargs" help:"List agents grouped by family."`
+	Show AgentCmd      `cmd:"" help:"Show one session by session ID."`
+	Jump AgentsJumpCmd `cmd:"" help:"Confirm and jump to a local session."`
+	Kill AgentsKillCmd `cmd:"" help:"Confirm and terminate a local idle session."`
+}
+type AgentsListCmd struct {
+	ReadOptions
 	All bool `help:"Include sessions ended within the last 24 hours."`
 }
 
 // AgentCmd shows one session without acknowledging any inbox events.
 type AgentCmd struct {
-	ID int64 `arg:"" help:"Internal session ID."`
+	DetailOptions
+	ID int64 `arg:"" name:"session-id" help:"Internal session ID."`
 }
 
 // ProjectsCmd lists repositories and their derived status.
 type ProjectsCmd struct {
+	List      ProjectsListCmd `cmd:"" default:"withargs" help:"List project status."`
+	Show      WhereCmd        `cmd:"" help:"Show project status, worktrees and sessions."`
+	Summarize SummarizeCmd    `cmd:"" help:"Refresh opt-in local project summaries through Claude."`
+}
+type ProjectsListCmd struct {
+	ReadOptions
 	AtRisk bool `help:"Only show projects with risk flags."`
 	Active bool `help:"Only show active projects."`
 }
 
 // WhereCmd shows a project's sourced summary, worktrees and agents.
 type WhereCmd struct {
+	ProjectDetailOptions
 	Project string `arg:"" help:"Repository name or path."`
 }
 
@@ -55,15 +70,17 @@ type WhereCmd struct {
 type InboxCmd struct {
 	List InboxListCmd `cmd:"" default:"withargs" help:"List inbox events."`
 	Ack  InboxAckCmd  `cmd:"" help:"Explicitly acknowledge inbox events."`
+	Jump JumpCmd      `cmd:"" help:"Jump to a local inbox item without acknowledging it."`
 }
 
 // InboxListCmd lists active attention and completions, optionally including history.
 type InboxListCmd struct {
+	ReadOptions
 	All bool `help:"Show all history, including acknowledged and ended events (default: current waits and up to 50 completions from 24h)."`
 }
 
 // ConflictsCmd shows current collisions separately from recent overlap.
-type ConflictsCmd struct{}
+type ConflictsCmd struct{ ReadOptions }
 
 // OrphansCmd leaves room for explicit process actions alongside the read command.
 type OrphansCmd struct {
@@ -72,17 +89,13 @@ type OrphansCmd struct {
 }
 
 // OrphansListCmd lists orphan candidates and their evidence.
-type OrphansListCmd struct{}
-
-// MachineCmd shows health and top agent memory users.
-type MachineCmd struct {
-	Show    MachineShowCmd    `cmd:"" default:"withargs" help:"Show machine health."`
-	ResetID MachineResetIDCmd `cmd:"" name:"reset-id" help:"Regenerate cloned machine identity."`
-}
+type OrphansListCmd struct{ OrphanOptions }
 
 // MachineShowCmd shows health and top agent memory users.
 type MachineShowCmd struct {
-	Full bool `help:"Show all retained MCP trends and full process detail."`
+	MachineDetailOptions
+	Machine string `arg:"" optional:"" default:"local" help:"Machine name, ID, device-ID prefix, or local."`
+	Full    bool   `help:"Show all retained MCP trends and full process detail."`
 }
 
 // Run renders the summary.
@@ -91,12 +104,15 @@ func (SummaryCmd) Run(g *Globals) error {
 }
 
 // Run renders agent families.
-func (c AgentsCmd) Run(g *Globals) error {
+func (c AgentsListCmd) Run(g *Globals) error {
 	return runRead(g, view.Filter{All: c.All}, "", func(r view.Reader, f view.Filter, now time.Time) (any, error) { return view.Agents(r, f, now) })
 }
 
 // Run renders session detail.
 func (c AgentCmd) Run(g *Globals) error {
+	if c.ID <= 0 {
+		return invalidUsage("session-id must be positive")
+	}
 	return runRead(g, view.Filter{}, "", func(r view.Reader, f view.Filter, now time.Time) (any, error) {
 		v, err := view.Agent(r, c.ID, now, f.Scope)
 		if errors.Is(err, store.ErrNotFound) {
@@ -125,7 +141,7 @@ func (c AgentCmd) Run(g *Globals) error {
 }
 
 // Run renders project status rows.
-func (c ProjectsCmd) Run(g *Globals) error {
+func (c ProjectsListCmd) Run(g *Globals) error {
 	return runRead(g, view.Filter{AtRisk: c.AtRisk, Active: c.Active}, "", func(r view.Reader, f view.Filter, now time.Time) (any, error) { return view.Projects(r, f, now) })
 }
 
@@ -153,6 +169,14 @@ func (OrphansListCmd) Run(g *Globals) error {
 
 // Run renders machine health.
 func (c MachineShowCmd) Run(g *Globals) error {
+	if c.Machine == "all" {
+		return invalidUsage("machines show requires one machine; all is not supported")
+	}
+	if c.Machine != "" {
+		g.Machine = c.Machine
+	} else {
+		g.Machine = "local"
+	}
 	return runRead(g, view.Filter{Full: c.Full}, "", func(r view.Reader, f view.Filter, now time.Time) (any, error) { return view.Machine(r, f, now) })
 }
 
@@ -339,18 +363,33 @@ func pathWithin(path, root string) bool { return pathx.Within(path, root) }
 
 // FlowCmd reads a family; omitted ID selects the newest live interactive session.
 type FlowCmd struct {
-	Minutes int   `default:"60" help:"Time window: 15, 60 or 240 minutes."`
-	ID      int64 `arg:"" optional:"" help:"Internal session ID (defaults to most recently active live interactive session)."`
+	ReadOptions
+	Minutes int    `default:"60" enum:"15,60,240" help:"Time window: 15, 60 or 240 minutes."`
+	ID      *int64 `arg:"" name:"session-id" optional:"" help:"Internal session ID (defaults to most recently active live interactive session)."`
 }
 
 func (c FlowCmd) Run(g *Globals) error {
-	return runRead(g, view.Filter{FlowMinutes: c.Minutes}, "", func(r view.Reader, f view.Filter, now time.Time) (any, error) {
-		if c.ID < 0 {
-			return nil, fmt.Errorf("session id must be positive")
+	id := int64(0)
+	if c.ID != nil {
+		id = *c.ID
+		if id <= 0 {
+			return invalidUsage("session-id must be positive")
 		}
-		v, err := view.Flow(r, f, c.ID, now)
+	}
+	if c.Minutes == 0 {
+		c.Minutes = 60
+	}
+	if c.Minutes != 15 && c.Minutes != 60 && c.Minutes != 240 {
+		return invalidUsage("--minutes must be 15, 60 or 240")
+	}
+	if c.ID != nil && g.Since != "" {
+		return invalidUsage("--since selects the default session; omit the session ID or --since")
+	}
+
+	return runRead(g, view.Filter{FlowMinutes: c.Minutes}, "", func(r view.Reader, f view.Filter, now time.Time) (any, error) {
+		v, err := view.Flow(r, f, id, now)
 		if errors.Is(err, store.ErrNotFound) {
-			return v, missingAgent(c.ID)
+			return v, missingAgent(id)
 		}
 		return v, err
 	})

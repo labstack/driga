@@ -6,9 +6,9 @@
   ["agents --all", "/agents?all=1&machine=all"],
   ["agents --project driga", "/agents?machine=all&project=driga"],
   ['agents --project "Fixture project" --all --state waiting', "/agents?all=1&machine=all&project=Fixture+project&state=waiting"],
-  ["where Fixture project", "/projects?machine=all&project=Fixture+project"],
-  ['where "a&b?<>"', "/projects?machine=all&project=a%26b%3F%3C%3E"],
-  ["projects", "/projects?machine=all"], ["inbox", "/inbox?machine=all"],
+  ["projects show Fixture project", "/projects?machine=all&project=Fixture+project"],
+  ['projects show "a&b?<>"', "/projects?machine=all&project=a%26b%3F%3C%3E"],
+  ["projects", "/projects?machine=all"], ["projects list", "/projects?machine=all"], ["agents show 12", "/agents/12?machine=all"], ["inbox", "/inbox?machine=all"],
   ["orphans", "/orphans?machine=all"], ["machines", "/machines?machine=all"],
   ["cleanup", "/cleanup?machine=all"], ["cleanup --why", "/cleanup?machine=all&why=1"],
   ["activity", "/activity?machine=all"]
@@ -19,10 +19,10 @@
  }
  for (const theme of ["mocha", "latte", "system"]) assert(parse("theme " + theme).theme === theme, "theme " + theme);
  assert(parse("agents", "peer&x").url === "/agents?machine=peer%26x", "scope is encoded");
- for (const command of ["ack 1", "inbox ack --all", "kill 42", "orphans kill 42", "cleanup apply", "cleanup --apply", "hooks install"]) {
+ for (const command of ["inbox ack --all", "agents jump 12", "agents kill 12", "inbox jump item", "projects summarize app", "orphans kill 42", "cleanup remove", "hooks install"]) {
   const result=parse(command); assert(result.error === "read-only in browser · use the CLI" && !result.url && !result.theme, command + " must not run");
  }
- for (const command of ["", "unknown", "agents --state nope", "agents --state", "agents --all --all", "agents --project", "where", "theme dark", "inbox trailing", "cleanup --why apply", 'where "unterminated', "agents; kill 42", "activity --window 6h", "x".repeat(501)]) {
+ for (const command of ["", "unknown", "agents --state nope", "agents --state", "agents --all --all", "agents --project", "projects show", "theme dark", "inbox trailing", "cleanup --why apply", 'projects show "unterminated', "agents; kill 42", "activity --window 6h", "x".repeat(501)]) {
   const result=parse(command); assert(result.error && !result.url && !result.theme, "invalid " + command);
  }
 })();

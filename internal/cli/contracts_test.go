@@ -19,7 +19,7 @@ func TestJSONSuccessAndFailureContracts(t *testing.T) {
 	}{
 		{[]string{"version", "--json"}, 0, `"version":"test"`},
 		{[]string{"config", "path", "--json"}, 0, `"path":`},
-		{[]string{"hooks", "status", "--json"}, 2, `"code":"unsupported_output"`},
+		{[]string{"hooks", "status", "--json"}, 2, `"code":"usage_error"`},
 		{[]string{"--json", "bogus"}, 2, `"code":"usage_error"`},
 		{[]string{"config", "show", "--json"}, 2, `"schema":2`},
 	} {

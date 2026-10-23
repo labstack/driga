@@ -65,7 +65,7 @@ func TestCleanupApplyNeedsYes(t *testing.T) {
 	readEnv(t)
 	var out bytes.Buffer
 	g := &Globals{Stdin: strings.NewReader(""), Stdout: &out}
-	err := (CleanupCmd{ID: "wt:test"}).runCandidates(context.Background(), g, cleanup.Env{}, []cleanup.Candidate{{ID: "wt:test", Kind: cleanup.Worktree, Status: "ready"}})
+	err := (CleanupRemoveCmd{ID: "wt:test"}).runCandidates(context.Background(), g, cleanup.Env{}, []cleanup.Candidate{{ID: "wt:test", Kind: cleanup.Worktree, Status: "ready"}})
 	if err == nil || !strings.Contains(err.Error(), "--yes") {
 		t.Fatal(err, out.String())
 	}
@@ -79,8 +79,8 @@ func TestCleanupAllSkipsNeedsReview(t *testing.T) {
 	var out bytes.Buffer
 	g := &Globals{Stdin: strings.NewReader(""), Stdout: &out}
 	dataDir := t.TempDir()
-	err := (CleanupCmd{All: true, Kind: "worktree", Yes: true}).runCandidates(context.Background(), g, cleanup.Env{DataDir: dataDir}, []cleanup.Candidate{{ID: "wt:review", Kind: cleanup.Worktree, Status: "needs_review", Ignored: []cleanup.IgnoredPath{{Path: ".env"}}}, {ID: "wt:changed", Kind: cleanup.Worktree, Status: "ready"}})
-	if err != nil || !strings.Contains(out.String(), "wt:review: skipped") || !strings.Contains(out.String(), "wt:changed: skipped") {
+	err := (CleanupRemoveCmd{All: true, Kind: "worktree", Yes: true}).runCandidates(context.Background(), g, cleanup.Env{DataDir: dataDir}, []cleanup.Candidate{{ID: "wt:review", Kind: cleanup.Worktree, Status: "needs_review", Ignored: []cleanup.IgnoredPath{{Path: ".env"}}}, {ID: "wt:changed", Kind: cleanup.Worktree, Status: "ready"}})
+	if err == nil || !strings.Contains(out.String(), "wt:review: skipped") || !strings.Contains(out.String(), "wt:changed: failed") || !strings.Contains(out.String(), "completed 0; skipped 1; failed 1") {
 		t.Fatal(err, out.String())
 	}
 	log, err := os.ReadFile(filepath.Join(dataDir, "cleanup.log"))
@@ -109,7 +109,7 @@ func TestCleanupActionJSON(t *testing.T) {
 	cleanupFake(t)
 	readDB(t, nil)
 	var out, errout bytes.Buffer
-	if code := run([]string{"cleanup", "--kind", "worktree", "--all", "--yes", "--json"}, "test", strings.NewReader(""), &out, &errout); code != 0 {
+	if code := run([]string{"cleanup", "remove", "--kind", "worktree", "--all", "--yes", "--json"}, "test", strings.NewReader(""), &out, &errout); code != 0 {
 		t.Fatal(code, errout.String())
 	}
 	var envelope map[string]json.RawMessage
@@ -120,7 +120,7 @@ func TestCleanupActionJSON(t *testing.T) {
 
 func TestCleanupJSONKeepsPerTargetOutcomes(t *testing.T) {
 	readEnv(t)
-	c := CleanupCmd{All: true, Yes: true}
+	c := CleanupRemoveCmd{All: true, Yes: true}
 	outcomes, err := c.jsonCandidates(context.Background(), cleanup.Env{DataDir: t.TempDir()}, []cleanup.Candidate{
 		{ID: "review", Kind: cleanup.Worktree, Status: "needs_review"},
 		{ID: "changed", Kind: cleanup.Worktree, Status: "ready"},
@@ -128,7 +128,7 @@ func TestCleanupJSONKeepsPerTargetOutcomes(t *testing.T) {
 	if err == nil || len(outcomes) != 2 || outcomes[0].Status != "unchanged" || outcomes[1].Status != "failed" {
 		t.Fatalf("%+v %v", outcomes, err)
 	}
-	outcomes, err = (CleanupCmd{All: true}).jsonCandidates(context.Background(), cleanup.Env{}, []cleanup.Candidate{{ID: "ready", Status: "ready"}})
+	outcomes, err = (CleanupRemoveCmd{All: true}).jsonCandidates(context.Background(), cleanup.Env{}, []cleanup.Candidate{{ID: "ready", Status: "ready"}})
 	if err == nil || len(outcomes) != 1 || outcomes[0].Status != "cancelled" {
 		t.Fatalf("%+v %v", outcomes, err)
 	}
@@ -160,7 +160,7 @@ func TestCleanupWhyListingOnly(t *testing.T) {
 	readDB(t, nil)
 	readRun(t, "cleanup", "--why")
 	var out, errout bytes.Buffer
-	if code := run([]string{"cleanup", "wt:test", "--why"}, "test", strings.NewReader(""), &out, &errout); code == 0 || !strings.Contains(errout.String(), "--why only applies to listing") {
+	if code := run([]string{"cleanup", "remove", "wt:test", "--why"}, "test", strings.NewReader(""), &out, &errout); code == 0 || !strings.Contains(errout.String(), "unknown flag --why") {
 		t.Fatal(code, errout.String())
 	}
 }
@@ -174,7 +174,7 @@ func TestCleanupJSONFailureIsOneRecord(t *testing.T) {
 	cleanupFake(t)
 	readDB(t, nil)
 	var out, diagnostic bytes.Buffer
-	code := run([]string{"cleanup", "stale-id", "--yes", "--json"}, "test", nil, &out, &diagnostic)
+	code := run([]string{"cleanup", "remove", "stale-id", "--yes", "--json"}, "test", nil, &out, &diagnostic)
 	if code != 1 || !json.Valid(out.Bytes()) || !strings.Contains(out.String(), `"outcomes":[]`) || !strings.Contains(out.String(), `"cleanup_failed"`) {
 		t.Fatalf("code=%d stdout=%s stderr=%s", code, &out, &diagnostic)
 	}

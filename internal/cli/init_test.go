@@ -47,7 +47,7 @@ func initFixture(t *testing.T, input string) (*Globals, *bytes.Buffer) {
 	t.Setenv("DRIGA_DATA_DIR", filepath.Join(home, "data"))
 	t.Setenv("DRIGA_SPOOL_DIR", filepath.Join(home, "spool"))
 	out := new(bytes.Buffer)
-	return &Globals{Stdin: strings.NewReader(input), Stdout: out, Stderr: out}, out
+	return &Globals{inputTerminal: true, Stdin: strings.NewReader(input), Stdout: out, Stderr: out}, out
 }
 
 func TestConfigShowDefaults(t *testing.T) {
@@ -227,7 +227,7 @@ func TestTask18CommandParsing(t *testing.T) {
 				Init    InitCmd    `cmd:""`
 				Config  ConfigCmd  `cmd:""`
 			}
-			parser, err := kong.New(&root)
+			parser, err := kong.New(&root, kong.Bind(&root.Globals))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -259,7 +259,7 @@ func TestServiceLogsLast50(t *testing.T) {
 	if err := os.WriteFile(service.LogPath(), []byte(log.String()), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := (ServiceCmd{Action: "logs"}).Run(g); err != nil {
+	if err := (ServiceLogsCmd{}).Run(g); err != nil {
 		t.Fatal(err)
 	}
 	if out.String() != want.String() {

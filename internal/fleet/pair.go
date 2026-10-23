@@ -314,7 +314,7 @@ func (s *Server) pairHTTP(w http.ResponseWriter, r *http.Request) {
 		if p.machine == s.st.MachineID() {
 			s.failPairLocked(key)
 			s.mu.Unlock()
-			jsonError(w, "local machine and viewer claim the same machine_id; run driga machine reset-id on the clone", 409)
+			jsonError(w, "local machine and viewer claim the same machine_id; run driga machines reset-id on the clone", 409)
 			return
 		}
 		if _, err := rand.Read(p.nP[:]); err != nil {
@@ -410,7 +410,7 @@ func (s *Server) pairHTTP(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		for _, v := range vs {
 			if v.MachineID != "" && v.MachineID == viewer.MachineID && v.DeviceID != viewer.DeviceID {
-				err = fmt.Errorf("%s and %s claim the same machine_id; run driga machine reset-id on the clone", v.Name, p.remote)
+				err = fmt.Errorf("%s and %s claim the same machine_id; run driga machines reset-id on the clone", v.Name, p.remote)
 				break
 			}
 		}
@@ -670,7 +670,7 @@ func Add(ctx context.Context, addr string, opts AddOpts, prompt func(string) boo
 	for _, p := range peers {
 		if p.Addr == addr {
 			if p.State == "untrusted" {
-				return zero, fmt.Errorf("peer identity changed: untrusted; run driga fleet rekey on the peer (pairings must be redone), then driga fleet remove and pair again")
+				return zero, fmt.Errorf("peer identity changed: untrusted; run driga fleet rekey on the peer (pairings must be redone), then driga fleet peers remove and pair again")
 			}
 			if pin != "" {
 				a, e := ParseDeviceID(pin)
@@ -804,11 +804,11 @@ func pairAddress(addr string) (string, error) {
 }
 func checkClone(peers []Peer, candidate Peer, id Identity) error {
 	if candidate.MachineID == id.Cert.Leaf.Subject.CommonName {
-		return fmt.Errorf("local machine and %s claim the same machine_id; run driga machine reset-id on the clone", candidate.Addr)
+		return fmt.Errorf("local machine and %s claim the same machine_id; run driga machines reset-id on the clone", candidate.Addr)
 	}
 	for _, p := range peers {
 		if p.MachineID == candidate.MachineID && p.DeviceID != candidate.DeviceID {
-			return fmt.Errorf("%s and %s claim the same machine_id; run driga machine reset-id on the clone", p.Name, candidate.Addr)
+			return fmt.Errorf("%s and %s claim the same machine_id; run driga machines reset-id on the clone", p.Name, candidate.Addr)
 		}
 	}
 	return nil
@@ -828,5 +828,5 @@ func markUntrusted(dir, addr string) error {
 	if err := SavePeers(dir, ps); err != nil {
 		return err
 	}
-	return fmt.Errorf("peer identity changed: untrusted; run driga fleet rekey on the peer (pairings must be redone), then driga fleet remove and pair again")
+	return fmt.Errorf("peer identity changed: untrusted; run driga fleet rekey on the peer (pairings must be redone), then driga fleet peers remove and pair again")
 }
