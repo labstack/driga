@@ -34,22 +34,22 @@ func TestAutoRequiresSafeProjectDirectory(t *testing.T) {
 	}
 	gitProject(t, root)
 	for _, dir := range []string{root, home, data, filepath.Dir(data)} {
-		if autoAllowed("Write", json.RawMessage(`{"file_path":"ordinary.txt"}`), dir, data) {
+		if autoAllowed("Write", json.RawMessage(`{"file_path":"ordinary.txt"}`), dir, autoProject(dir, data)) {
 			t.Errorf("broad working directory allowed: %s", dir)
 		}
 	}
 	plain := t.TempDir()
-	if autoAllowed("Edit", json.RawMessage(`{"file_path":"ordinary.txt"}`), plain, data) {
+	if autoAllowed("Edit", json.RawMessage(`{"file_path":"ordinary.txt"}`), plain, autoProject(plain, data)) {
 		t.Fatal("non-project directory allowed")
 	}
 	// Git discovery must ignore inherited overrides, and accept project subdirs.
 	t.Setenv("GIT_DIR", filepath.Join(root, ".git"))
 	t.Setenv("GIT_WORK_TREE", plain)
-	if autoAllowed("Write", json.RawMessage(`{"file_path":"ordinary.txt"}`), plain, data) {
+	if autoAllowed("Write", json.RawMessage(`{"file_path":"ordinary.txt"}`), plain, autoProject(plain, data)) {
 		t.Fatal("Git environment made a non-project directory a project")
 	}
 	for _, dir := range []string{filepath.Join(home, "project"), filepath.Join(home, "project", "src")} {
-		if !autoAllowed("Write", json.RawMessage(`{"file_path":"ordinary.txt"}`), dir, data) {
+		if !autoAllowed("Write", json.RawMessage(`{"file_path":"ordinary.txt"}`), dir, autoProject(dir, data)) {
 			t.Errorf("project working directory refused: %s", dir)
 		}
 	}
@@ -65,7 +65,7 @@ func TestAutoHiddenAndInstructionComponents(t *testing.T) {
 	} {
 		for _, tool := range []string{"Edit", "Write"} {
 			raw, _ := json.Marshal(map[string]string{"file_path": path})
-			if autoAllowed(tool, raw, dir, data) {
+			if autoAllowed(tool, raw, dir, autoProject(dir, data)) {
 				t.Errorf("%s allowed %s", tool, path)
 			}
 		}
@@ -77,7 +77,7 @@ func TestAutoHiddenAndInstructionComponents(t *testing.T) {
 	if err := os.Symlink(protected, filepath.Join(dir, "ordinary.md")); err != nil {
 		t.Fatal(err)
 	}
-	if autoAllowed("Edit", json.RawMessage(`{"file_path":"ordinary.md"}`), dir, data) {
+	if autoAllowed("Edit", json.RawMessage(`{"file_path":"ordinary.md"}`), dir, autoProject(dir, data)) {
 		t.Fatal("resolved instruction file allowed through symlink")
 	}
 }
@@ -91,7 +91,7 @@ func TestAutoWindowsNormalizedComponents(t *testing.T) {
 		`src/.cursor. /settings`, `src/Copilot-Instructions.md `,
 	} {
 		raw, _ := json.Marshal(map[string]string{"file_path": path})
-		if autoAllowed("Write", raw, dir, data) {
+		if autoAllowed("Write", raw, dir, autoProject(dir, data)) {
 			t.Errorf("Windows alias allowed: %q", path)
 		}
 	}

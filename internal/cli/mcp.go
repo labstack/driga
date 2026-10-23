@@ -112,7 +112,7 @@ func newMCPServer(g *Globals, actions bool, capture ...string) *sdk.Server {
 		})
 	}
 	var prompts func(context.Context) ([]chat.Prompt, error)
-	if policy != "" {
+	if actions {
 		prompts = func(ctx context.Context) ([]chat.Prompt, error) {
 			in, err := chatApproval(json.RawMessage(`{}`))
 			if err != nil {

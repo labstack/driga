@@ -80,7 +80,8 @@
    who.append(document.createTextNode((m.role==="user"?"You":"Driga")+(m.status==="queued"?" · queued":m.status==="stopped"||m.status==="interrupted"?" · "+m.status:"")));
    body.replaceChildren();
    // Only the same-origin server's safe goldmark renderer supplies this field.
-   if(m.role==="assistant"&&typeof m.html==="string"&&m.html)body.innerHTML=m.html;
+   if(m.role==="assistant"&&m.status==="streaming")body.textContent=m.text||(activity()+" · "+elapsed());
+   else if(m.role==="assistant"&&typeof m.html==="string"&&m.html)body.innerHTML=m.html;
    else content(body,m.text||(streaming?activity()+" · "+elapsed():"Message body not retained by capture policy."));
    // Keep the cursor outside server Markdown, including code blocks and lists.
    if(node.children.length>2)node.replaceChildren(who,body);
@@ -113,7 +114,7 @@
    if(e.action){actions.set(e.action.id,e.action);if(!e.message)apply({id:e.action.id,role:"action",status:e.action.status,text:e.action.title});render();}
    if(e.kind==="idle"){setActive(false);render();}
    if(e.kind==="delta"){
-    const m=messages.get(e.message_id);if(m){apply({...m,text:(m.text||"")+e.text,html:e.html||""});tool="";render();}
+    const m=messages.get(e.message_id);if(m){apply({...m,text:(m.text||"")+e.text,html:""});tool="";render();}
    }
    if(e.message){apply(e.message);if(e.message.role==="assistant"&&e.message.id===replyID&&e.message.status!=="streaming")setActive(false);render();}
   });

@@ -385,11 +385,15 @@ func load(path string, overrides map[string]any) (Config, map[string]string, err
 		}
 		return "config " + path + ": " + key
 	}
+	valid := c.Exclude[:0]
 	for _, pattern := range c.Exclude {
 		if !doublestar.ValidatePattern(strings.Trim(filepath.ToSlash(pattern), "/")) {
-			return c, sources, fmt.Errorf("%s: malformed exclude pattern %q", input("exclude"), pattern)
+			c.Warnings = append(c.Warnings, fmt.Sprintf("%s: skipped malformed pattern %q", input("exclude"), pattern))
+			continue
 		}
+		valid = append(valid, pattern)
 	}
+	c.Exclude = valid
 	if c.Fleet.Serve && strings.TrimSpace(c.Fleet.Listen) == "" {
 		return c, sources, fmt.Errorf("%s: fleet.listen is required when fleet.serve is true", input("fleet.listen"))
 	}

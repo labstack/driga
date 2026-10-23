@@ -41,7 +41,7 @@ func TestPromptAnswerOnce(t *testing.T) {
 			if err := b.AnswerPrompt(ctx, "one", allow); err != nil {
 				t.Fatal(err)
 			}
-			if err := b.AnswerPrompt(ctx, "one", !allow); err == nil || !strings.Contains(err.Error(), "already answered") {
+			if err := b.AnswerPrompt(ctx, "one", !allow); err == nil || !strings.Contains(err.Error(), "prompt no longer waiting") {
 				t.Fatal(err)
 			}
 			p := <-done

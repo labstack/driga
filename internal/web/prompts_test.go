@@ -81,7 +81,7 @@ func TestInboxPromptDecisionsAndAuth(t *testing.T) {
 				t.Fatal("not answered")
 			}
 			w = postChat(s, "/chat/api/prompt-answer", body, "http://127.0.0.1:4321", s.csrf, s.token)
-			if w.Code != 400 || !strings.Contains(w.Body.String(), "already answered") {
+			if w.Code != 400 || !strings.Contains(w.Body.String(), "prompt no longer waiting") {
 				t.Fatal(w.Code, w.Body.String())
 			}
 			if page := request(s, "GET", "/inbox", s.token); strings.Contains(page.Body.String(), `data-prompt="prompt"`) {
@@ -107,10 +107,10 @@ const assert=require("node:assert/strict");
   const row={querySelector:()=>status,querySelectorAll:()=>buttons,remove(){removed=true;}};
   const button={closest:()=>row,dataset:{promptId:"p",promptAnswer:allow?"allow":"deny"}};
   global.document={querySelector:()=>({content:"csrf"})};
-  global.fetch=async(path,options)=>{call={path,options};assert.equal(buttons[0].disabled,true);return {ok,text:async()=>"already answered"};};
+  global.fetch=async(path,options)=>{call={path,options};assert.equal(buttons[0].disabled,true);return {ok,text:async()=>"prompt no longer waiting"};};
   await DrigaConsole.answerPrompt(button);
   assert.equal(call.path,"/chat/api/prompt-answer");assert.equal(call.options.method,"POST");assert.equal(call.options.headers["X-CSRF-Token"],"csrf");assert.equal(call.options.credentials,"same-origin");assert.deepEqual(JSON.parse(call.options.body),{id:"p",allow});
-  assert.equal(removed,ok);if(!ok){assert.equal(status.textContent,"already answered");assert.equal(buttons[0].disabled,false);}
+  assert.equal(removed,ok);if(!ok){assert.equal(status.textContent,"prompt no longer waiting");assert.equal(buttons[0].disabled,false);}
  }
 })().catch(error=>{console.error(error);process.exitCode=1;});`
 	cmd := exec.Command(node, "-")

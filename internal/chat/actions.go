@@ -62,6 +62,10 @@ type pendingAction struct {
 	claimed   bool
 }
 
+func (a *pendingAction) awaitingResult() bool {
+	return a.Status == "allowed" || a.Status == "stopped" && a.claimed
+}
+
 func (b *Broker) stateStore() *store.Store {
 	if b.opts.ContextStore != nil {
 		return b.opts.ContextStore
@@ -201,10 +205,10 @@ func (b *Broker) Approve(ctx context.Context, in Approval) (Permission, error) {
 		b.mu.Unlock()
 		return Permission{}, err
 	}
-	directory := c.directory
+	directory, project := c.directory, c.autoProject
 	b.mu.Unlock()
 	title, remote := b.actionTitle(in), b.remoteTarget(in)
-	auto := autoAllowed(in.Tool, in.Input, directory, b.opts.DataDir)
+	auto := autoAllowed(in.Tool, in.Input, directory, project)
 	b.mu.Lock()
 	c, err = b.approvalConversation(in)
 	if err != nil {
@@ -220,7 +224,7 @@ func (b *Broker) Approve(ctx context.Context, in Approval) (Permission, error) {
 	}
 	for i := 0; i < len(c.actions) && (len(c.actions) >= MaxMessages || bytes > MaxBufferBytes); {
 		a := c.actions[i]
-		if a.Status == "pending" || a.Status == "allowed" {
+		if a.Status == "pending" || a.awaitingResult() {
 			i++
 			continue
 		}
@@ -308,18 +312,20 @@ func (b *Broker) Claim(in Approval) (string, error) {
 func (b *Broker) Complete(in Approval, id, result string, failed bool) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	c, err := b.approvalConversation(in)
-	if err != nil {
-		return err
+	// A claimed action may finish after Stop or after a new turn starts.
+	// Only its own token authorizes this result; it grants no new permission.
+	c := b.conversations[in.Conversation]
+	if b.closed || c == nil || in.Token == "" {
+		return errors.New("invalid action token or conversation")
 	}
 	status := "done"
 	if failed {
 		status = "failed"
 	}
 	for _, a := range c.actions {
-		if a.ID == id && a.token == c.token && a.claimed && a.Status == "allowed" {
-			b.finishAction(c, id, status, result)
-			return nil
+		if a.ID == id && subtle.ConstantTimeCompare([]byte(a.token), []byte(in.Token)) == 1 && a.claimed && (a.Status == "allowed" || a.Status == "stopped") {
+			a.Status, a.Result = status, result
+			return b.actionEvent(c, a)
 		}
 	}
 	return errors.New("claimed action not found")
@@ -356,7 +362,7 @@ func (b *Broker) actionTitle(in Approval) string {
 		return fmt.Sprintf("%s prompt %s · unavailable", decision, args.ID)
 	}
 	if args.SessionID > 0 && (name == "kill" || name == "jump") {
-		if s, err := b.stateStore().Session(args.SessionID); err == nil {
+		if s, err := b.stateStore().SessionScoped(args.SessionID, store.Scope{}); err == nil {
 			return fmt.Sprintf("%s %s #%d · %s", name, s.Adapter, s.ID, s.Cwd)
 		}
 	}
@@ -409,7 +415,7 @@ func (b *Broker) actionTitle(in Approval) string {
 	}
 	return strings.Join(strings.Fields(title), " ")
 }
-func autoAllowed(tool string, input json.RawMessage, dir, dataDir string) bool {
+func autoAllowed(tool string, input json.RawMessage, dir string, project bool) bool {
 	switch tool {
 	case "mcp__driga__ack_inbox", "mcp__driga__jump", "mcp__driga__summarize":
 		return true
@@ -417,7 +423,7 @@ func autoAllowed(tool string, input json.RawMessage, dir, dataDir string) bool {
 		var in struct {
 			Path string `json:"file_path"`
 		}
-		if json.Unmarshal(input, &in) != nil || in.Path == "" || !autoProject(dir, dataDir) {
+		if json.Unmarshal(input, &in) != nil || in.Path == "" || !project {
 			return false
 		}
 		// Check the resolved path too: a link inside the project may point at .git.
@@ -531,13 +537,21 @@ func (b *Broker) remoteTarget(in Approval) bool {
 	if !strings.HasPrefix(in.Tool, "mcp__driga__") {
 		return false
 	}
-	var args struct{ ID, Machine string }
+	var args struct {
+		ID, Machine string
+		SessionID   int64 `json:"session_id"`
+	}
 	if json.Unmarshal(in.Input, &args) != nil {
 		return false
 	}
 	st := b.stateStore()
 	if args.Machine != "" && args.Machine != "local" && args.Machine != st.MachineID() {
 		return true
+	}
+	if args.SessionID > 0 && (in.Tool == "mcp__driga__kill" || in.Tool == "mcp__driga__jump") {
+		if s, err := st.SessionScoped(args.SessionID, store.Scope{}); err == nil && s.MachineID != st.MachineID() {
+			return true
+		}
 	}
 	if args.ID == "" {
 		return false

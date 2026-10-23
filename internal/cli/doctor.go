@@ -83,6 +83,9 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 	checks := []Check{}
 	copilotSeen := false
 	add := func(name, status, detail, fix string) { checks = append(checks, Check{name, status, detail, fix}) }
+	for _, warning := range d.Config.Warnings {
+		add("config", "warn", warning, "correct the pattern in "+config.Path())
+	}
 	for _, entry := range []struct{ name, path string }{
 		{"storage:db", filepath.Join(d.DataDir, "driga.db")},
 		{"storage:wal", filepath.Join(d.DataDir, "driga.db-wal")},

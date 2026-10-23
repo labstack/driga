@@ -247,11 +247,11 @@ func TestAutoRules(t *testing.T) {
 		{"mcp__driga__ack_inbox", "", true}, {"mcp__driga__jump", "", true}, {"mcp__driga__summarize", "", true},
 	} {
 		raw, _ := json.Marshal(map[string]string{"file_path": tc.path})
-		if got := autoAllowed(tc.tool, raw, dir, outside); got != tc.want {
+		if got := autoAllowed(tc.tool, raw, dir, autoProject(dir, outside)); got != tc.want {
 			t.Errorf("%s %s: %v", tc.tool, tc.path, got)
 		}
 	}
-	if autoAllowed("Write", json.RawMessage(`{}`), dir, outside) {
+	if autoAllowed("Write", json.RawMessage(`{}`), dir, autoProject(dir, outside)) {
 		t.Fatal("missing path allowed")
 	}
 }

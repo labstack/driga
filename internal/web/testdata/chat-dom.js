@@ -67,9 +67,14 @@ async function runChatTests(){
  assert(get('chat-context').textContent.includes('session: 42'),'citation did not select context');
  assert(!body().innerHTML.includes('<script>')&&!body().innerHTML.includes('href="javascript:'),'unsafe server HTML');
  reset([{id:'stream',role:'assistant',status:'streaming',text:'',html:''}]);
+ reset([{id:'unsafe-stream',role:'assistant',status:'streaming',text:'<script>stream</script>',html:'<script>must ignore</script>'}]);
+ assert.equal(body().innerHTML,'','stream reset trusted HTML');
+ assert.equal(body().textContent,'<script>stream</script>');
+ reset([{id:'stream',role:'assistant',status:'streaming',text:'',html:''}]);
  const streamNode=article();
  change({seq:11,kind:'delta',message_id:'stream',text:'**Hel',html:serverHTML.partial});
- assert.equal(body().innerHTML,serverHTML.partial,'partial HTML not inserted');
+ assert.equal(body().innerHTML,'','streaming parsed HTML');
+ assert.equal(body().textContent,'**Hel','streaming text missing');
  assert.equal(article(),streamNode,'placeholder replaced instead of updated');
  assert(get('chat-status').textContent.includes('writing…'));
  assert(walk(article()).some(n=>n.className==='chat-cursor'&&n.textContent==='▍'));
@@ -79,7 +84,8 @@ async function runChatTests(){
  assert(requests.includes('/chat/api/stop'),'Stop did not call API');
  change({seq:12,kind:'delta',message_id:'stream',text:'lo**',html:serverHTML.complete});
  change({seq:12,kind:'delta',message_id:'stream',text:'duplicate',html:'replayed'});
- assert.equal(body().innerHTML,serverHTML.complete,'duplicate replay changed HTML');
+ assert.equal(body().innerHTML,'','streaming parsed HTML after Stop');
+ assert.equal(body().textContent,'**Hello**','duplicate replay changed text');
  change({seq:13,kind:'message',message:{id:'stream',role:'assistant',status:'complete',text:'**Hello**',html:serverHTML.complete}});
  assert.equal(body().innerHTML,serverHTML.complete);
  status({active:false});

@@ -179,14 +179,21 @@ func TestCaptureNoneRejected(t *testing.T) {
 	}
 }
 
-func TestMalformedExcludeRejectedAtLoad(t *testing.T) {
+func TestMalformedExcludeSkippedAtLoad(t *testing.T) {
 	for _, pattern := range []string{"[", "foo/[abc", "**/[abc"} {
 		path := filepath.Join(t.TempDir(), "config.toml")
-		if err := os.WriteFile(path, []byte("exclude = ['"+pattern+"']\n"), 0600); err != nil {
+		if err := os.WriteFile(path, []byte("exclude = ['good/**', '"+pattern+"', '**/node_modules']\n"), 0600); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := config.Load(path); err == nil {
-			t.Fatalf("accepted malformed exclude %q", pattern)
+		cfg, err := config.Load(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(cfg.Exclude) != 2 || cfg.Exclude[0] != "good/**" || cfg.Exclude[1] != "**/node_modules" {
+			t.Fatal(cfg.Exclude)
+		}
+		if len(cfg.Warnings) != 1 || !strings.Contains(cfg.Warnings[0], "exclude") || !strings.Contains(cfg.Warnings[0], pattern) {
+			t.Fatal(cfg.Warnings)
 		}
 	}
 }

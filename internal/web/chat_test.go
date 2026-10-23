@@ -199,12 +199,8 @@ func TestChatSSEPartialsAndOrderedReplay(t *testing.T) {
 		after = e.Seq
 		if e.Kind == "delta" {
 			deltas = append(deltas, e)
-			full := "First "
-			if len(deltas) == 2 {
-				full += "second"
-			}
-			if e.HTML != chat.MarkdownHTML(full) {
-				t.Fatalf("stream HTML: %q", e.HTML)
+			if e.HTML != "" {
+				t.Fatalf("stream included Markdown HTML: %q", e.HTML)
 			}
 		}
 		if len(deltas) == 2 {
@@ -232,7 +228,7 @@ func TestChatSSEPartialsAndOrderedReplay(t *testing.T) {
 			break
 		}
 	}
-	if got.Seq != deltas[1].Seq || got.Kind != "delta" || got.HTML != chat.MarkdownHTML("First second") {
+	if got.Seq != deltas[1].Seq || got.Kind != "delta" || got.HTML != "" {
 		t.Fatal(got, scan.Err())
 	}
 	raw, _ := json.Marshal(got)

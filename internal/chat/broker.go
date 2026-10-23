@@ -93,21 +93,22 @@ type turn struct {
 	context Context
 }
 type conversation struct {
-	mode             Mode
-	used             uint64    // Broker use count at last load, for eviction.
-	until            time.Time // When Full auto drops back to Auto.
-	expire           *time.Timer
-	actions          []*pendingAction
-	token, directory string
-	remote, readOnly bool
-	row              store.Conversation
-	result           json.RawMessage
-	messages         []store.ChatMessage
-	queue            []turn
-	events           []Event
-	seq              uint64
-	changed          chan struct{}
-	cancel           context.CancelFunc
+	mode                 Mode
+	used                 uint64    // Broker use count at last load, for eviction.
+	until                time.Time // When Full auto drops back to Auto.
+	expire               *time.Timer
+	actions              []*pendingAction
+	token, directory     string
+	remote, readOnly     bool
+	autoProject, noticed bool
+	row                  store.Conversation
+	result               json.RawMessage
+	messages             []store.ChatMessage
+	queue                []turn
+	events               []Event
+	seq                  uint64
+	changed              chan struct{}
+	cancel               context.CancelFunc
 }
 type Broker struct {
 	mu                  sync.Mutex
@@ -204,7 +205,11 @@ func (b *Broker) load(id string) (*conversation, error) {
 		var oldest *conversation
 		var key string
 		for id, c := range b.conversations {
-			if c.cancel == nil && (oldest == nil || c.used < oldest.used) {
+			busy := c.cancel != nil
+			for _, a := range c.actions {
+				busy = busy || a.token != "" && a.awaitingResult()
+			}
+			if !busy && (oldest == nil || c.used < oldest.used) {
 				oldest = c
 				key = id
 			}
@@ -241,6 +246,9 @@ func (b *Broker) load(id string) (*conversation, error) {
 	}
 	c := &conversation{used: b.uses, changed: make(chan struct{}), mode: Confirm, row: row, messages: messages, seq: uint64(time.Now().UnixMicro())}
 	for _, m := range messages {
+		if m.Role == "system" && m.Status == "notice" {
+			c.noticed = true
+		}
 		if m.Role == "action" && m.Tool != "" {
 			title := m.Tool
 			c.actions = append(c.actions, &pendingAction{Action: Action{ID: m.ID, Tool: m.Tool, Title: title, Status: m.Status, DecidedBy: m.DecidedBy, Input: json.RawMessage(`{}`)}})
@@ -434,6 +442,7 @@ func (b *Broker) run(ctx context.Context, c *conversation) {
 			err = dirErr
 		}
 		c.directory = dir
+		c.autoProject = false
 		c.token = uuid.NewString() + uuid.NewString()
 		if err == nil && !c.readOnly {
 			err = b.ensureSocket()
@@ -449,18 +458,23 @@ func (b *Broker) run(ctx context.Context, c *conversation) {
 		}
 		b.mu.Unlock()
 		if err == nil {
+			project := !req.ReadOnly && autoProject(dir, b.opts.DataDir)
+			b.mu.Lock()
+			c.autoProject = project
+			b.mu.Unlock()
 			err = b.agent.Run(ctx, req, func(d Delta) error {
 				b.mu.Lock()
 				defer b.mu.Unlock()
 				if ctx.Err() != nil {
 					return ctx.Err()
 				}
-				if d.Notice != "" {
-					notice := store.ChatMessage{ID: uuid.NewString(), MachineID: c.row.MachineID, ConversationID: c.row.ID, Role: "system", Text: d.Notice, CreatedAt: time.Now().UTC()}
+				if d.Notice != "" && !c.noticed {
+					notice := store.ChatMessage{ID: uuid.NewString(), MachineID: c.row.MachineID, ConversationID: c.row.ID, Role: "system", Status: "notice", Text: d.Notice, CreatedAt: time.Now().UTC()}
 					if err := b.save(ctx, notice); err != nil {
 						return err
 					}
 					b.message(c, notice)
+					c.noticed = true
 				}
 				if d.ToolUseID != "" {
 					status := "done"
@@ -535,7 +549,7 @@ func (b *Broker) Stop(ctx context.Context, id string) error {
 	b.denyPending(c, "stopped")
 	for _, a := range c.actions {
 		if a.token == c.token && a.Status == "allowed" {
-			b.finishAction(c, a.ID, "failed", "Stopped before a result was received")
+			b.finishAction(c, a.ID, "stopped", "result unknown")
 		}
 	}
 	c.token = ""

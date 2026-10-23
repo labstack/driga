@@ -297,7 +297,7 @@ echo '{"type":"result","result":"ok"}'`
 			raw, _ := os.ReadFile(record + ".args")
 			args := string(raw)
 			if support {
-				for _, want := range []string{"--tools\ndefault\n", "--permission-prompts\nhost\n", "--permission-prompt-tool\nmcp__driga__approve\n", "Read,Glob,Grep,LS,TodoWrite,NotebookRead"} {
+				for _, want := range []string{"--tools\ndefault\n", "--permission-prompts\nhost\n", "--permission-prompt-tool\nmcp__driga__approve\n", "TodoWrite,mcp__driga__list_prompts"} {
 					if !strings.Contains(args, want) {
 						t.Fatal(want, args)
 					}
@@ -305,7 +305,7 @@ echo '{"type":"result","result":"ok"}'`
 				if strings.Contains(args, "--allowedTools\nmcp__driga__*") || notices != 0 {
 					t.Fatal(args, notices)
 				}
-			} else if !strings.Contains(args, "--tools\n\n") || strings.Contains(args, "--permission-prompt") || notices != 1 {
+			} else if !strings.Contains(args, "--tools\n\n") || strings.Contains(args, "--permission-prompt") || notices != 2 {
 				t.Fatal(args, notices)
 			}
 			raw, _ = os.ReadFile(record + ".config")
@@ -322,7 +322,7 @@ echo '{"type":"result","result":"ok"}'`
 			if support && (env["DRIGA_CHAT_TOKEN"] != r.Token || env["DRIGA_CHAT_SOCKET"] != r.Socket || env["DRIGA_CHAT_CONVERSATION"] != r.Conversation) {
 				t.Fatal("turn environment missing")
 			}
-			if !support && (env["DRIGA_CHAT_TOKEN"] != "" || env["DRIGA_CHAT_READ_ONLY"] != "1") {
+			if !support && (env["DRIGA_CHAT_TOKEN"] != "" || env["DRIGA_CHAT_READ_ONLY"] != "1" || strings.Contains(args, "mcp__driga__list_prompts")) {
 				t.Fatal("fallback enabled actions")
 			}
 			r.ReadOnly = true
@@ -330,7 +330,7 @@ echo '{"type":"result","result":"ok"}'`
 				t.Fatal(err)
 			}
 			raw, _ = os.ReadFile(record + ".args")
-			if strings.Contains(string(raw), "--permission-prompt") || !strings.Contains(string(raw), "--tools\n\n") {
+			if strings.Contains(string(raw), "--permission-prompt") || strings.Contains(string(raw), "mcp__driga__list_prompts") || !strings.Contains(string(raw), "--tools\n\n") {
 				t.Fatal("ask enabled actions")
 			}
 		})

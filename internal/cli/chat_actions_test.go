@@ -17,6 +17,7 @@ import (
 	"github.com/labstack/driga/internal/platform"
 	"github.com/labstack/driga/internal/spool"
 	"github.com/labstack/driga/internal/store"
+	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 func TestChatActionNeedsPermission(t *testing.T) {
@@ -127,6 +128,40 @@ func TestChatCleanupAndSummaryKeepChecks(t *testing.T) {
 		err := runChatAction(context.Background(), g, tc.tool, json.RawMessage(tc.raw))
 		if err == nil || !strings.Contains(err.Error(), tc.want) {
 			t.Fatal(tc.tool, err)
+		}
+	}
+}
+
+func TestChatListPromptsOnlyWithActions(t *testing.T) {
+	for _, policy := range []string{"", "titles", "snippets"} {
+		for _, actions := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/%t", policy, actions), func(t *testing.T) {
+				ctx := context.Background()
+				a, b := sdk.NewInMemoryTransports()
+				ss, err := newMCPServer(&Globals{}, actions, policy).Connect(ctx, a, nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer ss.Close()
+				cs, err := sdk.NewClient(&sdk.Implementation{Name: "test"}, nil).Connect(ctx, b, nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer cs.Close()
+				listing, err := cs.ListTools(ctx, nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				found := false
+				for _, tool := range listing.Tools {
+					if tool.Name == "list_prompts" {
+						found = true
+					}
+				}
+				if found != actions {
+					t.Fatalf("actions=%t: advertised list_prompts=%t", actions, found)
+				}
+			})
 		}
 	}
 }

@@ -69,12 +69,13 @@ Chat should be able to do what the maintainer would do at the keyboard:
      resolution.
    - User settings, hooks, plugins and other MCP servers stay off, as today
      (`--setting-sources ""`, `--strict-mcp-config`).
-2. **Always allowed, no card.** The driga read tools, and Claude's read-only
-   built-ins: Read, Glob, Grep, LS, TodoWrite and similar. These go in
-   `--allowedTools`.
-3. **Everything else asks driga.** Claude runs with
+2. **Always allowed, no card.** The driga read tools and TodoWrite go in
+   `--allowedTools`. Read, Glob, Grep, LS and NotebookRead are not pre-allowed.
+   Claude permits reads inside the working directory itself.
+3. **Other calls ask driga.** Reads elsewhere ask in Confirm and Auto;
+   Full auto runs them. Claude runs with
    `--permission-prompt-tool mcp__driga__approve`. Claude calls that tool
-   before any other tool call.
+   for calls requiring permission, including reads outside the working directory.
    - The driga MCP child (`driga mcp --chat`) forwards the request to the
      broker over the broker's owner-only socket. It sends the tool name, the
      input and a per-turn token that ties it to the conversation.
@@ -89,7 +90,8 @@ Chat should be able to do what the maintainer would do at the keyboard:
    ask. It has no way to decide.
 5. **Stop and timeout.**
    - Stop denies every pending card and then stops the turn, as Stop does
-     today.
+     today. Running allowed actions become `stopped · result unknown`; their
+     own action token still accepts a later Complete result.
    - A card nobody answers is denied after 10 minutes, with status
      `expired`.
 6. **Remote targets.** A target on another machine is refused with a
@@ -98,7 +100,7 @@ Chat should be able to do what the maintainer would do at the keyboard:
    serves it on a private socket of its own, so the MCP child can still reach
    it.
 8. **Missing support.** If the installed Claude CLI lacks the permission
-   bridge, Chat stays read-only and says why.
+   bridge, Chat stays read-only and says why once per conversation.
    - `--permission-prompt-tool` is hidden from `claude --help` in 2.1.309, so
      the probe requires the visible `permission-prompts` flag as its marker.
    - Chat passes `--permission-prompts host` explicitly.
@@ -110,17 +112,17 @@ Chat should be able to do what the maintainer would do at the keyboard:
 - `{"behavior":"deny","message":…}` blocked the call, and Claude reported the
   message back to the user.
 - `{"behavior":"allow","updatedInput":…}` ran the call.
-- Commands Claude itself classifies as read-only (`echo`, `cat`, Read) ran
-  without calling the tool. This is Claude Code's normal read-only behaviour,
-  the same as in its own terminal. driga accepts it: reads are allowed in
-  every mode anyway.
+- Without the read built-ins in `--allowedTools`, reads inside the working
+  directory run; reads elsewhere ask. Both Read and read-only Bash commands
+  such as `head /etc/hosts` outside that directory reach the permission tool.
+  The broker shows a card in Confirm and Auto; Full auto runs them.
 
 ## Trust modes
 
 | Mode | Runs without asking | Asks |
 |---|---|---|
-| **Confirm** (default) | Reads only | Every other call |
-| **Auto** | Auto allows reads, inbox acknowledgments, jumps and summaries, and allows Edit/Write only inside a git project working directory that is neither home, the driga data directory nor an ancestor of either, with no hidden components or agent instruction names (`claude*.md`, `agents*.md`, `gemini*.md`, `copilot-instructions.md`, case-insensitive) in the given or resolved relative path after trimming trailing dots and spaces, and always asks on colons. | Everything else asks |
+| **Confirm** (default) | Driga read tools and reads inside the working directory | Reads elsewhere and every other call |
+| **Auto** | Auto allows driga read tools, reads inside the working directory, inbox acknowledgments, jumps and summaries, and allows Edit/Write only inside a git project working directory that is neither home, the driga data directory nor an ancestor of either, with no hidden components or agent instruction names (`claude*.md`, `agents*.md`, `gemini*.md`, `copilot-instructions.md`, case-insensitive) in the given or resolved relative path after trimming trailing dots and spaces, and always asks on colons. | Everything else asks |
 | **Full auto** | Everything | Nothing; header shows it in red |
 
 - The mode belongs to one conversation and starts as Confirm.

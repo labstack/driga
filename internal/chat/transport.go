@@ -266,7 +266,7 @@ func dialPath(ctx context.Context, path string) (*Remote, error) {
 	t := &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 		return (&net.Dialer{Timeout: time.Second}).DialContext(ctx, "unix", path)
 	}}
-	c := &Remote{http: &http.Client{Transport: t, Timeout: ApprovalTTL + time.Minute}, transport: t}
+	c := &Remote{http: &http.Client{Transport: t}, transport: t}
 	return c, nil
 }
 func (c *Remote) Close() {
@@ -285,6 +285,12 @@ func (c *Remote) call(ctx context.Context, method, path string, in, out any) err
 	return c.callOnce(ctx, method, path, in, out, true)
 }
 func (c *Remote) callOnce(ctx context.Context, method, path string, in, out any, retry bool) error {
+	timeout := 10 * time.Second
+	if path == "/approve" || path == "/hook-prompt" {
+		timeout = ApprovalTTL + time.Minute
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
 	var body bytes.Buffer
 	if in != nil {
 		if err := json.NewEncoder(&body).Encode(in); err != nil {

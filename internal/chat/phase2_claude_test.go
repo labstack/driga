@@ -21,7 +21,7 @@ echo '{"type":"result","result":"answer"}'`)
 	}
 	raw, _ := os.ReadFile(record + ".args")
 	args := string(raw)
-	for _, want := range []string{"--tools\ndefault\n", "--permission-prompts\nhost\n", "--permission-prompt-tool\nmcp__driga__approve\n", "Read,Glob,Grep,LS,TodoWrite,NotebookRead"} {
+	for _, want := range []string{"--tools\ndefault\n", "--permission-prompts\nhost\n", "--permission-prompt-tool\nmcp__driga__approve\n", "TodoWrite,mcp__driga__list_prompts"} {
 		if !strings.Contains(args, want) {
 			t.Fatal("missing", want, args)
 		}

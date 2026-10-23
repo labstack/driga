@@ -73,6 +73,7 @@ type PromptDecision struct {
 type pendingPrompt struct {
 	Prompt
 	answer chan PromptDecision
+	wait   context.Context
 }
 type PromptClient interface {
 	Prompts(context.Context) ([]Prompt, error)
@@ -111,32 +112,37 @@ func (b *Broker) WaitPrompt(ctx context.Context, in Prompt) (PromptDecision, err
 	}
 	in.CreatedAt = time.Now().UTC()
 	in.Input = append(json.RawMessage(nil), in.Input...)
-	p := &pendingPrompt{Prompt: in, answer: make(chan PromptDecision, 1)}
-	b.prompts[in.ID] = p
 	ttl := b.promptTTL
 	if ttl == 0 {
 		ttl = ApprovalTTL
 	}
+	wait, cancel := context.WithTimeout(ctx, ttl)
+	defer cancel()
+	p := &pendingPrompt{Prompt: in, answer: make(chan PromptDecision, 1), wait: wait}
+	b.prompts[in.ID] = p
 	b.mu.Unlock()
-	defer func() {
-		b.mu.Lock()
-		if b.prompts[in.ID] == p {
-			delete(b.prompts, in.ID)
-		}
-		b.mu.Unlock()
-	}()
-	timer := time.NewTimer(ttl)
-	defer timer.Stop()
+	var out PromptDecision
+	var err error
 	select {
-	case out := <-p.answer:
-		return out, nil
-	case <-ctx.Done():
-		return PromptDecision{}, ctx.Err()
+	case out = <-p.answer:
+	case <-wait.Done():
+		err = ctx.Err() // Expiry, unlike hook cancellation, is a normal retirement.
 	case <-b.ctx.Done():
-		return PromptDecision{}, b.ctx.Err()
-	case <-timer.C:
-		return PromptDecision{}, nil
+		err = b.ctx.Err()
 	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.prompts[in.ID] == p {
+		delete(b.prompts, in.ID)
+	}
+	// An answer committed under this same lock wins over cancellation. Never
+	// report success to a client and then discard its decision in the waiter.
+	select {
+	case out = <-p.answer:
+		err = nil
+	default:
+	}
+	return out, err
 }
 
 // SessionEnd retires prompts immediately. This single slow ticker covers ends
@@ -195,8 +201,9 @@ func (b *Broker) Prompts(ctx context.Context) ([]Prompt, error) {
 }
 func (b *Broker) answerPrompt(id string, allow bool) error {
 	p := b.prompts[id]
-	if p == nil {
-		return errors.New("prompt already answered")
+	if p == nil || p.wait.Err() != nil || b.ctx.Err() != nil {
+		delete(b.prompts, id)
+		return errors.New("prompt no longer waiting")
 	}
 	delete(b.prompts, id)
 	out := PromptDecision{Behavior: "deny", Message: "Denied from driga"}

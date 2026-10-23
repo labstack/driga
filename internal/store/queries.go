@@ -313,7 +313,14 @@ func scanSession(s scanner) (model.Session, error) {
 
 // Session returns a session by internal ID, or ErrNotFound.
 func (q *querier) Session(id int64) (model.Session, error) {
-	return scanSession(q.conn.QueryRowContext(q.ctx, "SELECT id,"+sessionColumns+" FROM sessions WHERE machine_id=? AND id=?", q.machineID, id))
+	return q.SessionScoped(id, q.localScope())
+}
+
+// SessionScoped resolves an internal ID within the selected machines.
+func (q *querier) SessionScoped(id int64, scope Scope) (model.Session, error) {
+	where, args := scope.where("machine_id")
+	args = append(args, id)
+	return scanSession(q.conn.QueryRowContext(q.ctx, "SELECT id,"+sessionColumns+" FROM sessions WHERE "+where+" AND id=?", args...))
 }
 
 // Sessions returns sessions matching filter, newest activity first.

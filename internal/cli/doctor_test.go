@@ -389,3 +389,23 @@ func TestDoctorDatabaseSizeBudget(t *testing.T) {
 	wal.Close()
 	requireCheck(t, Doctor(context.Background(), d), "storage:db", "warn", "")
 }
+
+func TestDoctorMalformedExcludeWarning(t *testing.T) {
+	d, _ := doctorFixture(t)
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte("exclude = ['foo[', '**/node_modules']\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d.Config = cfg
+	c := requireCheck(t, Doctor(context.Background(), d), "config", "warn", "")
+	if !strings.Contains(c.Detail, "exclude") || !strings.Contains(c.Detail, "foo[") || !strings.Contains(c.Detail, path) {
+		t.Fatal(c)
+	}
+	if len(cfg.Exclude) != 1 || cfg.Exclude[0] != "**/node_modules" {
+		t.Fatal(cfg.Exclude)
+	}
+}

@@ -20,11 +20,14 @@ func TestChatServerHTMLReplay(t *testing.T) {
 		{Seq: 3, Kind: "delta", MessageID: "a", Text: "lo**"},
 		{Seq: 4, Kind: "message", Message: &final},
 	}}
+	if got := renderChatMessage(store.ChatMessage{Role: "assistant", Status: "streaming", Text: "**streaming**"}); got.HTML != "" {
+		t.Fatal("streaming reset rendered Markdown", got.HTML)
+	}
 	got := renderChatState(state)
 	if got.Messages[0].HTML != "" || got.Messages[1].HTML != chat.MarkdownHTML(final.Text) {
 		t.Fatal(got.Messages)
 	}
-	if got.Events[1].HTML != chat.MarkdownHTML("**Hel") || got.Events[2].HTML != chat.MarkdownHTML("**Hello**") {
+	if got.Events[1].HTML != "" || got.Events[2].HTML != "" || got.Events[3].Message.HTML != chat.MarkdownHTML(final.Text) {
 		t.Fatal(got.Events)
 	}
 	if state.Events[0].Message.Text != "" {
@@ -32,7 +35,7 @@ func TestChatServerHTMLReplay(t *testing.T) {
 	}
 	// A reconnect can start in the middle of a stream, without an initial event.
 	state.Events = state.Events[2:3]
-	if got := renderChatState(state).Events[0].HTML; got != chat.MarkdownHTML(final.Text) {
+	if got := renderChatState(state).Events[0].HTML; got != "" {
 		t.Fatal(got)
 	}
 	state.Messages[1].Text = strings.Repeat("a", chat.MaxText+1024)

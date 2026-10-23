@@ -89,7 +89,10 @@ Later).
    and they disappear on restart.
    - Hook side, over the owner-only socket: register and wait, then retire.
    - Client side: `Prompts(ctx)` and `AnswerPrompt(ctx, id, allow)`.
-   - A prompt is answered at most once. Late answers get "already answered".
+   - A prompt is answered at most once. Late answers get "prompt no longer
+     waiting", including on the Chat card.
+     Removal and answering share the broker lock; a committed answer is delivered
+     even if the hook cancels at the same time.
    - A prompt is also retired when its session ends.
 4. **Inbox.** Each pending prompt is an inbox row on top of the existing
    "needs you" item for that session, showing the tool and input.
@@ -98,8 +101,12 @@ Later).
    - Web: Allow and Deny buttons, as authenticated POSTs with the existing
      Origin and CSRF checks.
 5. **Chat.**
-   - A read tool, `list_prompts`, shows tool names and inputs only when the
-     capture policy is `snippets`; otherwise the tool name only.
+   - Only action-enabled Chat turns register `list_prompts`. It shows tool names
+     and inputs only when the capture policy is `snippets`; otherwise the tool
+     name only.
+   - Chat reads inside the working directory run; reads elsewhere ask in
+     Confirm and Auto, and Full auto runs them. Read, Glob, Grep, LS and
+     NotebookRead stay out of `--allowedTools`; TodoWrite stays allowed.
    - An action tool, `answer_prompt(id, allow)`, goes through the phase 2
      gate:
      - Confirm: shows a card.

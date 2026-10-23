@@ -16,10 +16,7 @@ import (
 	"github.com/labstack/driga/internal/llm"
 )
 
-// Keep read authority explicit, including when the permission bridge is unavailable.
-var ReadBuiltins = []string{"Read", "Glob", "Grep", "LS", "TodoWrite", "NotebookRead"}
-
-var ReadTools = []string{"get_flow", "get_activity", "get_summary", "list_agents", "get_agent", "list_projects", "inspect_project", "list_inbox", "list_conflicts", "list_orphans", "get_machine", "list_machines", "inspect_setup", "list_cleanup_candidates", "list_prompts"}
+var ReadTools = []string{"get_flow", "get_activity", "get_summary", "list_agents", "get_agent", "list_projects", "inspect_project", "list_inbox", "list_conflicts", "list_orphans", "get_machine", "list_machines", "inspect_setup", "list_cleanup_candidates"}
 
 func readTool(name string) bool {
 	for _, t := range ReadTools {
@@ -33,7 +30,6 @@ func readTool(name string) bool {
 type Claude struct {
 	probeMu             sync.Mutex
 	probed              bool
-	warned              bool
 	cli                 llm.Claude
 	err                 error
 	DataDir, Executable string
@@ -62,14 +58,8 @@ func (a *Claude) Run(ctx context.Context, r Request, emit func(Delta) error) err
 	}
 	actions := !r.ReadOnly && r.Socket != "" && r.Token != "" && c.Require("permission-prompts") == nil
 	if !r.ReadOnly && r.Socket != "" && !actions && c.Require("permission-prompts") != nil {
-		a.probeMu.Lock()
-		warn := !a.warned
-		a.warned = true
-		a.probeMu.Unlock()
-		if warn {
-			if err := emit(Delta{Notice: "Chat stays read-only: " + c.Require("permission-prompts").Error()}); err != nil {
-				return err
-			}
+		if err := emit(Delta{Notice: "Chat stays read-only: " + c.Require("permission-prompts").Error()}); err != nil {
+			return err
 		}
 	}
 	dir := filepath.Join(a.DataDir, "tmp")
@@ -114,7 +104,9 @@ func (a *Claude) Run(ctx context.Context, r Request, emit func(Delta) error) err
 	nativeTools := ""
 	if actions {
 		nativeTools = "default"
-		tools = append(tools, ReadBuiltins...)
+		// Claude permits reads in cwd itself; pre-allowing read tools would
+		// also bypass the permission bridge for paths outside that directory.
+		tools = append(tools, "TodoWrite", "mcp__driga__list_prompts")
 	}
 	// --safe-mode also drops --mcp-config servers; empty setting sources keep
 	// user hooks, plugins and MCP out while the explicit driga server loads.
@@ -380,7 +372,7 @@ func (s *stream) validTool(name string) bool {
 		return true
 	}
 	switch name {
-	case "mcp__driga__answer_prompt", "mcp__driga__ack_inbox", "mcp__driga__jump", "mcp__driga__kill", "mcp__driga__cleanup", "mcp__driga__summarize", "mcp__driga__approve":
+	case "mcp__driga__list_prompts", "mcp__driga__answer_prompt", "mcp__driga__ack_inbox", "mcp__driga__jump", "mcp__driga__kill", "mcp__driga__cleanup", "mcp__driga__summarize", "mcp__driga__approve":
 		return true
 	}
 	return false

@@ -635,8 +635,8 @@ buttons or **m** in TUI navigate mode:
 
 | Mode | Runs without asking | Asks |
 |---|---|---|
-| Confirm | Reads | Every other call |
-| Auto | Auto allows reads, inbox acknowledgments, jumps and summaries, and allows Edit/Write only inside a git project working directory that is neither home, the driga data directory nor an ancestor of either, with no hidden components or agent instruction names (`claude*.md`, `agents*.md`, `gemini*.md`, `copilot-instructions.md`, case-insensitive) in the given or resolved relative path after trimming trailing dots and spaces, and always asks on colons. | Everything else asks |
+| Confirm | Driga read tools and reads inside the working directory | Reads elsewhere and every other call |
+| Auto | Auto allows driga read tools, reads inside the working directory, inbox acknowledgments, jumps and summaries, and allows Edit/Write only inside a git project working directory that is neither home, the driga data directory nor an ancestor of either, with no hidden components or agent instruction names (`claude*.md`, `agents*.md`, `gemini*.md`, `copilot-instructions.md`, case-insensitive) in the given or resolved relative path after trimming trailing dots and spaces, and always asks on colons. | Everything else asks |
 | Full auto | Everything | Nothing |
 
 Full auto requires confirmation and is shown in red with its remaining time.
@@ -649,19 +649,22 @@ An action card shows the tool, exact input, working directory, status, who decid
 and the result. Click **Allow** or **Deny** on the web. In TUI navigate mode,
 **y** allows and **n** denies the oldest pending card; while typing use **Alt+y**
 and **Alt+n**. The status line says **action waiting**. Stop denies pending cards
-before stopping the turn and queue. Unanswered cards expire after ten minutes.
+before stopping the turn and queue. Running allowed actions show
+**stopped · result unknown** until a later result arrives. Unanswered cards
+expire after ten minutes.
 Action log entries follow the conversation capture policy and retention. Tool,
 status and deciding actor survive a restart even when message bodies are not
 captured. Completed cards leave the bounded live buffer as new actions arrive;
 pending and running actions remain available until decided or completed.
 
-The explicit read allowlist includes driga’s read tools and Read, Glob, Grep, LS,
-TodoWrite and NotebookRead. Claude also detects its own read-only shell commands
-(such as `echo` and `cat`) and runs them without calling the permission bridge;
-reads are allowed in every mode. Other calls go through driga’s permission gate.
+The explicit allowlist includes driga’s read tools and TodoWrite. Read, Glob,
+Grep, LS and NotebookRead are not pre-allowed: reads inside the working directory
+run; reads elsewhere ask in Confirm and Auto. This also applies to read-only
+Bash commands such as `head /etc/hosts`. Full auto runs those reads without a
+card. Other calls go through driga’s permission gate.
 Chat uses `--tools default`, `--setting-sources ""` and `--strict-mcp-config` to
 keep user settings, hooks, plugins and other MCP servers out. If Claude lacks
-`--permission-prompts`, Chat stays read-only and explains why once.
+`--permission-prompts`, Chat stays read-only and explains why once per conversation.
 
 `driga ask` stays read-only: it has no action cards. The ordinary `driga mcp`
 server for your own agents also stays read-only. Chat’s private `mcp --chat`
@@ -833,7 +836,7 @@ to deny (`a` remains attach); Enter opens the full input. In the web inbox use
 Allow or Deny. Browser decisions require the authenticated session, Origin and
 CSRF token.
 
-Chat's `list_prompts` shows inputs only with `capture_text = "snippets"`;
+Action-enabled Chat's `list_prompts` shows inputs only with `capture_text = "snippets"`;
 other capture policies show tool metadata. `answer_prompt(id, allow)` uses the
 same action gate as other Chat actions: Confirm and Auto require a card;
 Full auto runs it immediately. The standalone `driga mcp` stays read-only.
