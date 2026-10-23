@@ -60,8 +60,8 @@ func safeMarkdownURL(value []byte) bool {
 	return false
 }
 
-// MarkdownHTML is the only producer of assistant HTML. Unsupported URL schemes
-// become escaped text, including relative URLs and protocol-relative references.
+// MarkdownHTML is the only producer of assistant HTML. Images and unsupported
+// URL schemes become escaped text, including relative and protocol-relative URLs.
 func MarkdownHTML(input string) string {
 	d := ParseMarkdown(input)
 	var blocked []ast.Node
@@ -83,7 +83,9 @@ func MarkdownHTML(input string) string {
 		default:
 			return ast.WalkContinue, nil
 		}
-		if !safeMarkdownURL(destination) {
+		// Images never load from assistant output: a remote image is a request
+		// a prompt-injected reply could use to exfiltrate data.
+		if _, image := n.(*ast.Image); image || !safeMarkdownURL(destination) {
 			blocked = append(blocked, n)
 			return ast.WalkSkipChildren, nil
 		}
@@ -104,7 +106,8 @@ func MarkdownHTML(input string) string {
 		if label != string(destination) {
 			label += " (" + MarkdownText(destination) + ")"
 		}
-		replacement := ast.NewString([]byte(label))
+		// The label was unescaped for display; escape it again for HTML.
+		replacement := ast.NewString([]byte(html.EscapeString(label)))
 		replacement.SetRaw(true)
 		parent := n.Parent()
 		parent.ReplaceChild(parent, n, replacement)

