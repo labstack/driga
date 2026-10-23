@@ -67,7 +67,7 @@ func TestChatSecurity(t *testing.T) {
 	if w := request(s, "GET", "/chat/api/send", s.token); w.Code != 405 {
 		t.Fatal(w.Code)
 	}
-	if w := request(s, "GET", "/chat", s.token); w.Code != 200 || !strings.Contains(w.Body.String(), "actions arrive in the next release") {
+	if w := request(s, "GET", "/chat", s.token); w.Code != 200 || !strings.Contains(w.Body.String(), `id="chat-mode-confirm"`) || strings.Contains(w.Body.String(), "actions arrive in the next release") {
 		t.Fatal(w.Code, w.Body)
 	}
 }
@@ -112,8 +112,8 @@ func TestChatSSEReplayAndEscaping(t *testing.T) {
 	}
 	cancel()
 	js := request(s, "GET", "/static/chat.js", s.token).Body.String()
-	if strings.Contains(js, "innerHTML") || !strings.Contains(js, "textContent") {
-		t.Fatal("agent output must use text nodes")
+	if !strings.Contains(js, "body.innerHTML=m.html") || strings.Contains(js, "function markdown(") || strings.Contains(js, "function inline(") {
+		t.Fatal("assistant HTML must come from the server renderer")
 	}
 	raw, _ := json.Marshal(state)
 	if strings.Contains(string(raw), "<script>") {
@@ -181,12 +181,12 @@ func TestChatSSEPartialsAndOrderedReplay(t *testing.T) {
 	}
 	scan := bufio.NewScanner(res.Body)
 	after := initial.Cursor
-	var deltas []chat.Event
+	var deltas []chatHTMLEvent
 	for scan.Scan() {
 		if !strings.HasPrefix(scan.Text(), "data: ") {
 			continue
 		}
-		var e chat.Event
+		var e chatHTMLEvent
 		if err := json.Unmarshal([]byte(strings.TrimPrefix(scan.Text(), "data: ")), &e); err != nil {
 			t.Fatal(err)
 		}
@@ -199,6 +199,9 @@ func TestChatSSEPartialsAndOrderedReplay(t *testing.T) {
 		after = e.Seq
 		if e.Kind == "delta" {
 			deltas = append(deltas, e)
+			if e.HTML != "" {
+				t.Fatalf("stream included Markdown HTML: %q", e.HTML)
+			}
 		}
 		if len(deltas) == 2 {
 			break
@@ -216,7 +219,7 @@ func TestChatSSEPartialsAndOrderedReplay(t *testing.T) {
 	replay := connect(deltas[0].Seq)
 	defer replay.Body.Close()
 	scan = bufio.NewScanner(replay.Body)
-	var got chat.Event
+	var got chatHTMLEvent
 	for scan.Scan() {
 		if strings.HasPrefix(scan.Text(), "data: ") {
 			if err := json.Unmarshal([]byte(strings.TrimPrefix(scan.Text(), "data: ")), &got); err != nil {
@@ -225,7 +228,7 @@ func TestChatSSEPartialsAndOrderedReplay(t *testing.T) {
 			break
 		}
 	}
-	if got.Seq != deltas[1].Seq || got.Kind != "delta" {
+	if got.Seq != deltas[1].Seq || got.Kind != "delta" || got.HTML != "" {
 		t.Fatal(got, scan.Err())
 	}
 	raw, _ := json.Marshal(got)

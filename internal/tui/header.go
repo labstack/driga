@@ -14,12 +14,6 @@ import (
 	"github.com/labstack/driga/internal/view"
 )
 
-func humanBytes(n uint64) string {
-	if n >= 1<<30 {
-		return fmt.Sprintf("%.1fG", float64(n)/(1<<30))
-	}
-	return fmt.Sprintf("%.1fM", float64(n)/(1<<20))
-}
 func duration(d time.Duration) string { return max(time.Duration(0), d).Round(time.Second).String() }
 func clean(s string) string {
 	return strings.Map(func(r rune) rune {
@@ -31,28 +25,16 @@ func clean(s string) string {
 }
 func truncate(s string, width int) string { return ansi.Truncate(s, max(1, width), "…") }
 func pack(parts []string, width int, separator string) string {
-	var lines []string
-	line := ""
-	for _, p := range parts {
-		p = truncate(clean(p), width)
-		if line != "" && lipgloss.Width(line+separator+p) > width {
-			lines = append(lines, line)
-			line = ""
-		}
-		if line != "" {
-			line += separator
-		}
-		line += p
+	cleaned := make([]string, len(parts))
+	for i, part := range parts {
+		cleaned[i] = clean(part)
 	}
-	if line != "" {
-		lines = append(lines, line)
-	}
-	return strings.Join(lines, "\n")
+	return styledPack(cleaned, width, separator)
 }
 func wrapText(text string, width int) string {
 	var lines []string
 	for _, line := range strings.Split(text, "\n") {
-		lines = append(lines, ansi.Hardwrap(clean(line), max(1, width), true))
+		lines = append(lines, ansi.Wrap(clean(line), max(1, width), ""))
 	}
 	return strings.Join(lines, "\n")
 }
@@ -116,7 +98,7 @@ func (m *app) header() string {
 	case "warning":
 		loadToken = "warn"
 	}
-	health := []string{headerGauge("mem", sample.MemUsed, sample.MemTotal, m.opts.NoColor), headerGauge("swap", sample.SwapUsed, sample.SwapTotal, m.opts.NoColor), "load " + view.TokenStyle(loadToken, m.opts.NoColor).Render(view.FormatLoad(sample.Load1, "%.1f")) + fmt.Sprintf("/%d", sample.Cores), "disk " + humanBytes(sample.DiskFree)}
+	health := []string{headerGauge("mem", sample.MemUsed, sample.MemTotal, m.opts.NoColor), headerGauge("swap", sample.SwapUsed, sample.SwapTotal, m.opts.NoColor), "load " + view.TokenStyle(loadToken, m.opts.NoColor).Render(view.FormatLoad(sample.Load1, "%.1f")) + fmt.Sprintf("/%d", sample.Cores), "disk " + view.HumanBytes(sample.DiskFree)}
 	right := strings.Join(health, "   ")
 	identity = strings.Join(identityParts, " · ")
 	if lipgloss.Width(identity)+lipgloss.Width(right)+2 <= m.width {
@@ -125,6 +107,9 @@ func (m *app) header() string {
 	return styledPack(append(identityParts, health...), m.width, "   ")
 }
 func (m *app) footer() string {
+	if m.help {
+		return truncate("↑↓/pgup/pgdown/wheel scroll · ?/esc close", m.width)
+	}
 	hints := []string{"0 Home", "m machine", "enter detail", "/ filter", "s sort", "g group by project", "o open terminal"}
 	if m.tab == flowTab {
 		hints = []string{"7 flow", "j/k session", "enter jump", "[/] family", "-/+ zoom", "tab needs", "C resume", "c Chat"}
@@ -139,6 +124,9 @@ func (m *app) footer() string {
 		hints = append(hints, "x/space ack")
 	}
 	if m.tab == 2 {
+		if r, ok := m.selected(); ok && r.prompt != nil {
+			hints = append(hints, "y allow / n deny")
+		}
 		hints = append(hints, "X ack all")
 	}
 	if m.tab == homeTab {
@@ -154,13 +142,37 @@ func (m *app) footer() string {
 		}
 	}
 	if m.tab == chatTab {
-		hints = []string{"ctrl+0 Home", "ctrl+n new", "ctrl+h history", "pgup/pgdown scroll", "esc Stop"}
+		// One line, most important first: hints that do not fit are dropped
+		// rather than wrapped, so the layout height never changes.
+		hints := []string{"c type", "m trust mode", "N tabs", "? help", "q quit"}
+		if m.chatInput.Focused() {
+			escape := "esc navigate"
+			if m.chatActive || m.pendingChat() != nil {
+				escape = "esc stop"
+			}
+			hints = []string{escape, "ctrl+enter send", "alt+N tabs", "alt+↑ edit last", "ctrl+x clear context"}
+		}
+		if m.pendingChat() != nil {
+			hint := "y/n allow/deny"
+			if m.chatInput.Focused() {
+				hint = "alt+y/alt+n allow/deny"
+			}
+			hints = append([]string{hint}, hints...)
+		}
+		line := ""
+		for _, hint := range hints {
+			next := hint
+			if line != "" {
+				next = line + " · " + hint
+			}
+			if ansi.StringWidth(next) > m.width {
+				break
+			}
+			line = next
+		}
+		return view.TokenStyle("muted", m.opts.NoColor).Render(line)
 	}
-	if m.tab == chatTab {
-		hints = append(hints, "ctrl+c quit")
-	} else {
-		hints = append(hints, "esc back", "? help", "q quit")
-	}
+	hints = append(hints, "esc back", "? help", "q quit")
 	if m.tab == 5 {
 		hints = append([]string{"x clean (confirm)", "r refresh candidates"}, hints...)
 	}
@@ -261,7 +273,7 @@ func (m *app) confirmationText() string {
 			lines = append(lines, fmt.Sprintf("%d  %s", pid, clean(idx[pid])))
 		}
 	}
-	lines = append(lines, "~reclaim "+humanBytes(o.RSSTotal)+" (RSS estimate)", "driga orphans kill "+o.ID)
+	lines = append(lines, "~reclaim "+view.HumanBytes(o.RSSTotal)+" (RSS estimate)", "driga orphans kill "+o.ID)
 	if c.kind == "force" {
 		lines[0] = "Really SIGKILL survivors? [y/N]"
 		lines[len(lines)-1] += " --force"
@@ -277,7 +289,7 @@ func (m *app) View() tea.View {
 		body = m.machineTable(body)
 	}
 	if len(m.rows) == 0 {
-		body = "No items"
+		body = m.emptyText()
 	}
 	if m.tab == homeTab {
 		lines := strings.Split(m.homeView(), "\n")
@@ -303,34 +315,33 @@ func (m *app) View() tea.View {
 		body = m.viewport.View()
 	}
 	if m.help {
-		body = wrapText("0 Home · 1–8 tabs · ↑/↓ or j/k move · enter detail · esc back\n7 Flow · 8 Chat · j/k session · enter jump · [/] family · -/+ zoom · tab needs · C resume · c Chat\nm cycle machine scope · / filter · enter apply · esc clear · s sort: state, age, mem, project · S summarize selected project\ng group by project · →/← expand/collapse families and worktrees\nx/space acknowledge Needs you / Inbox · X acknowledge all Inbox (confirm)\nclick select · click selected row to open · wheel scroll\npgup/pgdown scroll Home · k kill orphan (confirm) · K force (two confirmations)\no open terminal · ? close help · q / ctrl+c quit", m.width)
-		if m.tmuxTarget() != "" {
-			body += "\na attach tmux"
-		}
-		_, notes := m.intake()
-		if len(notes) > 0 {
-			body += "\n" + wrapText(strings.Join(notes, "\n"), m.width)
-		}
+		body = m.helpText()
+		lines := strings.Split(body, "\n")
+		m.helpOffset = min(m.helpOffset, max(0, len(lines)-m.bodyHeight()))
+		body = strings.Join(lines[m.helpOffset:], "\n")
 	}
 	if m.confirm != nil {
 		body = m.confirmationText()
 	}
 	if m.filtering {
 		body = m.filter.View() + "\n" + body
+
 	}
 	lines := strings.Split(body, "\n")
 	if len(lines) > m.bodyHeight() {
 		lines = lines[:m.bodyHeight()]
 	}
 	body = strings.Join(lines, "\n")
-	status := m.status
-	if m.tab == chatTab {
-		status = m.chatStatus
-	}
+	status := truncate(clean(m.status), m.width)
 	if m.busy && m.tab != chatTab {
-		status = "working… · " + status
+		status = truncate(clean("working… · "+m.status), m.width)
 	}
-	content := m.header() + "\n" + m.tabBar() + "\n" + strings.Repeat("─", m.width) + "\n" + body + "\n" + truncate(clean(status), m.width) + "\n" + m.footer()
+	if m.tab == chatTab {
+		status = m.chatStatusLine()
+	} else if m.filter.Value() != "" && !m.help && !m.detail && m.confirm == nil {
+		status = "Filter: " + truncate(clean(m.filter.Value()), max(1, m.width-20)) + " · esc clear"
+	}
+	content := m.header() + "\n" + m.tabBar() + "\n" + strings.Repeat("─", m.width) + "\n" + body + "\n" + status + "\n" + m.footer()
 	lines = strings.Split(content, "\n")
 	for i, line := range lines {
 		// Normalize before measuring so tabs cannot shift borders or escape in
@@ -341,4 +352,35 @@ func (m *app) View() tea.View {
 	v.AltScreen = true
 	v.MouseMode = tea.MouseModeCellMotion
 	return v
+}
+
+func (m *app) emptyText() string {
+	if m.filter.Value() != "" {
+		return "No matching items · esc clear filter"
+	}
+	text := map[int]string{
+		0: "No agents · start an agent session to see its state here.",
+		1: "No projects · collected agent sessions appear here by project.",
+		2: "No inbox items · prompts and completions appear here.",
+		3: "No orphan processes · idle helper trees appear here for review.",
+		4: "No machine samples · waiting for collection.",
+		5: "No cleanup candidates · r refresh candidates.",
+	}
+	return wrapText(text[m.tab], m.width)
+}
+
+func (m *app) helpText() string {
+	body := wrapText("0 Home · 1–8 tabs · ↑/↓ or j/k move · enter detail · esc back\nChat: esc stops a reply; otherwise navigate · c/enter type · alt+0–8 tabs\nChat: y/n allow/deny · alt+y/alt+n while typing · m trust mode (navigate)\nctrl+enter send · ctrl+n new · ctrl+h history · ctrl+t tools · ctrl+x clear context\n7 Flow · 8 Chat · j/k session · enter jump · [/] family · -/+ zoom · tab needs · C resume · c Chat\nm cycle machine scope · / filter · enter apply · esc clear · s sort: state, age, mem, project · S summarize selected project\ng group by project · →/← expand/collapse families and worktrees\nx/space acknowledge Needs you / Inbox · X acknowledge all Inbox (confirm)\nclick select · click selected row to open · wheel scroll\npgup/pgdown scroll Home · k kill orphan (confirm) · K force (two confirmations)\no open terminal · ? close help · q / ctrl+c quit", m.width)
+	if m.tmuxTarget() != "" {
+		body += "\na attach tmux"
+	}
+	_, notes := m.intake()
+	if len(notes) > 0 {
+		body += "\n" + wrapText(strings.Join(notes, "\n"), m.width)
+	}
+	return body
+}
+func (m *app) scrollHelp(delta int) {
+	limit := max(0, len(strings.Split(m.helpText(), "\n"))-m.bodyHeight())
+	m.helpOffset = min(max(0, m.helpOffset+delta), limit)
 }

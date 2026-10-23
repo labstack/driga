@@ -6,7 +6,7 @@
     "rss_bytes": 83886080,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "claude",
+    "cmdline": "claude", "argv": ["claude"],
     "exe": "/opt/heldout/bin/claude",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-000"
   },
@@ -17,7 +17,7 @@
     "rss_bytes": 50331648,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-000"
   },
@@ -28,7 +28,7 @@
     "rss_bytes": 66060288,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-000-branch-001"
   },
@@ -39,7 +39,7 @@
     "rss_bytes": 65011712,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "claude",
+    "cmdline": "claude", "argv": ["claude"],
     "exe": "/opt/heldout/bin/claude",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-001"
   },
@@ -50,7 +50,7 @@
     "rss_bytes": 87031808,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-001"
   },
@@ -61,7 +61,7 @@
     "rss_bytes": 75497472,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-001-branch-001"
   },
@@ -72,7 +72,7 @@
     "rss_bytes": 102760448,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "claude",
+    "cmdline": "claude", "argv": ["claude"],
     "exe": "/opt/heldout/bin/claude",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-002"
   },
@@ -83,7 +83,7 @@
     "rss_bytes": 85983232,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-002"
   },
@@ -94,7 +94,7 @@
     "rss_bytes": 61865984,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-002-branch-001"
   },
@@ -105,7 +105,7 @@
     "rss_bytes": 62914560,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "claude",
+    "cmdline": "claude", "argv": ["claude"],
     "exe": "/opt/heldout/bin/claude",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-003"
   },
@@ -116,7 +116,7 @@
     "rss_bytes": 77594624,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-003"
   },
@@ -127,7 +127,7 @@
     "rss_bytes": 56623104,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-003-branch-001"
   },
@@ -138,7 +138,7 @@
     "rss_bytes": 52428800,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "claude",
+    "cmdline": "claude", "argv": ["claude"],
     "exe": "/opt/heldout/bin/claude",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-004"
   },
@@ -149,7 +149,7 @@
     "rss_bytes": 77594624,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-004"
   },
@@ -160,7 +160,7 @@
     "rss_bytes": 53477376,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-004-branch-001"
   },
@@ -171,7 +171,7 @@
     "rss_bytes": 53477376,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "claude",
+    "cmdline": "claude", "argv": ["claude"],
     "exe": "/opt/heldout/bin/claude",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-005"
   },
@@ -182,7 +182,7 @@
     "rss_bytes": 61865984,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-005"
   },
@@ -193,7 +193,7 @@
     "rss_bytes": 54525952,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-005-branch-001"
   },
@@ -204,7 +204,7 @@
     "rss_bytes": 77594624,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "claude",
+    "cmdline": "claude", "argv": ["claude"],
     "exe": "/opt/heldout/bin/claude",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-006"
   },
@@ -215,7 +215,7 @@
     "rss_bytes": 99614720,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-006"
   },
@@ -226,7 +226,7 @@
     "rss_bytes": 97517568,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-006-branch-001"
   },
@@ -237,7 +237,7 @@
     "rss_bytes": 74448896,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "claude",
+    "cmdline": "claude", "argv": ["claude"],
     "exe": "/opt/heldout/bin/claude",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-007"
   },
@@ -248,7 +248,7 @@
     "rss_bytes": 81788928,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-007"
   },
@@ -259,7 +259,7 @@
     "rss_bytes": 77594624,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-007-branch-001"
   },
@@ -270,7 +270,7 @@
     "rss_bytes": 100663296,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "claude",
+    "cmdline": "claude", "argv": ["claude"],
     "exe": "/opt/heldout/bin/claude",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-008"
   },
@@ -281,7 +281,7 @@
     "rss_bytes": 58720256,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-008"
   },
@@ -292,7 +292,7 @@
     "rss_bytes": 100663296,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-008-branch-001"
   },
@@ -303,7 +303,7 @@
     "rss_bytes": 42991616,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "claude",
+    "cmdline": "claude", "argv": ["claude"],
     "exe": "/opt/heldout/bin/claude",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-009"
   },
@@ -314,7 +314,7 @@
     "rss_bytes": 82837504,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-009"
   },
@@ -325,7 +325,7 @@
     "rss_bytes": 97517568,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-009-branch-001"
   },
@@ -336,7 +336,7 @@
     "rss_bytes": 103809024,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "claude",
+    "cmdline": "claude", "argv": ["claude"],
     "exe": "/opt/heldout/bin/claude",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-010"
   },
@@ -347,7 +347,7 @@
     "rss_bytes": 44040192,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-010"
   },
@@ -358,7 +358,7 @@
     "rss_bytes": 96468992,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-010-branch-001"
   },
@@ -369,7 +369,7 @@
     "rss_bytes": 70254592,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "claude",
+    "cmdline": "claude", "argv": ["claude"],
     "exe": "/opt/heldout/bin/claude",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-011"
   },
@@ -380,7 +380,7 @@
     "rss_bytes": 59768832,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-011"
   },
@@ -391,7 +391,7 @@
     "rss_bytes": 101711872,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-011-branch-001"
   },
@@ -402,7 +402,7 @@
     "rss_bytes": 52428800,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "claude",
+    "cmdline": "claude", "argv": ["claude"],
     "exe": "/opt/heldout/bin/claude",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-012"
   },
@@ -413,7 +413,7 @@
     "rss_bytes": 67108864,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-012"
   },
@@ -424,7 +424,7 @@
     "rss_bytes": 77594624,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-012-branch-001"
   },
@@ -435,7 +435,7 @@
     "rss_bytes": 82837504,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "claude",
+    "cmdline": "claude", "argv": ["claude"],
     "exe": "/opt/heldout/bin/claude",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-013"
   },
@@ -446,7 +446,7 @@
     "rss_bytes": 41943040,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-013"
   },
@@ -457,7 +457,7 @@
     "rss_bytes": 77594624,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-013-branch-001"
   },
@@ -468,7 +468,7 @@
     "rss_bytes": 46137344,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "claude",
+    "cmdline": "claude", "argv": ["claude"],
     "exe": "/opt/heldout/bin/claude",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-014"
   },
@@ -479,7 +479,7 @@
     "rss_bytes": 88080384,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-014"
   },
@@ -490,7 +490,7 @@
     "rss_bytes": 48234496,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-014-branch-001"
   },
@@ -501,7 +501,7 @@
     "rss_bytes": 45088768,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "claude",
+    "cmdline": "claude", "argv": ["claude"],
     "exe": "/opt/heldout/bin/claude",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-015"
   },
@@ -512,7 +512,7 @@
     "rss_bytes": 82837504,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-015"
   },
@@ -523,7 +523,7 @@
     "rss_bytes": 60817408,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-015-branch-001"
   },
@@ -534,7 +534,7 @@
     "rss_bytes": 94371840,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "claude",
+    "cmdline": "claude", "argv": ["claude"],
     "exe": "/opt/heldout/bin/claude",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-016"
   },
@@ -545,7 +545,7 @@
     "rss_bytes": 97517568,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-016"
   },
@@ -556,7 +556,7 @@
     "rss_bytes": 99614720,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-016-branch-001"
   },
@@ -567,7 +567,7 @@
     "rss_bytes": 59768832,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "claude",
+    "cmdline": "claude", "argv": ["claude"],
     "exe": "/opt/heldout/bin/claude",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-017"
   },
@@ -578,7 +578,7 @@
     "rss_bytes": 53477376,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-017"
   },
@@ -589,7 +589,7 @@
     "rss_bytes": 62914560,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-017-branch-001"
   },
@@ -600,7 +600,7 @@
     "rss_bytes": 62914560,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "claude",
+    "cmdline": "claude", "argv": ["claude"],
     "exe": "/opt/heldout/bin/claude",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-018"
   },
@@ -611,7 +611,7 @@
     "rss_bytes": 101711872,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-018"
   },
@@ -622,7 +622,7 @@
     "rss_bytes": 80740352,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-018-branch-001"
   },
@@ -633,7 +633,7 @@
     "rss_bytes": 88080384,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "claude",
+    "cmdline": "claude", "argv": ["claude"],
     "exe": "/opt/heldout/bin/claude",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-019"
   },
@@ -644,7 +644,7 @@
     "rss_bytes": 87031808,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-019"
   },
@@ -655,7 +655,7 @@
     "rss_bytes": 78643200,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-019-branch-001"
   },
@@ -666,7 +666,7 @@
     "rss_bytes": 102760448,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "claude",
+    "cmdline": "claude", "argv": ["claude"],
     "exe": "/opt/heldout/bin/claude",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-020"
   },
@@ -677,7 +677,7 @@
     "rss_bytes": 45088768,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-020"
   },
@@ -688,7 +688,7 @@
     "rss_bytes": 84934656,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-020-branch-001"
   },
@@ -699,7 +699,7 @@
     "rss_bytes": 101711872,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "claude",
+    "cmdline": "claude", "argv": ["claude"],
     "exe": "/opt/heldout/bin/claude",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-021"
   },
@@ -710,7 +710,7 @@
     "rss_bytes": 90177536,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-021"
   },
@@ -721,7 +721,7 @@
     "rss_bytes": 93323264,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-021-branch-001"
   },
@@ -732,7 +732,7 @@
     "rss_bytes": 97517568,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "claude",
+    "cmdline": "claude", "argv": ["claude"],
     "exe": "/opt/heldout/bin/claude",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-022"
   },
@@ -743,7 +743,7 @@
     "rss_bytes": 65011712,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-022"
   },
@@ -754,7 +754,7 @@
     "rss_bytes": 96468992,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-022-branch-001"
   },
@@ -765,7 +765,7 @@
     "rss_bytes": 78643200,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "claude",
+    "cmdline": "claude", "argv": ["claude"],
     "exe": "/opt/heldout/bin/claude",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-023"
   },
@@ -776,7 +776,7 @@
     "rss_bytes": 91226112,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-023"
   },
@@ -787,7 +787,7 @@
     "rss_bytes": 77594624,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-023-branch-001"
   },
@@ -798,7 +798,7 @@
     "rss_bytes": 45088768,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "claude",
+    "cmdline": "claude", "argv": ["claude"],
     "exe": "/opt/heldout/bin/claude",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-024"
   },
@@ -809,7 +809,7 @@
     "rss_bytes": 60817408,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-024"
   },
@@ -820,7 +820,7 @@
     "rss_bytes": 57671680,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-024-branch-001"
   },
@@ -831,7 +831,7 @@
     "rss_bytes": 85983232,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "claude",
+    "cmdline": "claude", "argv": ["claude"],
     "exe": "/opt/heldout/bin/claude",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-025"
   },
@@ -842,7 +842,7 @@
     "rss_bytes": 94371840,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-025"
   },
@@ -853,7 +853,7 @@
     "rss_bytes": 95420416,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-025-branch-001"
   },
@@ -864,7 +864,7 @@
     "rss_bytes": 76546048,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "claude",
+    "cmdline": "claude", "argv": ["claude"],
     "exe": "/opt/heldout/bin/claude",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-026"
   },
@@ -875,7 +875,7 @@
     "rss_bytes": 88080384,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-026"
   },
@@ -886,7 +886,7 @@
     "rss_bytes": 92274688,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-026-branch-001"
   },
@@ -897,7 +897,7 @@
     "rss_bytes": 78643200,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "claude",
+    "cmdline": "claude", "argv": ["claude"],
     "exe": "/opt/heldout/bin/claude",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-027"
   },
@@ -908,7 +908,7 @@
     "rss_bytes": 55574528,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-027"
   },
@@ -919,7 +919,7 @@
     "rss_bytes": 53477376,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-027-branch-001"
   },
@@ -930,7 +930,7 @@
     "rss_bytes": 57671680,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "claude",
+    "cmdline": "claude", "argv": ["claude"],
     "exe": "/opt/heldout/bin/claude",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-028"
   },
@@ -941,7 +941,7 @@
     "rss_bytes": 92274688,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-028"
   },
@@ -952,7 +952,7 @@
     "rss_bytes": 90177536,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-028-branch-001"
   },
@@ -963,7 +963,7 @@
     "rss_bytes": 80740352,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "claude",
+    "cmdline": "claude", "argv": ["claude"],
     "exe": "/opt/heldout/bin/claude",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-029"
   },
@@ -974,7 +974,7 @@
     "rss_bytes": 68157440,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-029"
   },
@@ -985,7 +985,7 @@
     "rss_bytes": 101711872,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-029-branch-001"
   },
@@ -996,7 +996,7 @@
     "rss_bytes": 45088768,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "claude",
+    "cmdline": "claude", "argv": ["claude"],
     "exe": "/opt/heldout/bin/claude",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-030"
   },
@@ -1007,7 +1007,7 @@
     "rss_bytes": 77594624,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-030"
   },
@@ -1018,7 +1018,7 @@
     "rss_bytes": 95420416,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-030-branch-001"
   },
@@ -1029,7 +1029,7 @@
     "rss_bytes": 94371840,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "claude",
+    "cmdline": "claude", "argv": ["claude"],
     "exe": "/opt/heldout/bin/claude",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-031"
   },
@@ -1040,7 +1040,7 @@
     "rss_bytes": 100663296,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-031"
   },
@@ -1051,7 +1051,7 @@
     "rss_bytes": 42991616,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-031-branch-001"
   },
@@ -1062,7 +1062,7 @@
     "rss_bytes": 71303168,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "claude",
+    "cmdline": "claude", "argv": ["claude"],
     "exe": "/opt/heldout/bin/claude",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-032"
   },
@@ -1073,7 +1073,7 @@
     "rss_bytes": 51380224,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-032"
   },
@@ -1084,7 +1084,7 @@
     "rss_bytes": 87031808,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-032-branch-001"
   },
@@ -1095,7 +1095,7 @@
     "rss_bytes": 74448896,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "claude",
+    "cmdline": "claude", "argv": ["claude"],
     "exe": "/opt/heldout/bin/claude",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-033"
   },
@@ -1106,7 +1106,7 @@
     "rss_bytes": 50331648,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-033"
   },
@@ -1117,7 +1117,7 @@
     "rss_bytes": 79691776,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-033-branch-001"
   },
@@ -1128,7 +1128,7 @@
     "rss_bytes": 51380224,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "claude",
+    "cmdline": "claude", "argv": ["claude"],
     "exe": "/opt/heldout/bin/claude",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-034"
   },
@@ -1139,7 +1139,7 @@
     "rss_bytes": 98566144,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-034"
   },
@@ -1150,7 +1150,7 @@
     "rss_bytes": 88080384,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-034-branch-001"
   },
@@ -1161,7 +1161,7 @@
     "rss_bytes": 55574528,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "claude",
+    "cmdline": "claude", "argv": ["claude"],
     "exe": "/opt/heldout/bin/claude",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-035"
   },
@@ -1172,7 +1172,7 @@
     "rss_bytes": 84934656,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-035"
   },
@@ -1183,7 +1183,7 @@
     "rss_bytes": 87031808,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-035-branch-001"
   },
@@ -1194,7 +1194,7 @@
     "rss_bytes": 89128960,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "claude",
+    "cmdline": "claude", "argv": ["claude"],
     "exe": "/opt/heldout/bin/claude",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-036"
   },
@@ -1205,7 +1205,7 @@
     "rss_bytes": 68157440,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-036"
   },
@@ -1216,7 +1216,7 @@
     "rss_bytes": 55574528,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-036-branch-001"
   },
@@ -1227,7 +1227,7 @@
     "rss_bytes": 67108864,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "claude",
+    "cmdline": "claude", "argv": ["claude"],
     "exe": "/opt/heldout/bin/claude",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-037"
   },
@@ -1238,7 +1238,7 @@
     "rss_bytes": 59768832,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-037"
   },
@@ -1249,7 +1249,7 @@
     "rss_bytes": 82837504,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-037-branch-001"
   },
@@ -1260,7 +1260,7 @@
     "rss_bytes": 48234496,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "claude",
+    "cmdline": "claude", "argv": ["claude"],
     "exe": "/opt/heldout/bin/claude",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-038"
   },
@@ -1271,7 +1271,7 @@
     "rss_bytes": 83886080,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-038"
   },
@@ -1282,7 +1282,7 @@
     "rss_bytes": 62914560,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-038-branch-001"
   },
@@ -1293,7 +1293,7 @@
     "rss_bytes": 94371840,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "claude",
+    "cmdline": "claude", "argv": ["claude"],
     "exe": "/opt/heldout/bin/claude",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-039"
   },
@@ -1304,7 +1304,7 @@
     "rss_bytes": 42991616,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-039"
   },
@@ -1315,7 +1315,7 @@
     "rss_bytes": 71303168,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-039-branch-001"
   },
@@ -1326,7 +1326,7 @@
     "rss_bytes": 103809024,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "claude",
+    "cmdline": "claude", "argv": ["claude"],
     "exe": "/opt/heldout/bin/claude",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-040"
   },
@@ -1337,7 +1337,7 @@
     "rss_bytes": 82837504,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-040"
   },
@@ -1348,7 +1348,7 @@
     "rss_bytes": 54525952,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-040-branch-001"
   },
@@ -1359,7 +1359,7 @@
     "rss_bytes": 70254592,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "claude",
+    "cmdline": "claude", "argv": ["claude"],
     "exe": "/opt/heldout/bin/claude",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-041"
   },
@@ -1370,7 +1370,7 @@
     "rss_bytes": 53477376,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-041"
   },
@@ -1381,7 +1381,7 @@
     "rss_bytes": 47185920,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-041-branch-001"
   },
@@ -1392,7 +1392,7 @@
     "rss_bytes": 92274688,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "claude",
+    "cmdline": "claude", "argv": ["claude"],
     "exe": "/opt/heldout/bin/claude",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-042"
   },
@@ -1403,7 +1403,7 @@
     "rss_bytes": 48234496,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-042"
   },
@@ -1414,7 +1414,7 @@
     "rss_bytes": 51380224,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-042-branch-001"
   },
@@ -1425,7 +1425,7 @@
     "rss_bytes": 48234496,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "claude",
+    "cmdline": "claude", "argv": ["claude"],
     "exe": "/opt/heldout/bin/claude",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-043"
   },
@@ -1436,7 +1436,7 @@
     "rss_bytes": 96468992,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-043"
   },
@@ -1447,7 +1447,7 @@
     "rss_bytes": 73400320,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-043-branch-001"
   },
@@ -1458,7 +1458,7 @@
     "rss_bytes": 56623104,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "claude",
+    "cmdline": "claude", "argv": ["claude"],
     "exe": "/opt/heldout/bin/claude",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-044"
   },
@@ -1469,7 +1469,7 @@
     "rss_bytes": 48234496,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-044"
   },
@@ -1480,7 +1480,7 @@
     "rss_bytes": 70254592,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-044-branch-001"
   },
@@ -1491,7 +1491,7 @@
     "rss_bytes": 59768832,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "claude",
+    "cmdline": "claude", "argv": ["claude"],
     "exe": "/opt/heldout/bin/claude",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-045"
   },
@@ -1502,7 +1502,7 @@
     "rss_bytes": 92274688,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-045"
   },
@@ -1513,7 +1513,7 @@
     "rss_bytes": 55574528,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-045-branch-001"
   },
@@ -1524,7 +1524,7 @@
     "rss_bytes": 60817408,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "claude",
+    "cmdline": "claude", "argv": ["claude"],
     "exe": "/opt/heldout/bin/claude",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-046"
   },
@@ -1535,7 +1535,7 @@
     "rss_bytes": 44040192,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-046"
   },
@@ -1546,7 +1546,7 @@
     "rss_bytes": 92274688,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-046-branch-001"
   },
@@ -1557,7 +1557,7 @@
     "rss_bytes": 100663296,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "claude",
+    "cmdline": "claude", "argv": ["claude"],
     "exe": "/opt/heldout/bin/claude",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-047"
   },
@@ -1568,7 +1568,7 @@
     "rss_bytes": 73400320,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-047"
   },
@@ -1579,7 +1579,7 @@
     "rss_bytes": 98566144,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-047-branch-001"
   },
@@ -1590,7 +1590,7 @@
     "rss_bytes": 68157440,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "claude",
+    "cmdline": "claude", "argv": ["claude"],
     "exe": "/opt/heldout/bin/claude",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-048"
   },
@@ -1601,7 +1601,7 @@
     "rss_bytes": 91226112,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-048"
   },
@@ -1612,7 +1612,7 @@
     "rss_bytes": 55574528,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-048-branch-001"
   },
@@ -1623,7 +1623,7 @@
     "rss_bytes": 50331648,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "claude",
+    "cmdline": "claude", "argv": ["claude"],
     "exe": "/opt/heldout/bin/claude",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-049"
   },
@@ -1634,7 +1634,7 @@
     "rss_bytes": 54525952,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-049"
   },
@@ -1645,7 +1645,7 @@
     "rss_bytes": 88080384,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/estuary/checkouts/grove-049-branch-001"
   }

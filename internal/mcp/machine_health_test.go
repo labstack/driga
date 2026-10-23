@@ -15,10 +15,10 @@ func TestMachineLeakFieldsCLIParity(t *testing.T) {
 	st, _ := fixture(t)
 	t.Setenv("PATH", t.TempDir())
 	at := time.Now().UTC().Truncate(time.Hour).Add(-4 * time.Hour)
-	ps := []model.Proc{{PID: 100, Cmdline: "codex app-server", StartTime: at.Add(-time.Hour)}}
+	ps := []model.Proc{{PID: 100, Cmdline: "codex app-server", Argv: []string{"codex", "app-server"}, StartTime: at.Add(-time.Hour)}}
 	for i := range 3 {
 		now := at.Add(time.Duration(i) * 80 * time.Minute)
-		ps = append(ps, model.Proc{PID: int32(i + 1), PPID: 100, Cmdline: "node /opt/codegraph/dist/index.js", StartTime: now, RSS: 100})
+		ps = append(ps, model.Proc{PID: int32(i + 1), PPID: 100, Cmdline: "node /opt/codegraph/dist/index.js", Argv: []string{"node", "/opt/codegraph/dist/index.js"}, StartTime: now, RSS: 100})
 		v := derive.MCPServers(ps, nil, now)
 		if err := st.Tx(context.Background(), func(tx *store.Tx) error {
 			if err := tx.ObserveMCP(now, v.Samples); err != nil {
@@ -73,7 +73,7 @@ func TestMachineWholeHostCLIParity(t *testing.T) {
 		if err := tx.InsertSample(model.MachineSample{TS: at, MemUsed: 8 << 30, MemCompressed: 2 << 30, PressureLevel: "critical"}); err != nil {
 			return err
 		}
-		return tx.ReplaceProcs([]model.Proc{{PID: 42, Exe: "/bin/claude", StartTime: at, RSS: 10, Footprint: 30, MemoryMeasure: "physical_footprint", CPUPercent: 10}, {PID: 43, PPID: 42, Cmdline: "node /opt/codegraph/dist/index.js", StartTime: at.Add(time.Second), Exe: "/bin/worker", RSS: 20, Footprint: 50, MemoryMeasure: "physical_footprint", CPUPercent: 70}, {PID: 45, PPID: 42, Cmdline: "node /opt/codegraph/dist/index.js", StartTime: at.Add(2 * time.Second), Exe: "/bin/worker", RSS: 20}, {PID: 44, Exe: "/Applications/Browser.app/Contents/MacOS/Browser", RSS: 90, MemoryMeasure: "rss", CPUPercent: 5}})
+		return tx.ReplaceProcs([]model.Proc{{PID: 42, Exe: "/bin/claude", StartTime: at, RSS: 10, Footprint: 30, MemoryMeasure: "physical_footprint", CPUPercent: 10}, {PID: 43, PPID: 42, Cmdline: "node /opt/codegraph/dist/index.js", Argv: []string{"node", "/opt/codegraph/dist/index.js"}, StartTime: at.Add(time.Second), Exe: "/bin/worker", RSS: 20, Footprint: 50, MemoryMeasure: "physical_footprint", CPUPercent: 70}, {PID: 45, PPID: 42, Cmdline: "node /opt/codegraph/dist/index.js", Argv: []string{"node", "/opt/codegraph/dist/index.js"}, StartTime: at.Add(2 * time.Second), Exe: "/bin/worker", RSS: 20}, {PID: 44, Exe: "/Applications/Browser.app/Contents/MacOS/Browser", RSS: 90, MemoryMeasure: "rss", CPUPercent: 5}})
 	}); err != nil {
 		t.Fatal(err)
 	}

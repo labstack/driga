@@ -15,6 +15,7 @@ import (
 	"io/fs"
 	"net"
 	"net/http"
+	"path"
 	"strings"
 	"sync"
 	"time"
@@ -44,9 +45,12 @@ type Options struct {
 	Host          string
 	Machine       string
 	CleanupList   func(context.Context) ([]cleanup.Candidate, error)
+	Activity      func(bool)
 }
 
 type Server struct {
+	routes          *http.ServeMux
+	origin          http.CrossOriginProtection
 	source          Source
 	opts            Options
 	token           string
@@ -56,7 +60,7 @@ type Server struct {
 	static          http.Handler
 	themeCSS        string
 	mu              sync.Mutex
-	clients         map[chan struct{}]bool
+	clients         map[chan struct{}]bool // Value records a pending data refresh.
 	ready           chan struct{}
 	cacheMu         sync.Mutex
 	cache           map[snapshotKey]cachedSnapshot
@@ -101,12 +105,14 @@ func New(source Source, opts Options) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Server{
+	s := &Server{
 		source: source, opts: opts, token: base64.RawURLEncoding.EncodeToString(token[:32]), csrf: base64.RawURLEncoding.EncodeToString(token[32:]), chatStreams: make(chan struct{}, 32),
 		themeCSS: view.ThemeCSS(), templates: t, static: http.StripPrefix("/static/", http.FileServer(http.FS(static))),
 		clients: map[chan struct{}]bool{}, ready: make(chan struct{}),
 		cache: map[snapshotKey]cachedSnapshot{}, cookieName: instanceCookie(opts.Host), sseWriteTimeout: 10 * time.Second, watchInterval: time.Second, refreshInterval: 15 * time.Second,
-	}, nil
+	}
+	s.routes = s.newRoutes()
+	return s, nil
 }
 
 func (s *Server) URL() string { return "http://" + s.opts.Host + "/?token=" + s.token }
@@ -131,16 +137,19 @@ func (s *Server) Watch(ctx context.Context) {
 			if activity, ok := s.source.(interface{ SetActive(bool) }); ok {
 				activity.SetActive(active)
 			}
-			if err != nil {
-				continue
+			if s.opts.Activity != nil {
+				s.opts.Activity(active)
 			}
-			if initialized && next == version && time.Since(lastRefresh) < s.refreshInterval {
-				continue
+			refresh := err == nil && (!initialized || next != version || time.Since(lastRefresh) >= s.refreshInterval)
+			if refresh {
+				version, initialized = next, true
+				lastRefresh = time.Now()
 			}
-			version, initialized = next, true
-			lastRefresh = time.Now()
 			s.mu.Lock()
 			for ch := range s.clients {
+				// Keep a refresh pending if a slow client still has an earlier
+				// tick queued. Every tick also schedules that client's tail.
+				s.clients[ch] = s.clients[ch] || refresh
 				select {
 				case ch <- struct{}{}:
 				default:
@@ -196,30 +205,47 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unauthorized", 401)
 		return
 	}
-	if strings.HasPrefix(r.URL.Path, "/chat/api/") {
-		s.chatAPI(w, r)
+	// Match the decoded path, as the dashboard routes have always done.
+	if r.URL.RawPath != "" {
+		r = r.Clone(r.Context())
+		r.URL.RawPath = ""
+	}
+	// ServeMux redirects noncanonical paths before matching. These routes retain
+	// their direct responses (including API errors and static file handling).
+	clean := path.Clean(r.URL.Path)
+	if clean != r.URL.Path && clean+"/" != r.URL.Path {
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/chat/api/"):
+			s.chatAPI(w, r)
+		case strings.HasPrefix(r.URL.Path, "/static/"):
+			s.static.ServeHTTP(w, r)
+		default:
+			s.page(w, r)
+		}
 		return
 	}
-	if r.URL.Path == "/static/theme.css" {
+	s.routes.ServeHTTP(w, r)
+}
+
+func (s *Server) newRoutes() *http.ServeMux {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /static", s.page)
+	mux.HandleFunc("GET /chat/api", s.page)
+	mux.HandleFunc("GET /chat/api/", s.chatAPI)
+	for _, path := range []string{"/chat/api/prompt-answer", "/chat/api/new", "/chat/api/send", "/chat/api/stop", "/chat/api/mode", "/chat/api/decide"} {
+		mux.HandleFunc("POST "+path, s.chatAPI)
+	}
+	mux.HandleFunc("GET /static/theme.css", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/css; charset=utf-8")
 		if r.Method != http.MethodHead {
 			_, _ = fmt.Fprint(w, s.themeCSS)
 		}
-		return
-	}
-	if strings.HasPrefix(r.URL.Path, "/static/") {
-		s.static.ServeHTTP(w, r)
-		return
-	}
-	if r.URL.Path == "/flow.json" {
-		s.flowJSON(w, r)
-		return
-	}
-	if r.URL.Path == "/events" {
-		s.events(w, r)
-		return
-	}
-	s.page(w, r)
+	})
+	mux.Handle("GET /static/", s.static)
+	mux.HandleFunc("GET /flow.json", s.flowJSON)
+	mux.HandleFunc("GET /events", s.events)
+	mux.HandleFunc("GET /", s.page)
+	return mux
 }
 
 func (s *Server) validToken(token string) bool {
@@ -238,7 +264,7 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 	}
 	ch := make(chan struct{}, 1)
 	s.mu.Lock()
-	s.clients[ch] = true
+	s.clients[ch] = false
 	s.mu.Unlock()
 	defer func() { s.mu.Lock(); delete(s.clients, ch); s.mu.Unlock() }()
 	writePayload := func(event, payload string) error {
@@ -255,7 +281,7 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 	seen := map[string]bool{}
 	var lastTail time.Time
 	sendTail := func() error {
-		if !lastTail.IsZero() && time.Since(lastTail) < time.Second {
+		if !lastTail.IsZero() && time.Since(lastTail) < s.watchInterval {
 			return nil
 		}
 		clone := r.Clone(r.Context())
@@ -298,21 +324,24 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 	if err := sendTail(); err != nil {
 		return
 	}
-	tailTick := time.NewTicker(time.Second)
-	defer tailTick.Stop()
 	for {
 		select {
-		case <-tailTick.C:
-			if err := sendTail(); err != nil {
-				return
-			}
 		case <-r.Context().Done():
 			return
 		case <-ch:
-			if err := writeEvent("refresh"); err != nil {
-				return
+			s.mu.Lock()
+			refresh := s.clients[ch]
+			s.clients[ch] = false
+			s.mu.Unlock()
+			if refresh {
+				if err := writeEvent("refresh"); err != nil {
+					return
+				}
+				if err := writeEvent("change"); err != nil {
+					return
+				}
 			}
-			if err := writeEvent("change"); err != nil {
+			if err := sendTail(); err != nil {
 				return
 			}
 		}

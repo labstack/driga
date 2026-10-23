@@ -259,7 +259,80 @@ echo '{"type":"result","result":"First second third"}'`)
 		t.Fatal(err)
 	}
 	s := settled(t, b, c.ID)
-	if got := s.Messages[len(s.Messages)-1].Text; got != "First second third" {
-		t.Fatal("duplicated or missing assistant text", got)
+	for _, m := range s.Messages {
+		if m.Role == "assistant" && m.Text != "First second third" {
+			t.Fatal("duplicated or missing assistant text", m.Text)
+		}
+	}
+}
+
+func TestClaudeActionArgsAndFallback(t *testing.T) {
+	for _, support := range []bool{true, false} {
+		t.Run(map[bool]string{true: "actions", false: "fallback"}[support], func(t *testing.T) {
+			help := flags
+			if support {
+				help += "\n --permission-prompts <host> Host prompts"
+			}
+			body := `previous=""
+for arg in "$@"; do
+ if [ "$previous" = "--mcp-config" ]; then /bin/cp "$arg" "$CHAT_RECORD.config"; fi
+ previous="$arg"
+done
+echo '{"type":"system","subtype":"init","mcp_servers":[{"name":"driga","status":"connected"}]}'
+echo '{"type":"result","result":"ok"}'`
+			a, record := fakeCLI(t, help, body)
+			notices := 0
+			r := Request{Socket: "private.sock", Conversation: "conv", Token: "random-token"}
+			emit := func(d Delta) error {
+				if d.Notice != "" {
+					notices++
+				}
+				return nil
+			}
+			for i := 0; i < 2; i++ {
+				if err := a.Run(context.Background(), r, emit); err != nil {
+					t.Fatal(err)
+				}
+			}
+			raw, _ := os.ReadFile(record + ".args")
+			args := string(raw)
+			if support {
+				for _, want := range []string{"--tools\ndefault\n", "--permission-prompts\nhost\n", "--permission-prompt-tool\nmcp__driga__approve\n", "TodoWrite,mcp__driga__list_prompts"} {
+					if !strings.Contains(args, want) {
+						t.Fatal(want, args)
+					}
+				}
+				if strings.Contains(args, "--allowedTools\nmcp__driga__*") || notices != 0 {
+					t.Fatal(args, notices)
+				}
+			} else if !strings.Contains(args, "--tools\n\n") || strings.Contains(args, "--permission-prompt") || notices != 2 {
+				t.Fatal(args, notices)
+			}
+			raw, _ = os.ReadFile(record + ".config")
+			var conf struct {
+				Servers map[string]struct {
+					Args []string
+					Env  map[string]string
+				} `json:"mcpServers"`
+			}
+			if err := json.Unmarshal(raw, &conf); err != nil {
+				t.Fatal(err)
+			}
+			env := conf.Servers["driga"].Env
+			if support && (env["DRIGA_CHAT_TOKEN"] != r.Token || env["DRIGA_CHAT_SOCKET"] != r.Socket || env["DRIGA_CHAT_CONVERSATION"] != r.Conversation) {
+				t.Fatal("turn environment missing")
+			}
+			if !support && (env["DRIGA_CHAT_TOKEN"] != "" || env["DRIGA_CHAT_READ_ONLY"] != "1" || strings.Contains(args, "mcp__driga__list_prompts")) {
+				t.Fatal("fallback enabled actions")
+			}
+			r.ReadOnly = true
+			if err := a.Run(context.Background(), r, emit); err != nil {
+				t.Fatal(err)
+			}
+			raw, _ = os.ReadFile(record + ".args")
+			if strings.Contains(string(raw), "--permission-prompt") || strings.Contains(string(raw), "mcp__driga__list_prompts") || !strings.Contains(string(raw), "--tools\n\n") {
+				t.Fatal("ask enabled actions")
+			}
+		})
 	}
 }

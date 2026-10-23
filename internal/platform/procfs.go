@@ -9,54 +9,13 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"runtime"
+
 	"slices"
 	"strconv"
 	"strings"
-	"time"
 
-	"github.com/labstack/driga/internal/model"
 	"github.com/shirou/gopsutil/v4/common"
-	"github.com/shirou/gopsutil/v4/disk"
-	"github.com/shirou/gopsutil/v4/load"
 )
-
-// procStatZombie reads field 3 after the parenthesized comm, which may itself
-// contain spaces and parentheses. Only a positive Z observation exempts a proc.
-func procStatZombie(data []byte) bool {
-	stat := string(data)
-	end := strings.LastIndexByte(stat, ')')
-	if strings.IndexByte(stat, '(') < 0 || end < 0 {
-		return false
-	}
-	fields := strings.Fields(stat[end+1:])
-	return len(fields) > 0 && fields[0] == "Z"
-}
-
-// ParseMeminfo returns memory and swap sizes in bytes; missing/invalid fields are zero.
-func ParseMeminfo(data []byte) (total, avail, swapTotal, swapFree uint64) {
-	for _, line := range strings.Split(string(data), "\n") {
-		fields := strings.Fields(line)
-		if len(fields) != 3 || fields[2] != "kB" {
-			continue
-		}
-		n, err := strconv.ParseUint(fields[1], 10, 64)
-		if err != nil || n > math.MaxUint64/1024 {
-			continue
-		}
-		switch fields[0] {
-		case "MemTotal:":
-			total = n * 1024
-		case "MemAvailable:":
-			avail = n * 1024
-		case "SwapTotal:":
-			swapTotal = n * 1024
-		case "SwapFree:":
-			swapFree = n * 1024
-		}
-	}
-	return
-}
 
 // ParsePSI extracts memory "some avg10"; an absent some line returns nil.
 func ParsePSI(data []byte) (*float64, error) {
@@ -248,44 +207,6 @@ func (p procFS) context(ctx context.Context) context.Context {
 	}
 	env[common.HostProcEnvKey] = p.root
 	return context.WithValue(ctx, common.EnvKey, env)
-}
-
-func (p procFS) Machine(ctx context.Context) (model.MachineSample, error) {
-	s := model.MachineSample{PressureLevel: "unknown", TS: time.Now(), Cores: runtime.NumCPU()}
-	if err := ctx.Err(); err != nil {
-		return s, err
-	}
-	data, err := os.ReadFile(filepath.Join(p.root, "meminfo"))
-	if err != nil {
-		return s, fmt.Errorf("meminfo: %w", err)
-	}
-	total, avail, swapTotal, swapFree := ParseMeminfo(data)
-	if total == 0 || avail > total || swapFree > swapTotal {
-		return s, errors.New("invalid meminfo totals")
-	}
-	s.MemTotal, s.MemUsed = total, total-avail
-	s.SwapTotal, s.SwapUsed = swapTotal, swapTotal-swapFree
-	s.PressureFree = float64(avail) / float64(total) * 100
-	data, err = os.ReadFile(filepath.Join(p.root, "pressure", "memory"))
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return s, fmt.Errorf("memory PSI: %w", err)
-	}
-	s.PsiMemSome10, err = ParsePSI(data)
-	if err != nil {
-		return s, err
-	}
-	avg, err := load.AvgWithContext(p.context(ctx))
-	if err != nil {
-		return s, fmt.Errorf("load average: %w", err)
-	}
-	s.Load1, s.Load5, s.Load15 = avg.Load1, avg.Load5, avg.Load15
-	usage, err := disk.UsageWithContext(ctx, "/")
-	if err != nil {
-		return s, fmt.Errorf("disk usage: %w", err)
-	}
-	s.DiskFree = usage.Free
-	s.DiskTotal = usage.Total
-	return s, ctx.Err()
 }
 
 func (p procFS) Cwds(ctx context.Context, pids []int32) (map[int32]string, error) {

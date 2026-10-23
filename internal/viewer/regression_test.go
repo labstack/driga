@@ -171,3 +171,32 @@ func TestSwitchingSourceForwardsFlow(t *testing.T) {
 		t.Fatal(f, err)
 	}
 }
+
+func TestOverviewDefersSessionDetailsToSelection(t *testing.T) {
+	st, err := store.Open("", store.Memory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	var id int64
+	err = st.Tx(context.Background(), func(tx *store.Tx) error {
+		var err error
+		id, err = tx.UpsertSession(model.Session{SessionObs: model.SessionObs{Adapter: "test", ExternalID: "selected", LastActivityAt: time.Now()}})
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := NewStoreSource(st, t.TempDir(), view.Filter{})
+	snap, err := src.Load(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(snap.AgentDetails) != 0 {
+		t.Fatal("overview eagerly loaded sessions")
+	}
+	detail, err := src.LoadAgent(context.Background(), store.Scope{}, id)
+	if err != nil || detail.Session.ID != id {
+		t.Fatal(detail, err)
+	}
+}

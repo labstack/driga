@@ -320,3 +320,26 @@ func TestSSERecoversAfterReadError(t *testing.T) {
 	}
 	t.Fatalf("watcher stopped after a transient error: %v", scan.Err())
 }
+
+func TestMuxRetainsPathAndMethodResponses(t *testing.T) {
+	s, _, _, _ := fixture(t)
+	for _, tc := range []struct {
+		method, path string
+		status       int
+		allow        string
+	}{
+		{"GET", "/static", 404, ""},
+		{"GET", "/chat/api", 404, ""},
+		{"GET", "/missing//page", 404, ""},
+		{"GET", "/chat/api/../unknown", 503, ""},
+		{"GET", "/flow.json/", 404, ""},
+		{"GET", "/static%2ftheme.css", 200, ""},
+		{"GET", "/chat/api/send", 405, "POST"},
+		{"DELETE", "/chat/api/send", 405, "GET, HEAD"},
+	} {
+		w := request(s, tc.method, tc.path, s.token)
+		if w.Code != tc.status || w.Header().Get("Allow") != tc.allow {
+			t.Errorf("%s %s: status=%d Allow=%q", tc.method, tc.path, w.Code, w.Header().Get("Allow"))
+		}
+	}
+}

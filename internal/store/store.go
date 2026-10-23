@@ -144,8 +144,23 @@ func Open(path string, mode Mode) (_ *Store, retErr error) {
 	}
 	fresh := objects == 0 && mode != ReadOnly
 	if !fresh {
-		if err := checkSchema(ctx, db, path); err != nil {
+		have, want, err := checkSchema(ctx, db, path)
+		if err != nil {
 			return nil, err
+		}
+		if have < want {
+			// Only a writer applies forward migrations; a reader of an older
+			// database is looking at a collector that has not restarted yet.
+			if mode == ReadOnly {
+				return nil, &SchemaError{Path: path, Behind: true}
+			}
+			provider, err := migrationProvider(db)
+			if err != nil {
+				return nil, err
+			}
+			if _, err := provider.Up(ctx); err != nil {
+				return nil, fmt.Errorf("migrate schema: %w", err)
+			}
 		}
 	}
 	if fresh {
@@ -288,29 +303,41 @@ var ErrSchemaPreRelease = errors.New("database uses a pre-release schema")
 // ErrSchemaNewer means the database belongs to a newer driga binary.
 var ErrSchemaNewer = errors.New("database is from a newer driga")
 
+// ErrSchemaBehind means a reader found a database its collector has not migrated yet.
+var ErrSchemaBehind = errors.New("database schema is older than this driga")
+
 // SchemaError carries the same diagnosis and fix for writers, readers and doctor.
 type SchemaError struct {
-	Path  string
-	Newer bool
+	Path          string
+	Newer, Behind bool
 }
 
 func (e *SchemaError) Unwrap() error {
-	if e.Newer {
+	switch {
+	case e.Newer:
 		return ErrSchemaNewer
+	case e.Behind:
+		return ErrSchemaBehind
 	}
 	return ErrSchemaPreRelease
 }
 
 func (e *SchemaError) Fix() string {
-	if e.Newer {
+	switch {
+	case e.Newer:
 		return "upgrade driga to the version that created this database"
+	case e.Behind:
+		return "restart the collector so it applies the update: driga service restart"
 	}
 	return resetCommand(e.Path, runtime.GOOS)
 }
 
 func (e *SchemaError) Error() string {
-	if e.Newer {
+	switch {
+	case e.Newer:
 		return fmt.Sprintf("database at %s is from a newer driga; %s", e.Path, e.Fix())
+	case e.Behind:
+		return fmt.Sprintf("database at %s is older than this driga; %s", e.Path, e.Fix())
 	}
 	return fmt.Sprintf("database at %s uses a pre-release schema; reset it: %s", e.Path, e.Fix())
 }
@@ -338,58 +365,66 @@ func migrationProvider(db *sql.DB) (*goose.Provider, error) {
 	return goose.NewProvider(goose.DialectSQLite3, db, subFS, goose.WithDisableGlobalRegistry(true))
 }
 
-// checkSchema accepts only the baseline's history. It never creates or converts
-// a history table, including on read-only opens.
-func checkSchema(ctx context.Context, db *sql.DB, path string) error {
+// checkSchema accepts the baseline and its forward migrations, returning the
+// applied and the latest known version. It never creates or converts a history
+// table, including on read-only opens; any other history requires a reset.
+func checkSchema(ctx context.Context, db *sql.DB, path string) (have, want int64, err error) {
 	incompatible := &SchemaError{Path: path}
+	provider, err := migrationProvider(db)
+	if err != nil {
+		return 0, 0, err
+	}
+	known := map[int64]bool{}
+	for _, source := range provider.ListSources() {
+		known[source.Version] = true
+		want = max(want, source.Version)
+	}
 	var marker int
 	if err := db.QueryRowContext(ctx, "PRAGMA user_version").Scan(&marker); err != nil {
-		return err
+		return 0, 0, err
 	}
 	var exists int
 	if err := db.QueryRowContext(ctx, "SELECT count(*) FROM sqlite_schema WHERE type='table' AND name='goose_db_version'").Scan(&exists); err != nil {
-		return err
+		return 0, 0, err
 	}
-	if exists != 1 {
-		return incompatible
+	if exists != 1 || marker != 1 {
+		return 0, 0, incompatible
 	}
 	rows, err := db.QueryContext(ctx, "SELECT version_id,is_applied FROM goose_db_version ORDER BY id")
 	if err != nil {
-		return incompatible
+		return 0, 0, incompatible
 	}
 	defer rows.Close()
 	var versions []int64
 	for rows.Next() {
 		var version int64
 		var applied bool
-		if err := rows.Scan(&version, &applied); err != nil {
-			return incompatible
-		}
-		if !applied {
-			return incompatible
+		if err := rows.Scan(&version, &applied); err != nil || !applied {
+			return 0, 0, incompatible
 		}
 		versions = append(versions, version)
 	}
 	if err := rows.Err(); err != nil {
-		return err
+		return 0, 0, err
 	}
-	if marker < 1 || len(versions) < 2 || versions[0] != 0 || versions[1] != 1 {
-		return incompatible
+	if len(versions) < 2 || versions[0] != 0 || versions[1] != 1 {
+		return 0, 0, incompatible
 	}
-	// A newer baseline descendant has a strictly increasing history. Legacy and
-	// unknown chains lack the baseline marker and always require a reset.
-	previous := int64(1)
+	// The baseline's descendants form a strictly increasing history.
+	have = 1
 	for _, v := range versions[2:] {
-		if v <= previous {
-			return incompatible
+		if v <= have {
+			return 0, 0, incompatible
 		}
-		previous = v
+		have = v
 	}
-	if marker > 1 || previous > 1 {
-		return &SchemaError{Path: path, Newer: true}
+	if have > want {
+		return 0, 0, &SchemaError{Path: path, Newer: true}
 	}
-	if marker != 1 {
-		return incompatible
+	for _, v := range versions[1:] {
+		if !known[v] {
+			return 0, 0, incompatible
+		}
 	}
-	return nil
+	return have, want, nil
 }

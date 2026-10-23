@@ -44,16 +44,16 @@ func TestClaudePermissionToolFromTranscript(t *testing.T) {
 		{name: "outside tail", transcript: assistant(edit) + strings.Repeat("x", 256<<10) + "\n"},
 		{name: "symlink tail", transcript: strings.Repeat("x", 256<<10) + "\n" + assistant(bash), symlink: true, wantTool: "Bash"},
 		{name: "missing", missing: true},
-		{name: "missing preserves input", missing: true, policy: "snippets", toolInput: `{"command":"echo safe"}`, wantDetail: "echo safe"},
-		{name: "message wins", transcript: assistant(edit), message: "Claude needs your permission to use Bash", policy: "snippets", wantTool: "Bash", wantDetail: "Claude needs your permission to use Bash"},
+		{name: "missing input stays private", missing: true, policy: "snippets", toolInput: `{"command":"echo safe"}`},
+		{name: "message wins", transcript: assistant(edit), message: "Claude needs your permission to use Bash", policy: "snippets", wantTool: "Bash"},
 		{name: "payload wins", transcript: assistant(edit), tool: "Read", wantTool: "Read"},
 		{name: "other notification", transcript: assistant(bash), notification: "idle_prompt"},
 		{name: "other adapter", transcript: assistant(bash), adapter: "codex"},
 		{name: "titles", transcript: assistant(bash), policy: "titles", wantTool: "Bash"},
-		{name: "snippets command", transcript: assistant(bash), policy: "snippets", wantTool: "Bash", wantDetail: "echo [redacted]"},
-		{name: "snippets path", transcript: assistant(edit), policy: "snippets", wantTool: "Edit", wantDetail: "/repo/file.go"},
-		{name: "snippets Write", transcript: assistant(`{"type":"tool_use","id":"write","name":"Write","input":{"file_path":"/repo/new.go","content":"private"}}`), policy: "snippets", wantTool: "Write", wantDetail: "/repo/new.go"},
-		{name: "snippets Read", transcript: assistant(`{"type":"tool_use","id":"read","name":"Read","input":{"file_path":"/repo/read.go"}}`), policy: "snippets", wantTool: "Read", wantDetail: "/repo/read.go"},
+		{name: "snippets command", transcript: assistant(bash), policy: "snippets", wantTool: "Bash"},
+		{name: "snippets path", transcript: assistant(edit), policy: "snippets", wantTool: "Edit"},
+		{name: "snippets Write", transcript: assistant(`{"type":"tool_use","id":"write","name":"Write","input":{"file_path":"/repo/new.go","content":"private"}}`), policy: "snippets", wantTool: "Write"},
+		{name: "snippets Read", transcript: assistant(`{"type":"tool_use","id":"read","name":"Read","input":{"file_path":"/repo/read.go"}}`), policy: "snippets", wantTool: "Read"},
 		{name: "MCP opaque input", transcript: assistant(`{"type":"tool_use","id":"mcp","name":"mcp__x__y","input":["opaque",1]}`), wantTool: "mcp__x__y"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -142,7 +142,7 @@ func TestClaudePermissionTranscriptBoundsText(t *testing.T) {
 	if err != nil || len(events) != 1 {
 		t.Fatal(events, err)
 	}
-	if ev := events[0]; utf8.RuneCountInString(ev.Tool) != 200 || utf8.RuneCountInString(ev.Detail) != 200 || !strings.HasPrefix(ev.Detail, "[redacted] ") {
+	if ev := events[0]; utf8.RuneCountInString(ev.Tool) != 200 || ev.Detail != "" || ev.Message != "" {
 		t.Fatalf("unbounded or unscrubbed text: %+v", ev)
 	}
 }

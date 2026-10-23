@@ -3,12 +3,13 @@ package web
 import (
 	"bytes"
 	"context"
-	"github.com/labstack/driga/internal/view"
-	"github.com/labstack/driga/internal/viewer"
 	"os/exec"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/labstack/driga/internal/view"
+	"github.com/labstack/driga/internal/viewer"
 
 	"github.com/labstack/driga/internal/derive"
 	"github.com/labstack/driga/internal/model"
@@ -26,10 +27,10 @@ func TestMachineMCPLeakMarker(t *testing.T) {
 	at := time.Date(time.Now().Year(), time.Now().Month(), time.Now().Day(), 8, 12, 0, 0, time.UTC).Add(-24 * time.Hour)
 	source := s.source.(*viewer.StoreSource)
 	source.Now = func() time.Time { return at.Add(160 * time.Minute) }
-	ps := []model.Proc{{PID: 100, Cmdline: "codex app-server", StartTime: at.Add(-time.Hour)}}
+	ps := []model.Proc{{PID: 100, Cmdline: "codex app-server", Argv: []string{"codex", "app-server"}, StartTime: at.Add(-time.Hour)}}
 	for i := range 3 {
 		now := at.Add(time.Duration(i) * 80 * time.Minute)
-		ps = append(ps, model.Proc{PID: int32(i + 1), PPID: 100, Cmdline: "node /opt/codegraph/dist/index.js", StartTime: now, RSS: 100})
+		ps = append(ps, model.Proc{PID: int32(i + 1), PPID: 100, Cmdline: "node /opt/codegraph/dist/index.js", Argv: []string{"node", "/opt/codegraph/dist/index.js"}, StartTime: now, RSS: 100})
 		v := derive.MCPServers(ps, nil, now)
 		if err := st.Tx(context.Background(), func(tx *store.Tx) error {
 			if err := tx.ObserveMCP(now, v.Samples); err != nil {
@@ -110,9 +111,9 @@ func TestMachineMCPServers(t *testing.T) {
 	at := time.Now().Add(-31 * time.Hour)
 	if err := st.Tx(context.Background(), func(tx *store.Tx) error {
 		return tx.ReplaceProcs([]model.Proc{
-			{PID: 10, Cmdline: "codex app-server", StartTime: at, Cwd: "/projects/<fixture>"},
-			{PID: 11, PPID: 10, Cmdline: "java -cp /opt/maestro/lib/* maestro.cli.AppKt mcp", RSS: 2 << 30, StartTime: at.Add(time.Hour)},
-			{PID: 12, PPID: 10, Cmdline: "java -cp /opt/maestro/lib/* maestro.cli.AppKt mcp", RSS: 2 << 30, StartTime: at.Add(30 * time.Hour)},
+			{PID: 10, Cmdline: "codex app-server", Argv: []string{"codex", "app-server"}, StartTime: at, Cwd: "/projects/<fixture>"},
+			{PID: 11, PPID: 10, Cmdline: "java -cp /opt/maestro/lib/* maestro.cli.AppKt mcp", Argv: []string{"java", "-cp", "/opt/maestro/lib/*", "maestro.cli.AppKt", "mcp"}, RSS: 2 << 30, StartTime: at.Add(time.Hour)},
+			{PID: 12, PPID: 10, Cmdline: "java -cp /opt/maestro/lib/* maestro.cli.AppKt mcp", Argv: []string{"java", "-cp", "/opt/maestro/lib/*", "maestro.cli.AppKt", "mcp"}, RSS: 2 << 30, StartTime: at.Add(30 * time.Hour)},
 		})
 	}); err != nil {
 		t.Fatal(err)
@@ -129,7 +130,7 @@ func TestMachineMCPLauncherSummaryAndEvidence(t *testing.T) {
 	s, st, _, _ := fixture(t)
 	t.Setenv("PATH", t.TempDir())
 	if err := st.Tx(context.Background(), func(tx *store.Tx) error {
-		return tx.ReplaceProcs([]model.Proc{{PID: 1, Cmdline: "claude"}, {PID: 2, PPID: 1, Cmdline: "node exec firecrawl-mcp --project '<fixture>'", RSS: 10 << 20}, {PID: 3, PPID: 2, Cmdline: "node /cache/node_modules/.bin/firecrawl-mcp --project '<fixture>'", RSS: 20 << 20}})
+		return tx.ReplaceProcs([]model.Proc{{PID: 1, Cmdline: "claude", Argv: []string{"claude"}}, {PID: 2, PPID: 1, Cmdline: "node exec firecrawl-mcp --project '<fixture>'", Argv: []string{"node", "exec", "firecrawl-mcp", "--project", "<fixture>"}, RSS: 10 << 20}, {PID: 3, PPID: 2, Cmdline: "node /cache/node_modules/.bin/firecrawl-mcp --project '<fixture>'", Argv: []string{"node", "/cache/node_modules/.bin/firecrawl-mcp", "--project", "<fixture>"}, RSS: 20 << 20}})
 	}); err != nil {
 		t.Fatal(err)
 	}

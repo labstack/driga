@@ -14,6 +14,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bmatcuk/doublestar/v4"
+
 	"github.com/pelletier/go-toml/v2"
 )
 
@@ -37,6 +39,7 @@ var settings = []Setting{
 	{"capture_text", "CaptureText", "string", "titles", "Local text capture policy.", "titles or snippets"},
 	{"open_cmd", "OpenCmd", "string", "", "Editor command; {cwd} is substituted.", "empty = auto-detect"},
 	{"no_service_hint", "NoServiceHint", "bool", false, "Suppress optional service hints.", "true or false"},
+	{"ui.theme", "UI.Theme", "string", "auto", "Palette for the whole terminal UI.", "auto, mocha or latte"},
 	{"adapters.claude.enabled", "", "bool", true, "Enable Claude session discovery.", "true or false"},
 	{"adapters.codex.enabled", "", "bool", true, "Enable Codex session discovery.", "true or false"},
 	{"adapters.gemini.enabled", "", "bool", true, "Enable Gemini session discovery.", "true or false"},
@@ -84,6 +87,10 @@ var runtimeSettings = []struct{ Name, Type, Default, Purpose string }{
 	{"DRIGA_CONFIG", "path", "$XDG_CONFIG_HOME/driga/config.toml or ~/.config/driga/config.toml", "Configuration file override."},
 	{"DRIGA_DATA_DIR", "path", "Linux: $XDG_DATA_HOME/driga or ~/.local/share/driga; macOS: ~/Library/Application Support/driga", "Database and fleet data directory override."},
 	{"DRIGA_SPOOL_DIR", "path", "Linux: $XDG_STATE_HOME/driga/events or ~/.local/state/driga/events; macOS: ~/Library/Application Support/driga/events", "Hook/ack spool directory override."},
+	{"DRIGA_CHAT_SOCKET", "path", "unset", "Chat broker socket for the MCP child of one Chat turn."},
+	{"DRIGA_CHAT_CONVERSATION", "id", "unset", "Chat conversation of the MCP child's turn."},
+	{"DRIGA_CHAT_TOKEN", "secret", "unset", "Per-turn token tying the MCP child's approval requests to its turn."},
+	{"DRIGA_CHAT_READ_ONLY", "marker", "unset", "1 keeps the Chat MCP child read-only."},
 	{"DRIGA_INTERNAL", "marker", "unset", "1 suppresses recursive hooks from Driga-owned Claude subprocesses."},
 	{"DRIGA_FIXTURE_OUTPUT", "path", "unset", "Fixture generator output directory (tests only)."},
 	{"DRIGA_COLLECTOR_HEAP_CHILD", "marker", "unset", "1 selects isolated collector heap-test child."},
@@ -166,6 +173,10 @@ func (s Setting) assign(c *Config, raw any) error {
 			return fmt.Errorf("expected string")
 		}
 		switch s.Key {
+		case "ui.theme":
+			if text != "auto" && text != "mocha" && text != "latte" {
+				return fmt.Errorf("allowed values: %s", s.Range)
+			}
 		case "motion":
 			if text != "on" && text != "off" {
 				return fmt.Errorf("allowed values: %s", s.Range)
@@ -374,6 +385,15 @@ func load(path string, overrides map[string]any) (Config, map[string]string, err
 		}
 		return "config " + path + ": " + key
 	}
+	valid := c.Exclude[:0]
+	for _, pattern := range c.Exclude {
+		if !doublestar.ValidatePattern(strings.Trim(filepath.ToSlash(pattern), "/")) {
+			c.Warnings = append(c.Warnings, fmt.Sprintf("%s: skipped malformed pattern %q", input("exclude"), pattern))
+			continue
+		}
+		valid = append(valid, pattern)
+	}
+	c.Exclude = valid
 	if c.Fleet.Serve && strings.TrimSpace(c.Fleet.Listen) == "" {
 		return c, sources, fmt.Errorf("%s: fleet.listen is required when fleet.serve is true", input("fleet.listen"))
 	}

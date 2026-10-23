@@ -17,6 +17,19 @@ var combase = windows.NewLazySystemDLL("combase.dll")
 var ole32 = windows.NewLazySystemDLL("ole32.dll")
 var oleaut32 = windows.NewLazySystemDLL("oleaut32.dll")
 
+var procRoInitialize = combase.NewProc("RoInitialize")
+var procRoUninitialize = combase.NewProc("RoUninitialize")
+var procCoInitializeEx = ole32.NewProc("CoInitializeEx")
+var procCoUninitialize = ole32.NewProc("CoUninitialize")
+var procCoInitializeSecurity = ole32.NewProc("CoInitializeSecurity")
+var procCoCreateInstance = ole32.NewProc("CoCreateInstance")
+var procWindowsCreateString = combase.NewProc("WindowsCreateString")
+var procWindowsDeleteString = combase.NewProc("WindowsDeleteString")
+var procRoGetActivationFactory = combase.NewProc("RoGetActivationFactory")
+var procRoActivateInstance = combase.NewProc("RoActivateInstance")
+var procSysAllocString = oleaut32.NewProc("SysAllocString")
+var procSysFreeString = oleaut32.NewProc("SysFreeString")
+
 type HRESULT uint32
 
 func (h HRESULT) Error() string { return fmt.Sprintf("COM HRESULT 0x%08x", uint32(h)) }
@@ -33,7 +46,7 @@ func Initialize() (func(), error) {
 		return nil, fmt.Errorf("native COM backend requires Windows amd64 or arm64")
 	}
 	runtime.LockOSThread()
-	p := combase.NewProc("RoInitialize")
+	p := procRoInitialize
 	if err := p.Find(); err != nil {
 		runtime.UnlockOSThread()
 		return nil, err
@@ -43,19 +56,19 @@ func Initialize() (func(), error) {
 		runtime.UnlockOSThread()
 		return nil, err
 	}
-	return func() { combase.NewProc("RoUninitialize").Call(); runtime.UnlockOSThread() }, nil
+	return func() { procRoUninitialize.Call(); runtime.UnlockOSThread() }, nil
 }
 
 // InitializeSTA is required by the Shell's IFileOperation interface. It must
 // not share the MTA initialization used by Task Scheduler and WinRT toasts.
 func InitializeSTA() (func(), error) {
 	runtime.LockOSThread()
-	h, _, _ := ole32.NewProc("CoInitializeEx").Call(0, 2) // COINIT_APARTMENTTHREADED
+	h, _, _ := procCoInitializeEx.Call(0, 2) // COINIT_APARTMENTTHREADED
 	if err := Check(h); err != nil {
 		runtime.UnlockOSThread()
 		return nil, err
 	}
-	return func() { ole32.NewProc("CoUninitialize").Call(); runtime.UnlockOSThread() }, nil
+	return func() { procCoUninitialize.Call(); runtime.UnlockOSThread() }, nil
 }
 
 var securityOnce sync.Once
@@ -65,7 +78,7 @@ var securityError error
 // Task Scheduler COM examples. An embedding host may already own COM security.
 func Security() error {
 	securityOnce.Do(func() {
-		h, _, _ := ole32.NewProc("CoInitializeSecurity").Call(0, ^uintptr(0), 0, 0, 6, 3, 0, 0, 0)
+		h, _, _ := procCoInitializeSecurity.Call(0, ^uintptr(0), 0, 0, 6, 3, 0, 0, 0)
 		if uint32(h) != 0x80010119 {
 			securityError = Check(h)
 		} // RPC_E_TOO_LATE
@@ -108,7 +121,7 @@ func Create(class, iid string) (*Object, error) {
 		return nil, err
 	}
 	var out *Object
-	h, _, _ := ole32.NewProc("CoCreateInstance").Call(uintptr(unsafe.Pointer(&cls)), 0, 1, uintptr(unsafe.Pointer(&id)), uintptr(unsafe.Pointer(&out)))
+	h, _, _ := procCoCreateInstance.Call(uintptr(unsafe.Pointer(&cls)), 0, 1, uintptr(unsafe.Pointer(&id)), uintptr(unsafe.Pointer(&out)))
 	return out, Check(h)
 }
 
@@ -120,13 +133,13 @@ func String(s string) (HString, error) {
 		return 0, err
 	}
 	var out HString
-	h, _, _ := combase.NewProc("WindowsCreateString").Call(uintptr(unsafe.Pointer(&u[0])), uintptr(len(u)-1), uintptr(unsafe.Pointer(&out)))
+	h, _, _ := procWindowsCreateString.Call(uintptr(unsafe.Pointer(&u[0])), uintptr(len(u)-1), uintptr(unsafe.Pointer(&out)))
 	runtime.KeepAlive(u)
 	return out, Check(h)
 }
 func (s HString) Close() {
 	if s != 0 {
-		combase.NewProc("WindowsDeleteString").Call(uintptr(s))
+		procWindowsDeleteString.Call(uintptr(s))
 	}
 }
 func Factory(class, iid string) (*Object, error) {
@@ -140,7 +153,7 @@ func Factory(class, iid string) (*Object, error) {
 		return nil, err
 	}
 	var out *Object
-	h, _, _ := combase.NewProc("RoGetActivationFactory").Call(uintptr(s), uintptr(unsafe.Pointer(&id)), uintptr(unsafe.Pointer(&out)))
+	h, _, _ := procRoGetActivationFactory.Call(uintptr(s), uintptr(unsafe.Pointer(&id)), uintptr(unsafe.Pointer(&out)))
 	return out, Check(h)
 }
 func Activate(class string) (*Object, error) {
@@ -150,7 +163,7 @@ func Activate(class string) (*Object, error) {
 	}
 	defer s.Close()
 	var out *Object
-	h, _, _ := combase.NewProc("RoActivateInstance").Call(uintptr(s), uintptr(unsafe.Pointer(&out)))
+	h, _, _ := procRoActivateInstance.Call(uintptr(s), uintptr(unsafe.Pointer(&out)))
 	return out, Check(h)
 }
 func BString(s string) (uintptr, func(), error) {
@@ -158,10 +171,10 @@ func BString(s string) (uintptr, func(), error) {
 	if err != nil {
 		return 0, nil, err
 	}
-	b, _, _ := oleaut32.NewProc("SysAllocString").Call(uintptr(unsafe.Pointer(&u[0])))
+	b, _, _ := procSysAllocString.Call(uintptr(unsafe.Pointer(&u[0])))
 	runtime.KeepAlive(u)
 	if b == 0 {
 		return 0, nil, fmt.Errorf("allocate COM string")
 	}
-	return b, func() { oleaut32.NewProc("SysFreeString").Call(b) }, nil
+	return b, func() { procSysFreeString.Call(b) }, nil
 }

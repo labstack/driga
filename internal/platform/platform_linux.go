@@ -7,7 +7,9 @@ import (
 	"encoding/binary"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -60,7 +62,8 @@ func (p linuxPlatform) Procs(ctx context.Context) ([]model.Proc, error) {
 			continue
 		}
 		stat, _ := os.ReadFile(filepath.Join(p.root, strconv.FormatInt(int64(proc.Pid), 10), "stat"))
-		if procStatZombie(stat) {
+		states, _ := proc.StatusWithContext(ctx)
+		if slices.Contains(states, process.Zombie) {
 			out = append(out, model.Proc{PID: proc.Pid, PPID: ppid, StartTime: time.UnixMilli(start), Zombie: true})
 			continue
 		}
@@ -72,7 +75,7 @@ func (p linuxPlatform) Procs(ctx context.Context) ([]model.Proc, error) {
 		if err != nil {
 			continue
 		}
-		cmdline, err := proc.CmdlineWithContext(ctx)
+		argv, err := proc.CmdlineSliceWithContext(ctx)
 		if err != nil {
 			continue
 		}
@@ -86,7 +89,7 @@ func (p linuxPlatform) Procs(ctx context.Context) ([]model.Proc, error) {
 			TTY: ttys[controllingTTYDevice(stat)],
 			PID: proc.Pid, PPID: ppid, StartTime: time.UnixMilli(start),
 			RSS: rss.RSS, CPUSeconds: times.User + times.System,
-			Cmdline: cmdline, Exe: exe,
+			Cmdline: strings.Join(argv, " "), Argv: argv, Exe: exe,
 		})
 	}
 	return out, ctx.Err()

@@ -68,7 +68,7 @@ func TestTemporaryCwdViaSymlinkedTempRoot(t *testing.T) {
 		{"missing sibling", filepath.Join(base, "missing"), filepath.Join(base, "missing-other"), false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if !tc.want && (base == "/tmp" || strings.HasPrefix(base, "/tmp/")) {
+			if !tc.want && (base == "/tmp" || strings.HasPrefix(base, "/tmp/") || base == "/private/tmp" || strings.HasPrefix(base, "/private/tmp/")) {
 				t.Skip("negative case needs a base outside the built-in /tmp root (Linux test temp dirs live in /tmp)")
 			}
 			t.Setenv("TMPDIR", tc.tempRoot)

@@ -5,9 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	ks "github.com/kardianos/service"
-	"github.com/labstack/driga/internal/filelock"
-	"github.com/labstack/driga/internal/secfile"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -17,6 +14,10 @@ import (
 	"strings"
 	"text/tabwriter"
 	"time"
+
+	ks "github.com/kardianos/service"
+	"github.com/labstack/driga/internal/filelock"
+	"github.com/labstack/driga/internal/secfile"
 
 	"github.com/labstack/driga/internal/chat"
 	"github.com/labstack/driga/internal/cleanup"
@@ -82,6 +83,9 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 	checks := []Check{}
 	copilotSeen := false
 	add := func(name, status, detail, fix string) { checks = append(checks, Check{name, status, detail, fix}) }
+	for _, warning := range d.Config.Warnings {
+		add("config", "warn", warning, "correct the pattern in "+config.Path())
+	}
 	for _, entry := range []struct{ name, path string }{
 		{"storage:db", filepath.Join(d.DataDir, "driga.db")},
 		{"storage:wal", filepath.Join(d.DataDir, "driga.db-wal")},
@@ -215,11 +219,13 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 			}
 			others := 0
 			for _, p := range procs {
-				if !isCollectorProc(p) {
-					continue
-				}
-				if !held || p.PID <= 0 || int64(p.PID) != ownerPID || !alive(p.PID, p.StartTime) {
-					others++
+				// The lock owner is this data directory's collector whatever its
+				// binary is called; other collectors are recognised by name.
+				owned := held && p.PID > 0 && int64(p.PID) == ownerPID && alive(p.PID, p.StartTime) && len(p.Argv) >= 2 && p.Argv[1] == "collect"
+				if !owned {
+					if isCollectorProc(p) {
+						others++
+					}
 					continue
 				}
 				rss = p.RSS
@@ -583,14 +589,10 @@ func isCollectorProc(p model.Proc) bool {
 		if !strings.EqualFold(filepath.Base(p.Exe), "driga") && !strings.EqualFold(filepath.Base(p.Exe), "driga.exe") {
 			return false
 		}
-		// Process APIs may join argv without quoting paths containing spaces.
-		if rest, ok := strings.CutPrefix(p.Cmdline, p.Exe); ok && strings.HasPrefix(rest, " ") {
-			args := strings.Fields(rest)
-			return len(args) > 0 && args[0] == "collect"
-		}
+
 	}
-	args, err := splitCommandWords(p.Cmdline)
-	return err == nil && len(args) >= 2 && (filepath.Base(args[0]) == "driga" || strings.EqualFold(filepath.Base(args[0]), "driga.exe")) && args[1] == "collect"
+	args := p.Argv
+	return len(args) >= 2 && (filepath.Base(args[0]) == "driga" || strings.EqualFold(filepath.Base(args[0]), "driga.exe")) && args[1] == "collect"
 }
 
 // probeCollectorLock does not create a file or modify its contents/permissions.

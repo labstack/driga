@@ -7,7 +7,12 @@ import (
 	"github.com/labstack/driga/internal/pathx"
 )
 
-func hookEntry(bin, adapter, event, goos string) (map[string]any, error) {
+func hookEntry(bin, adapter, event, goos string) (entry map[string]any, err error) {
+	defer func() {
+		if err == nil && adapter == "claude" && event == "PermissionRequest" {
+			entry["timeout"] = 660
+		}
+	}()
 	if goos == "windows" {
 		if !pathx.RecordedIsAbs(bin) || !pathx.WindowsStyle(bin) || strings.ContainsAny(bin, "\x00\r\n\"") {
 			return nil, fmt.Errorf("hook requires an absolute Windows executable path")

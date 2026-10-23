@@ -27,6 +27,7 @@ type Globals struct {
 	Project         string            `help:"Scope views to one project (path, name, or '.')."`
 	Since           string            `help:"Only show items since a duration ago or 'yesterday'."`
 	Snapshot        bool              `help:"Force snapshot mode (one-shot collect, no history)."`
+	Theme           *string           `enum:"auto,mocha,latte" help:"TUI theme: auto, mocha or latte (overrides ui.theme)."`
 	NoColor         bool              `name:"no-color" help:"Disable colors."`
 	Watch           time.Duration     `help:"Re-render every interval (e.g. 2s)." placeholder:"DUR"`
 
@@ -95,6 +96,9 @@ func (VersionCmd) Run(g *Globals) error {
 // Main parses args, runs the selected command and returns the exit code.
 func Main(args []string, version string, metadata ...string) int {
 	if err := config.ResolvePaths(); err != nil {
+		if len(args) > 0 && args[0] == "hook" {
+			return 0
+		}
 		fmt.Fprintln(os.Stderr, "driga: resolve paths:", err)
 		return 1
 	}
@@ -109,7 +113,7 @@ func run(args []string, version string, stdin io.Reader, stdout, stderr io.Write
 			hookLogError(errors.New("hook requires adapter and event"))
 			return 0
 		}
-		_ = (HookCmd{Adapter: args[1], Event: args[2]}).Run(&Globals{Stdin: stdin})
+		_ = (HookCmd{Adapter: args[1], Event: args[2]}).Run(&Globals{Stdin: stdin, Stdout: stdout, Stderr: stderr})
 		return 0
 	}
 

@@ -100,7 +100,7 @@ type pairMessage struct {
 	Arch         string `json:"arch,omitempty"`
 	DrigaVersion string `json:"driga_version,omitempty"`
 	Name         string `json:"name,omitempty"`
-	Abort        bool   `json:"abort,omitempty"`
+	Abort        bool   `json:"abort,omitzero"`
 }
 
 func randomToken() string {

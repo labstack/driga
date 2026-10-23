@@ -183,7 +183,7 @@ func TestDoctorCadenceAndRSS(t *testing.T) {
 		if err := tx.SetSourceOK("machine", d.Now.Add(-31*time.Second)); err != nil {
 			return err
 		}
-		return tx.ReplaceProcs([]model.Proc{{PID: 1, Cmdline: "/opt/driga collect", RSS: 51_000_000}, {PID: 2, Cmdline: "editor driga collect", RSS: 1_000_000_000}})
+		return tx.ReplaceProcs([]model.Proc{{PID: 1, Cmdline: "/opt/driga collect", Argv: []string{"/opt/driga", "collect"}, RSS: 51_000_000}, {PID: 2, Cmdline: "editor driga collect", Argv: []string{"editor", "driga", "collect"}, RSS: 1_000_000_000}})
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -237,9 +237,9 @@ func TestDoctorCollectorPaths(t *testing.T) {
 	d, st := doctorFixture(t)
 	if err := st.Tx(context.Background(), func(tx *store.Tx) error {
 		return tx.ReplaceProcs([]model.Proc{
-			{PID: 1, Exe: "/opt/path with spaces/driga", Cmdline: "/opt/path with spaces/driga collect", RSS: 10_000_000},
-			{PID: 2, Cmdline: `"/opt/another path/driga" collect`, RSS: 10_000_000},
-			{PID: 3, Exe: "/opt/editor", Cmdline: "driga collect", RSS: 1_000_000_000},
+			{PID: 1, Exe: "/opt/path with spaces/driga", Cmdline: "/opt/path with spaces/driga collect", Argv: []string{"/opt/path with spaces/driga", "collect"}, RSS: 10_000_000},
+			{PID: 2, Cmdline: `"/opt/another path/driga" collect`, Argv: []string{"/opt/another path/driga", "collect"}, RSS: 10_000_000},
+			{PID: 3, Exe: "/opt/editor", Cmdline: "driga collect", Argv: []string{"driga", "collect"}, RSS: 1_000_000_000},
 		})
 	}); err != nil {
 		t.Fatal(err)
@@ -262,7 +262,7 @@ func TestDoctorCollectorFootprint(t *testing.T) {
 	} {
 		d, st := doctorFixture(t)
 		if err := st.Tx(context.Background(), func(tx *store.Tx) error {
-			return tx.ReplaceProcs([]model.Proc{{PID: 1, Cmdline: "/opt/driga collect", Footprint: tc.footprint, MemoryMeasure: "physical_footprint", RSS: tc.rss}})
+			return tx.ReplaceProcs([]model.Proc{{PID: 1, Cmdline: "/opt/driga collect", Argv: []string{"/opt/driga", "collect"}, Footprint: tc.footprint, MemoryMeasure: "physical_footprint", RSS: tc.rss}})
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -388,4 +388,24 @@ func TestDoctorDatabaseSizeBudget(t *testing.T) {
 	}
 	wal.Close()
 	requireCheck(t, Doctor(context.Background(), d), "storage:db", "warn", "")
+}
+
+func TestDoctorMalformedExcludeWarning(t *testing.T) {
+	d, _ := doctorFixture(t)
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte("exclude = ['foo[', '**/node_modules']\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d.Config = cfg
+	c := requireCheck(t, Doctor(context.Background(), d), "config", "warn", "")
+	if !strings.Contains(c.Detail, "exclude") || !strings.Contains(c.Detail, "foo[") || !strings.Contains(c.Detail, path) {
+		t.Fatal(c)
+	}
+	if len(cfg.Exclude) != 1 || cfg.Exclude[0] != "**/node_modules" {
+		t.Fatal(cfg.Exclude)
+	}
 }

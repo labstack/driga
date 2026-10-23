@@ -109,6 +109,14 @@ func (c Claude) RunTo(ctx context.Context, args []string, stdin string, stdout i
 
 // RunIn shares probing, process lifetime and internal-agent tagging with ask and summaries.
 func (c Claude) RunIn(ctx context.Context, dir string, args []string, stdin string, stdout io.Writer) error {
+	return c.runIn(ctx, dir, args, stdin, stdout, 120*time.Second)
+}
+
+// RunChatIn leaves time for approval cards; Stop owns the turn lifetime.
+func (c Claude) RunChatIn(ctx context.Context, dir string, args []string, stdin string, stdout io.Writer) error {
+	return c.runIn(ctx, dir, args, stdin, stdout, 0)
+}
+func (c Claude) runIn(ctx context.Context, dir string, args []string, stdin string, stdout io.Writer, timeout time.Duration) error {
 	args = append([]string(nil), args...)
 	named := false
 	for i, arg := range args {
@@ -128,8 +136,11 @@ func (c Claude) RunIn(ctx context.Context, dir string, args []string, stdin stri
 	if err := c.Require("name"); err != nil {
 		return err
 	}
-	ctx, cancel := context.WithTimeout(ctx, 120*time.Second)
-	defer cancel()
+	if timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
+	}
 	cmd := exec.CommandContext(ctx, c.path, args...)
 	cmd.Dir = dir
 	cmd.WaitDelay = 2 * time.Second

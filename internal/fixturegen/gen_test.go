@@ -91,11 +91,11 @@ func heldoutScenarios() map[string]Scenario {
 	broker := Scenario{Now: now, Repos: 1, WorktreesPerRepo: 1, Seed: 906, Layout: "wetlands",
 		Agents: []AgentSpec{{Adapter: "claude", ID: "living-neighbor", Version: "2.1.97", Status: "idle"}},
 		Procs: []model.Proc{
-			{PID: 8100, PPID: 1, StartTime: now.Add(-2 * time.Hour), Cmdline: "node /opt/heldout-tools/app-server-broker.mjs", RSS: 20 << 20},
-			{PID: 8101, PPID: 8100, StartTime: now.Add(-2 * time.Hour), Cmdline: "codex app-server", RSS: 12 << 20},
-			{PID: 8102, PPID: 8101, StartTime: now.Add(-time.Hour), Cmdline: "worker-runtime", RSS: 3 << 20},
-			{PID: 8200, PPID: 1, StartTime: now.Add(-2 * time.Minute), Cmdline: "claude mcp serve", RSS: 1 << 20},
-			{PID: 8300, PPID: 1, StartTime: now.Add(-time.Hour), Cmdline: "unrelated-indexer", RSS: 1 << 20},
+			{PID: 8100, PPID: 1, StartTime: now.Add(-2 * time.Hour), Cmdline: "node /opt/heldout-tools/app-server-broker.mjs", Argv: []string{"node", "/opt/heldout-tools/app-server-broker.mjs"}, RSS: 20 << 20},
+			{PID: 8101, PPID: 8100, StartTime: now.Add(-2 * time.Hour), Cmdline: "codex app-server", Argv: []string{"codex", "app-server"}, RSS: 12 << 20},
+			{PID: 8102, PPID: 8101, StartTime: now.Add(-time.Hour), Cmdline: "worker-runtime", Argv: []string{"worker-runtime"}, RSS: 3 << 20},
+			{PID: 8200, PPID: 1, StartTime: now.Add(-2 * time.Minute), Cmdline: "claude mcp serve", Argv: []string{"claude", "mcp", "serve"}, RSS: 1 << 20},
+			{PID: 8300, PPID: 1, StartTime: now.Add(-time.Hour), Cmdline: "unrelated-indexer", Argv: []string{"unrelated-indexer"}, RSS: 1 << 20},
 		}}
 	return map[string]Scenario{
 		"claude/2.1.93/heldout/one-repo-one-agent":           small,

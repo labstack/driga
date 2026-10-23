@@ -10,6 +10,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -44,11 +45,21 @@ func AppendAll(dir string, evs []model.HookEvent) error {
 	if len(order) == 0 {
 		return nil
 	}
-	if err := secfile.MkdirPrivate(dir); err != nil {
-		return err
+	// Windows also protects an existing directory's DACL. On Unix the
+	// successful append open already proves the directory exists.
+	if runtime.GOOS == "windows" {
+		if err := secfile.MkdirPrivate(dir); err != nil {
+			return err
+		}
 	}
 	for _, path := range order {
 		f, err := secfile.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE)
+		if errors.Is(err, os.ErrNotExist) {
+			if err := secfile.MkdirPrivate(dir); err != nil {
+				return err
+			}
+			f, err = secfile.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE)
+		}
 		if err != nil {
 			return err
 		}

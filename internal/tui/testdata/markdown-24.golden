@@ -1,0 +1,112 @@
+Heading one
+
+Heading two
+
+Heading three
+
+Heading four
+
+Heading five
+
+Heading six
+
+Setext heading
+
+Paragraph with strong,
+emphasis, both,
+strikethrough, inline
+code, escaped
+*asterisks* and &
+entities. Unicode 界界,
+é and 👨‍👩‍👧‍👦 keep their
+display widths. Soft
+line continues. Hard
+break:
+next line.
+
+go
+│ fmt.Println("code is …
+│     return nil
+│ 
+│ **literal** <script>c…
+
+│ indented code
+│ another line
+
+│ A block quote with
+│ strong text.
+│ 
+│ │ A nested quote.
+│ │ 
+│ │ • Nested list
+│ │ • Second item
+
+3. Ordered item with a
+   continuation long
+   enough to wrap and
+   show its hanging
+   indent on narrow
+   screens.
+   • Nested unordered
+     item
+     • Deeply nested
+       item
+4. Next ordered item
+
+• ☐ Pending task with
+  code
+• ☑ Completed task
+
+────────────────────────
+
+link text
+(https://example.com/doc
+s) and
+https://example.com and
+https://example.org and
+hello@example.com.
+
+[image: picture alt]
+(https://example.com/ima
+ge.png)
+
+Name   │ Descrip │ Count
+       │  tion   │      
+───────┼─────────┼──────
+Wide   │ A long  │   123
+界     │ centere │      
+       │    d    │      
+       │ descrip │      
+       │  tion   │      
+       │  with   │      
+       │ inline  │      
+       │  spans  │      
+       │  that   │      
+       │  wraps  │      
+       │   the   │      
+       │ widest  │      
+       │ column  │      
+       │ first.  │      
+code   │ removed │     4
+       │   and   │      
+       │  link   │      
+       │ (https: │      
+       │ //examp │      
+       │ le.com) │      
+
+One: a
+Two: b
+Three: c
+Four: d
+Five: e
+Six: f
+
+<div
+onclick="evil()">literal
+raw HTML</div>
+
+Inline <span>HTML</span>
+stays literal in the
+terminal. blocked
+(javascript:alert(1))
+stays text.

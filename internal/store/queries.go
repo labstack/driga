@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -133,8 +134,8 @@ func (tx *Tx) ReplaceProcs(procs []model.Proc) error {
 		return err
 	}
 	for _, p := range procs {
-		if err := tx.exec(`INSERT INTO procs (machine_id,pid,ppid,start_time,rss,cpu_seconds,cpu_percent,cmdline,exe,role,agent,session_id,cwd,tty,footprint,swap,memory_measure,partial)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, tx.machineID, p.PID, p.PPID, unix(p.StartTime), p.RSS, p.CPUSeconds, p.CPUPercent, p.Cmdline, p.Exe, p.Role, p.Agent, p.SessionID, p.Cwd, p.TTY, p.Footprint, p.Swap, p.MemoryMeasure, p.Partial); err != nil {
+		if err := tx.exec(`INSERT INTO procs (machine_id,pid,ppid,start_time,rss,cpu_seconds,cpu_percent,cmdline,argv,exe,role,agent,session_id,cwd,tty,footprint,swap,memory_measure,partial)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, tx.machineID, p.PID, p.PPID, unix(p.StartTime), p.RSS, p.CPUSeconds, p.CPUPercent, p.Cmdline, procArgvJSON(p.Argv), p.Exe, p.Role, p.Agent, p.SessionID, p.Cwd, p.TTY, p.Footprint, p.Swap, p.MemoryMeasure, p.Partial); err != nil {
 			return err
 		}
 	}
@@ -158,10 +159,10 @@ func (tx *Tx) SyncProcs(prev, procs []model.Proc) error {
 			continue
 		}
 		delete(old, p.PID)
-		if err := tx.exec(`INSERT INTO procs (machine_id,pid,ppid,start_time,rss,cpu_seconds,cpu_percent,cmdline,exe,role,agent,session_id,cwd,tty,footprint,swap,memory_measure,partial)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(machine_id,pid) DO UPDATE SET ppid=excluded.ppid,start_time=excluded.start_time,
-		rss=excluded.rss,cpu_seconds=excluded.cpu_seconds,cpu_percent=excluded.cpu_percent,cmdline=excluded.cmdline,exe=excluded.exe,
-		role=excluded.role,agent=excluded.agent,session_id=excluded.session_id,cwd=excluded.cwd,tty=excluded.tty,footprint=excluded.footprint,swap=excluded.swap,memory_measure=excluded.memory_measure,partial=excluded.partial`, tx.machineID, p.PID, p.PPID, unix(p.StartTime), p.RSS, p.CPUSeconds, p.CPUPercent, p.Cmdline, p.Exe, p.Role, p.Agent, p.SessionID, p.Cwd, p.TTY, p.Footprint, p.Swap, p.MemoryMeasure, p.Partial); err != nil {
+		if err := tx.exec(`INSERT INTO procs (machine_id,pid,ppid,start_time,rss,cpu_seconds,cpu_percent,cmdline,argv,exe,role,agent,session_id,cwd,tty,footprint,swap,memory_measure,partial)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(machine_id,pid) DO UPDATE SET ppid=excluded.ppid,start_time=excluded.start_time,
+		rss=excluded.rss,cpu_seconds=excluded.cpu_seconds,cpu_percent=excluded.cpu_percent,cmdline=excluded.cmdline,argv=excluded.argv,exe=excluded.exe,
+		role=excluded.role,agent=excluded.agent,session_id=excluded.session_id,cwd=excluded.cwd,tty=excluded.tty,footprint=excluded.footprint,swap=excluded.swap,memory_measure=excluded.memory_measure,partial=excluded.partial`, tx.machineID, p.PID, p.PPID, unix(p.StartTime), p.RSS, p.CPUSeconds, p.CPUPercent, p.Cmdline, procArgvJSON(p.Argv), p.Exe, p.Role, p.Agent, p.SessionID, p.Cwd, p.TTY, p.Footprint, p.Swap, p.MemoryMeasure, p.Partial); err != nil {
 			return err
 		}
 	}
@@ -176,7 +177,7 @@ func (tx *Tx) SyncProcs(prev, procs []model.Proc) error {
 // sameStoredProc compares the columns ReplaceProcs writes.
 func sameStoredProc(a, b model.Proc) bool {
 	return a.PPID == b.PPID && unix(a.StartTime) == unix(b.StartTime) && a.RSS == b.RSS && a.CPUSeconds == b.CPUSeconds &&
-		a.CPUPercent == b.CPUPercent && a.Cmdline == b.Cmdline && a.Exe == b.Exe && a.Role == b.Role && a.Agent == b.Agent &&
+		a.CPUPercent == b.CPUPercent && slices.Equal(a.Argv, b.Argv) && a.Cmdline == b.Cmdline && a.Exe == b.Exe && a.Role == b.Role && a.Agent == b.Agent &&
 		a.SessionID == b.SessionID && a.Cwd == b.Cwd && a.TTY == b.TTY && a.Footprint == b.Footprint && a.Swap == b.Swap && a.MemoryMeasure == b.MemoryMeasure && a.Partial == b.Partial
 }
 
@@ -188,10 +189,14 @@ func (q *querier) Procs() ([]model.Proc, error) {
 // ProcsScoped returns selected machines' processes in PID and machine order.
 func (q *querier) ProcsScoped(scope Scope) ([]model.Proc, error) {
 	where, args := scope.where("machine_id")
-	return readMany(q, "SELECT machine_id,pid,ppid,start_time,rss,cpu_seconds,cpu_percent,cmdline,exe,role,agent,session_id,cwd,tty,footprint,swap,memory_measure,partial FROM procs WHERE "+where+" ORDER BY pid,machine_id", args, func(s scanner) (model.Proc, error) {
+	return readMany(q, "SELECT machine_id,pid,ppid,start_time,rss,cpu_seconds,cpu_percent,cmdline,argv,exe,role,agent,session_id,cwd,tty,footprint,swap,memory_measure,partial FROM procs WHERE "+where+" ORDER BY pid,machine_id", args, func(s scanner) (model.Proc, error) {
 		var p model.Proc
 		var start int64
-		err := s.Scan(&p.MachineID, &p.PID, &p.PPID, &start, &p.RSS, &p.CPUSeconds, &p.CPUPercent, &p.Cmdline, &p.Exe, &p.Role, &p.Agent, &p.SessionID, &p.Cwd, &p.TTY, &p.Footprint, &p.Swap, &p.MemoryMeasure, &p.Partial)
+		var argv string
+		err := s.Scan(&p.MachineID, &p.PID, &p.PPID, &start, &p.RSS, &p.CPUSeconds, &p.CPUPercent, &p.Cmdline, &argv, &p.Exe, &p.Role, &p.Agent, &p.SessionID, &p.Cwd, &p.TTY, &p.Footprint, &p.Swap, &p.MemoryMeasure, &p.Partial)
+		if err == nil {
+			err = json.Unmarshal([]byte(argv), &p.Argv)
+		}
 		p.StartTime = fromUnix(start)
 		return p, err
 	})
@@ -308,7 +313,14 @@ func scanSession(s scanner) (model.Session, error) {
 
 // Session returns a session by internal ID, or ErrNotFound.
 func (q *querier) Session(id int64) (model.Session, error) {
-	return scanSession(q.conn.QueryRowContext(q.ctx, "SELECT id,"+sessionColumns+" FROM sessions WHERE machine_id=? AND id=?", q.machineID, id))
+	return q.SessionScoped(id, q.localScope())
+}
+
+// SessionScoped resolves an internal ID within the selected machines.
+func (q *querier) SessionScoped(id int64, scope Scope) (model.Session, error) {
+	where, args := scope.where("machine_id")
+	args = append(args, id)
+	return scanSession(q.conn.QueryRowContext(q.ctx, "SELECT id,"+sessionColumns+" FROM sessions WHERE "+where+" AND id=?", args...))
 }
 
 // Sessions returns sessions matching filter, newest activity first.
@@ -1073,3 +1085,5 @@ func (q *querier) InboxAlertCandidates(scope Scope) ([]model.InboxItem, error) {
 func (tx *Tx) MarkInboxAlerted(machine, id string) error {
 	return tx.exec("UPDATE inbox_items SET alerted=1 WHERE machine_id=? AND id=? AND alerted=0", machine, id)
 }
+
+func procArgvJSON(argv []string) string { b, _ := json.Marshal(argv); return string(b) }

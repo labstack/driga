@@ -21,7 +21,7 @@ func TestLinkParentsByAncestry(t *testing.T) {
 }
 
 func TestLinkParentsBrokerFallback(t *testing.T) {
-	base := []model.Proc{{PID: 100, PPID: 1}, {PID: 101, PPID: 100, Cmdline: "node /plugin/app-server-broker.mjs", Cwd: "/repo", StartTime: time.Unix(200, 0)}}
+	base := []model.Proc{{PID: 100, PPID: 1}, {PID: 101, PPID: 100, Cmdline: "node /plugin/app-server-broker.mjs", Argv: []string{"node", "/plugin/app-server-broker.mjs"}, Cwd: "/repo", StartTime: time.Unix(200, 0)}}
 	sessions := []model.Session{familySession(1, 100), familySession(2, 0)}
 	sessions[1].StartedAt = time.Unix(230, 0)
 	if got := LinkParents(sessions, NewProcIndex(base)); !reflect.DeepEqual(got, map[int64]int64{2: 1}) {
@@ -37,6 +37,7 @@ func TestLinkParentsBrokerFallback(t *testing.T) {
 				procs[1].Cwd = "/other"
 			case "not helper":
 				procs[1].Cmdline = "shell"
+				procs[1].Argv = []string{"shell"}
 			}
 			if got := LinkParents(sessions, NewProcIndex(procs)); len(got) != 0 {
 				t.Fatal(got)

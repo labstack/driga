@@ -172,3 +172,27 @@ func TestAppendAllWritesNothingOnEncodeError(t *testing.T) {
 		t.Fatalf("batch: %+v %v", events, err)
 	}
 }
+
+func TestAppendCreatesParentsAndWakesExistingDirectory(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "missing", "spool")
+	ev := model.HookEvent{TS: time.Now(), Adapter: "claude", Event: "Stop"}
+	for i := 0; i < 2; i++ {
+		if i > 0 {
+			old := time.Now().Add(-time.Hour)
+			if err := os.Chtimes(dir, old, old); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := AppendAll(dir, []model.HookEvent{ev, ev}); err != nil {
+			t.Fatal(err)
+		}
+		info, err := os.Stat(dir)
+		if err != nil || time.Since(info.ModTime()) > time.Minute {
+			t.Fatal("directory wake missing", info, err)
+		}
+	}
+	got, _, err := Drain(dir, nil)
+	if err != nil || len(got) != 4 {
+		t.Fatal("lost batched appends", len(got), err)
+	}
+}

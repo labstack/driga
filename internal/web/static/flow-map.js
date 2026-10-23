@@ -174,6 +174,7 @@
   function markTitle(el,text) {el.append(svg("title",{},text));el.addEventListener("mouseenter",()=>{const box=root.querySelector("[data-flow-hover]");box.textContent=text;box.hidden=false;});el.addEventListener("mouseleave",()=>{root.querySelector("[data-flow-hover]").hidden=true;});}
   function render(fresh=new Map(),newWorkers=new Set()) {
     if(!root||!data)return;
+    root.querySelector("[data-flow-empty]").hidden=!!data.lead;
     const canvas=root.querySelector("[data-flow-svg]"),width=Math.max(360,canvas.parentElement.clientWidth);
     geo=geometry(data,width,expanded);if(!geo.rows.some(r=>r.node.id===selected))selected=geo.rows[0]?.node.id;
     canvas.setAttribute("viewBox",`0 0 ${width} ${geo.height}`);canvas.setAttribute("width",width);canvas.setAttribute("height",geo.height);canvas.replaceChildren();
@@ -245,7 +246,7 @@
     fetchFlow();
   }
   document.addEventListener("keydown",event=>{
-    if(!root||!data||event.ctrlKey||event.altKey||event.metaKey||event.target.closest("input,textarea,select,[contenteditable='true']")||document.querySelector("dialog[open]"))return;
+    if(!root||!data||event.ctrlKey||event.altKey||event.metaKey||event.target.closest("input,textarea,select,button,a,summary,[role='button'],[contenteditable='true']")||document.querySelector("dialog[open]"))return;
     const key=event.key;if(!["j","k","ArrowDown","ArrowUp","Enter","[","]","-","+","="].includes(key))return;
     event.preventDefault();event.stopImmediatePropagation();
     if(key==="["||key==="]"){const link=root.querySelector(key==="["?"[data-flow-prev]":"[data-flow-next]");if(link?.getAttribute("href"))location.assign(link.href);return;}

@@ -10,8 +10,9 @@ type identKey struct {
 }
 
 type ident struct {
-	key          identKey
-	cmdline, exe string
+	key  identKey
+	argv []string
+	exe  string
 }
 
 // identCache keeps argv and executable path across scans; both are fixed for a
@@ -21,24 +22,24 @@ type identCache struct {
 	m  map[int32]ident
 }
 
-func (c *identCache) get(pid int32, key identKey, load func() (string, string, error)) (string, string, error) {
+func (c *identCache) get(pid int32, key identKey, load func() ([]string, string, error)) ([]string, string, error) {
 	c.mu.Lock()
 	v, ok := c.m[pid]
 	c.mu.Unlock()
 	if ok && v.key == key {
-		return v.cmdline, v.exe, nil
+		return v.argv, v.exe, nil
 	}
-	cmdline, exe, err := load()
+	argv, exe, err := load()
 	if err != nil {
-		return "", "", err
+		return nil, "", err
 	}
 	c.mu.Lock()
 	if c.m == nil {
 		c.m = make(map[int32]ident)
 	}
-	c.m[pid] = ident{key: key, cmdline: cmdline, exe: exe}
+	c.m[pid] = ident{key: key, argv: argv, exe: exe}
 	c.mu.Unlock()
-	return cmdline, exe, nil
+	return argv, exe, nil
 }
 
 // retain drops processes absent from the latest scan.

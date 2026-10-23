@@ -3,10 +3,12 @@ package view
 import (
 	"errors"
 	"fmt"
-	"github.com/labstack/driga/internal/pathx"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/labstack/driga/internal/pathx"
+	"github.com/labstack/driga/internal/textfmt"
 
 	"github.com/labstack/driga/internal/derive"
 	"github.com/labstack/driga/internal/inbox"
@@ -219,7 +221,7 @@ func agentLocal(r Reader, id int64, now time.Time) (AgentView, error) {
 	return v, nil
 }
 
-func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'" }
+func shellQuote(s string) string { return textfmt.ShellQuote(s, true) }
 
 func projectRow(r Reader, repo model.Repo, ss []model.Session, now time.Time) (ProjectRow, []WorktreeRow, []HandoffRow, error) {
 	row := ProjectRow{MachineID: r.MachineID()}

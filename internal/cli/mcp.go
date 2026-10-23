@@ -8,6 +8,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/labstack/driga/internal/chat"
 	"github.com/labstack/driga/internal/collector"
 	"github.com/labstack/driga/internal/config"
 	drigamcp "github.com/labstack/driga/internal/mcp"
@@ -39,7 +40,8 @@ func (c MCPCmd) Run(g *Globals) error {
 		}
 		policy = cfg.CaptureText
 	}
-	err := NewMCPServer(g, policy).Run(ctx, &sdk.StdioTransport{MaxLineLength: drigamcp.MaxLineLength})
+	server := newMCPServer(g, c.Chat && os.Getenv("DRIGA_CHAT_READ_ONLY") != "1", policy)
+	err := server.Run(ctx, &sdk.StdioTransport{MaxLineLength: drigamcp.MaxLineLength})
 	if ctx.Err() != nil {
 		return nil
 	}
@@ -48,6 +50,17 @@ func (c MCPCmd) Run(g *Globals) error {
 
 // NewMCPServer shares the CLI read path with transport-independent tool handlers.
 func NewMCPServer(g *Globals, capture ...string) *sdk.Server {
+	policy := ""
+	if len(capture) > 0 {
+		policy = capture[0]
+	}
+	return newMCPServer(g, false, policy)
+}
+func newMCPServer(g *Globals, actions bool, capture ...string) *sdk.Server {
+	policy := ""
+	if len(capture) > 0 {
+		policy = capture[0]
+	}
 	base := *g
 	stderr := base.Stderr
 	if stderr == nil {
@@ -98,12 +111,18 @@ func NewMCPServer(g *Globals, capture ...string) *sdk.Server {
 			return runtimeDoctor(ctx, cfg, now, r.(DoctorReader)), nil
 		})
 	}
-	// Neither the SDK logger nor snapshot hints may write to protocol stdout.
-	policy := ""
-	if len(capture) > 0 {
-		policy = capture[0]
+	var prompts func(context.Context) ([]chat.Prompt, error)
+	if actions {
+		prompts = func(ctx context.Context) ([]chat.Prompt, error) {
+			in, err := chatApproval(json.RawMessage(`{}`))
+			if err != nil {
+				return nil, err
+			}
+			return chat.ChatPrompts(ctx, os.Getenv("DRIGA_CHAT_SOCKET"), in)
+		}
 	}
-	return drigamcp.NewServer(drigamcp.Options{CaptureText: policy, Version: base.Version, Logger: slog.New(slog.NewTextHandler(stderr, nil)), Read: read, Doctor: doctor, Cleanup: func(ctx context.Context, kind string, sizes bool) (view.Envelope, error) {
+	// Neither the SDK logger nor snapshot hints may write to protocol stdout.
+	return drigamcp.NewServer(drigamcp.Options{Prompts: prompts, Chat: actions, Action: chatAction(&base), Approve: chatApprove, CaptureText: policy, Version: base.Version, Logger: slog.New(slog.NewTextHandler(stderr, nil)), Read: read, Doctor: doctor, Cleanup: func(ctx context.Context, kind string, sizes bool) (view.Envelope, error) {
 		return cleanupRead(ctx, &base, kind, sizes, false)
 	}})
 }

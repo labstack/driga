@@ -16,8 +16,6 @@ import (
 	"github.com/labstack/driga/internal/llm"
 )
 
-// Keep the allowlist explicit: adding action tools to driga MCP must not silently
-// expand Phase 1's authority. --tools empty disables all native tools.
 var ReadTools = []string{"get_flow", "get_activity", "get_summary", "list_agents", "get_agent", "list_projects", "inspect_project", "list_inbox", "list_conflicts", "list_orphans", "get_machine", "list_machines", "inspect_setup", "list_cleanup_candidates"}
 
 func readTool(name string) bool {
@@ -58,6 +56,12 @@ func (a *Claude) Run(ctx context.Context, r Request, emit func(Delta) error) err
 	if err != nil {
 		return err
 	}
+	actions := !r.ReadOnly && r.Socket != "" && r.Token != "" && c.Require("permission-prompts") == nil
+	if !r.ReadOnly && r.Socket != "" && !actions && c.Require("permission-prompts") != nil {
+		if err := emit(Delta{Notice: "Chat stays read-only: " + c.Require("permission-prompts").Error()}); err != nil {
+			return err
+		}
+	}
 	dir := filepath.Join(a.DataDir, "tmp")
 	if err := secfile.MkdirPrivate(dir); err != nil {
 		return err
@@ -82,6 +86,12 @@ func (a *Claude) Run(ctx context.Context, r Request, emit func(Delta) error) err
 		f.Close()
 		return err
 	}
+	if actions {
+		env["DRIGA_CHAT_SOCKET"], env["DRIGA_CHAT_CONVERSATION"], env["DRIGA_CHAT_TOKEN"] = r.Socket, r.Conversation, r.Token
+		env["DRIGA_CHAT_READ_ONLY"] = "0"
+	} else {
+		env["DRIGA_CHAT_READ_ONLY"] = "1"
+	}
 	conf := map[string]any{"mcpServers": map[string]any{"driga": map[string]any{"command": exe, "args": []string{"mcp", "--chat"}, "env": env}}}
 	encodeErr := json.NewEncoder(f).Encode(conf)
 	if err := errors.Join(encodeErr, f.Close()); err != nil {
@@ -91,16 +101,30 @@ func (a *Claude) Run(ctx context.Context, r Request, emit func(Delta) error) err
 	for i, t := range ReadTools {
 		tools[i] = "mcp__driga__" + t
 	}
+	nativeTools := ""
+	if actions {
+		nativeTools = "default"
+		// Claude permits reads in cwd itself; pre-allowing read tools would
+		// also bypass the permission bridge for paths outside that directory.
+		tools = append(tools, "TodoWrite", "mcp__driga__list_prompts")
+	}
 	// --safe-mode also drops --mcp-config servers; empty setting sources keep
 	// user hooks, plugins and MCP out while the explicit driga server loads.
-	args := []string{"-p", "--setting-sources", "", "--strict-mcp-config", "--mcp-config", f.Name(), "--tools", "", "--allowedTools", strings.Join(tools, ","), "--name", "driga-internal", "--output-format", "stream-json", "--verbose", "--include-partial-messages"}
+	args := []string{"-p", "--setting-sources", "", "--strict-mcp-config", "--mcp-config", f.Name(), "--tools", nativeTools, "--allowedTools", strings.Join(tools, ","), "--name", "driga-internal", "--output-format", "stream-json", "--verbose", "--include-partial-messages"}
+	if actions {
+		args = append(args, "--permission-prompts", "host", "--permission-prompt-tool", "mcp__driga__approve")
+	}
 	if r.Resume != "" {
 		args = append(args, "--resume", r.Resume)
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	s := stream{emit: emit, cancel: cancel}
-	runErr := c.RunIn(ctx, r.Directory, args, r.Prompt, &s)
+	s := stream{emit: emit, cancel: cancel, actions: actions}
+	run := c.RunIn
+	if actions {
+		run = c.RunChatIn
+	}
+	runErr := run(ctx, r.Directory, args, r.Prompt, &s)
 	if s.err != nil {
 		return s.err
 	}
@@ -139,6 +163,7 @@ type stream struct {
 	pending                           []byte
 	partialText                       string
 	tools                             map[string]bool
+	actions                           bool
 	connected, partial, printed, done bool
 	err                               error
 }
@@ -178,7 +203,12 @@ func (s *stream) line(line []byte) error {
 		MCPServers    []struct{ Name, Status string } `json:"mcp_servers"`
 		Tools         []string                        `json:"tools"`
 		Message       struct {
-			Content []struct{ Type, Text, Name, ID string }
+			Content []struct {
+				Type, Text, Name, ID string
+				ToolUseID            string          `json:"tool_use_id"`
+				Content              json.RawMessage `json:"content"`
+				IsError              bool            `json:"is_error"`
+			}
 		} `json:"message"`
 		Event struct {
 			Type         string
@@ -206,14 +236,14 @@ func (s *stream) line(line []byte) error {
 			return errors.New("driga MCP server did not connect; refusing Chat")
 		}
 		for _, tool := range e.Tools {
-			if !readTool(tool) {
+			if !s.validTool(tool) {
 				return fmt.Errorf("unexpected tool %q; Chat requires driga read tools only", tool)
 			}
 		}
 	}
 	switch e.Type {
 	case "system":
-	case "assistant", "stream_event", "result":
+	case "assistant", "stream_event", "result", "user":
 		if !s.connected {
 			return errors.New("driga MCP server connection was not confirmed")
 		}
@@ -235,7 +265,7 @@ func (s *stream) line(line []byte) error {
 			s.partialText = ""
 		}
 		if e.Event.Type == "content_block_start" && e.Event.ContentBlock.Type == "tool_use" {
-			if !readTool(e.Event.ContentBlock.Name) {
+			if !s.validTool(e.Event.ContentBlock.Name) {
 				return errors.New("agent attempted a tool outside driga read tools")
 			}
 			return s.tool(e.Event.ContentBlock.ID, e.Event.ContentBlock.Name)
@@ -246,6 +276,15 @@ func (s *stream) line(line []byte) error {
 			s.printed = true
 			return s.emit(Delta{Text: e.Event.Delta.Text})
 		}
+	case "user":
+		for _, content := range e.Message.Content {
+			if content.Type == "tool_result" {
+				if err := s.emit(Delta{ToolUseID: content.ToolUseID, ToolResult: string(content.Content), Failed: content.IsError}); err != nil {
+					return err
+				}
+			}
+		}
+
 	case "assistant":
 		var text strings.Builder
 		for _, content := range e.Message.Content {
@@ -304,7 +343,7 @@ func (s *stream) finish() error {
 }
 
 func (s *stream) tool(id, name string) error {
-	if !readTool(name) {
+	if !s.validTool(name) {
 		return errors.New("agent attempted a tool outside driga read tools")
 	}
 	if s.tools == nil {
@@ -320,4 +359,21 @@ func (s *stream) tool(id, name string) error {
 		s.tools[id] = true
 	}
 	return s.emit(Delta{Tool: name})
+}
+
+func (s *stream) validTool(name string) bool {
+	if readTool(name) {
+		return true
+	}
+	if !s.actions {
+		return false
+	}
+	if !strings.HasPrefix(name, "mcp__") {
+		return true
+	}
+	switch name {
+	case "mcp__driga__list_prompts", "mcp__driga__answer_prompt", "mcp__driga__ack_inbox", "mcp__driga__jump", "mcp__driga__kill", "mcp__driga__cleanup", "mcp__driga__summarize", "mcp__driga__approve":
+		return true
+	}
+	return false
 }

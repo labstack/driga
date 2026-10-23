@@ -13,8 +13,8 @@ func TestSubreaperEvidenceUsesSampleOS(t *testing.T) {
 	now := time.Unix(1700000000, 0)
 	ps := []model.Proc{
 		{PID: 600, PPID: 600, StartTime: now.Add(-3 * time.Hour)},
-		{PID: 700, PPID: 600, StartTime: now.Add(-2 * time.Hour), Cmdline: "systemd --user"},
-		{PID: 701, PPID: 700, StartTime: now.Add(-time.Hour), Cmdline: "claude mcp serve"},
+		{PID: 700, PPID: 600, StartTime: now.Add(-2 * time.Hour), Cmdline: "systemd --user", Argv: []string{"systemd", "--user"}},
+		{PID: 701, PPID: 700, StartTime: now.Add(-time.Hour), Cmdline: "claude mcp serve", Argv: []string{"claude", "mcp", "serve"}},
 		{PID: 702, PPID: 701, StartTime: now.Add(-time.Minute)},
 	}
 	for _, sourceOS := range []string{"linux", "darwin", "windows"} {

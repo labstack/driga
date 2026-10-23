@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/labstack/driga/internal/jsonwire"
+	"github.com/labstack/driga/internal/jsonx"
 )
 
 // EventMetadata is an allowlist of protocol names and numeric usage, never content.
@@ -12,9 +12,9 @@ import (
 type EventMetadata struct {
 	Model        string   `json:"model,omitempty"`
 	Tool         string   `json:"tool,omitempty"`
-	InputTokens  *int64   `json:"input_tokens,omitempty"`
-	OutputTokens *int64   `json:"output_tokens,omitempty"`
-	CostUSD      *float64 `json:"cost_usd,omitempty"`
+	InputTokens  *int64   `json:"input_tokens,omitzero"`
+	OutputTokens *int64   `json:"output_tokens,omitzero"`
+	CostUSD      *float64 `json:"cost_usd,omitzero"`
 }
 
 // StateSignal explains an observation used by the state table. Strength is
@@ -26,8 +26,8 @@ type StateSignal struct {
 	Age        time.Duration `json:"age_ms"`
 	Strength   float64       `json:"strength"`
 	Supports   bool          `json:"supports"`
-	Alive      *bool         `json:"alive,omitempty"`
-	CPUPercent *float64      `json:"cpu_percent,omitempty"`
+	Alive      *bool         `json:"alive,omitzero"`
+	CPUPercent *float64      `json:"cpu_percent,omitzero"`
 }
 
 // StateInput contains the observations consumed by the label table.
@@ -50,8 +50,8 @@ type StateInput struct {
 
 // StateMixer is saved atomically with its verdict and the label-pass inputs.
 type StateMixer struct {
-	Input          *StateInput   `json:"input,omitempty"`
-	StalledAfterMS int64         `json:"stalled_after_ms,omitempty"`
+	Input          *StateInput   `json:"input,omitzero"`
+	StalledAfterMS int64         `json:"stalled_after_ms,omitzero"`
 	Verdict        string        `json:"verdict"`
 	Heuristic      bool          `json:"heuristic"`
 	Evidence       string        `json:"evidence"`
@@ -60,8 +60,14 @@ type StateMixer struct {
 	Rows           []StateSignal `json:"rows"`
 }
 
-func (v StateMixer) MarshalJSON() ([]byte, error)  { return jsonwire.Marshal(v) }
-func (v StateSignal) MarshalJSON() ([]byte, error) { return jsonwire.Marshal(v) }
+func (v StateMixer) MarshalJSON() ([]byte, error) {
+	type plain StateMixer
+	return jsonx.Marshal(plain(v))
+}
+func (v StateSignal) MarshalJSON() ([]byte, error) {
+	type plain StateSignal
+	return jsonx.Marshal(plain(v))
+}
 func (v *StateSignal) UnmarshalJSON(b []byte) error {
 	type raw StateSignal
 	var r raw

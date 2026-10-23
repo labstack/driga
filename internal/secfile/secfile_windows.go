@@ -265,3 +265,5 @@ func createTemp(dir, pattern string) (*os.File, error) {
 	}
 	return nil, &os.PathError{Op: "createtemp", Path: dir, Err: os.ErrExist}
 }
+
+func syncDir(string) error { return nil }

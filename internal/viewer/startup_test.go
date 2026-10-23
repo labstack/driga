@@ -216,7 +216,7 @@ func TestLiveSnapshotFirstFrameResolvesProject(t *testing.T) {
 type startupSocketPlatform struct{ startupPlatform }
 
 func (*startupSocketPlatform) Procs(context.Context) ([]model.Proc, error) {
-	return []model.Proc{{PID: 200, PPID: 1, StartTime: time.Now().Add(-time.Hour), Cmdline: "claude mcp serve"}}, nil
+	return []model.Proc{{PID: 200, PPID: 1, StartTime: time.Now().Add(-time.Hour), Cmdline: "claude mcp serve", Argv: []string{"claude", "mcp", "serve"}}}, nil
 }
 func (p *startupSocketPlatform) ExternalPeers(ctx context.Context, _ []int32) (map[int32]bool, error) {
 	close(p.started)
@@ -271,3 +271,5 @@ func TestLiveSnapshotSocketProbeDoesNotBlockReads(t *testing.T) {
 		t.Fatal("blocked socket probe stalled viewer")
 	}
 }
+
+func (s *startupScanner) Prune(paths []string) { s.scanner.Prune(paths) }

@@ -38,10 +38,12 @@ jobs:
         with:
           go-version-file: go.mod
           check-latest: false
-          cache: false
-      # Tests must never see a real home, agent config or Driga data.
+          cache: true
+      # Tests must never see a real home, agent config or Driga data. The Go
+      # caches stay where setup-go restored them; they hold no user state.
       - name: Isolate test and build state
         run: |
+          gocache=$(go env GOCACHE) gomodcache=$(go env GOMODCACHE)
           task_root=$(mktemp -d "$RUNNER_TEMP/driga-ci.XXXXXX")
           mkdir -p "$task_root/home" "$task_root/data" "$task_root/spool"
           {
@@ -54,8 +56,8 @@ jobs:
             echo "DRIGA_DATA_DIR=$task_root/data"
             echo "DRIGA_SPOOL_DIR=$task_root/spool"
             echo "DRIGA_CONFIG=$task_root/config.toml"
-            echo "GOCACHE=$task_root/gocache"
-            echo "GOMODCACHE=$task_root/gomodcache"
+            echo "GOCACHE=$gocache"
+            echo "GOMODCACHE=$gomodcache"
           } >> "$GITHUB_ENV"
       - name: Format, vet and generated files
         run: |
@@ -74,14 +76,7 @@ jobs:
         env:
           CGO_ENABLED: "1"
         run: go test -race ./...
-      - name: Cross-build the cgo-free targets
-        env:
-          CGO_ENABLED: "0"
-        run: |
-          for target in darwin/arm64 darwin/amd64 linux/amd64 linux/arm64 windows/amd64; do
-            GOOS=${target%/*} GOARCH=${target#*/} go build -o /dev/null ./cmd/driga
-          done
-
+      # The snapshot cross-builds every release target.
       - name: Validate GoReleaser configuration
         uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
@@ -118,9 +113,10 @@ jobs:
         with:
           go-version-file: go.mod
           check-latest: false
-          cache: false
+          cache: true
       - name: Isolate test and build state
         run: |
+          $goCache, $goModCache = (go env GOCACHE), (go env GOMODCACHE)
           $taskRoot = Join-Path $env:RUNNER_TEMP ("dw-" + [guid]::NewGuid().ToString('N').Substring(0,8))
           $testHome = Join-Path $taskRoot 'home'
           New-Item -ItemType Directory -Force $testHome, "$taskRoot/data", "$taskRoot/spool", "$taskRoot/temp" | Out-Null
@@ -141,8 +137,8 @@ jobs:
             DRIGA_CONFIG = "$taskRoot/config.toml"
             TEMP = "$taskRoot/temp"
             TMP = "$taskRoot/temp"
-            GOCACHE = "$taskRoot/gocache"
-            GOMODCACHE = "$taskRoot/gomodcache"
+            GOCACHE = $goCache
+            GOMODCACHE = $goModCache
           }
           foreach ($entry in $settings.GetEnumerator()) { "$($entry.Key)=$($entry.Value)" >> $env:GITHUB_ENV }
       - name: Vet
@@ -176,9 +172,10 @@ jobs:
         with:
           go-version-file: go.mod
           check-latest: false
-          cache: false
+          cache: true
       - name: Isolate test and build state
         run: |
+          $goCache, $goModCache = (go env GOCACHE), (go env GOMODCACHE)
           $taskRoot = Join-Path $env:RUNNER_TEMP ("dw-" + [guid]::NewGuid().ToString('N').Substring(0,8))
           $testHome = Join-Path $taskRoot 'home'
           New-Item -ItemType Directory -Force $testHome, "$taskRoot/data", "$taskRoot/spool", "$taskRoot/temp" | Out-Null
@@ -199,8 +196,8 @@ jobs:
             DRIGA_CONFIG = "$taskRoot/config.toml"
             TEMP = "$taskRoot/temp"
             TMP = "$taskRoot/temp"
-            GOCACHE = "$taskRoot/gocache"
-            GOMODCACHE = "$taskRoot/gomodcache"
+            GOCACHE = $goCache
+            GOMODCACHE = $goModCache
           }
           foreach ($entry in $settings.GetEnumerator()) { "$($entry.Key)=$($entry.Value)" >> $env:GITHUB_ENV }
       - name: Windows end-to-end

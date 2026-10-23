@@ -63,7 +63,7 @@ func TestClaudeInstallMergesPreservingExisting(t *testing.T) {
 	if !reflect.DeepEqual(h["PreToolUse"], oldHooks["PreToolUse"]) || !reflect.DeepEqual(h["Stop"].([]any)[0], oldHooks["Stop"].([]any)[0]) {
 		t.Fatal("existing hook groups changed")
 	}
-	for _, event := range []string{"Stop", "Notification", "SessionStart", "SessionEnd"} {
+	for _, event := range []string{"Stop", "Notification", "SessionStart", "SessionEnd", "PermissionRequest"} {
 		groups := h[event].([]any)
 		group := groups[len(groups)-1].(map[string]any)
 		hook := group["hooks"].([]any)[0].(map[string]any)
@@ -75,7 +75,7 @@ func TestClaudeInstallMergesPreservingExisting(t *testing.T) {
 		t.Fatal("backup differs")
 	}
 	info, _ := os.Stat(path)
-	if info.Mode().Perm() != 0640 {
+	if info.Mode().Perm() != 0600 {
 		t.Fatalf("mode/format: %v, %q", info.Mode(), d.After)
 	}
 }
@@ -165,7 +165,7 @@ func TestClaudeMissingFileCreates(t *testing.T) {
 		t.Fatalf("permissions: %v, %v", info.Mode(), dir.Mode())
 	}
 	installed, err := hooks.ClaudeStatus(path)
-	if err != nil || !reflect.DeepEqual(installed, []string{"Notification", "SessionEnd", "SessionStart", "Stop"}) {
+	if err != nil || !reflect.DeepEqual(installed, []string{"Notification", "PermissionRequest", "SessionEnd", "SessionStart", "Stop"}) {
 		t.Fatalf("status = %v, %v", installed, err)
 	}
 }
@@ -266,7 +266,7 @@ func TestClaudeDuplicateManagedKeyFallsBack(t *testing.T) {
 		t.Fatal("ambiguous targeted edit should disclose full rewrite")
 	}
 	h := decodeSettings(t, d.After)["hooks"].(map[string]any)
-	if len(h) != 4 {
+	if len(h) != 5 {
 		t.Fatalf("hooks not installed: %s", d.After)
 	}
 }

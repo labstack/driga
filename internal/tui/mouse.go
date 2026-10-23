@@ -111,7 +111,7 @@ func (m *app) mouseRow(x, y int) (int, bool) {
 }
 
 func (m *app) mouseWheel(msg tea.MouseWheelMsg) tea.Cmd {
-	if m.help || m.confirm != nil || m.filtering || !m.loaded {
+	if m.confirm != nil || m.filtering || !m.loaded {
 		return nil
 	}
 	base := lipgloss.Height(m.header()) + lipgloss.Height(m.tabBar()) + 1
@@ -127,8 +127,12 @@ func (m *app) mouseWheel(msg tea.MouseWheelMsg) tea.Cmd {
 	default:
 		return nil
 	}
+	if m.help {
+		m.scrollHelp(delta)
+		return nil
+	}
 	if m.tab == chatTab {
-		m.chatOffset = max(0, m.chatOffset-delta)
+		m.scrollChat(-delta, false)
 		return nil
 	}
 	if m.detail {

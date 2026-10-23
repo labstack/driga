@@ -6,15 +6,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/labstack/driga/internal/jsonwire"
-	"github.com/labstack/driga/internal/model"
-	"github.com/labstack/driga/internal/store"
-	"github.com/labstack/driga/internal/view"
 	"os"
 	"path/filepath"
 	"strings"
 	"text/tabwriter"
 	"time"
+
+	"github.com/labstack/driga/internal/jsonx"
+	"github.com/labstack/driga/internal/model"
+	"github.com/labstack/driga/internal/store"
+	"github.com/labstack/driga/internal/view"
 
 	"github.com/labstack/driga/internal/config"
 	"github.com/labstack/driga/internal/fleet"
@@ -216,4 +217,11 @@ type peerStatus struct {
 	FeedSeq   int64     `json:"feed_seq"`
 }
 
-func (v peerStatus) MarshalJSON() ([]byte, error) { return jsonwire.Marshal(v) }
+func (v peerStatus) MarshalJSON() ([]byte, error) {
+	return jsonx.Object(v.Peer, struct {
+		LastSeen  time.Time `json:"last_seen_at"`
+		LastError string    `json:"last_error"`
+		FeedEpoch string    `json:"feed_epoch"`
+		FeedSeq   int64     `json:"feed_seq"`
+	}{v.LastSeen, v.LastError, v.FeedEpoch, v.FeedSeq})
+}

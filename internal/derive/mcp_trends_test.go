@@ -72,7 +72,7 @@ func TestMCPTrendIdentityReuseAndUnknownStarts(t *testing.T) {
 
 func TestMCPTrendNewHostCannotInheritOldLeak(t *testing.T) {
 	at := time.Unix(1000, 0).UTC()
-	ps := []model.Proc{{PID: 100, Cmdline: "codex app-server", StartTime: at}, {PID: 1, PPID: 100, Cmdline: "node /opt/server.js", StartTime: at}}
+	ps := []model.Proc{{PID: 100, Cmdline: "codex app-server", Argv: []string{"codex", "app-server"}, StartTime: at}, {PID: 1, PPID: 100, Cmdline: "node /opt/server.js", Argv: []string{"node", "/opt/server.js"}, StartTime: at}}
 	v := MCPServers(ps, nil, at.Add(time.Hour))
 	s := v.Samples[0]
 	leak := MCPTrend{Host: s.Host, Key: s.Key, State: "leaking", Count: 1}
@@ -92,9 +92,9 @@ func TestMCPTrendNewHostCannotInheritOldLeak(t *testing.T) {
 func TestMCPSampleMembersExcludeLaunchers(t *testing.T) {
 	at := time.Unix(1000, 0).UTC()
 	ps := []model.Proc{
-		{PID: 100, Cmdline: "claude", StartTime: at},
-		{PID: 1, PPID: 100, Cmdline: "node exec firecrawl-mcp", StartTime: at, RSS: 10},
-		{PID: 2, PPID: 1, Cmdline: "node /cache/node_modules/.bin/firecrawl-mcp", StartTime: at, RSS: 20},
+		{PID: 100, Cmdline: "claude", Argv: []string{"claude"}, StartTime: at},
+		{PID: 1, PPID: 100, Cmdline: "node exec firecrawl-mcp", Argv: []string{"node", "exec", "firecrawl-mcp"}, StartTime: at, RSS: 10},
+		{PID: 2, PPID: 1, Cmdline: "node /cache/node_modules/.bin/firecrawl-mcp", Argv: []string{"node", "/cache/node_modules/.bin/firecrawl-mcp"}, StartTime: at, RSS: 20},
 	}
 	v := MCPServers(ps, nil, at.Add(time.Hour))
 	if len(v.Samples) != 1 || v.Samples[0].Count != 1 || v.Samples[0].Footprint != 30 || len(v.Samples[0].Members) != 1 || v.Samples[0].Members[0].PID != 2 || v.Samples[0].Key != v.Commands[0].Key {

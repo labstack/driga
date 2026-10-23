@@ -178,3 +178,37 @@ func TestCaptureNoneRejected(t *testing.T) {
 		t.Fatal("capture_text=none accepted")
 	}
 }
+
+func TestMalformedExcludeSkippedAtLoad(t *testing.T) {
+	for _, pattern := range []string{"[", "foo/[abc", "**/[abc"} {
+		path := filepath.Join(t.TempDir(), "config.toml")
+		if err := os.WriteFile(path, []byte("exclude = ['good/**', '"+pattern+"', '**/node_modules']\n"), 0600); err != nil {
+			t.Fatal(err)
+		}
+		cfg, err := config.Load(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(cfg.Exclude) != 2 || cfg.Exclude[0] != "good/**" || cfg.Exclude[1] != "**/node_modules" {
+			t.Fatal(cfg.Exclude)
+		}
+		if len(cfg.Warnings) != 1 || !strings.Contains(cfg.Warnings[0], "exclude") || !strings.Contains(cfg.Warnings[0], pattern) {
+			t.Fatal(cfg.Warnings)
+		}
+	}
+}
+
+// The Chat MCP child inherits these from its broker; config must accept them.
+func TestChatChildEnvironmentAccepted(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("DRIGA_CONFIG", path)
+	for _, name := range []string{"DRIGA_CHAT_SOCKET", "DRIGA_CHAT_CONVERSATION", "DRIGA_CHAT_TOKEN", "DRIGA_CHAT_READ_ONLY"} {
+		t.Setenv(name, "x")
+	}
+	if _, err := config.Load(config.Path()); err != nil {
+		t.Fatal(err)
+	}
+}

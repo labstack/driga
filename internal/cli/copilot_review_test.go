@@ -155,7 +155,9 @@ func TestCopilotSandboxAndNoEventsWarnings(t *testing.T) {
 	if err := os.MkdirAll(d.CopilotHome, 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.Tx(context.Background(), func(tx *store.Tx) error { return tx.ReplaceProcs([]model.Proc{{PID: 123, Cmdline: "copilot"}}) }); err != nil {
+	if err := st.Tx(context.Background(), func(tx *store.Tx) error {
+		return tx.ReplaceProcs([]model.Proc{{PID: 123, Cmdline: "copilot", Argv: []string{"copilot"}}})
+	}); err != nil {
 		t.Fatal(err)
 	}
 	for _, body := range []string{`{"sandbox":{"enabled":true},"other":{"enabled":"not bool"}}`, `{"sandbox":{"enabled":false}}`, `{`, ""} {

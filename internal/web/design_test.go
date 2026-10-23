@@ -25,6 +25,16 @@ func TestThemeControlAndStylesheet(t *testing.T) {
 	}
 }
 
+func TestFooterDescribesChatActions(t *testing.T) {
+	s, _, _, _ := fixture(t)
+	for _, page := range []string{"/", "/chat", "/flow"} {
+		body := request(s, "GET", page, s.token).Body.String()
+		if strings.Contains(body, "Read-only dashboard") || !strings.Contains(body, "Local actions in Chat") {
+			t.Fatal(page, "footer misrepresents available actions")
+		}
+	}
+}
+
 func TestRailCountsRefresh(t *testing.T) {
 	s, _, _, _ := fixture(t)
 	for _, fragment := range []bool{false, true} {

@@ -58,7 +58,7 @@ func TestLinkParentsDetachedBrokerByCwdAndLifetime(t *testing.T) {
 	start := time.Unix(1000, 0)
 	procs := []model.Proc{
 		{PID: 100, PPID: 1, StartTime: start, Cwd: "/repo"},
-		{PID: 200, PPID: 1, StartTime: start.Add(time.Hour), Cwd: "/repo", Cmdline: "node /plugin/app-server-broker.mjs serve"},
+		{PID: 200, PPID: 1, StartTime: start.Add(time.Hour), Cwd: "/repo", Cmdline: "node /plugin/app-server-broker.mjs serve", Argv: []string{"node", "/plugin/app-server-broker.mjs", "serve"}},
 	}
 	parent := familySession(1, 100)
 	parent.Cwd, parent.StartedAt = "/repo", start

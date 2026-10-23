@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
@@ -10,10 +11,11 @@ import (
 	"time"
 
 	"github.com/labstack/driga/internal/chat"
+	"github.com/labstack/driga/internal/store"
 )
 
 func isChatPOST(path string) bool {
-	return path == "/chat/api/send" || path == "/chat/api/stop" || path == "/chat/api/new"
+	return path == "/chat/api/prompt-answer" || path == "/chat/api/send" || path == "/chat/api/stop" || path == "/chat/api/new" || path == "/chat/api/mode" || path == "/chat/api/decide"
 }
 func (s *Server) chatAPI(w http.ResponseWriter, r *http.Request) {
 	if isChatPOST(r.URL.Path) {
@@ -22,7 +24,7 @@ func (s *Server) chatAPI(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "method not allowed", 405)
 			return
 		}
-		if r.Header.Get("Origin") != "http://"+r.Host || subtle.ConstantTimeCompare([]byte(r.Header.Get("X-CSRF-Token")), []byte(s.csrf)) != 1 {
+		if s.origin.Check(r) != nil || r.Header.Get("Origin") != "http://"+r.Host || subtle.ConstantTimeCompare([]byte(r.Header.Get("X-CSRF-Token")), []byte(s.csrf)) != 1 {
 			http.Error(w, "Origin or CSRF token rejected", 403)
 			return
 		}
@@ -42,6 +44,28 @@ func (s *Server) chatAPI(w http.ResponseWriter, r *http.Request) {
 	var out any
 	var err error
 	switch r.URL.Path {
+	case "/chat/api/prompts":
+		if client, ok := s.opts.Chat.(chat.PromptClient); ok {
+			out, err = client.Prompts(ctx)
+		} else {
+			out = []chat.Prompt{}
+		}
+	case "/chat/api/prompt-answer":
+		var in struct {
+			ID    string `json:"id"`
+			Allow bool   `json:"allow"`
+		}
+		decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096))
+		decoder.DisallowUnknownFields()
+		err = decoder.Decode(&in)
+		if err == nil {
+			if client, ok := s.opts.Chat.(chat.PromptClient); ok {
+				err = client.AnswerPrompt(ctx, in.ID, in.Allow)
+			} else {
+				err = errors.New("Prompts unavailable")
+			}
+		}
+		out = map[string]bool{"ok": err == nil}
 	case "/chat/api/new":
 		out, err = s.opts.Chat.Create(ctx)
 	case "/chat/api/history":
@@ -60,6 +84,24 @@ func (s *Server) chatAPI(w http.ResponseWriter, r *http.Request) {
 				err = s.opts.Chat.Stop(ctx, in.ID)
 			} else {
 				err = s.opts.Chat.Send(ctx, in.ID, in.Text, in.Context)
+			}
+		}
+		out = map[string]bool{"ok": err == nil}
+	case "/chat/api/mode", "/chat/api/decide":
+		var in struct {
+			ID     string    `json:"id"`
+			Mode   chat.Mode `json:"mode"`
+			Action string    `json:"action"`
+			Allow  bool      `json:"allow"`
+		}
+		decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096))
+		decoder.DisallowUnknownFields()
+		err = decoder.Decode(&in)
+		if err == nil {
+			if r.URL.Path == "/chat/api/mode" {
+				err = s.opts.Chat.SetMode(ctx, in.ID, in.Mode)
+			} else {
+				err = s.opts.Chat.Decide(ctx, in.ID, in.Action, in.Allow)
 			}
 		}
 		out = map[string]bool{"ok": err == nil}
@@ -125,43 +167,94 @@ func (s *Server) chatEvents(w http.ResponseWriter, r *http.Request) {
 		}
 		return rc.Flush()
 	}
-	tick := time.NewTicker(150 * time.Millisecond)
-	defer tick.Stop()
-	heartbeat := time.NewTicker(15 * time.Second)
-	defer heartbeat.Stop()
 	var active bool
 	queued := -1
 	for {
 		if state.Reset {
-			if err := write(state.Cursor, "reset", state); err != nil {
+			if err := write(state.Cursor, "reset", renderChatState(state)); err != nil {
 				return
 			}
 		} else {
-			for _, e := range state.Events {
+			for _, e := range renderChatEvents(state) {
 				if err := write(e.Seq, "change", e); err != nil {
 					return
 				}
 			}
 		}
 		after = state.Cursor
+		state.Reset, state.Events = false, nil
 		if state.Active != active || state.Queued != queued {
 			active, queued = state.Active, state.Queued
 			if err := write(after, "status", map[string]any{"active": active, "queued": queued}); err != nil {
 				return
 			}
 		}
-		select {
-		case <-r.Context().Done():
-			return
-		case <-heartbeat.C:
+		waitCtx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+		next, waitErr := s.opts.Chat.Wait(waitCtx, r.URL.Query().Get("id"), after)
+		cancel()
+		if errors.Is(waitErr, context.DeadlineExceeded) && r.Context().Err() == nil {
 			if err := write(after, "status", map[string]any{"active": active, "queued": queued}); err != nil {
 				return
 			}
-		case <-tick.C:
+			continue
 		}
-		state, err = s.opts.Chat.Read(r.Context(), r.URL.Query().Get("id"), after)
+		if waitErr == nil && next.Cursor == after {
+			if err := write(after, "status", map[string]any{"active": next.Active, "queued": next.Queued}); err != nil {
+				return
+			}
+			continue
+		}
+		state, err = next, waitErr
 		if err != nil {
 			return
 		}
 	}
+}
+
+// HTML belongs to the browser transport, never persisted chat history or deltas.
+type chatHTMLMessage struct {
+	store.ChatMessage
+	HTML string `json:"html,omitempty"`
+}
+type chatHTMLEvent struct {
+	chat.Event
+	Message *chatHTMLMessage `json:"message,omitempty"`
+	HTML    string           `json:"html,omitempty"`
+}
+type chatHTMLState struct {
+	chat.State
+	Messages []chatHTMLMessage `json:"messages"`
+	Events   []chatHTMLEvent   `json:"events"`
+}
+
+func renderChatMessage(m store.ChatMessage) chatHTMLMessage {
+	out := chatHTMLMessage{ChatMessage: m}
+	if m.Role == "assistant" && m.Status != "streaming" {
+		out.HTML = chat.MarkdownHTML(m.Text)
+	}
+	return out
+}
+func renderChatState(state chat.State) chatHTMLState {
+	out := chatHTMLState{State: state, Messages: []chatHTMLMessage{}, Events: make([]chatHTMLEvent, len(state.Events))}
+	for _, m := range state.Messages {
+		out.Messages = append(out.Messages, renderChatMessage(m))
+	}
+	out.Events = renderChatEvents(state)
+	return out
+}
+
+func renderChatEvents(state chat.State) []chatHTMLEvent {
+	events := make([]chatHTMLEvent, len(state.Events))
+	if len(events) == 0 {
+		return events
+	}
+	for i, e := range state.Events {
+		rendered := chatHTMLEvent{Event: e}
+		if e.Message != nil {
+			m := renderChatMessage(*e.Message)
+			rendered.Message = &m
+		}
+		events[i] = rendered
+	}
+	return events
 }

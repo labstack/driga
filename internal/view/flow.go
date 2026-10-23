@@ -7,9 +7,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/labstack/driga/internal/textfmt"
+
 	"github.com/labstack/driga/internal/derive"
 	"github.com/labstack/driga/internal/inbox"
-	"github.com/labstack/driga/internal/jsonwire"
+	"github.com/labstack/driga/internal/jsonx"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/scrub"
 	"github.com/labstack/driga/internal/store"
@@ -26,7 +28,7 @@ type FlowNode struct {
 	Waits          []FlowWait              `json:"waits"`
 	Handoffs       []model.CompletionEvent `json:"handoffs"`
 	RetainedFromAt time.Time               `json:"retained_from_at"`
-	Jump           *model.InboxJump        `json:"jump,omitempty"`
+	Jump           *model.InboxJump        `json:"jump,omitzero"`
 	Reason         string                  `json:"reason,omitempty"`
 	MachineID      string                  `json:"machine_id"`
 	ID             int64                   `json:"id"`
@@ -44,12 +46,12 @@ type FlowNode struct {
 	LastActivityAt time.Time               `json:"last_activity_at"`
 	LastActivity   string                  `json:"last_activity,omitempty"`
 	LastTool       string                  `json:"last_tool,omitempty"`
-	Mem            *uint64                 `json:"mem_bytes,omitempty"`
-	Helpers        *int                    `json:"helpers,omitempty"`
+	Mem            *uint64                 `json:"mem_bytes,omitzero"`
+	Helpers        *int                    `json:"helpers,omitzero"`
 	Model          string                  `json:"model,omitempty"`
-	InputTokens    *int64                  `json:"input_tokens,omitempty"`
-	OutputTokens   *int64                  `json:"output_tokens,omitempty"`
-	CostUSD        *float64                `json:"cost_usd,omitempty"`
+	InputTokens    *int64                  `json:"input_tokens,omitzero"`
+	OutputTokens   *int64                  `json:"output_tokens,omitzero"`
+	CostUSD        *float64                `json:"cost_usd,omitzero"`
 	Activity       []int                   `json:"activity"`
 	Observed       *FlowObserved           `json:"observed"`
 }
@@ -103,8 +105,12 @@ type FlowView struct {
 	UsageWindow     string           `json:"usage_window"`
 }
 
-func (v FlowView) MarshalJSON() ([]byte, error) { return jsonwire.Marshal(v) }
-func (v FlowNode) MarshalJSON() ([]byte, error) { return jsonwire.Marshal(v) }
+func (v FlowView) MarshalJSON() ([]byte, error) { type plain FlowView; return jsonx.Marshal(plain(v)) }
+func (v FlowNode) MarshalJSON() ([]byte, error) {
+	v.Label, v.Heuristic = jsonx.Label(v.Label, v.Heuristic)
+	type plain FlowNode
+	return jsonx.Marshal(plain(v))
+}
 
 // FlowWorkers is a presentation window; the complete family stays in FlowView.
 type FlowWorkers struct {
@@ -586,14 +592,9 @@ func FlowSpark(buckets []int) string {
 	for _, n := range buckets {
 		peak = max(peak, n)
 	}
-	var b strings.Builder
-	blocks := []rune("▁▂▃▄▅▆▇█")
-	for _, n := range buckets {
-		if n == 0 || peak == 0 {
-			b.WriteRune(' ')
-		} else {
-			b.WriteRune(blocks[min(7, (n*8-1)/peak)])
-		}
+	cells := make([]textfmt.SparkCell, len(buckets))
+	for i, n := range buckets {
+		cells[i].Value = float64(n)
 	}
-	return b.String()
+	return textfmt.Spark(cells, float64(peak), ' ', textfmt.SparkCeil, nil)
 }

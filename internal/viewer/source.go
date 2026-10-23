@@ -166,27 +166,6 @@ func (s *StoreSource) load(ctx context.Context, mode string, scope store.Scope, 
 			return err
 		}
 		if details {
-			ids := map[int64]bool{}
-			var collect func([]view.AgentRow)
-			collect = func(rows []view.AgentRow) {
-				for _, r := range rows {
-					ids[r.ID] = true
-					collect(r.Children)
-				}
-			}
-			collect(snap.Agents.Rows)
-			for _, i := range snap.Inbox.Rows {
-				if i.SessionID != 0 {
-					ids[i.SessionID] = true
-				}
-			}
-			for id := range ids {
-				d, err := view.Agent(tx, id, now, f.Scope)
-				if err != nil {
-					return err
-				}
-				snap.AgentDetails[id] = d
-			}
 			for _, r := range snap.Projects.Rows {
 				d, err := view.WhereFiltered(tx, r.Status.Repo.Path, now, view.Filter{All: f.All, Scope: store.Scope{Machines: []string{r.MachineID}}})
 				if err != nil {
@@ -415,7 +394,7 @@ func (s *LiveSnapshotSource) Close() error {
 	return s.st.Close()
 }
 
-// DetailSource loads only the detail requested by a browser.
+// DetailSource loads only the selected session or project detail.
 type DetailSource interface {
 	LoadAgent(context.Context, store.Scope, int64) (view.AgentView, error)
 	LoadProject(context.Context, store.Scope, int64, bool) (view.WhereView, error)

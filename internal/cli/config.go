@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/labstack/driga/internal/secfile"
 	"io"
 	"os"
 	"os/exec"
@@ -13,6 +12,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/labstack/driga/internal/secfile"
+
+	"github.com/kballard/go-shellquote"
 	"github.com/labstack/driga/internal/config"
 	"github.com/pelletier/go-toml/v2"
 )
@@ -70,7 +72,7 @@ func (ConfigEditCmd) Run(g *Globals) error {
 		editor = "vi"
 	}
 	// Parse quoting without running a shell: filenames and editor flags remain argv.
-	args, err := splitCommandWords(editor)
+	args, err := shellquote.Split(editor)
 	if err != nil {
 		return fmt.Errorf("EDITOR: %w", err)
 	}
@@ -80,50 +82,6 @@ func (ConfigEditCmd) Run(g *Globals) error {
 	cmd := exec.Command(args[0], append(args[1:], path)...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = g.Stdin, commandOutput(g), g.Stderr
 	return cmd.Run()
-}
-
-func splitCommandWords(s string) ([]string, error) {
-	var args []string
-	var word strings.Builder
-	var quote rune
-	escaped, started := false, false
-	flush := func() {
-		if started {
-			args = append(args, word.String())
-			word.Reset()
-			started = false
-		}
-	}
-	for _, r := range s {
-		switch {
-		case escaped:
-			word.WriteRune(r)
-			escaped = false
-			started = true
-		case r == '\\' && quote != '\'':
-			escaped = true
-			started = true
-		case quote != 0:
-			if r == quote {
-				quote = 0
-			} else {
-				word.WriteRune(r)
-			}
-		case r == '\'' || r == '"':
-			quote = r
-			started = true
-		case r == ' ' || r == '\t' || r == '\n':
-			flush()
-		default:
-			word.WriteRune(r)
-			started = true
-		}
-	}
-	if escaped || quote != 0 {
-		return nil, errors.New("command contains unfinished quoting")
-	}
-	flush()
-	return args, nil
 }
 
 func durationText(d time.Duration) string {
@@ -207,14 +165,5 @@ func writeConfig(path, text string) error {
 	if err := secfile.Protect(dir); err != nil {
 		return err
 	}
-	f, err := secfile.CreateTemp(dir, ".config-*")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(f.Name())
-	_, writeErr := io.WriteString(f, text)
-	if err := errors.Join(writeErr, f.Close()); err != nil {
-		return err
-	}
-	return os.Rename(f.Name(), path)
+	return secfile.WriteFileAtomic(path, []byte(text), nil)
 }

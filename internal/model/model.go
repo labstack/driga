@@ -30,7 +30,7 @@ type Machine struct {
 // Proc is one process in a snapshot.
 type Proc struct {
 	// Partial means one or more live Windows process queries were denied.
-	Partial       bool      `json:"partial,omitempty"`
+	Partial       bool      `json:"partial,omitzero"`
 	TTY           string    `json:"tty,omitempty"`
 	MachineID     string    `json:"machine_id"`
 	PID           int32     `json:"pid"`
@@ -43,11 +43,12 @@ type Proc struct {
 	CPUSeconds    float64   `json:"cpu_ms"`
 	CPUPercent    float64   `json:"cpu_percent"`
 	Cmdline       string    `json:"cmdline"`
+	Argv          []string  `json:"argv"`
 	Exe           string    `json:"exe"`
 	Cwd           string    `json:"cwd"`
 	Role          string    `json:"role,omitempty"`
 	Agent         string    `json:"agent,omitempty"`
-	SessionID     int64     `json:"session_id,omitempty"`
+	SessionID     int64     `json:"session_id,omitzero"`
 	// Zombie is live inspection data; cleanup never uses stored process state.
 	Zombie bool `json:"-"`
 	// OwnerUID is the real uid when OwnerKnown; live inspection only, never
@@ -59,8 +60,8 @@ type Proc struct {
 // MachineSample is one machine-health reading.
 type MachineSample struct {
 	// Windows commit accounting is not pagefile occupancy.
-	CommitLimit uint64 `json:"commit_limit_bytes,omitempty"`
-	CommitUsed  uint64 `json:"commit_used_bytes,omitempty"`
+	CommitLimit uint64 `json:"commit_limit_bytes,omitzero"`
+	CommitUsed  uint64 `json:"commit_used_bytes,omitzero"`
 	// DiskTotal is live inspection data for the collector's low_disk threshold.
 	// It is not a new persisted column.
 	DiskTotal     uint64    `json:"-"`
@@ -80,7 +81,7 @@ type MachineSample struct {
 	Load15 float64 `json:"load15"`
 	Cores  int     `json:"cores"`
 	// PsiMemSome10 is Linux PSI memory "some avg10"; nil when unavailable.
-	PsiMemSome10 *float64 `json:"psi_mem_some10,omitempty"`
+	PsiMemSome10 *float64 `json:"psi_mem_some10,omitzero"`
 }
 
 // Repo is a git repository (the main worktree's path).
@@ -153,9 +154,9 @@ type FileTouch struct {
 // HookEvent is one line in the spool. Event retains the adapter's protocol name;
 // ack uses Message as the inbox item id, and summary carries Summary instead of text.
 type HookEvent struct {
-	Recoverable      bool      `json:"recoverable,omitempty"`
+	Recoverable      bool      `json:"recoverable,omitzero"`
 	Origin           string    `json:"origin,omitempty"`
-	PID              int32     `json:"pid,omitempty"`
+	PID              int32     `json:"pid,omitzero"`
 	ProcStart        time.Time `json:"proc_started_at,omitzero"`
 	Title            string    `json:"title,omitempty"`
 	Prompt           string    `json:"prompt,omitempty"`
@@ -164,7 +165,7 @@ type HookEvent struct {
 	NotificationType string    `json:"notification_type,omitempty"`
 	Tool             string    `json:"tool,omitempty"`
 	Detail           string    `json:"detail,omitempty"`
-	Summary          *Summary  `json:"summary,omitempty"`
+	Summary          *Summary  `json:"summary,omitzero"`
 	MachineID        string    `json:"machine_id,omitempty"`
 	TS               time.Time `json:"occurred_at"`
 	Adapter          string    `json:"adapter"`
@@ -189,17 +190,17 @@ type Summary struct {
 // Session is a stored session with derived fields.
 type Session struct {
 	StartedFrom string      `json:"started_from,omitempty"`
-	Mixer       *StateMixer `json:"mixer,omitempty"`
+	Mixer       *StateMixer `json:"mixer,omitzero"`
 	MachineID   string      `json:"machine_id"`
 	ID          int64       `json:"id"`
-	ParentID    *int64      `json:"parent_id,omitempty"`
+	ParentID    *int64      `json:"parent_id,omitzero"`
 	SessionObs
-	RepoID     *int64     `json:"repo_id,omitempty"`
-	WorktreeID *int64     `json:"worktree_id,omitempty"`
+	RepoID     *int64     `json:"repo_id,omitzero"`
+	WorktreeID *int64     `json:"worktree_id,omitzero"`
 	Label      string     `json:"label"`
 	Heuristic  bool       `json:"heuristic"`
 	Evidence   string     `json:"evidence"`
-	EndedAt    *time.Time `json:"ended_at,omitempty"`
+	EndedAt    *time.Time `json:"ended_at,omitzero"`
 }
 
 // InboxItem is one event needing the user's attention.
@@ -209,16 +210,16 @@ type InboxItem struct {
 	Detail         string     `json:"detail,omitempty"`
 	WaitingSinceAt time.Time  `json:"waiting_since_at,omitzero"`
 	Source         string     `json:"source,omitempty"`
-	EndedAt        *time.Time `json:"ended_at,omitempty"`
-	Jump           *InboxJump `json:"jump,omitempty"`
-	AckPendingAt   *time.Time `json:"ack_pending_at,omitempty"`
+	EndedAt        *time.Time `json:"ended_at,omitzero"`
+	Jump           *InboxJump `json:"jump,omitzero"`
+	AckPendingAt   *time.Time `json:"ack_pending_at,omitzero"`
 	MachineID      string     `json:"machine_id"`
 	ID             string     `json:"id"`
 	SessionID      int64      `json:"session_id"`
 	Kind           string     `json:"kind"` // finished|waiting
 	TS             time.Time  `json:"occurred_at"`
 	Summary        string     `json:"summary"`
-	AckedAt        *time.Time `json:"acked_at,omitempty"`
+	AckedAt        *time.Time `json:"acked_at,omitzero"`
 }
 
 // InboxJump contains only a proven destination or a copyable resume command.
@@ -287,7 +288,7 @@ type Gap struct {
 
 // Event is a stored hook event attributed to a session.
 type Event struct {
-	Metadata   *EventMetadata `json:"metadata,omitempty"`
+	Metadata   *EventMetadata `json:"metadata,omitzero"`
 	MachineID  string         `json:"machine_id"`
 	Adapter    string         `json:"adapter"`
 	ExternalID string         `json:"external_id"`

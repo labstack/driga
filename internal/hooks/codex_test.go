@@ -38,7 +38,7 @@ func TestCodexInstallWhenUnset(t *testing.T) {
 		t.Fatal("original not backed up")
 	}
 	info, _ := os.Stat(path)
-	if info.Mode().Perm() != 0640 {
+	if info.Mode().Perm() != 0600 {
 		t.Fatalf("mode = %v", info.Mode())
 	}
 	d, err = hooks.CodexInstall(path, testBinary("/opt/tools with spaces/driga"), false, testNow.Add(time.Second))

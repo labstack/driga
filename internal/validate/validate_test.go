@@ -76,7 +76,7 @@ func TestHeldOutFixtures(t *testing.T) {
 }
 
 type sessionLabel struct {
-	Heuristic  bool   `json:"heuristic,omitempty"`
+	Heuristic  bool   `json:"heuristic,omitzero"`
 	ExternalID string `json:"external_id"`
 	Label      string `json:"label"`
 }

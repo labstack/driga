@@ -18,9 +18,12 @@ import (
 	"sync"
 	"time"
 
+	"math"
+
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/scrub"
-	"math"
+	"golang.org/x/net/netutil"
+	"golang.org/x/time/rate"
 )
 
 const maxBody = 8 << 20
@@ -410,8 +413,7 @@ type Handler struct {
 	sink     func(context.Context, Batch) (int, error)
 	slots    chan struct{}
 	mu       sync.Mutex
-	window   time.Time
-	count    int
+	limiter  *rate.Limiter
 	stats    Stats
 	lastLog  map[string]time.Time
 	onReject func()
@@ -420,7 +422,7 @@ type Handler struct {
 // New returns a bounded OTLP handler. The sink must enqueue work for the collector.
 // Optional onReject is a nonblocking notification to persist a fresh Stats snapshot.
 func New(sink func(context.Context, Batch) (int, error), onReject ...func()) *Handler {
-	h := &Handler{sink: sink, slots: make(chan struct{}, 16), stats: Stats{Reasons: make(map[string]int64)}, lastLog: make(map[string]time.Time)}
+	h := &Handler{limiter: rate.NewLimiter(10, 10), sink: sink, slots: make(chan struct{}, 16), stats: Stats{Reasons: make(map[string]int64)}, lastLog: make(map[string]time.Time)}
 	if len(onReject) > 0 {
 		h.onReject = onReject[0]
 	}
@@ -477,16 +479,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "OTLP/HTTP JSON required", 415)
 		return
 	}
-	h.mu.Lock()
-	now := time.Now()
-	if now.Sub(h.window) >= time.Second {
-		h.window = now
-		h.count = 0
-	}
-	h.count++
-	limited := h.count > 10
-	h.mu.Unlock()
-	if limited {
+	if !h.limiter.Allow() {
 		h.reject("rate limit", 429)
 		w.Header().Set("Retry-After", "1")
 		w.WriteHeader(429)
@@ -577,39 +570,29 @@ func Listen(addr string) (net.Listener, error) {
 	return net.Listen("tcp", addr)
 }
 
-type limitedListener struct {
+// connectionRateListener retains the ten accepts per second admission limit.
+// Concurrent connection ownership and cancellation belong to netutil.
+type connectionRateListener struct {
 	net.Listener
-	slots    chan struct{}
 	accepted []time.Time
 }
-type limitedConn struct {
-	net.Conn
-	once    sync.Once
-	release func()
-}
 
-func (c *limitedConn) Close() error { err := c.Conn.Close(); c.once.Do(c.release); return err }
-func (l *limitedListener) Accept() (net.Conn, error) {
+func (l *connectionRateListener) Accept() (net.Conn, error) {
 	for {
-		c, e := l.Listener.Accept()
-		if e != nil {
-			return nil, e
+		c, err := l.Listener.Accept()
+		if err != nil {
+			return nil, err
 		}
 		now := time.Now()
 		for len(l.accepted) > 0 && now.Sub(l.accepted[0]) >= time.Second {
 			l.accepted = l.accepted[1:]
 		}
 		if len(l.accepted) >= 10 {
-			c.Close()
+			_ = c.Close()
 			continue
 		}
-		select {
-		case l.slots <- struct{}{}:
-			l.accepted = append(l.accepted, now)
-			return &limitedConn{Conn: c, release: func() { <-l.slots }}, nil
-		default:
-			c.Close()
-		}
+		l.accepted = append(l.accepted, now)
+		return c, nil
 	}
 }
 
@@ -630,7 +613,7 @@ func Serve(ctx context.Context, ln net.Listener, h http.Handler) error {
 		case <-done:
 		}
 	}()
-	err = s.Serve(&limitedListener{Listener: ln, slots: make(chan struct{}, 16)})
+	err = s.Serve(netutil.LimitListener(&connectionRateListener{Listener: ln}, 16))
 	if errors.Is(err, http.ErrServerClosed) || ctx.Err() != nil {
 		return nil
 	}

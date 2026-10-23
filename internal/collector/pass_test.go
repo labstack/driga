@@ -100,7 +100,7 @@ func setup(t *testing.T) (Deps, *store.Store, *fakePlatform, *fakeAdapter) {
 	t.Setenv("DRIGA_SPOOL_DIR", t.TempDir())
 	t.Setenv("DRIGA_CONFIG", filepath.Join(home, "config.toml"))
 	now := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
-	p := &fakePlatform{procs: []model.Proc{{PID: 101, PPID: 2, StartTime: now.Add(-time.Hour), Cmdline: "claude", Cwd: home, CPUSeconds: 2}}}
+	p := &fakePlatform{procs: []model.Proc{{PID: 101, PPID: 2, StartTime: now.Add(-time.Hour), Cmdline: "claude", Argv: []string{"claude"}, Cwd: home, CPUSeconds: 2}}}
 	a := &fakeAdapter{name: "claude", obs: []model.SessionObs{{Adapter: "claude", ExternalID: "one", PID: 101, ProcStart: p.procs[0].StartTime, Cwd: home, RegistryStatus: "busy", StartedAt: p.procs[0].StartTime, LastActivityAt: now.Add(-time.Second)}}}
 	sigs, err := signatures.Load(nil)
 	if err != nil {
@@ -287,7 +287,7 @@ func TestCodexPidLinking(t *testing.T) {
 	d, st, p, a := setup(t)
 	a.name = "codex"
 	start := d.Now().Add(-time.Minute)
-	p.procs = []model.Proc{{PID: 10, StartTime: start.Add(-time.Second), Cmdline: "codex", Cwd: t.TempDir()}, {PID: 11, StartTime: start.Add(3 * time.Second), Cmdline: "codex exec", Cwd: ""}, {PID: 12, StartTime: start.Add(6 * time.Second), Cmdline: "codex", Cwd: ""}, {PID: 13, StartTime: start, Cmdline: "codex app-server", Cwd: ""}}
+	p.procs = []model.Proc{{PID: 10, StartTime: start.Add(-time.Second), Cmdline: "codex", Argv: []string{"codex"}, Cwd: t.TempDir()}, {PID: 11, StartTime: start.Add(3 * time.Second), Cmdline: "codex exec", Argv: []string{"codex", "exec"}, Cwd: ""}, {PID: 12, StartTime: start.Add(6 * time.Second), Cmdline: "codex", Argv: []string{"codex"}, Cwd: ""}, {PID: 13, StartTime: start, Cmdline: "codex app-server", Argv: []string{"codex", "app-server"}, Cwd: ""}}
 	cwd := p.procs[0].Cwd
 	for i := 1; i < len(p.procs); i++ {
 		p.procs[i].Cwd = cwd
@@ -368,7 +368,7 @@ func TestSessionRepoMapping(t *testing.T) {
 
 func TestOrphanStored(t *testing.T) {
 	d, st, p, _ := setup(t)
-	p.procs = append(p.procs, model.Proc{PID: 200, PPID: 1, StartTime: d.Now().Add(-time.Hour), Cmdline: "claude mcp serve", RSS: 123})
+	p.procs = append(p.procs, model.Proc{PID: 200, PPID: 1, StartTime: d.Now().Add(-time.Hour), Cmdline: "claude mcp serve", Argv: []string{"claude", "mcp", "serve"}, RSS: 123})
 	pass(t, d, st, Plan{Procs: true})
 	orphans, err := st.Orphans()
 	if err != nil || len(orphans) != 1 || orphans[0].RootPID != 200 || orphans[0].RSSTotal != 123 {
@@ -472,6 +472,7 @@ func TestCodexLinksFreshCwds(t *testing.T) {
 	a.obs[0].PID = 0
 	a.obs[0].RegistryStatus = ""
 	p.procs[0].Cmdline = "codex"
+	p.procs[0].Argv = []string{"codex"}
 	p.procs[0].Cwd = ""
 	p.cwds = map[int32]string{101: a.obs[0].Cwd}
 	pass(t, d, st, Plan{Procs: true, Cwds: true})
@@ -513,6 +514,7 @@ func TestCapturedTextPolicy(t *testing.T) {
 			a.name = "codex"
 			a.obs[0].Adapter = "codex"
 			p.procs[0].Cmdline = "codex"
+			p.procs[0].Argv = []string{"codex"}
 			secret := "ghp_verysecretvalue"
 			text := "answer " + secret + strings.Repeat(" x", 250)
 			a.obs[0].LastPrompt = text

@@ -1,5 +1,14 @@
 "use strict";
 (() => {
+  async function answerPrompt(button) {
+    const row=button.closest("[data-prompt]"), status=row.querySelector('[role="status"]');
+    row.querySelectorAll("button").forEach(el=>el.disabled=true);
+    try {
+      const response=await fetch("/chat/api/prompt-answer",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json","X-CSRF-Token":document.querySelector('meta[name="chat-csrf"]').content},body:JSON.stringify({id:button.dataset.promptId,allow:button.dataset.promptAnswer==="allow"})});
+      if(!response.ok)throw new Error(await response.text());
+      row.remove();
+    } catch(error) {status.textContent=error.message;row.querySelectorAll("button").forEach(el=>el.disabled=false);}
+  }
   const readOnly = "read-only in browser · use the CLI";
   const states = ["working", "waiting", "stalled", "idle", "finished", "ended", "dead", "unknown"];
   function parseCommand(input, scope = "all") {
@@ -139,7 +148,8 @@
       }
     };
   }
-  globalThis.DrigaConsole = Object.freeze({parseCommand, familyEvent, flowWireGeometry, observationPulses, transcriptSize, createInboxController, createMachineController});
+  function connectionText(connected,closed) { return connected?"● live":closed?"○ disconnected · authenticate the new web URL, then reload":"○ reconnecting…"; }
+  globalThis.DrigaConsole = Object.freeze({answerPrompt,connectionText,parseCommand, familyEvent, flowWireGeometry, observationPulses, transcriptSize, createInboxController, createMachineController});
   if (typeof document === "undefined") return;
 
   const root = document.documentElement;
@@ -345,6 +355,8 @@
   function closeHelp() { help.close(); focusPane(focused); }
   document.querySelector("[data-close-help]").addEventListener("click", closeHelp);
   document.addEventListener("click", event => {
+    const promptButton=event.target.closest("[data-prompt-answer]");
+    if(promptButton){event.preventDefault();answerPrompt(promptButton);return;}
     const copy = event.target.closest("[data-inbox-copy]");
     if (copy) { inboxUI.copy(copy, navigator.clipboard); return; }
     if (event.target.closest("[data-inbox-older]")) { inboxUI.showOlder(); return; }
@@ -500,10 +512,23 @@
   if (document.fonts) document.fonts.ready.then(() => charts.draw());
   system.addEventListener("change", () => { if (preference === "system") charts.draw(); });
   phone.addEventListener("change", () => charts.draw());
-  function connection(connected) { document.querySelectorAll(".connection").forEach(el => { el.textContent = connected ? "● live" : "○ reconnecting…"; el.classList.toggle("working", connected); el.classList.toggle("waiting", !connected); }); }
+  function connection(connected) { document.querySelectorAll(".connection").forEach(el => { el.textContent = connectionText(connected,stream.readyState===EventSource.CLOSED); el.classList.toggle("working", connected); el.classList.toggle("waiting", !connected); }); }
   const stream = new EventSource("/events" + window.location.search);
   stream.addEventListener("open", () => connection(true)); stream.addEventListener("error", () => connection(false));
   const refresh = () => { if(document.querySelector("[data-flow-map]")){document.dispatchEvent(new Event("driga:flow-refresh"));return;} const main = document.getElementById("main"); if (window.htmx) htmx.trigger(main, "console:refresh"); };
+  let promptPolling=false;
+  setInterval(async()=>{
+    const container=document.querySelector("[data-prompts]");
+    if(!container||promptPolling)return;
+    promptPolling=true;
+    try {
+      const response=await fetch("/chat/api/prompts",{credentials:"same-origin"});
+      if(!response.ok)return;
+      const prompts=await response.json();
+      const shown=Array.from(container.querySelectorAll("[data-prompt]"),row=>row.dataset.prompt).sort();
+      if(JSON.stringify(shown)!==JSON.stringify(prompts.map(prompt=>prompt.id).sort()))refresh();
+    } catch(_) { /* The next poll retries. */ } finally {promptPolling=false;}
+  },1000);
   stream.addEventListener("refresh", () => {if(document.querySelector("[data-flow-map]")) document.dispatchEvent(new Event("driga:flow-refresh"));});
   stream.addEventListener("ready", refresh); stream.addEventListener("change", () => {if(!document.querySelector("[data-flow-map]"))refresh();});
   stream.addEventListener("tail", event => { try { ingestTail(JSON.parse(event.data)); } catch (_) { /* A reconnect will refresh the tail. */ } });

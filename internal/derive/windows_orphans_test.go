@@ -22,7 +22,7 @@ func TestWindowsParentIdentity(t *testing.T) {
 		{"unknown", &model.Proc{PID: 700}, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			ps := []model.Proc{{PID: 701, PPID: 700, StartTime: now.Add(-time.Minute), Cmdline: "claude mcp serve"}}
+			ps := []model.Proc{{PID: 701, PPID: 700, StartTime: now.Add(-time.Minute), Cmdline: "claude mcp serve", Argv: []string{"claude", "mcp", "serve"}}}
 			if tc.parent != nil {
 				parent := *tc.parent
 				parent.PPID = 600
@@ -45,7 +45,7 @@ func TestWindowsParentIdentity(t *testing.T) {
 
 func TestWindowsOrphanPinsEveryMember(t *testing.T) {
 	now := time.Now()
-	ps := []model.Proc{{PID: 701, PPID: 700, StartTime: now.Add(-time.Hour), Cmdline: `"C:\Tools\claude.exe" mcp serve`}, {PID: 702, PPID: 701, StartTime: now.Add(-time.Minute)}}
+	ps := []model.Proc{{PID: 701, PPID: 700, StartTime: now.Add(-time.Hour), Cmdline: `"C:\Tools\claude.exe" mcp serve`, Argv: []string{"C:\\Tools\\claude.exe", "mcp", "serve"}}, {PID: 702, PPID: 701, StartTime: now.Add(-time.Minute)}}
 	peers := WithExternalPeers(map[int32]bool{701: false, 702: false})
 	first := FindOrphans(newProcIndex(ps, true), nil, signatures.Builtin(), now, 0, nil, peers)
 	if len(first) != 1 || len(first[0].ProcessStarts) != 2 || first[0].Verified {

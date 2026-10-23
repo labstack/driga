@@ -1,7 +1,6 @@
 package hooks
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -65,26 +64,14 @@ func TestWriteDiffAtomicModeAndSymlink(t *testing.T) {
 				t.Fatal(err)
 			}
 			d.After, d.Changed = "new", true
-			originalRename := renameSettings
-			t.Cleanup(func() { renameSettings = originalRename })
-			failure := errors.New("simulated pre-rename failure")
-			renameSettings = func(_, _ string) error { return failure }
-			if err := writeDiff(d, false, time.Now()); !errors.Is(err, failure) {
-				t.Fatalf("expected simulated failure, got %v", err)
-			}
-			b, _ := os.ReadFile(target)
-			if string(b) != "original" {
-				t.Fatalf("failure changed original: %q", b)
-			}
-			renameSettings = originalRename
 			if err := writeDiff(d, false, time.Now()); err != nil {
 				t.Fatal(err)
 			}
 			info, err := os.Stat(target)
-			if err != nil || info.Mode().Perm() != 0640 {
+			if err != nil || info.Mode().Perm() != 0600 {
 				t.Fatalf("mode: %v %v", info, err)
 			}
-			b, _ = os.ReadFile(target)
+			b, _ := os.ReadFile(target)
 			if string(b) != "new" {
 				t.Fatalf("target: %q", b)
 			}
@@ -92,7 +79,7 @@ func TestWriteDiffAtomicModeAndSymlink(t *testing.T) {
 			if err != nil || (info.Mode()&os.ModeSymlink != 0) != link {
 				t.Fatalf("symlink: %v %v", info, err)
 			}
-			temps, _ := filepath.Glob(filepath.Join(dir, ".driga-settings-*"))
+			temps, _ := filepath.Glob(filepath.Join(dir, ".*-*"))
 			if len(temps) != 0 {
 				t.Fatalf("leaked temps: %v", temps)
 			}

@@ -59,8 +59,8 @@ type ErrorRecord struct {
 }
 
 type Envelope struct {
-	Error        *ErrorRecord     `json:"error,omitempty"`
-	Truncated    *bool            `json:"truncated,omitempty"`
+	Error        *ErrorRecord     `json:"error,omitzero"`
+	Truncated    *bool            `json:"truncated,omitzero"`
 	Schema       int              `json:"schema"`
 	ObservedAt   time.Time        `json:"observed_at"`
 	Mode         string           `json:"mode"`
@@ -131,7 +131,7 @@ type AgentRow struct {
 	ID               int64         `json:"id"`
 	RepoID           int64         `json:"repo_id"`
 	LastActivityAt   time.Time     `json:"last_activity_at"`
-	TitleFromPrompt  bool          `json:"title_from_prompt,omitempty"`
+	TitleFromPrompt  bool          `json:"title_from_prompt,omitzero"`
 	Heuristic        bool          `json:"heuristic"`
 	Label            string        `json:"label"`
 	Adapter          string        `json:"adapter"`
@@ -207,7 +207,7 @@ type ProjectStatus struct {
 
 // WherePart preserves the source and timestamp of one project summary part.
 type WherePart struct {
-	Stale     bool      `json:"stale,omitempty"`
+	Stale     bool      `json:"stale,omitzero"`
 	MachineID string    `json:"machine_id"`
 	Source    string    `json:"source"`
 	Text      string    `json:"text"`
@@ -241,7 +241,7 @@ type WhereView struct {
 
 // InboxRow is an event with its project and age.
 type InboxRow struct {
-	Historical bool `json:"historical,omitempty"`
+	Historical bool `json:"historical,omitzero"`
 	MachineFresh
 	MachineID string `json:"machine_id"`
 	model.InboxItem
@@ -295,8 +295,8 @@ type MemoryRow struct {
 
 // MachineView contains host totals, whole-machine app rankings, and agent role totals.
 type MachineView struct {
-	Full       bool      `json:"full,omitempty"`
-	Truncated  bool      `json:"truncated,omitempty"`
+	Full       bool      `json:"full,omitzero"`
+	Truncated  bool      `json:"truncated,omitzero"`
 	TrendSince time.Time `json:"trend_since,omitzero"`
 	// Machines serves human fleet views; the wire includes only additional hosts.
 	AdditionalMachines []MachineView `json:"machines,omitempty"`

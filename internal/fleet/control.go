@@ -19,10 +19,10 @@ type ControlRequest struct {
 	Op        string `json:"op"`
 	DeviceID  string `json:"device_id,omitempty"`
 	Window    string `json:"window,omitempty"`
-	Ack       bool   `json:"ack,omitempty"`
+	Ack       bool   `json:"ack,omitzero"`
 	Token     string `json:"token,omitempty"`
 	Attempt   string `json:"attempt,omitempty"`
-	Approve   bool   `json:"approve,omitempty"`
+	Approve   bool   `json:"approve,omitzero"`
 	MachineID string `json:"machine_id,omitempty"`
 }
 

@@ -28,7 +28,7 @@ with activity within the last 24 hours, alongside recently ended sessions.
 Data views merge paired machines by default. `--machine all|local|<name|id>`
 selects a scope; `--project .` resolves against local repositories only.
 Data views support `--json`, `--project <name|path|.>`, `--since <duration|yesterday>`,
-`--snapshot`, and `--no-color`; `NO_COLOR` is also honored. View JSON has schema 2,
+`--snapshot`, `--theme=auto|mocha|latte`, and `--no-color`; `NO_COLOR` is also honored. View JSON has schema 2,
 an observation time, collection mode, source freshness, coverage gaps, and data.
 `doctor --json` returns diagnostic checks rather than a view envelope.
 Use `driga <command> --help` for command-specific flags.
@@ -128,6 +128,7 @@ Defaults and their purpose:
 
 | Setting | Default | Purpose |
 | --- | --- | --- |
+| `ui.theme` | `auto` | Whole TUI palette: `auto`, `mocha`, `latte`; override with `--theme`. |
 | `roots` | none | Discover from sessions; add scanning roots only when wanted. |
 | `root_depth` | `3` | Bound discovery below configured roots. |
 | `exclude` | `**/node_modules`, `**/.tmp/**` | Avoid dependency and temporary directories. |
@@ -232,11 +233,13 @@ driga hooks uninstall
 Installation shows a line-level unified diff with three context lines and `@@`
 hunk ranges, then asks for confirmation. Existing Claude and Codex
 files are backed up to `*.driga-bak-<timestamp>`.
-Claude installation appends commands for Stop, Notification, SessionStart, and
-SessionEnd to `~/.claude/settings.json`, preserving existing hooks. Codex
+Claude installation appends commands for Stop, Notification, SessionStart,
+SessionEnd and PermissionRequest to `~/.claude/settings.json`, preserving existing
+hooks. Codex
 installation manages only the `[[hooks.PermissionRequest]]` block in
 `config.toml`, preserving comments and existing `notify` settings. Uninstall
-removes only Driga entries. Hooks append events to the spool; the collector alone writes SQLite.
+removes only Driga entries. Capture hooks append events to the spool; the collector
+alone writes SQLite. Claude PermissionRequest uses the in-memory broker instead.
 
 Copilot installation manages only `$COPILOT_HOME/hooks/driga.json`, falling back
 to `~/.copilot/hooks/driga.json`. It captures sessionStart, userPromptSubmitted,
@@ -597,23 +600,75 @@ No real agent CLI is run by tests.
 
 Open **8:chat** or press **c** on any web console page to dock Chat on the right.
 Non-command text in the command bar opens the composer. Send with ⌘Enter (or
-Ctrl+Enter), use Stop / Escape to cancel the current turn and queued messages,
-and use History to reopen a conversation. Context chips describe the current
-page, selected session/project and machine; remove a chip to leave it out.
+Ctrl+Enter), use Stop to cancel the current turn and queued messages,
+and use History to reopen a conversation. Escape closes the panel when the input
+is empty; with a draft, the first Escape blurs the input and keeps the draft.
+Context chips describe the current page, selected session/project and machine;
+remove a chip to leave it out.
 Session references in answers select the session on the current page. Tool calls
-appear in a collapsed **Tools used** list. Agent output is rendered as text.
+appear in a collapsed **Tools used** list. Driga replies are rendered as Markdown
+and marked **answered by Claude Code**. A timed indicator shows thinking, writing
+or the current read tool. Streaming follows the bottom until you scroll up; reduced
+motion uses a static dot.
 
 In `driga top`, press **8** or **c** for Chat with the current selection. Enter
-adds a line; Ctrl+Enter or Alt+Enter sends; Escape stops. PgUp/PgDown scroll,
-Alt+Up recalls the last draft, Ctrl+H cycles history, Ctrl+N starts a conversation,
-Ctrl+X clears context and Ctrl+0 returns Home. Flow's copy-resume key is **C**.
+adds a line; Ctrl+Enter or Alt+Enter sends. Escape stops an active reply; otherwise
+it enters **navigate** mode and keeps the draft. In navigate mode, normal keys
+work: **0–8** switch tabs, **q** quits, **?** opens help and **/** filters. Press
+**c** or **Enter** to type again. **Alt+0–Alt+8** switch tabs from either mode;
+returning to Chat restores the draft. The footer shows the current mode.
+Help scrolls with arrows, PgUp/PgDown or the mouse wheel. Applied list filters
+stay visible in the status line; Escape clears the filter when no overlay is open.
+Session details load when selected, rather than for every overview row.
+PgUp/PgDown scroll the visible transcript with a one-line overlap and stop at its ends. Alt+Up recalls the last draft, Ctrl+H cycles history, Ctrl+N
+starts a conversation, Ctrl+T toggles tool details, Ctrl+X clears context and
+Ctrl+0 returns Home. Thinking/writing/tool status includes elapsed time and a
+streaming cursor; NoColor uses a static indicator. Flow's copy-resume key is **C**.
 
-Chat understands collected state only. Native shell/file tools are disabled
-with `--tools ""`; each run injects driga's read-only MCP server using a private
-config and `--strict-mcp-config`. `--safe-mode` disables hooks, plugins, skills
-and other customizations while retaining Claude's authentication/model/permission
-settings. Only the explicit driga read-tool list is approved. Trust controls are
-disabled. Chat does not dispatch tasks or approve agent actions.
+Chat can acknowledge inbox items, jump to a session terminal, kill an agent or
+orphan, clean up a candidate and refresh project summaries. It also has Claude’s
+built-in shell and file tools. Actions are local-only and keep the CLI’s process,
+cleanup and jump safety checks. Chat never types into a live agent terminal.
+
+Each conversation starts in **Confirm**. Change trust mode with the web header
+buttons or **m** in TUI navigate mode:
+
+| Mode | Runs without asking | Asks |
+|---|---|---|
+| Confirm | Driga read tools and reads inside the working directory | Reads elsewhere and every other call |
+| Auto | Auto allows driga read tools, reads inside the working directory, inbox acknowledgments, jumps and summaries, and allows Edit/Write only inside a git project working directory that is neither home, the driga data directory nor an ancestor of either, with no hidden components or agent instruction names (`claude*.md`, `agents*.md`, `gemini*.md`, `copilot-instructions.md`, case-insensitive) in the given or resolved relative path after trimming trailing dots and spaces, and always asks on colons. | Everything else asks |
+| Full auto | Everything | Nothing |
+
+Full auto requires confirmation and is shown in red with its remaining time.
+The TUI warning stays visible while replies and action cards update; press **m**
+again to confirm, or another key to cancel. Full auto lasts at most 30 minutes. It ends when you switch it off, close the conversation
+or restart the broker; it is never persisted. Only clients can change modes or
+decide cards. Model text, files and tool output cannot change that authority.
+
+An action card shows the tool, exact input, working directory, status, who decided
+and the result. Click **Allow** or **Deny** on the web. In TUI navigate mode,
+**y** allows and **n** denies the oldest pending card; while typing use **Alt+y**
+and **Alt+n**. The status line says **action waiting**. Stop denies pending cards
+before stopping the turn and queue. Running allowed actions show
+**stopped · result unknown** until a later result arrives. Unanswered cards
+expire after ten minutes.
+Action log entries follow the conversation capture policy and retention. Tool,
+status and deciding actor survive a restart even when message bodies are not
+captured. Completed cards leave the bounded live buffer as new actions arrive;
+pending and running actions remain available until decided or completed.
+
+The explicit allowlist includes driga’s read tools and TodoWrite. Read, Glob,
+Grep, LS and NotebookRead are not pre-allowed: reads inside the working directory
+run; reads elsewhere ask in Confirm and Auto. This also applies to read-only
+Bash commands such as `head /etc/hosts`. Full auto runs those reads without a
+card. Other calls go through driga’s permission gate.
+Chat uses `--tools default`, `--setting-sources ""` and `--strict-mcp-config` to
+keep user settings, hooks, plugins and other MCP servers out. If Claude lacks
+`--permission-prompts`, Chat stays read-only and explains why once per conversation.
+
+`driga ask` stays read-only: it has no action cards. The ordinary `driga mcp`
+server for your own agents also stays read-only. Chat’s private `mcp --chat`
+child supplies its action tools and permission bridge.
 
 The collector owns the broker and its local socket, using the shared directory
 rule described in Fleet setup. Web, TUI and ask connect locally. Without a service, the opening
@@ -622,17 +677,21 @@ No driga conversation history survives that client. With the service, conversati
 IDs, vendor resume IDs and capture-filtered messages persist in SQLite for 30 days;
 interrupted work is marked interrupted after restart and is never replayed to the
 agent automatically. SSE cursors replay bounded ordered events; an expired cursor
-or service restart sends a replacement snapshot.
+or service restart sends a replacement snapshot. Existing web and TUI clients
+reload the local broker key after a collector restart. Chat streams wake on broker
+events and retain a 15-second heartbeat. If the web process itself restarts, reopen
+its newly printed authentication URL, then reload any disconnected tab.
 
 Your explicitly submitted question is scrubbed and sent to Claude. Context and
 MCP evidence pass the capture policy before reaching the agent. Driga retains no
 chat message bodies under `capture_text = "titles"`; `snippets` retains scrubbed
 200-character snippets. Live conversation text and drafts are bounded in memory,
-and browser history stores no chat text on disk. Tool names are retained as
-metadata. Downgrading to titles erases retained bodies when the broker starts.
+and browser history stores no chat text on disk. Tool names and safe action decision metadata are retained as
+metadata. Process command lines and argv require `capture_text = "snippets"` in
+Chat tool responses; other policies remove both argument-bearing fields. Downgrading to titles erases retained bodies when the broker starts.
 Claude's own session history is vendor-managed and enables `--resume`; driga's
-capture policy does not control that vendor history. Chat makes no new network
-connection except the selected CLI's existing vendor connection.
+capture policy does not control that vendor history. Chat tools may make network connections when approved; Claude uses its existing
+vendor connection.
 
 ## Web dashboard
 
@@ -647,8 +706,7 @@ It listens on loopback only (`--listen` refuses other addresses), runs as its ow
 process so the collector's footprint is unchanged, and updates live as the collector
 writes. The token in the printed URL sets a cookie for that browser; restarting
 `driga web` issues a new token. Pages: Home, Agents, Projects, Inbox, Orphans,
-Machines, Cleanup (listing only), Flow and Chat. Nothing in the browser can kill, acknowledge or
-clean up in this version.
+Machines, Cleanup (listing only), Flow and Chat. Chat provides local actions through approval cards.
 
 ## MCP registration
 
@@ -749,3 +807,46 @@ Extra files are read in configuration order before built-in signatures; first
 match wins. Roles are `interactive`, `headless`, `host`, `helper`, and `app`.
 Match executable tokens specifically. A match contributes helper evidence;
 process ancestry, reparenting, activity, and running app ownership also matter.
+
+
+### Themes
+
+Set `[ui] theme = 'auto'` (the default), `'mocha'`, or `'latte'` in TOML.
+For example:
+
+```toml
+[ui]
+theme = 'latte'
+```
+
+`driga --theme mocha top` overrides the config for the whole TUI. Auto follows
+terminal background detection; `--no-color` keeps the layout without ANSI styling.
+The web console's Mocha, Latte, and System choices use the same Catppuccin tokens,
+including assistant Markdown. Web System follows the browser's color preference.
+
+### Answer Claude permission prompts
+
+With the collector running, `driga hooks install claude` offers a settings diff
+that includes `PermissionRequest` with a 660-second timeout. Repair updates it;
+uninstall removes it. Restart existing Claude sessions after changing hooks.
+
+Pending local Claude prompts appear above the inbox waits with the session,
+tool, and exact input. In the TUI select a prompt and press `y` to allow or `n`
+to deny (`a` remains attach); Enter opens the full input. In the web inbox use
+Allow or Deny. Browser decisions require the authenticated session, Origin and
+CSRF token.
+
+Action-enabled Chat's `list_prompts` shows inputs only with `capture_text = "snippets"`;
+other capture policies show tool metadata. `answer_prompt(id, allow)` uses the
+same action gate as other Chat actions: Confirm and Auto require a card;
+Full auto runs it immediately. The standalone `driga mcp` stays read-only.
+
+Prompts live in memory only, never in the database, logs or fleet. Claude
+permission notifications retain only the tool and needs-you metadata, even with
+snippets capture. First answer
+wins. A matching transcript tool result retires a terminal-answered prompt within
+about a second; session end, hook exit and ten minutes also retire it. Any error,
+timeout or absent collector exits the hook successfully without output, leaving
+the terminal to decide. Denials say “Denied from driga”. Driga never creates
+“always allow” rules or emits `updatedPermissions`. Codex, Copilot, Gemini and
+paired-machine prompts are outside this feature.

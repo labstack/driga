@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"charm.land/bubbles/v2/spinner"
 	"charm.land/bubbles/v2/table"
 	"charm.land/bubbles/v2/textarea"
 	"charm.land/bubbles/v2/textinput"
@@ -29,6 +30,7 @@ import (
 	"github.com/labstack/driga/internal/spool"
 	"github.com/labstack/driga/internal/store"
 	"github.com/labstack/driga/internal/view"
+	"github.com/labstack/driga/internal/viewer"
 )
 
 // Options configures scope, appearance, and injectable action dependencies.
@@ -41,6 +43,7 @@ type Options struct {
 	JumpTerminal  bool
 	Machine       string
 	Project       string
+	Theme         string
 	NoColor       bool
 	OpenCmd       string
 	TermProgram   string
@@ -60,17 +63,30 @@ type Options struct {
 type app struct {
 	chatGeneration uint64
 	chatActive     bool
+	chatSpinner    spinner.Model
+	chatAnimating  bool
+	chatStarted    time.Time
+	chatReplyID    string
+	chatTool       string
+	chatEventSeq   uint64
 	chatInput      textarea.Model
 	chatContext    chat.Context
 	chatID         string
 	chatStatus     string
 	chatMessages   []store.ChatMessage
+	chatMode       chat.Mode
+	chatUntil      time.Time // Full auto end, from the broker.
+	chatFullAsk    bool      // m pressed once on the way to Full auto.
+	prompts        []chat.Prompt
+	chatActions    []chat.Action
 	chatHistory    []store.Conversation
 	chatDrafts     []string
 	chatOffset     int
 	chatEphemeral  bool
 	chatTools      bool
 	chatPolling    bool
+	chatPageHeight int
+	chatMaxOffset  int
 
 	flow             view.FlowView
 	flowID           int64
@@ -111,6 +127,8 @@ type app struct {
 	viewport         viewport.Model
 	confirm          *confirmation
 	help             bool
+	helpOffset       int
+	selectionKey     string
 	status           string
 	busy             bool
 	width, height    int
@@ -126,6 +144,7 @@ type confirmation struct {
 type tickMsg struct{}
 type heartbeatMsg struct{ err error }
 type refreshMsg struct {
+	prompts []chat.Prompt
 	snap    Snapshot
 	version int64
 	changed bool
@@ -147,6 +166,7 @@ type cleanupSizeMsg struct {
 
 // New creates a Bubble Tea v2 model. Collection and actions run only in commands.
 func New(src Source, opts Options) tea.Model {
+	_ = view.SetTheme(opts.Theme)
 	if opts.Now == nil {
 		opts.Now = time.Now
 	}
@@ -177,7 +197,7 @@ func New(src Source, opts Options) tea.Model {
 	input.Prompt = "/ "
 	input.Placeholder = "filter"
 	input.SetStyles(textinput.Styles{})
-	m := &app{chatInput: newChatInput(), chatEphemeral: opts.ChatEphemeral, tab: homeTab, machineScope: opts.Machine, src: src, opts: opts, width: 80, height: 24, expanded: map[string]bool{}, filter: input, table: table.New(table.WithFocused(true)), viewport: viewport.New()}
+	m := &app{chatInput: newChatInput(), chatSpinner: spinner.New(spinner.WithSpinner(spinner.MiniDot)), chatEphemeral: opts.ChatEphemeral, tab: homeTab, machineScope: opts.Machine, src: src, opts: opts, width: 80, height: 24, expanded: map[string]bool{}, filter: input, table: table.New(table.WithFocused(true)), viewport: viewport.New()}
 	if opts.InitialTab == "machine" {
 		m.tab = 4
 	}
@@ -196,6 +216,11 @@ func (m *app) poll() tea.Cmd {
 	src, opts, loaded, version := m.src, m.opts, m.loaded, m.version
 	return func() tea.Msg {
 		r := refreshMsg{version: version}
+		if client, ok := opts.Chat.(chat.PromptClient); ok {
+			ctx, cancel := context.WithTimeout(opts.Context, time.Second)
+			r.prompts, _ = client.Prompts(ctx)
+			cancel()
+		}
 		if err := heartbeat(opts.DataDir, opts.Now()); err != nil {
 			r.err = err
 			return r
@@ -241,39 +266,79 @@ func heartbeat(dir string, now time.Time) error {
 }
 
 func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	model, cmd := m.update(msg)
+	return model, tea.Batch(cmd, m.loadSelection())
+}
+func (m *app) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case selectedDetailMsg:
+		if msg.key != m.selectionKey {
+			return m, nil
+		}
+		if msg.err != nil {
+			m.status = "detail: " + msg.err.Error()
+			return m, nil
+		}
+		m.snap.AgentDetails = map[int64]view.AgentView{msg.id: msg.detail}
+		m.rebuild()
+		if m.detail && m.detailRow != nil && m.detailRow.agent == msg.id {
+			offset := m.viewport.YOffset()
+			m.openDetail(*m.detailRow)
+			m.viewport.SetYOffset(offset)
+		}
+		return m, nil
 	case tea.BackgroundColorMsg:
 		view.SetDarkBackground(msg.IsDark())
 		m.rebuild()
 		return m, nil
 	case chatStateMsg:
 		if msg.generation != m.chatGeneration {
-			if m.tab == chatTab {
-				return m, m.readChat()
-			}
-			m.chatPolling = false
 			return m, nil
 		}
-		m.chatActive = msg.state.Active
 		if msg.err != nil {
+			m.endChatActivity()
 			m.chatStatus = msg.err.Error()
 			m.chatPolling = false
 			return m, nil
 		}
 		m.chatID = msg.state.Conversation.ID
 		m.chatMessages = msg.state.Messages
+		if msg.state.Reset {
+			m.chatActions = msg.state.Actions
+		} else {
+			for _, event := range msg.state.Events {
+				if event.Action == nil || event.Seq <= m.chatEventSeq {
+					continue
+				}
+				found := false
+				for i := range m.chatActions {
+					if m.chatActions[i].ID == event.Action.ID {
+						m.chatActions[i], found = *event.Action, true
+						break
+					}
+				}
+				if !found {
+					m.chatActions = append(m.chatActions, *event.Action)
+				}
+			}
+			if len(m.chatActions) > chat.MaxMessages {
+				m.chatActions = m.chatActions[len(m.chatActions)-chat.MaxMessages:]
+			}
+		}
+		m.chatMode, m.chatUntil = msg.state.Mode, msg.state.Until
 		m.chatHistory = msg.history
 		m.chatEphemeral = msg.state.Ephemeral
-		m.chatStatus = "Ready"
-		if msg.state.Active {
-			m.chatStatus = fmt.Sprintf("Claude is answering · %d queued", msg.state.Queued)
-		}
-		if m.tab == chatTab {
-			return m, nextChatTick()
+		m.updateChatActivity(msg.state)
+		m.chatEventSeq = max(m.chatEventSeq, msg.state.Cursor)
+		if m.chatActive {
+			return m, tea.Batch(nextChatTick(m.chatGeneration), m.animateChat())
 		}
 		m.chatPolling = false
 		return m, nil
 	case chatSentMsg:
+		if msg.generation != m.chatGeneration {
+			return m, nil
+		}
 		if msg.err != nil {
 			m.chatStatus = msg.err.Error()
 			if msg.text != "" && m.chatInput.Value() == "" {
@@ -285,9 +350,24 @@ func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.chatDrafts = m.chatDrafts[len(m.chatDrafts)-100:]
 			}
 		}
+		if msg.err == nil && m.opts.Chat != nil && !m.chatPolling {
+			m.chatPolling = true
+			return m, m.readChat()
+		}
 		return m, nil
+	case spinner.TickMsg:
+		if !m.chatActive || m.tab != chatTab || m.opts.NoColor || m.opts.MotionOff {
+			m.chatAnimating = false
+			return m, nil
+		}
+		var cmd tea.Cmd
+		m.chatSpinner, cmd = m.chatSpinner.Update(msg)
+		return m, cmd
 	case chatTickMsg:
-		if m.tab != chatTab {
+		if msg.generation != m.chatGeneration {
+			return m, nil
+		}
+		if !m.chatActive || m.opts.Chat == nil {
 			m.chatPolling = false
 			return m, nil
 		}
@@ -380,6 +460,21 @@ func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status = "heartbeat: " + msg.err.Error()
 		}
 	case refreshMsg:
+		if m.detailRow != nil && m.detailRow.prompt != nil {
+			found := false
+			for _, p := range msg.prompts {
+				if p.ID == m.detailRow.prompt.ID {
+					found = true
+				}
+			}
+			if !found {
+				m.detail = false
+				m.detailRow = nil
+				m.detailText = ""
+				m.viewport.SetContent("")
+			}
+		}
+		m.prompts = msg.prompts
 		m.pollPending = false
 		if msg.err != nil {
 			m.status = "refresh: " + msg.err.Error()
@@ -470,8 +565,25 @@ func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if k == "ctrl+c" {
 			return m, tea.Quit
 		}
-		if m.tab == chatTab {
-			return m, m.chatKey(msg)
+		// Modified tab keys bypass focused composers, filters and overlays.
+		if msg.Mod == tea.ModAlt && msg.Code >= '0' && msg.Code <= '8' {
+			return m, m.selectTab(byte(msg.Code))
+		}
+		if m.chatFullAsk && k != "m" {
+			m.chatFullAsk = false
+			m.chatStatus = "Full auto not enabled."
+		}
+		if m.tab == chatTab && !m.filtering && !m.help {
+			if k == "esc" || m.chatInput.Focused() {
+				return m, m.chatKey(msg)
+			}
+			if k == "c" || k == "enter" {
+				return m, m.chatInput.Focus()
+			}
+			switch k {
+			case "ctrl+enter", "super+enter", "alt+enter", "ctrl+n", "ctrl+h", "ctrl+x", "ctrl+t", "ctrl+0", "pgup", "pgdown", "ctrl+end", "alt+up", "y", "n", "alt+y", "alt+n", "m":
+				return m, m.chatKey(msg)
+			}
 		}
 		if (k == "c" || k == "8") && !m.filtering && m.confirm == nil {
 			return m, m.openChat()
@@ -504,6 +616,9 @@ func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.confirmKey(k)
 		}
 		if k == "esc" {
+			if !m.detail && !m.help {
+				m.filter.SetValue("")
+			}
 			m.detail = false
 			m.help = false
 			m.rebuild()
@@ -511,42 +626,24 @@ func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if k == "?" {
 			m.help = !m.help
+			m.helpOffset = 0
 			return m, nil
 		}
 		if m.help {
+			switch k {
+			case "j", "down":
+				m.scrollHelp(1)
+			case "k", "up":
+				m.scrollHelp(-1)
+			case "pgdown":
+				m.scrollHelp(max(1, m.bodyHeight()-1))
+			case "pgup":
+				m.scrollHelp(-max(1, m.bodyHeight()-1))
+			}
 			return m, nil
 		}
 		if k >= "0" && k <= "7" {
-			tab := int(k[0] - '1')
-			if k == "0" {
-				tab = homeTab
-			}
-			if k == "7" {
-				tab = flowTab
-			}
-			if m.tabVisible(tab) {
-				if tab == flowTab {
-					// A tab key requests the shared default. Only explicit session
-					// navigation pins an ID across refreshes.
-					m.flowID = 0
-					m.flowExpanded = false
-					m.flowOffset = 0
-					m.cursors[flowTab] = 0
-					m.flowPulse, m.flowSeen = nil, nil
-				}
-				m.tab = tab
-				m.homeOffset = 0
-				m.detail = false
-				m.showAckPending()
-				m.rebuild()
-				if tab == flowTab {
-					return m, m.loadFlow()
-				}
-				if tab == 5 && m.opts.CleanupList != nil && !m.busy {
-					return m, m.loadCleanup()
-				}
-			}
-			return m, nil
+			return m, m.selectTab(k[0])
 		}
 		if m.tab == flowTab && !m.detail {
 			if k == "tab" && len(m.flow.Attention.Waits) > 0 {
@@ -776,6 +873,12 @@ func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, m.execute(args, false)
 				}
 			}
+		case "y", "n":
+			if m.tab == 2 && !m.busy {
+				if r, ok := m.selected(); ok && r.prompt != nil {
+					return m, m.answerPrompt(*r.prompt, k == "y")
+				}
+			}
 		case "a":
 			if !m.busy {
 				return m, m.attach()
@@ -965,5 +1068,40 @@ func (m *app) showAckPending() {
 	}
 	if strings.HasPrefix(m.status, "ack pending → ") {
 		m.status = ""
+	}
+}
+
+type selectedDetailMsg struct {
+	key    string
+	id     int64
+	detail view.AgentView
+	err    error
+}
+
+func (m *app) loadSelection() tea.Cmd {
+	source, ok := m.src.(viewer.DetailSource)
+	if !ok || !m.loaded || m.tab == chatTab || m.tab == flowTab {
+		return nil
+	}
+	row, ok := m.selected()
+	if m.detail && m.detailRow != nil {
+		row, ok = *m.detailRow, true
+	}
+	if !ok || row.agent == 0 {
+		m.selectionKey = ""
+		return nil
+	}
+	key := fmt.Sprintf("%d/%s/%d", m.version, row.machine, row.agent)
+	if key == m.selectionKey {
+		return nil
+	}
+	m.selectionKey = key
+	ctx, scope, id := m.opts.Context, m.flowScope(), row.agent
+	if row.machine != "" {
+		scope = store.Scope{Machines: []string{row.machine}}
+	}
+	return func() tea.Msg {
+		detail, err := source.LoadAgent(ctx, scope, id)
+		return selectedDetailMsg{key: key, id: id, detail: detail, err: err}
 	}
 }
