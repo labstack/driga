@@ -11,6 +11,8 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/labstack/driga/internal/textfmt"
+
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/term"
 	"github.com/labstack/driga/internal/derive"
@@ -97,7 +99,7 @@ func Render(w io.Writer, v any, opts RenderOpts) error {
 			fmt.Fprintln(tw, cell(x.Warning))
 		}
 	case SummaryView:
-		fmt.Fprintf(tw, "%d agents (%d working, %d waiting, %d stalled?) · inbox %d · %s · orphans %d ~%s · %s\n", x.Agents, x.Working, x.Waiting, x.Stalled, x.Inbox, HealthText(x.Sample, "%.0f"), x.Orphans, humanBytes(x.Reclaim), opts.Envelope.Mode)
+		fmt.Fprintf(tw, "%d agents (%d working, %d waiting, %d stalled?) · inbox %d · %s · orphans %d ~%s · %s\n", x.Agents, x.Working, x.Waiting, x.Stalled, x.Inbox, HealthText(x.Sample, "%.0f"), x.Orphans, HumanBytes(x.Reclaim), opts.Envelope.Mode)
 	case AgentsView:
 		renderAgents(tw, x, label)
 	case AgentView:
@@ -118,7 +120,7 @@ func Render(w io.Writer, v any, opts RenderOpts) error {
 		}
 		fmt.Fprintln(tw, "PID\tPPID\tMEM\tCOMMAND")
 		for _, p := range x.Procs {
-			fmt.Fprintf(tw, "%d\t%d\t%s\t%s\n", p.PID, p.PPID, humanBytes(p.RSS), cell(p.Cmdline))
+			fmt.Fprintf(tw, "%d\t%d\t%s\t%s\n", p.PID, p.PPID, HumanBytes(p.RSS), cell(p.Cmdline))
 		}
 		fmt.Fprintln(tw, "EVENT\tAT\tSUMMARY")
 		for _, e := range x.Events {
@@ -178,7 +180,7 @@ func Render(w io.Writer, v any, opts RenderOpts) error {
 		fmt.Fprintln(tw, "ID\tAGE\tSIGNATURE\tPROCS\t~RECLAIM\tCWD\tYOUNG\tVERIFIED\tEVIDENCE")
 		for _, o := range x.Rows {
 			fmt.Fprint(tw, machinePrefix(multi, o.MachineID, o.MachineFresh))
-			fmt.Fprintf(tw, "%s\t%s\t%s\t%d\t~%s\t%s\t%t\t%t\t%s\n", cell(o.ID), age(o.Age), cell(o.Signature), o.ProcCount, humanBytes(o.RSSTotal), cell(o.Cwd), o.Young, o.Verified, cell(strings.Join(o.Evidence, "; ")))
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%d\t~%s\t%s\t%t\t%t\t%s\n", cell(o.ID), age(o.Age), cell(o.Signature), o.ProcCount, HumanBytes(o.RSSTotal), cell(o.Cwd), o.Young, o.Verified, cell(strings.Join(o.Evidence, "; ")))
 		}
 		if opts.Envelope.Mode == "snapshot" {
 			fmt.Fprintln(tw, "unverified (snapshot)")
@@ -197,10 +199,10 @@ func Render(w io.Writer, v any, opts RenderOpts) error {
 			fmt.Fprintf(tw, "Memory measure: %s · %s\n", h.AgentShare.MemoryMeasure, FootprintNote)
 			apps := func(rows []MachineApp, processes bool) {
 				for _, a := range rows {
-					fmt.Fprintf(tw, "%s\t%s\t%s\t%.1f%% CPU\n", cell(a.Name), humanBytes(a.Memory), a.MemoryMeasure, a.CPUPercent)
+					fmt.Fprintf(tw, "%s\t%s\t%s\t%.1f%% CPU\n", cell(a.Name), HumanBytes(a.Memory), a.MemoryMeasure, a.CPUPercent)
 					if processes {
 						for _, p := range a.Processes {
-							fmt.Fprintf(tw, "  PID %d %s\t%s\t%.1f%% CPU\t%s\n", p.PID, cell(p.Exe), humanBytes(p.Memory), p.CPUPercent, cell(AttributionText(p.Attribution)))
+							fmt.Fprintf(tw, "  PID %d %s\t%s\t%.1f%% CPU\t%s\n", p.PID, cell(p.Exe), HumanBytes(p.Memory), p.CPUPercent, cell(AttributionText(p.Attribution)))
 						}
 					}
 				}
@@ -218,7 +220,7 @@ func Render(w io.Writer, v any, opts RenderOpts) error {
 			}
 			for _, p := range h.MCPServers.Pileups {
 				if !h.Full {
-					fmt.Fprintf(tw, "%s: %d processes · %s · Host: %s (PID %d) · age %s · Oldest: %s · Newest: %s\n%s\n", cell(p.Name), p.Count, humanBytes(p.Memory), cell(p.Host.Name), p.Host.PID, age(p.Host.Age), p.OldestStart.Format(time.RFC3339), p.NewestStart.Format(time.RFC3339), cell(p.Advice))
+					fmt.Fprintf(tw, "%s: %d processes · %s · Host: %s (PID %d) · age %s · Oldest: %s · Newest: %s\n%s\n", cell(p.Name), p.Count, HumanBytes(p.Memory), cell(p.Host.Name), p.Host.PID, age(p.Host.Age), p.OldestStart.Format(time.RFC3339), p.NewestStart.Format(time.RFC3339), cell(p.Advice))
 					continue
 				}
 				for _, line := range strings.Split(MCPPileupText(p), "\n") {
@@ -230,7 +232,7 @@ func Render(w io.Writer, v any, opts RenderOpts) error {
 				apps(h.LikelyAgent, false)
 			}
 			other := MachineOtherApps(h)
-			fmt.Fprintf(tw, "Other apps · %s (%s) · %.1f%% CPU\n", humanBytes(other.Memory), other.MemoryMeasure, other.CPUPercent)
+			fmt.Fprintf(tw, "Other apps · %s (%s) · %.1f%% CPU\n", HumanBytes(other.Memory), other.MemoryMeasure, other.CPUPercent)
 			for _, rank := range []struct {
 				name string
 				apps []MachineApp
@@ -241,7 +243,7 @@ func Render(w io.Writer, v any, opts RenderOpts) error {
 			s := h.Sample
 			fmt.Fprintln(tw, "Vitals detail")
 			fmt.Fprintln(tw, "MEMORY\tCOMPRESSED\tSWAP\tLOAD (1/5/15)\tCORES\tDISK FREE\tPRESSURE LEVEL / FREE")
-			fmt.Fprintf(tw, "%s/%s\t%s\t%s/%s\t%s/%s/%s\t%d\t%s\t%s / %.1f\n", humanBytes(s.MemUsed), humanBytes(s.MemTotal), humanBytes(s.MemCompressed), humanBytes(s.SwapUsed), humanBytes(s.SwapTotal), FormatLoad(s.Load1, "%.1f"), FormatLoad(s.Load5, "%.1f"), FormatLoad(s.Load15, "%.1f"), s.Cores, humanBytes(s.DiskFree), s.PressureLevel, s.PressureFree)
+			fmt.Fprintf(tw, "%s/%s\t%s\t%s/%s\t%s/%s/%s\t%d\t%s\t%s / %.1f\n", HumanBytes(s.MemUsed), HumanBytes(s.MemTotal), HumanBytes(s.MemCompressed), HumanBytes(s.SwapUsed), HumanBytes(s.SwapTotal), FormatLoad(s.Load1, "%.1f"), FormatLoad(s.Load5, "%.1f"), FormatLoad(s.Load15, "%.1f"), s.Cores, HumanBytes(s.DiskFree), s.PressureLevel, s.PressureFree)
 			if h.Full {
 				fmt.Fprintln(tw, "Retained MCP trends · minute detail for 24h; hourly endpoints to 30 days")
 				for _, t := range h.MCPServers.Trends {
@@ -256,7 +258,7 @@ func Render(w io.Writer, v any, opts RenderOpts) error {
 			fmt.Fprintln(tw, "Agent memory by role")
 			fmt.Fprintln(tw, "AGENT\tROLE\tMEM")
 			for _, r := range h.Memory {
-				fmt.Fprintf(tw, "%s\t%s\t%s\n", cell(r.Agent), cell(r.Role), humanBytes(r.RSS))
+				fmt.Fprintf(tw, "%s\t%s\t%s\n", cell(r.Agent), cell(r.Role), HumanBytes(r.RSS))
 			}
 		}
 
@@ -325,7 +327,7 @@ func renderAgents(w io.Writer, v AgentsView, label func(string) string) {
 				title += fmt.Sprintf(" (%d workers finished)", r.FinishedChildren)
 			}
 			fmt.Fprint(w, machinePrefix(multi, r.MachineID, r.MachineFresh))
-			fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", r.ID, name, label(r.Label), cell(r.Origin), cell(r.Project), cell(r.Branch), SessionDuration(r.Age), humanBytes(r.Mem), title, cell(r.Evidence))
+			fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", r.ID, name, label(r.Label), cell(r.Origin), cell(r.Project), cell(r.Branch), SessionDuration(r.Age), HumanBytes(r.Mem), title, cell(r.Evidence))
 			rows(r.Children, depth+1)
 		}
 	}
@@ -375,12 +377,9 @@ func renderConflicts(w io.Writer, rs []ConflictRow) {
 	}
 }
 
-func humanBytes(n uint64) string {
-	if n >= 1<<30 {
-		return fmt.Sprintf("%.1fG", float64(n)/(1<<30))
-	}
-	return fmt.Sprintf("%.1fM", float64(n)/(1<<20))
-}
+// HumanBytes formats compact terminal memory values.
+func HumanBytes(n uint64) string { return textfmt.Bytes(float64(n), true) }
+
 func age(d time.Duration) string { return max(0, d).Round(time.Second).String() }
 
 // SessionDuration renders a session duration, or "—" for an unknown (zero) age.
@@ -440,7 +439,7 @@ func HealthText(sample model.MachineSample, loadFormat string) string {
 	if sample.TS.IsZero() {
 		return "health unavailable"
 	}
-	return fmt.Sprintf("swap %s/%s · load %s/%d", humanBytes(sample.SwapUsed), humanBytes(sample.SwapTotal), FormatLoad(sample.Load1, loadFormat), sample.Cores)
+	return fmt.Sprintf("swap %s/%s · load %s/%d", HumanBytes(sample.SwapUsed), HumanBytes(sample.SwapTotal), FormatLoad(sample.Load1, loadFormat), sample.Cores)
 }
 
 // FromSuffix is the shared short launch-surface wording for session surfaces.

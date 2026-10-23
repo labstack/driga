@@ -75,7 +75,7 @@ func TestClaudeInstallMergesPreservingExisting(t *testing.T) {
 		t.Fatal("backup differs")
 	}
 	info, _ := os.Stat(path)
-	if info.Mode().Perm() != 0640 {
+	if info.Mode().Perm() != 0600 {
 		t.Fatalf("mode/format: %v, %q", info.Mode(), d.After)
 	}
 }

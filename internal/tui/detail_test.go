@@ -17,7 +17,7 @@ func TestAgentDetailTruncatesLongValues(t *testing.T) {
 	d.Session.Evidence = strings.Repeat("evidence ", 100)
 	d.Procs = []view.ProcRow{
 		{Proc: model.Proc{PID: 30, PPID: 1, Cmdline: "node -e first\n\t\x00second " + strings.Repeat("script\n", 850)}},
-		{Proc: model.Proc{PID: 123456, PPID: 30, Cmdline: "worker --short"}},
+		{Proc: model.Proc{PID: 123456, PPID: 30, Cmdline: "worker --short", Argv: []string{"worker", "--short"}}},
 	}
 	s.snap.AgentDetails[1] = d
 	m := setup(t, s, Options{})

@@ -10,13 +10,13 @@ import (
 
 func TestUnifiedMinimalEditsAndHunks(t *testing.T) {
 	for _, tc := range []struct{ name, before, after, want string }{
-		{"replace", "old\n", "new\n", "@@ -1,1 +1,1 @@\n-old\n+new\n"},
-		{"create", "", "new\n", "@@ -0,0 +1,1 @@\n+new\n"},
-		{"delete", "old\n", "", "@@ -1,1 +0,0 @@\n-old\n"},
+		{"replace", "old\n", "new\n", "@@ -1 +1 @@\n-old\n+new\n"},
+		{"create", "", "new\n", "@@ -0,0 +1 @@\n+new\n"},
+		{"delete", "old\n", "", "@@ -1 +0,0 @@\n-old\n"},
 		{"foreign between edits", "start\n/old/driga Stop\nforeign PreToolUse\n/old/driga SessionEnd\nend\n", "start\n/new/driga Stop\nforeign PreToolUse\n/new/driga SessionEnd\nend\n", "@@ -1,5 +1,5 @@\n start\n-/old/driga Stop\n+/new/driga Stop\n foreign PreToolUse\n-/old/driga SessionEnd\n+/new/driga SessionEnd\n end\n"},
 		{"separate hunks", "old\n1\n2\n3\n4\n5\n6\n7\nold\n", "new\n1\n2\n3\n4\n5\n6\n7\nnew\n", "@@ -1,4 +1,4 @@\n-old\n+new\n 1\n 2\n 3\n@@ -6,4 +6,4 @@\n 5\n 6\n 7\n-old\n+new\n"},
-		{"missing newline", "old", "new\n", "@@ -1,1 +1,1 @@\n-old\n\\ No newline at end of file\n+new\n"},
-		{"newline only", "same", "same\n", "@@ -1,1 +1,1 @@\n-same\n\\ No newline at end of file\n+same\n"},
+		{"missing newline", "old", "new\n", "@@ -1 +1 @@\n-old\n\\ No newline at end of file\n+new\n"},
+		{"newline only", "same", "same\n", "@@ -1 +1 @@\n-same\n\\ No newline at end of file\n+same\n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got := (hooks.Diff{Path: "config", Before: tc.before, After: tc.after, Changed: true}).Unified()

@@ -80,15 +80,5 @@ func (s *launchdController) Install() error {
 	if err := secfile.MkdirPrivate(filepath.Dir(s.plistPath)); err != nil {
 		return err
 	}
-	// Atomic replacement retains the old plist if writing the new one fails.
-	file, err := secfile.CreateTemp(filepath.Dir(s.plistPath), ".driga-plist-*")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(file.Name())
-	_, writeErr := file.Write(data)
-	if err := errors.Join(writeErr, file.Close()); err != nil {
-		return err
-	}
-	return os.Rename(file.Name(), s.plistPath)
+	return secfile.WriteFileAtomic(s.plistPath, data, nil)
 }

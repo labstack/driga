@@ -14,12 +14,6 @@ import (
 	"github.com/labstack/driga/internal/view"
 )
 
-func humanBytes(n uint64) string {
-	if n >= 1<<30 {
-		return fmt.Sprintf("%.1fG", float64(n)/(1<<30))
-	}
-	return fmt.Sprintf("%.1fM", float64(n)/(1<<20))
-}
 func duration(d time.Duration) string { return max(time.Duration(0), d).Round(time.Second).String() }
 func clean(s string) string {
 	return strings.Map(func(r rune) rune {
@@ -31,23 +25,11 @@ func clean(s string) string {
 }
 func truncate(s string, width int) string { return ansi.Truncate(s, max(1, width), "…") }
 func pack(parts []string, width int, separator string) string {
-	var lines []string
-	line := ""
-	for _, p := range parts {
-		p = truncate(clean(p), width)
-		if line != "" && lipgloss.Width(line+separator+p) > width {
-			lines = append(lines, line)
-			line = ""
-		}
-		if line != "" {
-			line += separator
-		}
-		line += p
+	cleaned := make([]string, len(parts))
+	for i, part := range parts {
+		cleaned[i] = clean(part)
 	}
-	if line != "" {
-		lines = append(lines, line)
-	}
-	return strings.Join(lines, "\n")
+	return styledPack(cleaned, width, separator)
 }
 func wrapText(text string, width int) string {
 	var lines []string
@@ -116,7 +98,7 @@ func (m *app) header() string {
 	case "warning":
 		loadToken = "warn"
 	}
-	health := []string{headerGauge("mem", sample.MemUsed, sample.MemTotal, m.opts.NoColor), headerGauge("swap", sample.SwapUsed, sample.SwapTotal, m.opts.NoColor), "load " + view.TokenStyle(loadToken, m.opts.NoColor).Render(view.FormatLoad(sample.Load1, "%.1f")) + fmt.Sprintf("/%d", sample.Cores), "disk " + humanBytes(sample.DiskFree)}
+	health := []string{headerGauge("mem", sample.MemUsed, sample.MemTotal, m.opts.NoColor), headerGauge("swap", sample.SwapUsed, sample.SwapTotal, m.opts.NoColor), "load " + view.TokenStyle(loadToken, m.opts.NoColor).Render(view.FormatLoad(sample.Load1, "%.1f")) + fmt.Sprintf("/%d", sample.Cores), "disk " + view.HumanBytes(sample.DiskFree)}
 	right := strings.Join(health, "   ")
 	identity = strings.Join(identityParts, " · ")
 	if lipgloss.Width(identity)+lipgloss.Width(right)+2 <= m.width {
@@ -261,7 +243,7 @@ func (m *app) confirmationText() string {
 			lines = append(lines, fmt.Sprintf("%d  %s", pid, clean(idx[pid])))
 		}
 	}
-	lines = append(lines, "~reclaim "+humanBytes(o.RSSTotal)+" (RSS estimate)", "driga orphans kill "+o.ID)
+	lines = append(lines, "~reclaim "+view.HumanBytes(o.RSSTotal)+" (RSS estimate)", "driga orphans kill "+o.ID)
 	if c.kind == "force" {
 		lines[0] = "Really SIGKILL survivors? [y/N]"
 		lines[len(lines)-1] += " --force"

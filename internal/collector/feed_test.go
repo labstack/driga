@@ -239,7 +239,7 @@ func TestFeedAckAndOrphanDisappearance(t *testing.T) {
 		t.Fatal(err)
 	}
 	a.obs[0].Completions = []model.CompletionEvent{{ID: "done", TS: d.Now()}}
-	p.procs = append(p.procs, model.Proc{PID: 200, PPID: 1, StartTime: d.Now().Add(-time.Hour), Cmdline: "claude mcp serve"})
+	p.procs = append(p.procs, model.Proc{PID: 200, PPID: 1, StartTime: d.Now().Add(-time.Hour), Cmdline: "claude mcp serve", Argv: []string{"claude", "mcp", "serve"}})
 	pass(t, d, st, Plan{Procs: true})
 	first := feedRows(t, st, 0)
 	seq := first[len(first)-1].Seq

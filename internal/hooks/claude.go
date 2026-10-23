@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/labstack/driga/internal/secfile"
 	"io"
 	"os"
 	"path/filepath"
@@ -16,6 +15,9 @@ import (
 	"strings"
 	"time"
 	"unicode"
+
+	"github.com/labstack/driga/internal/secfile"
+	"github.com/labstack/driga/internal/textfmt"
 
 	"github.com/labstack/driga/internal/pathx"
 )
@@ -31,8 +33,6 @@ type Diff struct {
 }
 
 var claudeEvents = []string{"Stop", "Notification", "SessionStart", "SessionEnd"}
-
-var renameSettings = os.Rename
 
 // ErrTelemetryInUse prevents replacing any existing agent telemetry destination.
 var ErrTelemetryInUse = errors.New("telemetry is already configured; Driga cannot replace or relay it")
@@ -456,14 +456,7 @@ func currentBinary() string {
 	return path
 }
 
-func shellQuote(s string) string {
-	if strings.IndexFunc(s, func(r rune) bool {
-		return !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune("/_-.:@", r))
-	}) < 0 && s != "" {
-		return s
-	}
-	return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'"
-}
+func shellQuote(s string) string { return textfmt.ShellQuote(s, false) }
 
 // shellProgram reads only the first shell word; it never executes commands.
 func shellProgram(command string) (program, rest string, ok bool) {
@@ -521,14 +514,12 @@ func writeDiff(d Diff, dryRun bool, now time.Time) error {
 	if d.target != "" {
 		path = d.target
 	}
-	info, err := os.Stat(path)
+	_, err := os.Stat(path)
 	exists := err == nil
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	mode := os.FileMode(0600)
 	if exists {
-		mode = info.Mode().Perm()
 		// Keep each original, even when two writes fall in the same second.
 		for stamp := now.Unix(); ; stamp++ {
 			backup := fmt.Sprintf("%s.driga-bak-%d", d.Path, stamp)
@@ -549,21 +540,7 @@ func writeDiff(d Diff, dryRun bool, now time.Time) error {
 	} else if err := secfile.MkdirPrivate(filepath.Dir(path)); err != nil {
 		return err
 	}
-	f, err := secfile.CreateTemp(filepath.Dir(path), ".driga-settings-*")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(f.Name())
-	_, writeErr := io.WriteString(f, d.After)
-	chmodErr := f.Chmod(mode)
-	syncErr := f.Sync()
-	if err := errors.Join(writeErr, chmodErr, syncErr, f.Close()); err != nil {
-		return err
-	}
-	if err := d.Check(); err != nil {
-		return err
-	}
-	if err := renameSettings(f.Name(), path); err != nil {
+	if err := secfile.WriteFileAtomic(path, []byte(d.After), d.Check); err != nil {
 		return err
 	}
 	return pruneBackups(d.Path)

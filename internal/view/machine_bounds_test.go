@@ -19,10 +19,10 @@ import (
 func machineHistoryFixture(t *testing.T) *store.Store {
 	t.Helper()
 	home := t.TempDir()
-	ps := []model.Proc{{PID: 1000, Cmdline: "claude", StartTime: testNow.Add(-72 * time.Hour)}}
+	ps := []model.Proc{{PID: 1000, Cmdline: "claude", Argv: []string{"claude"}, StartTime: testNow.Add(-72 * time.Hour)}}
 	for n := range 60 {
 		for member := range 3 {
-			ps = append(ps, model.Proc{PID: int32(n*3 + member + 1), PPID: 1000, Cmdline: fmt.Sprintf("node /opt/server-%02d/mcp.js", n), StartTime: testNow.Add(-60 * time.Hour), RSS: uint64(n+1) << 20})
+			ps = append(ps, model.Proc{PID: int32(n*3 + member + 1), PPID: 1000, Cmdline: fmt.Sprintf("node /opt/server-%02d/mcp.js", n), Argv: []string{"node", fmt.Sprintf("/opt/server-%02d/mcp.js", n)}, StartTime: testNow.Add(-60 * time.Hour), RSS: uint64(n+1) << 20})
 		}
 	}
 	if err := fixturegen.Write(home, fixturegen.Scenario{Now: testNow, Procs: ps}); err != nil {

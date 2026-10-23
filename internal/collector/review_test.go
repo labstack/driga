@@ -90,7 +90,7 @@ func (p *socketPlatform) ExternalPeers(_ context.Context, pids []int32) (map[int
 
 func TestPassVerifiesOrphansViaSocketProber(t *testing.T) {
 	d, st, p, _ := setup(t)
-	p.procs = append(p.procs, model.Proc{PID: 200, PPID: 1, StartTime: d.Now().Add(-time.Hour), Cmdline: "claude mcp serve"}, model.Proc{PID: 201, PPID: 200, StartTime: d.Now().Add(-time.Hour), Cmdline: "worker"})
+	p.procs = append(p.procs, model.Proc{PID: 200, PPID: 1, StartTime: d.Now().Add(-time.Hour), Cmdline: "claude mcp serve", Argv: []string{"claude", "mcp", "serve"}}, model.Proc{PID: 201, PPID: 200, StartTime: d.Now().Add(-time.Hour), Cmdline: "worker", Argv: []string{"worker"}})
 	probe := &socketPlatform{fakePlatform: p, peers: map[int32]bool{200: false, 201: true}}
 	d.Plat = probe
 	pass(t, d, st, Plan{Procs: true, Sockets: true})
@@ -119,7 +119,7 @@ func TestNewCodexSessionLinkedSamePass(t *testing.T) {
 	pass(t, d, st, Plan{Procs: true, Cwds: true})
 	a.name = "codex"
 	a.obs = []model.SessionObs{{Adapter: "codex", ExternalID: "new", Cwd: t.TempDir(), StartedAt: d.Now()}}
-	p.procs = append(p.procs, model.Proc{PID: 202, PPID: 2, StartTime: d.Now(), Cmdline: "codex"})
+	p.procs = append(p.procs, model.Proc{PID: 202, PPID: 2, StartTime: d.Now(), Cmdline: "codex", Argv: []string{"codex"}})
 	p.cwds = map[int32]string{202: a.obs[0].Cwd}
 	pass(t, d, st, Plan{Procs: true, Sockets: true})
 	for _, s := range sessions(t, st) {
@@ -138,7 +138,7 @@ func TestImmediateCwdLookupBoundedAndFair(t *testing.T) {
 	a.obs = nil
 	p.procs = nil
 	for i := int32(0); i < 205; i++ {
-		p.procs = append(p.procs, model.Proc{PID: 1000 + i, PPID: 2, StartTime: d.Now(), Cmdline: "codex"})
+		p.procs = append(p.procs, model.Proc{PID: 1000 + i, PPID: 2, StartTime: d.Now(), Cmdline: "codex", Argv: []string{"codex"}})
 	}
 	seen := make(map[int32]bool)
 	for range 2 {
@@ -318,7 +318,7 @@ func TestSpoolOnlyPassPreservesHookInboxAndHandoff(t *testing.T) {
 // the socket probe (it dominated snapshot latency on a loaded machine).
 func TestSnapshotSkipsSocketProbe(t *testing.T) {
 	d, _, p, _ := setup(t)
-	p.procs = append(p.procs, model.Proc{PID: 200, PPID: 1, StartTime: d.Now().Add(-time.Hour), Cmdline: "claude mcp serve"})
+	p.procs = append(p.procs, model.Proc{PID: 200, PPID: 1, StartTime: d.Now().Add(-time.Hour), Cmdline: "claude mcp serve", Argv: []string{"claude", "mcp", "serve"}})
 	probe := &socketPlatform{fakePlatform: p}
 	d.Plat = probe
 	st, err := Snapshot(context.Background(), d)
@@ -350,7 +350,7 @@ func TestPassWithFreshProcsSkipsStoredProcs(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if _, err := db.Exec(`INSERT INTO procs (machine_id,pid,ppid,start_time,rss,cpu_seconds,cpu_percent,cmdline,exe,role,agent,session_id,cwd) VALUES (?,'unreadable',0,0,0,0,0,'','','','',0,'')`, st.MachineID()); err != nil {
+	if _, err := db.Exec(`INSERT INTO procs (machine_id,pid,ppid,start_time,rss,cpu_seconds,cpu_percent,cmdline,argv,exe,role,agent,session_id,cwd) VALUES (?,'unreadable',0,0,0,0,0,'','[]','','','',0,'')`, st.MachineID()); err != nil {
 		t.Fatal(err)
 	}
 	pass(t, d, st, Plan{Procs: true})
@@ -371,8 +371,8 @@ func TestPassWithFreshProcsSkipsStoredProcs(t *testing.T) {
 func TestSocketProbeExcludesLiveHelpers(t *testing.T) {
 	d, st, p, a := setup(t)
 	p.procs = append(p.procs,
-		model.Proc{PID: 200, PPID: 1, StartTime: d.Now().Add(-time.Hour), Cmdline: "claude mcp serve"},
-		model.Proc{PID: 300, PPID: 1, StartTime: d.Now().Add(-time.Hour), Cmdline: "claude mcp serve"},
+		model.Proc{PID: 200, PPID: 1, StartTime: d.Now().Add(-time.Hour), Cmdline: "claude mcp serve", Argv: []string{"claude", "mcp", "serve"}},
+		model.Proc{PID: 300, PPID: 1, StartTime: d.Now().Add(-time.Hour), Cmdline: "claude mcp serve", Argv: []string{"claude", "mcp", "serve"}},
 	)
 	a.obs = append(a.obs, model.SessionObs{Adapter: "claude", ExternalID: "live-helper", PID: 300, ProcStart: p.procs[len(p.procs)-1].StartTime, RegistryStatus: "busy", LastActivityAt: d.Now()})
 	probe := &socketPlatform{fakePlatform: p, peers: map[int32]bool{200: true}}

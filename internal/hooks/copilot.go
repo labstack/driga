@@ -4,11 +4,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/labstack/driga/internal/secfile"
 	"os"
 	"path/filepath"
 	"reflect"
 	"time"
+
+	"github.com/labstack/driga/internal/secfile"
 )
 
 var copilotEvents = []string{"sessionStart", "userPromptSubmitted", "postToolUse", "postToolUseFailure", "notification", "agentStop", "errorOccurred", "subagentStart", "subagentStop", "sessionEnd"}
@@ -134,18 +135,5 @@ func writeOwnedDiff(d Diff) error {
 	if err := secfile.MkdirPrivate(filepath.Dir(d.Path)); err != nil {
 		return err
 	}
-	f, err := secfile.CreateTemp(filepath.Dir(d.Path), ".driga-hooks-*")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(f.Name())
-	_, writeErr := f.WriteString(d.After)
-	err = errors.Join(writeErr, f.Sync(), f.Close())
-	if err != nil {
-		return err
-	}
-	if err := d.Check(); err != nil {
-		return err
-	}
-	return renameSettings(f.Name(), d.Path)
+	return secfile.WriteFileAtomic(d.Path, []byte(d.After), d.Check)
 }

@@ -1,9 +1,10 @@
 package collector
 
 import (
-	"github.com/labstack/driga/internal/model"
 	"testing"
 	"time"
+
+	"github.com/labstack/driga/internal/model"
 )
 
 func TestInternalSignatureIgnored(t *testing.T) {
@@ -11,8 +12,8 @@ func TestInternalSignatureIgnored(t *testing.T) {
 	a.obs = nil
 	start := d.Now().Add(-time.Hour)
 	p.procs = []model.Proc{
-		{PID: 42, PPID: 1, Exe: "claude", Cmdline: "claude -p --name driga-internal", StartTime: start},
-		{PID: 43, PPID: 42, Exe: "npx", Cmdline: "npx some-mcp", StartTime: start},
+		{PID: 42, PPID: 1, Exe: "claude", Cmdline: "claude -p --name driga-internal", Argv: []string{"claude", "-p", "--name", "driga-internal"}, StartTime: start},
+		{PID: 43, PPID: 42, Exe: "npx", Cmdline: "npx some-mcp", Argv: []string{"npx", "some-mcp"}, StartTime: start},
 	}
 	pass(t, d, st, Plan{Procs: true})
 	if ss := sessions(t, st); len(ss) != 0 {
@@ -33,8 +34,8 @@ func TestInternalTreeNotOrphan(t *testing.T) {
 	a.obs = nil
 	start := d.Now().Add(-time.Hour)
 	p.procs = []model.Proc{
-		{PID: 41, PPID: 1, Cmdline: "npx helper-mcp", StartTime: start},
-		{PID: 42, PPID: 41, Cmdline: "claude -p --name driga-internal", StartTime: start},
+		{PID: 41, PPID: 1, Cmdline: "npx helper-mcp", Argv: []string{"npx", "helper-mcp"}, StartTime: start},
+		{PID: 42, PPID: 41, Cmdline: "claude -p --name driga-internal", Argv: []string{"claude", "-p", "--name", "driga-internal"}, StartTime: start},
 	}
 	pass(t, d, st, Plan{Procs: true})
 	oo, err := st.Orphans()

@@ -237,7 +237,7 @@ func TestTmuxKeyHiddenWithoutTmux(t *testing.T) {
 	for _, ancestor := range []bool{false, true} {
 		t.Run(map[bool]string{false: "outside", true: "inside"}[ancestor], func(t *testing.T) {
 			s := fixture()
-			s.snap.Procs = []model.Proc{{PID: 30, PPID: 20}, {PID: 20, PPID: 10, Cmdline: "shell"}, {PID: 10, Cmdline: "/usr/bin/tmux new-session -s dev"}}
+			s.snap.Procs = []model.Proc{{PID: 30, PPID: 20}, {PID: 20, PPID: 10, Cmdline: "shell", Argv: []string{"shell"}}, {PID: 10, Cmdline: "/usr/bin/tmux new-session -s dev", Argv: []string{"/usr/bin/tmux", "new-session", "-s", "dev"}}}
 			if !ancestor {
 				s.snap.Procs[0].PPID = 1
 			}
@@ -586,7 +586,7 @@ func TestProjectScopedCollection(t *testing.T) {
 
 func TestTmuxRewrittenProcessTitle(t *testing.T) {
 	s := fixture()
-	s.snap.Procs = []model.Proc{{PID: 30, PPID: 20}, {PID: 20, PPID: 10}, {PID: 10, Cmdline: "tmux: server"}}
+	s.snap.Procs = []model.Proc{{PID: 30, PPID: 20}, {PID: 20, PPID: 10}, {PID: 10, Cmdline: "tmux: server", Argv: []string{"tmux:", "server"}}}
 	var args []string
 	m := setup(t, s, Options{LookupTmux: func(_ context.Context, pids []int32) (string, error) { return tmuxSession("$1\t500\n$2\t20\n", pids) }, Exec: func(cmd []string) error { args = cmd; return nil }})
 	if !strings.Contains(m.View().Content, "a attach tmux") {

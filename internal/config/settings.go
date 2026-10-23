@@ -14,6 +14,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bmatcuk/doublestar/v4"
+
 	"github.com/pelletier/go-toml/v2"
 )
 
@@ -378,6 +380,11 @@ func load(path string, overrides map[string]any) (Config, map[string]string, err
 			return "flag " + key
 		}
 		return "config " + path + ": " + key
+	}
+	for _, pattern := range c.Exclude {
+		if !doublestar.ValidatePattern(strings.Trim(filepath.ToSlash(pattern), "/")) {
+			return c, sources, fmt.Errorf("%s: malformed exclude pattern %q", input("exclude"), pattern)
+		}
 	}
 	if c.Fleet.Serve && strings.TrimSpace(c.Fleet.Listen) == "" {
 		return c, sources, fmt.Errorf("%s: fleet.listen is required when fleet.serve is true", input("fleet.listen"))

@@ -90,8 +90,8 @@ func TestDoctorCollectorBudgetUsesLockOwner(t *testing.T) {
 	d.ProcessAlive = func(pid int32, at time.Time) bool { return pid == 42 && at.Equal(start) }
 	if err := st.Tx(context.Background(), func(tx *store.Tx) error {
 		return tx.ReplaceProcs([]model.Proc{
-			{PID: 42, StartTime: start, Cmdline: "/opt/driga collect", RSS: 20_000_000},
-			{PID: 43, StartTime: start, Cmdline: "/debug/driga collect", RSS: 90_000_000},
+			{PID: 42, StartTime: start, Cmdline: "/opt/driga collect", Argv: []string{"/opt/driga", "collect"}, RSS: 20_000_000},
+			{PID: 43, StartTime: start, Cmdline: "/debug/driga collect", Argv: []string{"/debug/driga", "collect"}, RSS: 90_000_000},
 		})
 	}); err != nil {
 		t.Fatal(err)

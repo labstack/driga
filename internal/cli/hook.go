@@ -203,7 +203,7 @@ var hookParentProcess = func() (model.Proc, error) {
 	defer cancel()
 	p := &process.Process{Pid: pid}
 	exe, exeErr := p.ExeWithContext(ctx)
-	cmd, cmdErr := p.CmdlineWithContext(ctx)
+	cmd, argv, cmdErr := parentCommand(ctx, p)
 	if exeErr != nil && cmdErr != nil {
 		return model.Proc{}, errors.New("Copilot parent identity unavailable")
 	}
@@ -211,7 +211,7 @@ var hookParentProcess = func() (model.Proc, error) {
 	if err != nil {
 		return model.Proc{}, err
 	}
-	return model.Proc{PID: pid, StartTime: time.UnixMilli(ms), Exe: exe, Cmdline: cmd}, nil
+	return model.Proc{PID: pid, StartTime: time.UnixMilli(ms), Exe: exe, Cmdline: cmd, Argv: argv}, nil
 }
 
 var hookParentIdentity = func() (int32, time.Time, error) {

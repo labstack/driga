@@ -85,7 +85,7 @@ func TestMCPCommandNormalization(t *testing.T) {
 		{"/tmp/run-a/node /opt/server/mcp.js", "/tmp/run-b/python /opt/server/mcp.js", false},
 		{"/tmp/run-a/node /opt/server/mcp.js", "/tmp/run-b/node /opt/server/mcp.js", true},
 	} {
-		ps := []model.Proc{{PID: 1, Cmdline: "claude"}, {PID: 2, PPID: 1, Cmdline: tc.a}, {PID: 3, PPID: 1, Cmdline: tc.b}}
+		ps := []model.Proc{{PID: 1, Cmdline: "claude", Argv: []string{"claude"}}, {PID: 2, PPID: 1, Cmdline: tc.a, Argv: fixtureArgv(tc.a)}, {PID: 3, PPID: 1, Cmdline: tc.b, Argv: fixtureArgv(tc.b)}}
 		got := MCPServers(ps, sigs, time.Now())
 		if (len(got.Pileups) == 1) != tc.equal {
 			t.Errorf("%q / %q: %+v", tc.a, tc.b, got)
@@ -107,10 +107,10 @@ func TestMCPReportedScaleWithoutThresholds(t *testing.T) {
 		} else if host >= 9 {
 			cmd, count, child, memory = "claude", 23, "node /opt/codegraph/dist/index.js", 100_000_000
 		}
-		ps = append(ps, model.Proc{PID: hostPID, Cmdline: cmd, StartTime: at.Add(-31 * time.Hour)})
+		ps = append(ps, model.Proc{PID: hostPID, Cmdline: cmd, Argv: fixtureArgv(cmd), StartTime: at.Add(-31 * time.Hour)})
 		for i := range count {
 			pid++
-			ps = append(ps, model.Proc{PID: pid, PPID: hostPID, Cmdline: child, RSS: memory, StartTime: at.Add(time.Duration(i-count) * time.Hour)})
+			ps = append(ps, model.Proc{PID: pid, PPID: hostPID, Cmdline: child, Argv: fixtureArgv(child), RSS: memory, StartTime: at.Add(time.Duration(i-count) * time.Hour)})
 		}
 	}
 	got := MCPServers(ps, nil, at)
@@ -132,15 +132,15 @@ func TestMCPAncestrySafety(t *testing.T) {
 	sigs, _ := signatures.Load(nil)
 	at := time.Unix(1000, 0).UTC()
 	ps := []model.Proc{
-		{PID: 1, Cmdline: "claude", StartTime: at},
-		{PID: 2, PPID: 1, Cmdline: "codex app-server", StartTime: at},
-		{PID: 3, PPID: 2, Cmdline: "sh wrapper", StartTime: at},
-		{PID: 4, PPID: 3, Cmdline: "node /opt/mcp/server.js", StartTime: at},
-		{PID: 5, PPID: 3, Cmdline: "node /opt/mcp/server.js", StartTime: at},
-		{PID: 6, PPID: 2, Cmdline: "node /opt/mcp/server.js", StartTime: at.Add(-time.Second)}, // PID reuse
-		{PID: 7, PPID: 2, Cmdline: "node /opt/mcp/server.js", Zombie: true},
-		{PID: 8, PPID: 9, Cmdline: "node /opt/mcp/server.js"}, {PID: 9, PPID: 8, Cmdline: "node /opt/mcp/server.js"},
-		{PID: 10, PPID: 2, Cmdline: "sleep 60"}, {PID: 11, PPID: 2, Cmdline: "sleep 61"},
+		{PID: 1, Cmdline: "claude", Argv: []string{"claude"}, StartTime: at},
+		{PID: 2, PPID: 1, Cmdline: "codex app-server", Argv: []string{"codex", "app-server"}, StartTime: at},
+		{PID: 3, PPID: 2, Cmdline: "sh wrapper", Argv: []string{"sh", "wrapper"}, StartTime: at},
+		{PID: 4, PPID: 3, Cmdline: "node /opt/mcp/server.js", Argv: []string{"node", "/opt/mcp/server.js"}, StartTime: at},
+		{PID: 5, PPID: 3, Cmdline: "node /opt/mcp/server.js", Argv: []string{"node", "/opt/mcp/server.js"}, StartTime: at},
+		{PID: 6, PPID: 2, Cmdline: "node /opt/mcp/server.js", Argv: []string{"node", "/opt/mcp/server.js"}, StartTime: at.Add(-time.Second)}, // PID reuse
+		{PID: 7, PPID: 2, Cmdline: "node /opt/mcp/server.js", Argv: []string{"node", "/opt/mcp/server.js"}, Zombie: true},
+		{PID: 8, PPID: 9, Cmdline: "node /opt/mcp/server.js", Argv: []string{"node", "/opt/mcp/server.js"}}, {PID: 9, PPID: 8, Cmdline: "node /opt/mcp/server.js", Argv: []string{"node", "/opt/mcp/server.js"}},
+		{PID: 10, PPID: 2, Cmdline: "sleep 60", Argv: []string{"sleep", "60"}}, {PID: 11, PPID: 2, Cmdline: "sleep 61", Argv: []string{"sleep", "61"}},
 	}
 	got := MCPServers(ps, sigs, at.Add(time.Hour))
 	if len(got.Pileups) != 1 || got.Pileups[0].Host.PID != 2 || got.Pileups[0].Count != 2 || len(got.Commands) != 4 {
@@ -148,7 +148,8 @@ func TestMCPAncestrySafety(t *testing.T) {
 	}
 	for _, cmd := range []string{"claude", "codex", "codex app-server", "agy", "copilot", "/home/fixture/.codex/packages/app-server-daemon/1/bin/codex app-server", "/home/fixture/.local/share/claude/versions/2.1.304"} {
 		ps[0].Cmdline = cmd
-		got := MCPServers([]model.Proc{ps[0], {PID: 12, PPID: 1, Cmdline: "node /opt/mcp/server.js"}, {PID: 13, PPID: 1, Cmdline: "node /opt/mcp/server.js"}}, sigs, at)
+		ps[0].Argv = fixtureArgv(cmd)
+		got := MCPServers([]model.Proc{ps[0], {PID: 12, PPID: 1, Cmdline: "node /opt/mcp/server.js", Argv: []string{"node", "/opt/mcp/server.js"}}, {PID: 13, PPID: 1, Cmdline: "node /opt/mcp/server.js", Argv: []string{"node", "/opt/mcp/server.js"}}}, sigs, at)
 		if len(got.Pileups) != 1 {
 			t.Errorf("host %q: %+v", cmd, got)
 		}
@@ -156,7 +157,7 @@ func TestMCPAncestrySafety(t *testing.T) {
 }
 
 func TestDuplicateChildCommandsNeedNoMCPMarker(t *testing.T) {
-	ps := []model.Proc{{PID: 1, Cmdline: "claude"}, {PID: 2, PPID: 1, Cmdline: "node /opt/tools/index.js", RSS: 1}, {PID: 3, PPID: 1, Cmdline: "node /opt/tools/index.js", RSS: 1}}
+	ps := []model.Proc{{PID: 1, Cmdline: "claude", Argv: []string{"claude"}}, {PID: 2, PPID: 1, Cmdline: "node /opt/tools/index.js", Argv: []string{"node", "/opt/tools/index.js"}, RSS: 1}, {PID: 3, PPID: 1, Cmdline: "node /opt/tools/index.js", Argv: []string{"node", "/opt/tools/index.js"}, RSS: 1}}
 	got := MCPServers(ps, nil, time.Now())
 	if len(got.Pileups) != 1 || got.Pileups[0].Count != 2 {
 		t.Fatalf("all duplicate child commands must be reported: %+v", got)
@@ -167,10 +168,10 @@ func TestDuplicateChildCommandsNeedNoMCPMarker(t *testing.T) {
 // drop the -<os>-<arch> suffix, so one server on two platforms is one row.
 func TestMCPLabelDropsNPMPlatformSuffix(t *testing.T) {
 	ps := []model.Proc{
-		{PID: 1, Cmdline: "claude"},
-		{PID: 4, PPID: 1, Cmdline: "/x/node_modules/@colbymchenry/codegraph/node_modules/@colbymchenry/codegraph-darwin-arm64/node --liftoff-only /x/node_modules/@colbymchenry/codegraph/node_modules/@colbymchenry/codegraph-darwin-arm64/lib/dist/bin/codegraph.js serve --mcp", RSS: 1},
-		{PID: 10, Cmdline: "claude"},
-		{PID: 11, PPID: 10, Cmdline: "/y/node_modules/@colbymchenry/codegraph/node_modules/@colbymchenry/codegraph-linux-x64/node --liftoff-only /y/node_modules/@colbymchenry/codegraph/node_modules/@colbymchenry/codegraph-linux-x64/lib/dist/bin/codegraph.js serve --mcp", RSS: 1},
+		{PID: 1, Cmdline: "claude", Argv: []string{"claude"}},
+		{PID: 4, PPID: 1, Cmdline: "/x/node_modules/@colbymchenry/codegraph/node_modules/@colbymchenry/codegraph-darwin-arm64/node --liftoff-only /x/node_modules/@colbymchenry/codegraph/node_modules/@colbymchenry/codegraph-darwin-arm64/lib/dist/bin/codegraph.js serve --mcp", Argv: []string{"/x/node_modules/@colbymchenry/codegraph/node_modules/@colbymchenry/codegraph-darwin-arm64/node", "--liftoff-only", "/x/node_modules/@colbymchenry/codegraph/node_modules/@colbymchenry/codegraph-darwin-arm64/lib/dist/bin/codegraph.js", "serve", "--mcp"}, RSS: 1},
+		{PID: 10, Cmdline: "claude", Argv: []string{"claude"}},
+		{PID: 11, PPID: 10, Cmdline: "/y/node_modules/@colbymchenry/codegraph/node_modules/@colbymchenry/codegraph-linux-x64/node --liftoff-only /y/node_modules/@colbymchenry/codegraph/node_modules/@colbymchenry/codegraph-linux-x64/lib/dist/bin/codegraph.js serve --mcp", Argv: []string{"/y/node_modules/@colbymchenry/codegraph/node_modules/@colbymchenry/codegraph-linux-x64/node", "--liftoff-only", "/y/node_modules/@colbymchenry/codegraph/node_modules/@colbymchenry/codegraph-linux-x64/lib/dist/bin/codegraph.js", "serve", "--mcp"}, RSS: 1},
 	}
 	got := MCPServers(ps, nil, time.Now()).Commands
 	if len(got) != 1 || got[0].Name != "codegraph" || got[0].Count != 2 || got[0].HostCount != 2 {

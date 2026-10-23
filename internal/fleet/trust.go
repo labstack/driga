@@ -4,12 +4,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/labstack/driga/internal/secfile"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/labstack/driga/internal/secfile"
 )
 
 var trustMu sync.Mutex
@@ -17,7 +18,7 @@ var trustMu sync.Mutex
 // Peer is a machine whose feed this collector follows.
 type Peer struct {
 	// Ack records the permission granted to this viewer during pairing.
-	Ack       bool      `json:"ack,omitempty"`
+	Ack       bool      `json:"ack,omitzero"`
 	Name      string    `json:"name"`
 	State     string    `json:"state,omitempty"`
 	Addr      string    `json:"addr"`
@@ -105,25 +106,5 @@ func atomicPrivateWrite(path string, data []byte) error {
 	if err := privateDir(filepath.Dir(path)); err != nil {
 		return err
 	}
-	f, err := secfile.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+"-*")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(f.Name())
-	if err := makePrivateFile(f.Name()); err != nil {
-		f.Close()
-		return err
-	}
-	if _, err := f.Write(data); err != nil {
-		_ = f.Close()
-		return err
-	}
-	if err := f.Sync(); err != nil {
-		_ = f.Close()
-		return err
-	}
-	if err := f.Close(); err != nil {
-		return err
-	}
-	return os.Rename(f.Name(), path)
+	return secfile.WriteFileAtomic(path, data, nil)
 }

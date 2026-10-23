@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kballard/go-shellquote"
+
 	"github.com/labstack/driga/internal/model"
 )
 
@@ -44,7 +46,7 @@ func TestShareTextGating(t *testing.T) {
 
 func TestProcsPayloadAgentOnlyScrubbed(t *testing.T) {
 	_, b := Encode(Procs, ProcsRow{Processes: []model.Proc{
-		{PID: 1, Cmdline: "unrelated private process"},
+		{PID: 1, Cmdline: "unrelated private process", Argv: []string{"unrelated", "private", "process"}},
 		{PID: 2, Agent: "codex", SessionID: 99, Cmdline: "codex ghp_secretvalue " + strings.Repeat("界", 250)},
 	}}, Snippets)
 	var got struct {
@@ -82,7 +84,11 @@ func TestProcsCmdlineDropsPromptsUnlessSnippets(t *testing.T) {
 		for _, share := range []ShareText{None, Titles, Snippets} {
 			for _, capture := range []string{"titles", "snippets"} {
 				t.Run(string(share)+"/"+capture+"/"+cmd, func(t *testing.T) {
-					_, b := Encode(Procs, ProcsRow{Processes: []model.Proc{{Agent: "claude", Cmdline: cmd}}}, EffectiveShare(share, capture))
+					argv, err := shellquote.Split(cmd)
+					if err != nil {
+						t.Fatal(err)
+					}
+					_, b := Encode(Procs, ProcsRow{Processes: []model.Proc{{Agent: "claude", Cmdline: cmd, Argv: argv}}}, EffectiveShare(share, capture))
 					var got struct {
 						Processes []model.Proc `json:"processes"`
 					}

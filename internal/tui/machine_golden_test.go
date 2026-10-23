@@ -32,10 +32,10 @@ func TestMachineGoldenFrames(t *testing.T) {
 				src.snap.Machine.Sample.TS = src.snap.ObservedAt
 				at := src.snap.ObservedAt
 				ps := []model.Proc{
-					{PID: 10, Cmdline: "codex app-server", StartTime: at.Add(-31 * time.Hour)},
-					{PID: 11, PPID: 10, Cmdline: "node /opt/codegraph/dist/index.js", RSS: 100 << 20, StartTime: at.Add(-160 * time.Minute)},
-					{PID: 12, PPID: 10, Cmdline: "node /opt/codegraph/dist/index.js", RSS: 100 << 20, StartTime: at},
-					{PID: 13, PPID: 10, Cmdline: "node /opt/codegraph/dist/index.js", RSS: 100 << 20, StartTime: at.Add(-80 * time.Minute)},
+					{PID: 10, Cmdline: "codex app-server", Argv: []string{"codex", "app-server"}, StartTime: at.Add(-31 * time.Hour)},
+					{PID: 11, PPID: 10, Cmdline: "node /opt/codegraph/dist/index.js", Argv: []string{"node", "/opt/codegraph/dist/index.js"}, RSS: 100 << 20, StartTime: at.Add(-160 * time.Minute)},
+					{PID: 12, PPID: 10, Cmdline: "node /opt/codegraph/dist/index.js", Argv: []string{"node", "/opt/codegraph/dist/index.js"}, RSS: 100 << 20, StartTime: at},
+					{PID: 13, PPID: 10, Cmdline: "node /opt/codegraph/dist/index.js", Argv: []string{"node", "/opt/codegraph/dist/index.js"}, RSS: 100 << 20, StartTime: at.Add(-80 * time.Minute)},
 				}
 				trends := derive.NewMCPTrendBuilder()
 				for i, count := range []int{2, 3, 4} {

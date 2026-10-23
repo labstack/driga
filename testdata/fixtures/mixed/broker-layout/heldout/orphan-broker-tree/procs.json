@@ -6,7 +6,7 @@
     "rss_bytes": 20971520,
     "cpu_ms": 0,
     "cpu_percent": 0,
-    "cmdline": "node /opt/heldout-tools/app-server-broker.mjs",
+    "cmdline": "node /opt/heldout-tools/app-server-broker.mjs", "argv": ["node", "/opt/heldout-tools/app-server-broker.mjs"],
     "exe": "",
     "cwd": "{{FIXTURE_HOME}}/wetlands/grove-000"
   },
@@ -17,7 +17,7 @@
     "rss_bytes": 12582912,
     "cpu_ms": 0,
     "cpu_percent": 0,
-    "cmdline": "codex app-server",
+    "cmdline": "codex app-server", "argv": ["codex", "app-server"],
     "exe": "",
     "cwd": "{{FIXTURE_HOME}}/wetlands/grove-000"
   },
@@ -28,7 +28,7 @@
     "rss_bytes": 3145728,
     "cpu_ms": 0,
     "cpu_percent": 0,
-    "cmdline": "worker-runtime",
+    "cmdline": "worker-runtime", "argv": ["worker-runtime"],
     "exe": "",
     "cwd": "{{FIXTURE_HOME}}/wetlands/grove-000"
   },
@@ -39,7 +39,7 @@
     "rss_bytes": 1048576,
     "cpu_ms": 0,
     "cpu_percent": 0,
-    "cmdline": "claude mcp serve",
+    "cmdline": "claude mcp serve", "argv": ["claude", "mcp", "serve"],
     "exe": "",
     "cwd": "{{FIXTURE_HOME}}/wetlands/grove-000"
   },
@@ -50,7 +50,7 @@
     "rss_bytes": 1048576,
     "cpu_ms": 0,
     "cpu_percent": 0,
-    "cmdline": "unrelated-indexer",
+    "cmdline": "unrelated-indexer", "argv": ["unrelated-indexer"],
     "exe": "",
     "cwd": "{{FIXTURE_HOME}}/wetlands/grove-000"
   },
@@ -61,7 +61,7 @@
     "rss_bytes": 74448896,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "claude",
+    "cmdline": "claude", "argv": ["claude"],
     "exe": "/opt/heldout/bin/claude",
     "cwd": "{{FIXTURE_HOME}}/wetlands/grove-000"
   }

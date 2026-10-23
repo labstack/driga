@@ -31,7 +31,7 @@ func TestCopilotPromptBeforeStartAndError(t *testing.T) {
 				at := fixture[0].TS
 				d.Now = func() time.Time { return at }
 				start := at.Add(-time.Hour)
-				p.procs = []model.Proc{{PID: 42, StartTime: start, Cmdline: "copilot"}}
+				p.procs = []model.Proc{{PID: 42, StartTime: start, Cmdline: "copilot", Argv: []string{"copilot"}}}
 				pass(t, d, st, Plan{Procs: true})
 				collect := func() {
 					t.Helper()
@@ -91,7 +91,7 @@ func TestCopilotHooksStateAndInbox(t *testing.T) {
 			d, st, p, a := setup(t)
 			t.Setenv("COPILOT_HOME", t.TempDir())
 			a.obs = nil
-			p.procs = []model.Proc{{PID: 42, StartTime: d.now().Add(-time.Hour), Cmdline: "copilot", Cwd: os.Getenv("HOME"), TTY: "/dev/pts/1"}}
+			p.procs = []model.Proc{{PID: 42, StartTime: d.now().Add(-time.Hour), Cmdline: "copilot", Argv: []string{"copilot"}, Cwd: os.Getenv("HOME"), TTY: "/dev/pts/1"}}
 			d.InboxRunner = inboxRunnerFunc(func(_ context.Context, n string, _ ...string) ([]byte, error) {
 				if n == "tmux" {
 					return []byte("/dev/pts/1 work:1.1\n"), nil
@@ -180,7 +180,7 @@ func TestCopilotWaitSessionIsolationAndPIDReuse(t *testing.T) {
 	t.Setenv("COPILOT_HOME", t.TempDir())
 	a.obs = nil
 	start := d.now().Add(-time.Hour)
-	p.procs = []model.Proc{{PID: 42, StartTime: start, Cmdline: "copilot"}}
+	p.procs = []model.Proc{{PID: 42, StartTime: start, Cmdline: "copilot", Argv: []string{"copilot"}}}
 	at := d.now()
 	d.Now = func() time.Time { return at }
 	pass(t, d, st, Plan{Procs: true})
@@ -210,7 +210,7 @@ func TestCopilotWaitNotClearedByNotificationsOrSubagents(t *testing.T) {
 	d, st, p, a := setup(t)
 	a.obs = nil
 	start := d.now().Add(-time.Hour)
-	p.procs = []model.Proc{{PID: 42, StartTime: start, Cmdline: "copilot"}}
+	p.procs = []model.Proc{{PID: 42, StartTime: start, Cmdline: "copilot", Argv: []string{"copilot"}}}
 	at := d.now()
 	d.Now = func() time.Time { return at }
 	pass(t, d, st, Plan{Procs: true})
@@ -289,7 +289,7 @@ func TestCopilotLateWaitAndToolMetadata(t *testing.T) {
 	d, st, p, a := setup(t)
 	a.obs = nil
 	start := d.now().Add(-time.Hour)
-	p.procs = []model.Proc{{PID: 42, StartTime: start, Cmdline: "copilot"}}
+	p.procs = []model.Proc{{PID: 42, StartTime: start, Cmdline: "copilot", Argv: []string{"copilot"}}}
 	at := d.now()
 	d.Now = func() time.Time { return at }
 	pass(t, d, st, Plan{Procs: true})

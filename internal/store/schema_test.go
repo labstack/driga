@@ -32,7 +32,7 @@ func TestFreshBaseline(t *testing.T) {
 		t.Fatal(err)
 	}
 	rows.Close()
-	if !reflect.DeepEqual(versions, []int{0, 1}) {
+	if !reflect.DeepEqual(versions, []int{0, 1, 2}) {
 		t.Fatal(versions)
 	}
 	for pragma, want := range map[string]int{"user_version": 1, "auto_vacuum": 2, "foreign_keys": 1} {
@@ -145,7 +145,7 @@ func TestRejectNewerSchema(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := st.db.Exec("INSERT INTO goose_db_version(version_id,is_applied) VALUES (2,1)"); err != nil {
+	if _, err := st.db.Exec("INSERT INTO goose_db_version(version_id,is_applied) VALUES (99,1)"); err != nil {
 		t.Fatal(err)
 	}
 	st.Close()
@@ -167,7 +167,7 @@ func TestReadOnlySchemaCheckDoesNotCreateHistory(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if err := checkSchema(context.Background(), db, "empty.db"); !errors.Is(err, ErrSchemaPreRelease) {
+	if _, _, err := checkSchema(context.Background(), db, "empty.db"); !errors.Is(err, ErrSchemaPreRelease) {
 		t.Fatal(err)
 	}
 	var count int
@@ -196,5 +196,54 @@ func TestLocalMachineAlwaysRecordsOS(t *testing.T) {
 	m, err := st.Machine()
 	if err != nil || m.OS != runtime.GOOS {
 		t.Fatalf("missing local provenance: %+v %v", m, err)
+	}
+}
+
+// A database created at the baseline keeps its data: the collector applies
+// forward migrations, while a reader asks for the collector to restart.
+func TestForwardMigrationFromBaseline(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "driga.db")
+	st, err := Open(path, ReadWrite)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := st.machineID
+	st.Close()
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Rewind to a baseline-only database, as created by the previous release.
+	for _, stmt := range []string{"ALTER TABLE procs DROP COLUMN argv", "DELETE FROM goose_db_version WHERE version_id > 1"} {
+		if _, err := db.Exec(stmt); err != nil {
+			t.Fatal(err)
+		}
+	}
+	db.Close()
+	if st, err := Open(path, ReadOnly); !errors.Is(err, ErrSchemaBehind) || !strings.Contains(err.Error(), "driga service restart") {
+		if st != nil {
+			st.Close()
+		}
+		t.Fatalf("reader: %v", err)
+	}
+	st, err = Open(path, ReadWrite)
+	if err != nil {
+		t.Fatalf("writer migrate: %v", err)
+	}
+	defer st.Close()
+	if st.machineID != id {
+		t.Fatal("machine identity lost in migration")
+	}
+	var argv string
+	if _, err := st.db.Exec("INSERT INTO procs (machine_id,pid,ppid,start_time,rss,cpu_seconds,cpu_percent,cmdline,exe,role,agent,session_id,cwd,tty,footprint,swap,memory_measure,partial) VALUES (?,1,0,0,0,0,0,'x','x','','','','','',0,0,'',0)", id); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.db.QueryRow("SELECT argv FROM procs WHERE pid=1").Scan(&argv); err != nil || argv != "[]" {
+		t.Fatal(argv, err)
+	}
+	if st, err := Open(path, ReadOnly); err != nil {
+		t.Fatalf("reader after migration: %v", err)
+	} else {
+		st.Close()
 	}
 }

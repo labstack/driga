@@ -9,7 +9,7 @@ import (
 
 func bucketFixture() ([]model.Proc, []model.Session) {
 	at := time.Unix(1000, 0).UTC()
-	return []model.Proc{{PID: 10, Exe: "/bin/claude", Cmdline: "claude", StartTime: at}, {PID: 11, PPID: 10, Exe: "/bin/node", Cmdline: "node mcp-server-x", StartTime: at.Add(time.Second)}}, []model.Session{{ID: 1, SessionObs: model.SessionObs{PID: 10, ProcStart: at, StartedAt: at, Cwd: "/work/project"}}}
+	return []model.Proc{{PID: 10, Exe: "/bin/claude", Cmdline: "claude", Argv: []string{"claude"}, StartTime: at}, {PID: 11, PPID: 10, Exe: "/bin/node", Cmdline: "node mcp-server-x", Argv: []string{"node", "mcp-server-x"}, StartTime: at.Add(time.Second)}}, []model.Session{{ID: 1, SessionObs: model.SessionObs{PID: 10, ProcStart: at, StartedAt: at, Cwd: "/work/project"}}}
 }
 func TestBucketsParentChainSession(t *testing.T) {
 	ps, ss := bucketFixture()
@@ -41,6 +41,7 @@ func TestBucketsAmbiguousCwdNotAttributed(t *testing.T) {
 	ps[1].PPID = 0
 	ps[1].Cwd = ss[0].Cwd
 	ps[1].Cmdline = "node server.js"
+	ps[1].Argv = []string{"node", "server.js"}
 	if got := PlaceProcesses(ps, ss, nil)[11]; got.Bucket != BucketOther || got.Attribution != nil {
 		t.Fatal(got)
 	}
@@ -48,6 +49,7 @@ func TestBucketsAmbiguousCwdNotAttributed(t *testing.T) {
 func TestBucketsAgentWithoutSession(t *testing.T) {
 	ps, _ := bucketFixture()
 	ps[0].Cmdline = "codex app-server"
+	ps[0].Argv = []string{"codex", "app-server"}
 	ps[0].Exe = "/bin/codex"
 	got := PlaceProcesses(ps, nil, nil)
 	for _, p := range ps {
@@ -57,7 +59,7 @@ func TestBucketsAgentWithoutSession(t *testing.T) {
 	}
 }
 func editorBucketFixture() []model.Proc {
-	return []model.Proc{{PID: 1, Exe: "/Applications/Editor.app/Contents/MacOS/Editor Helper (Plugin)"}, {PID: 2, PPID: 1, Exe: "/bin/node", Cmdline: "node /x/node_modules/@acme/weather-mcp/dist/index.js"}}
+	return []model.Proc{{PID: 1, Exe: "/Applications/Editor.app/Contents/MacOS/Editor Helper (Plugin)"}, {PID: 2, PPID: 1, Exe: "/bin/node", Cmdline: "node /x/node_modules/@acme/weather-mcp/dist/index.js", Argv: []string{"node", "/x/node_modules/@acme/weather-mcp/dist/index.js"}}}
 }
 func TestBucketsEditorExtensionHostMCP(t *testing.T) {
 	got := PlaceProcesses(editorBucketFixture(), nil, nil)
@@ -68,6 +70,7 @@ func TestBucketsEditorExtensionHostMCP(t *testing.T) {
 func TestBucketsEditorWorkerIsOther(t *testing.T) {
 	ps := editorBucketFixture()
 	ps[1].Cmdline = "node /x/tsserver.js"
+	ps[1].Argv = []string{"node", "/x/tsserver.js"}
 	if got := PlaceProcesses(ps, nil, nil)[2]; got.Bucket != BucketOther {
 		t.Fatal(got)
 	}
@@ -113,7 +116,7 @@ func TestBucketsEveryProcessOnce(t *testing.T) {
 }
 
 func TestBucketsStoredRoleDoesNotEraseSignature(t *testing.T) {
-	ps := []model.Proc{{PID: 1, Cmdline: "codex app-server", Agent: "codex", Role: "internal"}}
+	ps := []model.Proc{{PID: 1, Cmdline: "codex app-server", Argv: []string{"codex", "app-server"}, Agent: "codex", Role: "internal"}}
 	if got := PlaceProcesses(ps, nil, nil)[1]; got.Bucket != BucketAgent {
 		t.Fatal(got)
 	}
@@ -131,6 +134,7 @@ func TestBucketsMCPTokenBoundaries(t *testing.T) {
 	} {
 		ps := editorBucketFixture()
 		ps[1].Cmdline = tc.command
+		ps[1].Argv = fixtureArgv(tc.command)
 		if got := PlaceProcesses(ps, nil, nil)[2]; got.Bucket != tc.want {
 			t.Fatalf("%s: %+v", tc.command, got)
 		}
@@ -141,6 +145,7 @@ func TestBucketsEditorBundledMCP(t *testing.T) {
 	ps := editorBucketFixture()
 	ps[1].Exe = "/Applications/Editor.app/Contents/Resources/bin/weather-mcp"
 	ps[1].Cmdline = ps[1].Exe
+	ps[1].Argv = []string{ps[1].Exe}
 	if got := PlaceProcesses(ps, nil, nil)[2]; got.Bucket != BucketLikely || got.SharedHost != 1 {
 		t.Fatal(got)
 	}
@@ -151,8 +156,8 @@ func TestBucketsCwdNeverClaimsOtherAgentTree(t *testing.T) {
 	ps, ss := bucketFixture()
 	at := ps[0].StartTime
 	ps = append(ps,
-		model.Proc{PID: 20, Exe: "/bin/codex", Cmdline: "codex app-server", Cwd: "/work/project", StartTime: at.Add(time.Minute)},
-		model.Proc{PID: 21, PPID: 20, Exe: "/bin/node", Cmdline: "node tool.js", Cwd: "/work/project", StartTime: at.Add(2 * time.Minute)},
+		model.Proc{PID: 20, Exe: "/bin/codex", Cmdline: "codex app-server", Argv: []string{"codex", "app-server"}, Cwd: "/work/project", StartTime: at.Add(time.Minute)},
+		model.Proc{PID: 21, PPID: 20, Exe: "/bin/node", Cmdline: "node tool.js", Argv: []string{"node", "tool.js"}, Cwd: "/work/project", StartTime: at.Add(2 * time.Minute)},
 	)
 	got := PlaceProcesses(ps, ss, nil)
 	for _, pid := range []int32{20, 21} {

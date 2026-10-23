@@ -4,7 +4,6 @@ import (
 	"path"
 	"regexp"
 	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/labstack/driga/internal/model"
@@ -26,19 +25,20 @@ var npmPlatformSuffix = regexp.MustCompile(`-(?:darwin|linux|win32|freebsd|andro
 var executableVersion = regexp.MustCompile(`^v?[0-9]+(?:\.[0-9]+)+(?:[-+][0-9A-Za-z.-]+)?$`)
 
 func describeMCP(p model.Proc, sigs *signatures.Set) mcpIdentity {
-	words := commandWords(p.Cmdline)
+	words := slices.Clone(p.Argv)
 	if len(words) == 0 {
 		if p.Cmdline != "" || p.Exe == "" {
 			return mcpIdentity{}
 		}
 		words = []string{p.Exe}
 	}
-	d := mcpIdentity{entry: words[0], args: words[1:]}
-	exe := words[0]
+	// Normalize entrypoint separators for identity, leaving argument values intact.
+	d := mcpIdentity{entry: strings.ReplaceAll(words[0], `\`, "/"), args: words[1:]}
+	exe := d.entry
 	if p.Exe != "" {
-		exe = p.Exe
+		exe = strings.ReplaceAll(p.Exe, `\`, "/")
 	}
-	if path.Base(words[0]) == "node" || path.Base(exe) == "node" {
+	if strings.TrimSuffix(path.Base(d.entry), ".exe") == "node" || strings.TrimSuffix(path.Base(exe), ".exe") == "node" {
 		d.runtime = exe
 		i := 1
 		for i < len(words) && strings.HasPrefix(words[i], "-") {
@@ -50,7 +50,7 @@ func describeMCP(p model.Proc, sigs *signatures.Set) mcpIdentity {
 			}
 		}
 		if i < len(words) {
-			d.entry, d.args = words[i], words[i+1:]
+			d.entry, d.args = strings.ReplaceAll(words[i], `\`, "/"), words[i+1:]
 		}
 	}
 	base := path.Base(d.entry)
@@ -170,15 +170,7 @@ func (d mcpIdentity) groupKey() string {
 		return d.key
 	}
 	// Reuse volatile port/temp normalization while retaining all server options.
-	return d.key + "\x00" + normalizedMCPCommand(model.Proc{Cmdline: joinCommand(append([]string{"server"}, d.args...))})
-}
-
-func joinCommand(args []string) string {
-	quoted := make([]string, len(args))
-	for i, arg := range args {
-		quoted[i] = strconv.Quote(arg)
-	}
-	return strings.Join(quoted, " ")
+	return d.key + "\x00" + normalizedMCPCommand(model.Proc{Argv: append([]string{"server"}, d.args...)})
 }
 
 func launchesMCP(parent, child mcpIdentity) bool {

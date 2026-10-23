@@ -32,7 +32,7 @@
       "rss_bytes": 20971520,
       "cpu_ms": 0,
       "cpu_percent": 0,
-      "cmdline": "node /opt/heldout-tools/app-server-broker.mjs",
+      "cmdline": "node /opt/heldout-tools/app-server-broker.mjs", "argv": ["node", "/opt/heldout-tools/app-server-broker.mjs"],
       "exe": "",
       "cwd": ""
     },
@@ -43,7 +43,7 @@
       "rss_bytes": 12582912,
       "cpu_ms": 0,
       "cpu_percent": 0,
-      "cmdline": "codex app-server",
+      "cmdline": "codex app-server", "argv": ["codex", "app-server"],
       "exe": "",
       "cwd": ""
     },
@@ -54,7 +54,7 @@
       "rss_bytes": 3145728,
       "cpu_ms": 0,
       "cpu_percent": 0,
-      "cmdline": "worker-runtime",
+      "cmdline": "worker-runtime", "argv": ["worker-runtime"],
       "exe": "",
       "cwd": ""
     },
@@ -65,7 +65,7 @@
       "rss_bytes": 1048576,
       "cpu_ms": 0,
       "cpu_percent": 0,
-      "cmdline": "claude mcp serve",
+      "cmdline": "claude mcp serve", "argv": ["claude", "mcp", "serve"],
       "exe": "",
       "cwd": ""
     },
@@ -76,7 +76,7 @@
       "rss_bytes": 1048576,
       "cpu_ms": 0,
       "cpu_percent": 0,
-      "cmdline": "unrelated-indexer",
+      "cmdline": "unrelated-indexer", "argv": ["unrelated-indexer"],
       "exe": "",
       "cwd": ""
     }

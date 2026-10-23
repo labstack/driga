@@ -10,7 +10,7 @@ import (
 // ProcRow attributes a process through a natural session reference.
 type ProcRow struct {
 	model.Proc
-	Session *SessionKey `json:"session,omitempty"`
+	Session *SessionKey `json:"session,omitzero"`
 }
 
 // DecodedProcs is the wire representation of a replacement process snapshot.
@@ -70,7 +70,7 @@ func (v *ProcRow) UnmarshalJSON(b []byte) error {
 	type plainProc model.Proc
 	var row struct {
 		plainProc
-		Session *SessionKey `json:"session,omitempty"`
+		Session *SessionKey `json:"session,omitzero"`
 	}
 	if err := json.Unmarshal(b, &row); err != nil {
 		return err

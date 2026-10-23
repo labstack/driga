@@ -1,15 +1,15 @@
 [
-  {"pid":10,"cmdline":"/opt/bin/codex app-server","exe":"/opt/bin/codex","cwd":"/projects/fixture","started_at":"2026-10-19T05:00:00Z"},
-  {"pid":11,"ppid":10,"cmdline":"/usr/bin/java -Xmx4g -cp /opt/maestro/lib/* maestro.cli.AppKt mcp","exe":"/usr/bin/java","started_at":"2026-10-19T06:00:00Z","footprint_bytes":2147483648,"memory_measure":"physical_footprint"},
-  {"pid":12,"ppid":10,"cmdline":"/usr/bin/java -Xmx4g -cp /opt/maestro/lib/* maestro.cli.AppKt mcp","exe":"/usr/bin/java","started_at":"2026-10-20T11:00:00Z","footprint_bytes":2147483648,"memory_measure":"physical_footprint"},
-  {"pid":20,"cmdline":"claude","exe":"/home/fixture/.local/share/claude/versions/2.1.304","started_at":"2026-10-20T01:00:00Z"},
-  {"pid":21,"ppid":20,"cmdline":"node /opt/codegraph/dist/index.js","exe":"/usr/bin/node","rss_bytes":104857600,"swap_bytes":104857600,"memory_measure":"rss_swap","started_at":"2026-10-20T02:00:00Z"},
-  {"pid":22,"ppid":20,"cmdline":"node /opt/codegraph/dist/index.js","exe":"/usr/bin/node","rss_bytes":104857600,"swap_bytes":104857600,"memory_measure":"rss_swap","started_at":"2026-10-20T03:00:00Z"},
-  {"pid":23,"ppid":20,"cmdline":"node /opt/mcp/server.js --port 41001 --socket /tmp/a/sock","exe":"/usr/bin/node","rss_bytes":10,"started_at":"2026-10-20T02:00:00Z"},
-  {"pid":24,"ppid":20,"cmdline":"node /opt/mcp/server.js --port 42002 --socket /private/tmp/b/sock","exe":"/usr/bin/node","footprint_bytes":20,"memory_measure":"physical_footprint","started_at":"2026-10-20T03:00:00Z"},
-  {"pid":30,"cmdline":"agy","exe":"/bin/agy","started_at":"2026-10-20T01:00:00Z"},
-  {"pid":31,"ppid":30,"cmdline":"/usr/bin/java -Xmx4g -cp /opt/maestro/lib/* maestro.cli.AppKt mcp","exe":"/usr/bin/java","footprint_bytes":2147483648,"memory_measure":"physical_footprint"},
-  {"pid":32,"ppid":30,"cmdline":"uvx single-mcp --project /projects/one","exe":"/bin/uvx","rss_bytes":10},
-  {"pid":40,"cmdline":"copilot","exe":"/bin/copilot","started_at":"2026-10-20T01:00:00Z"},
-  {"pid":41,"ppid":40,"cmdline":"uvx single-mcp --project /projects/one","exe":"/bin/uvx","rss_bytes":10}
+  {"pid":10,"cmdline":"/opt/bin/codex app-server", "argv": ["/opt/bin/codex", "app-server"],"exe":"/opt/bin/codex","cwd":"/projects/fixture","started_at":"2026-10-19T05:00:00Z"},
+  {"pid":11,"ppid":10,"cmdline":"/usr/bin/java -Xmx4g -cp /opt/maestro/lib/* maestro.cli.AppKt mcp", "argv": ["/usr/bin/java", "-Xmx4g", "-cp", "/opt/maestro/lib/*", "maestro.cli.AppKt", "mcp"],"exe":"/usr/bin/java","started_at":"2026-10-19T06:00:00Z","footprint_bytes":2147483648,"memory_measure":"physical_footprint"},
+  {"pid":12,"ppid":10,"cmdline":"/usr/bin/java -Xmx4g -cp /opt/maestro/lib/* maestro.cli.AppKt mcp", "argv": ["/usr/bin/java", "-Xmx4g", "-cp", "/opt/maestro/lib/*", "maestro.cli.AppKt", "mcp"],"exe":"/usr/bin/java","started_at":"2026-10-20T11:00:00Z","footprint_bytes":2147483648,"memory_measure":"physical_footprint"},
+  {"pid":20,"cmdline":"claude", "argv": ["claude"],"exe":"/home/fixture/.local/share/claude/versions/2.1.304","started_at":"2026-10-20T01:00:00Z"},
+  {"pid":21,"ppid":20,"cmdline":"node /opt/codegraph/dist/index.js", "argv": ["node", "/opt/codegraph/dist/index.js"],"exe":"/usr/bin/node","rss_bytes":104857600,"swap_bytes":104857600,"memory_measure":"rss_swap","started_at":"2026-10-20T02:00:00Z"},
+  {"pid":22,"ppid":20,"cmdline":"node /opt/codegraph/dist/index.js", "argv": ["node", "/opt/codegraph/dist/index.js"],"exe":"/usr/bin/node","rss_bytes":104857600,"swap_bytes":104857600,"memory_measure":"rss_swap","started_at":"2026-10-20T03:00:00Z"},
+  {"pid":23,"ppid":20,"cmdline":"node /opt/mcp/server.js --port 41001 --socket /tmp/a/sock", "argv": ["node", "/opt/mcp/server.js", "--port", "41001", "--socket", "/tmp/a/sock"],"exe":"/usr/bin/node","rss_bytes":10,"started_at":"2026-10-20T02:00:00Z"},
+  {"pid":24,"ppid":20,"cmdline":"node /opt/mcp/server.js --port 42002 --socket /private/tmp/b/sock", "argv": ["node", "/opt/mcp/server.js", "--port", "42002", "--socket", "/private/tmp/b/sock"],"exe":"/usr/bin/node","footprint_bytes":20,"memory_measure":"physical_footprint","started_at":"2026-10-20T03:00:00Z"},
+  {"pid":30,"cmdline":"agy", "argv": ["agy"],"exe":"/bin/agy","started_at":"2026-10-20T01:00:00Z"},
+  {"pid":31,"ppid":30,"cmdline":"/usr/bin/java -Xmx4g -cp /opt/maestro/lib/* maestro.cli.AppKt mcp", "argv": ["/usr/bin/java", "-Xmx4g", "-cp", "/opt/maestro/lib/*", "maestro.cli.AppKt", "mcp"],"exe":"/usr/bin/java","footprint_bytes":2147483648,"memory_measure":"physical_footprint"},
+  {"pid":32,"ppid":30,"cmdline":"uvx single-mcp --project /projects/one", "argv": ["uvx", "single-mcp", "--project", "/projects/one"],"exe":"/bin/uvx","rss_bytes":10},
+  {"pid":40,"cmdline":"copilot", "argv": ["copilot"],"exe":"/bin/copilot","started_at":"2026-10-20T01:00:00Z"},
+  {"pid":41,"ppid":40,"cmdline":"uvx single-mcp --project /projects/one", "argv": ["uvx", "single-mcp", "--project", "/projects/one"],"exe":"/bin/uvx","rss_bytes":10}
 ]

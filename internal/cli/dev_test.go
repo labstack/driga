@@ -99,7 +99,7 @@ func TestDoctorAgyLine(t *testing.T) {
 			}
 			if source == "process" {
 				if err := st.Tx(context.Background(), func(tx *store.Tx) error {
-					return tx.ReplaceProcs([]model.Proc{{PID: 42, Exe: "/opt/bin/agy", Cmdline: "/opt/bin/agy"}})
+					return tx.ReplaceProcs([]model.Proc{{PID: 42, Exe: "/opt/bin/agy", Cmdline: "/opt/bin/agy", Argv: []string{"/opt/bin/agy"}}})
 				}); err != nil {
 					t.Fatal(err)
 				}

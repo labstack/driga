@@ -27,6 +27,7 @@ type winDetails struct {
 	Start, Kernel, User uint64
 	RSS, Private        uint64
 	Exe, Cmdline        string
+	Argv                []string
 	Partial             bool
 }
 type winMemory struct{ TotalPhys, AvailPhys, TotalPageFile, AvailPageFile, SwapTotal, SwapUsed uint64 }
@@ -80,7 +81,7 @@ func (p winPlatform) Procs(ctx context.Context) ([]model.Proc, error) {
 			if d.Exe != "" {
 				proc.Exe = d.Exe
 			}
-			proc.Cmdline, proc.Partial = d.Cmdline, d.Partial
+			proc.Cmdline, proc.Partial, proc.Argv = d.Cmdline, d.Partial, d.Argv
 		}
 		ps = append(ps, proc)
 	}

@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/labstack/driga/internal/pathx"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -17,6 +16,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/labstack/driga/internal/pathx"
+
 	"github.com/labstack/driga/internal/adapter"
 	"github.com/labstack/driga/internal/config"
 	"github.com/labstack/driga/internal/derive"
@@ -24,7 +25,7 @@ import (
 	"github.com/labstack/driga/internal/fleet"
 	"github.com/labstack/driga/internal/gitscan"
 	attention "github.com/labstack/driga/internal/inbox"
-	"github.com/labstack/driga/internal/jsonwire"
+	"github.com/labstack/driga/internal/jsonx"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/platform"
 	"github.com/labstack/driga/internal/scrub"
@@ -728,7 +729,7 @@ func passFeedRows(tx *store.Tx, now time.Time, share feed.ShareText) (map[string
 			failed := !v.LastErrorAt.IsZero() && !v.LastErrorAt.Before(v.LastOKAt)
 			v.LastOKAt, v.LastErrorAt = time.Time{}, time.Time{}
 			comparisonRow = struct {
-				model.SourceStatus
+				Source model.SourceStatus
 				Failed bool
 			}{v, failed}
 		case feed.WorktreeRow:
@@ -869,8 +870,8 @@ func appendPassChanges(tx *store.Tx, before, after map[string]passFeedRow, now t
 		if exists && !reflect.DeepEqual(previous.comparison, row.comparison) {
 			// Most rows are unchanged. Only use wire comparison for real field
 			// differences, preserving JSON omission/normalization semantics.
-			old, _ := jsonwire.Marshal(previous.comparison)
-			current, _ := jsonwire.Marshal(row.comparison)
+			old, _ := jsonx.Marshal(previous.comparison)
+			current, _ := jsonx.Marshal(row.comparison)
 			publish = !bytes.Equal(old, current)
 		}
 		if row.kind == feed.Source && !publish && !reflect.DeepEqual(previous.row, row.row) {

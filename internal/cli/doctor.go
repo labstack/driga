@@ -5,9 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	ks "github.com/kardianos/service"
-	"github.com/labstack/driga/internal/filelock"
-	"github.com/labstack/driga/internal/secfile"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -17,6 +14,10 @@ import (
 	"strings"
 	"text/tabwriter"
 	"time"
+
+	ks "github.com/kardianos/service"
+	"github.com/labstack/driga/internal/filelock"
+	"github.com/labstack/driga/internal/secfile"
 
 	"github.com/labstack/driga/internal/chat"
 	"github.com/labstack/driga/internal/cleanup"
@@ -583,14 +584,10 @@ func isCollectorProc(p model.Proc) bool {
 		if !strings.EqualFold(filepath.Base(p.Exe), "driga") && !strings.EqualFold(filepath.Base(p.Exe), "driga.exe") {
 			return false
 		}
-		// Process APIs may join argv without quoting paths containing spaces.
-		if rest, ok := strings.CutPrefix(p.Cmdline, p.Exe); ok && strings.HasPrefix(rest, " ") {
-			args := strings.Fields(rest)
-			return len(args) > 0 && args[0] == "collect"
-		}
+
 	}
-	args, err := splitCommandWords(p.Cmdline)
-	return err == nil && len(args) >= 2 && (filepath.Base(args[0]) == "driga" || strings.EqualFold(filepath.Base(args[0]), "driga.exe")) && args[1] == "collect"
+	args := p.Argv
+	return len(args) >= 2 && (filepath.Base(args[0]) == "driga" || strings.EqualFold(filepath.Base(args[0]), "driga.exe")) && args[1] == "collect"
 }
 
 // probeCollectorLock does not create a file or modify its contents/permissions.

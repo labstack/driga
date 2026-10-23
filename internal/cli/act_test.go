@@ -66,7 +66,7 @@ func TestKillVerifiesUnverifiedOnDemand(t *testing.T) {
 
 	start := time.Unix(1700000000, 0)
 	tree := func(cpu float64) []model.Proc {
-		return []model.Proc{{PID: 4242, PPID: 1, StartTime: start, CPUSeconds: cpu, Cmdline: "helper"}}
+		return []model.Proc{{PID: 4242, PPID: 1, StartTime: start, CPUSeconds: cpu, Cmdline: "helper", Argv: []string{"helper"}}}
 	}
 	for _, tc := range []struct {
 		name   string
@@ -213,7 +213,7 @@ func TestKillConfirmation(t *testing.T) {
 	}
 
 	readEnv(t)
-	procs := []model.Proc{{PID: 1, Cmdline: "fixture", RSS: 1024}}
+	procs := []model.Proc{{PID: 1, Cmdline: "fixture", Argv: []string{"fixture"}, RSS: 1024}}
 	candidates := []model.Orphan{{ID: "protected", RootPID: 1, StartTime: time.Now().Add(-time.Hour), PIDs: []int32{1}, RSSTotal: 1024, Verified: true}}
 	for _, tc := range []struct {
 		input         string

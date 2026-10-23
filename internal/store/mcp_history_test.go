@@ -3,12 +3,13 @@ package store
 import (
 	"context"
 	"fmt"
-	"github.com/labstack/driga/internal/derive"
-	"github.com/labstack/driga/internal/model"
 	"path/filepath"
 	"reflect"
 	"testing"
 	"time"
+
+	"github.com/labstack/driga/internal/derive"
+	"github.com/labstack/driga/internal/model"
 )
 
 func TestMCPUnchangedMinuteWritesNoStateRows(t *testing.T) {
@@ -230,13 +231,13 @@ func mcpRows(t *testing.T, s interface {
 func TestMCPPruningRebasesObservedWindow(t *testing.T) {
 	s := openTest(t, "", Memory)
 	at := time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC)
-	ps := []model.Proc{{PID: 100, Cmdline: "claude", StartTime: at.Add(-time.Hour * 24)}}
+	ps := []model.Proc{{PID: 100, Cmdline: "claude", Argv: []string{"claude"}, StartTime: at.Add(-time.Hour * 24)}}
 	for i, minutes := range []int{-61, -60, -59, -30, 0} {
 		now := at.Add(time.Duration(minutes) * time.Minute)
 		if i == 1 {
 			ps = ps[:1]
 		} // an end outside the snapshot window
-		ps = append(ps, model.Proc{PID: int32(i + 1), PPID: 100, Cmdline: "node /opt/server.js", StartTime: now})
+		ps = append(ps, model.Proc{PID: int32(i + 1), PPID: 100, Cmdline: "node /opt/server.js", Argv: []string{"node", "/opt/server.js"}, StartTime: now})
 		v := derive.MCPServers(ps, nil, now)
 		mustTx(t, s, func(tx *Tx) error { return tx.ObserveMCP(now, v.Samples) })
 	}

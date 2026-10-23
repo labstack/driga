@@ -7,7 +7,6 @@ import (
 	"io/fs"
 	"os"
 	"os/exec"
-	"path"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -15,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/bmatcuk/doublestar/v4"
 
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/pathx"
@@ -133,23 +134,9 @@ func DiscoverRepos(cwds, roots []string, depth int, exclude []string) ([]string,
 }
 
 func excluded(p string, patterns []string) bool {
-	parts := strings.Split(strings.Trim(filepath.ToSlash(p), "/"), "/")
-	var match func([]string, []string) bool
-	match = func(pattern, names []string) bool {
-		if len(pattern) == 0 {
-			return len(names) == 0
-		}
-		if pattern[0] == "**" {
-			return match(pattern[1:], names) || (len(names) > 0 && match(pattern, names[1:]))
-		}
-		if len(names) == 0 {
-			return false
-		}
-		ok, _ := path.Match(pattern[0], names[0])
-		return ok && match(pattern[1:], names[1:])
-	}
 	for _, pattern := range patterns {
-		if match(strings.Split(strings.Trim(filepath.ToSlash(pattern), "/"), "/"), parts) {
+		ok, _ := doublestar.Match(strings.Trim(filepath.ToSlash(pattern), "/"), strings.Trim(filepath.ToSlash(p), "/"))
+		if ok {
 			return true
 		}
 	}
