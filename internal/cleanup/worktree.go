@@ -61,7 +61,7 @@ func inspectWorktree(ctx context.Context, e Env, s snapshot, w model.Worktree, e
 	if locked {
 		return fail("worktree is locked")
 	}
-	c.identity, err = os.Stat(c.Path)
+	c.identity, err = captureIdentity(c.Path)
 	if err != nil {
 		return c, err
 	}

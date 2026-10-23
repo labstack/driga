@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"github.com/labstack/driga/internal/wincom"
 
 	"golang.org/x/sys/windows"
 )
@@ -20,5 +21,10 @@ func openWebBrowser(ctx context.Context, address string) error {
 	if err != nil {
 		return err
 	}
+	done, err := wincom.InitializeSTA()
+	if err != nil {
+		return err
+	}
+	defer done()
 	return shellOpenBrowser(0, verb, url, nil, nil, windows.SW_SHOWNORMAL)
 }

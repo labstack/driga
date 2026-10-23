@@ -3,7 +3,6 @@ package cleanup
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"runtime"
 	"unsafe"
@@ -41,12 +40,8 @@ func trash(ctx context.Context, _ Env, c Candidate, opts ApplyOpts, r Result) (R
 	if n == 0 || n >= uint32(len(buf)) || !pathx.Equal(resolved(c.Path), windows.UTF16ToString(buf[:n])) {
 		return r, fmt.Errorf("recycle path must be absolute and not redirected")
 	}
-	info, err := os.Lstat(c.Path)
-	if err != nil {
+	if err := validateRecycleIdentity(c); err != nil {
 		return r, err
-	}
-	if c.identity == nil || info.Mode()&os.ModeSymlink != 0 || !os.SameFile(info, c.identity) {
-		return r, fmt.Errorf("recycle source identity changed")
 	}
 	return r, recycle(ctx, c)
 }
@@ -66,16 +61,7 @@ func recycle(ctx context.Context, c Candidate) error {
 	}
 	defer done()
 	sink := newRecycleSink(ctx)
-	sink.validate = func() error {
-		info, err := os.Lstat(c.Path)
-		if err != nil {
-			return err
-		}
-		if c.identity == nil || info.Mode()&os.ModeSymlink != 0 || !os.SameFile(info, c.identity) {
-			return fmt.Errorf("recycle source identity changed")
-		}
-		return nil
-	}
+	sink.validate = func() error { return validateRecycleIdentity(c) }
 	op, err := wincom.Create("{3AD05575-8857-4850-9277-11B85BDB8E09}", "{947AAB5F-0A5C-4C13-B4D6-4BF7836FC9F8}")
 	if err != nil {
 		return err
@@ -147,21 +133,7 @@ var recycleSinkTable = [19]uintptr{
 	windows.NewCallback(func(*recycleSink, uintptr, uintptr, uintptr, uintptr) uintptr { return 0 }),
 	windows.NewCallback(func(*recycleSink, uintptr, uintptr, uintptr, uintptr, uintptr, uintptr) uintptr { return 0 }),
 	windows.NewCallback(func(s *recycleSink, flags uint32, _ uintptr) uintptr {
-		if err := s.ctx.Err(); err != nil {
-			s.err = err
-			return 0x80004004
-		}
-		if flags&0x80 == 0 {
-			s.err = fmt.Errorf("Shell refused recycling; permanent deletion vetoed")
-			return 0x80004004
-		} // TSF_DELETE_RECYCLE_IF_POSSIBLE
-		if s.validate != nil {
-			if err := s.validate(); err != nil {
-				s.err = err
-				return 0x80004004
-			}
-		}
-		return 0
+		return s.preDelete(flags)
 	}),
 	windows.NewCallback(func(s *recycleSink, _ uintptr, _ uintptr, hr uintptr, recycled uintptr) uintptr {
 		if err := wincom.Check(hr); err != nil {
@@ -181,6 +153,24 @@ var recycleSinkTable = [19]uintptr{
 	windows.NewCallback(func(*recycleSink) uintptr { return 0 }),
 	windows.NewCallback(func(*recycleSink) uintptr { return 0 }),
 	windows.NewCallback(func(*recycleSink) uintptr { return 0 }),
+}
+
+func (s *recycleSink) preDelete(flags uint32) uintptr {
+	if err := s.ctx.Err(); err != nil {
+		s.err = err
+		return 0x80004004
+	}
+	if flags&0x80 == 0 {
+		s.err = fmt.Errorf("Shell refused recycling; permanent deletion vetoed")
+		return 0x80004004
+	} // TSF_DELETE_RECYCLE_IF_POSSIBLE
+	if s.validate != nil {
+		if err := s.validate(); err != nil {
+			s.err = err
+			return 0x80004004
+		}
+	}
+	return 0
 }
 
 func newRecycleSink(ctx context.Context) *recycleSink {

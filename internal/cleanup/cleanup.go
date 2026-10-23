@@ -55,7 +55,7 @@ type Candidate struct {
 	root                                      string
 	rootCanonical                             string
 	rootIdentity                              os.FileInfo
-	identity                                  os.FileInfo
+	identity                                  *fileIdentity
 }
 type Env struct {
 	Store         *store.Store
@@ -277,7 +277,7 @@ func verify(ctx context.Context, e Env, c Candidate) (Candidate, error) {
 	if err != nil {
 		return fresh, err
 	}
-	if c.ID != fresh.ID || c.Path != fresh.Path || !os.SameFile(c.identity, fresh.identity) {
+	if c.ID != fresh.ID || c.Path != fresh.Path || !sameIdentity(c.identity, fresh.identity) {
 		return fresh, fmt.Errorf("candidate path identity changed")
 	}
 	if !reflect.DeepEqual(c.Ignored, fresh.Ignored) {

@@ -367,3 +367,26 @@ func TestPassWithFreshProcsSkipsStoredProcs(t *testing.T) {
 		t.Fatalf("sessions after unscanned pass: %+v", ss)
 	}
 }
+
+func TestSocketProbeExcludesLiveHelpers(t *testing.T) {
+	d, st, p, a := setup(t)
+	p.procs = append(p.procs,
+		model.Proc{PID: 200, PPID: 1, StartTime: d.Now().Add(-time.Hour), Cmdline: "claude mcp serve"},
+		model.Proc{PID: 300, PPID: 1, StartTime: d.Now().Add(-time.Hour), Cmdline: "claude mcp serve"},
+	)
+	a.obs = append(a.obs, model.SessionObs{Adapter: "claude", ExternalID: "live-helper", PID: 300, ProcStart: p.procs[len(p.procs)-1].StartTime, RegistryStatus: "busy", LastActivityAt: d.Now()})
+	probe := &socketPlatform{fakePlatform: p, peers: map[int32]bool{200: true}}
+	d.Plat = probe
+	pass(t, d, st, Plan{Procs: true, Sockets: true})
+	if !reflect.DeepEqual(probe.requested, []int32{200}) {
+		t.Fatalf("probe set changed external-peer ownership: %v", probe.requested)
+	}
+	if err := spool.Append(d.SpoolDir, model.HookEvent{Adapter: "claude", SessionID: "live-helper", TS: d.Now().Add(time.Second), Event: "SessionEnd"}); err != nil {
+		t.Fatal(err)
+	}
+	pass(t, d, st, Plan{Procs: true, Sockets: true})
+	if !reflect.DeepEqual(probe.requested, []int32{200, 300}) {
+		t.Fatalf("same-pass SessionEnd was not used for probe selection: %v", probe.requested)
+	}
+
+}

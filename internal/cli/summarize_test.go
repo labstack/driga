@@ -74,7 +74,7 @@ func summaryFixture(t *testing.T) (*store.Store, string, int64) {
 		if err != nil {
 			return err
 		}
-		wts, scanErr := gitscan.NewScanner(1).Scan(context.Background(), dir, true)
+		wts, scanErr := gitscan.NewScanner(1).Scan(context.Background(), dir, gitscan.Full)
 		if scanErr != nil || len(wts) != 1 {
 			t.Fatalf("scan: %+v %v", wts, scanErr)
 		}

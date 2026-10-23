@@ -176,8 +176,12 @@ func Run(ctx context.Context, d Deps, dataDir string) error {
 	defer st.Close()
 	// Commit export-policy changes before any listener can serve the retained
 	// feed. The first pass may spend a long time collecting recent histories.
+	enabled, err := collectFeedEnabled(d, st.DataDir())
+	if err != nil {
+		return err
+	}
 	if err := st.Tx(ctx, func(tx *store.Tx) error {
-		_, err := configurePassFeed(d, tx)
+		_, err := configurePassFeed(d, tx, enabled)
 		return err
 	}); err != nil {
 		if ctx.Err() != nil {
@@ -460,7 +464,31 @@ func startFleetServer(ctx context.Context, d Deps, dataDir string, failures chan
 func drainOnly(ctx context.Context, d Deps, st *store.Store) error {
 	now := d.now()
 	share := feed.EffectiveShare(feed.ShareText(d.Cfg.Fleet.ShareText), d.Cfg.CaptureText)
-	err := st.Tx(ctx, func(tx *store.Tx) error {
+	enabled, err := collectFeedEnabled(d, st.DataDir())
+	if err != nil {
+		return err
+	}
+	offsets, err := st.Offsets()
+	if err != nil {
+		return err
+	}
+	batch := collectSpool(d, offsets)
+	sessions, err := st.Sessions(store.SessionFilter{IncludeEnded: true})
+	if err != nil {
+		return err
+	}
+	sessions = hookSessions(sessions, spoolHooks(d, batch.events))
+	copilotCapturePolicy(sessions, d.Cfg.CaptureText)
+	reconcileCopilot(sessions, d.Plat, now)
+	procs, err := st.Procs()
+	if err != nil {
+		return err
+	}
+	jumps := collectInboxJumps(ctx, d, sessions, procs)
+	err = st.Tx(ctx, func(tx *store.Tx) error {
+		if _, err := configurePassFeed(d, tx, enabled); err != nil {
+			return err
+		}
 		before, err := passFeedRows(tx, now, share)
 		if err != nil {
 			return err
@@ -472,7 +500,7 @@ func drainOnly(ctx context.Context, d Deps, st *store.Store) error {
 			}
 			return appendPassChanges(tx, before, after, now)
 		}
-		hooks, err := drainSpool(d, tx, now, func(name string, err error) error {
+		hooks, err := writeSpool(d, tx, batch, now, func(name string, err error) error {
 			if err != nil {
 				return tx.SetSourceError(name, scrub.Scrub(err.Error()), now)
 			}
@@ -522,7 +550,7 @@ func drainOnly(ctx context.Context, d Deps, st *store.Store) error {
 		if err := tx.CloseAttentionGrowth(now); err != nil {
 			return err
 		}
-		if err := resolveInboxJumps(ctx, tx, d, ss, nil); err != nil {
+		if err := writeInboxJumps(tx, ss, jumps); err != nil {
 			return err
 		}
 		items, err := tx.Inbox(time.Time{}, false)

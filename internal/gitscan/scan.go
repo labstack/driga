@@ -326,9 +326,19 @@ func topologyTime(p string) stamp {
 	return statTime(filepath.Join(common, "worktrees"))
 }
 
+// ScanMode selects identity discovery, cached status, or full enrichment.
+type ScanMode int
+
+const (
+	Identity ScanMode = iota // Worktree paths, branches and HEADs only; never status/log.
+	Cached
+	Full
+)
+
 // Scan reads the repository's non-bare worktrees. A full scan bypasses metadata
 // caching; its caller schedules one at least every five minutes.
-func (s *Scanner) Scan(ctx context.Context, repoPath string, full bool) ([]model.Worktree, error) {
+func (s *Scanner) Scan(ctx context.Context, repoPath string, mode ScanMode) ([]model.Worktree, error) {
+	full := mode == Full
 	repoPath = NormalizePath(repoPath)
 	s.mu.Lock()
 	lock := s.locks[repoPath]
@@ -385,6 +395,19 @@ func (s *Scanner) Scan(ctx context.Context, repoPath string, full bool) ([]model
 			return nil, err
 		}
 		entries = append(entries, entry)
+	}
+	if mode == Identity {
+		worktrees := make([]model.Worktree, 0, len(entries))
+		for _, entry := range entries {
+			head := entry.Head
+			if strings.Trim(head, "0") == "" {
+				head = ""
+			}
+			worktrees = append(worktrees, model.Worktree{Path: entry.Path, Branch: entry.Branch, Head: head, UpdatedAt: time.Now()})
+		}
+		// Identity discovery must not mark status as cached: the next pass still
+		// needs status/log even when HEAD and index timestamps are unchanged.
+		return worktrees, nil
 	}
 	results := make([]model.Worktree, len(entries))
 	errs := make([]error, len(entries))

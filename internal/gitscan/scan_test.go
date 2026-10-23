@@ -3,6 +3,7 @@ package gitscan
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -69,7 +70,11 @@ func initRepo(t *testing.T, p string) string {
 
 func scanOne(t *testing.T, s *Scanner, p string, full bool) model.Worktree {
 	t.Helper()
-	w, err := s.Scan(context.Background(), p, full)
+	mode := Cached
+	if full {
+		mode = Full
+	}
+	w, err := s.Scan(context.Background(), p, mode)
 	if err != nil || len(w) != 1 {
 		t.Fatalf("scan: %#v, %v", w, err)
 	}
@@ -206,12 +211,12 @@ func TestLinkedWorktreeGitFile(t *testing.T) {
 		t.Fatalf("%v, %v", got, err)
 	}
 	s := NewScanner(2)
-	w, err := s.Scan(context.Background(), p, true)
+	w, err := s.Scan(context.Background(), p, Full)
 	if err != nil || len(w) != 2 {
 		t.Fatalf("%v, %v", w, err)
 	}
 	gitTest(t, linked, "checkout", "--detach")
-	w, err = s.Scan(context.Background(), p, false)
+	w, err = s.Scan(context.Background(), p, Cached)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -333,7 +338,7 @@ func TestScanConcurrentBoundAndCancellation(t *testing.T) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			_, err := s.Scan(context.Background(), filepath.Join(base, string(rune('a'+i%4))), true)
+			_, err := s.Scan(context.Background(), filepath.Join(base, string(rune('a'+i%4))), Full)
 			if err != nil {
 				t.Error(err)
 			}
@@ -345,7 +350,7 @@ func TestScanConcurrentBoundAndCancellation(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := s.Scan(ctx, base, true); !errors.Is(err, context.Canceled) {
+	if _, err := s.Scan(ctx, base, Full); !errors.Is(err, context.Canceled) {
 		t.Fatalf("got %v", err)
 	}
 }
@@ -360,7 +365,7 @@ func TestScanUnbornAndBare(t *testing.T) {
 	}
 	bare := filepath.Join(t.TempDir(), "bare")
 	gitTest(t, "", "init", "--bare", bare)
-	got, err := NewScanner(1).Scan(context.Background(), bare, true)
+	got, err := NewScanner(1).Scan(context.Background(), bare, Full)
 	if err != nil || len(got) != 0 {
 		t.Fatalf("%v, %v", got, err)
 	}
@@ -375,8 +380,50 @@ func TestScanSkipsMissingLinkedWorktree(t *testing.T) {
 	if err := os.RemoveAll(linked); err != nil {
 		t.Fatal(err)
 	}
-	w, err := NewScanner(2).Scan(context.Background(), p, true)
+	w, err := NewScanner(2).Scan(context.Background(), p, Full)
 	if err != nil || len(w) != 1 || w[0].Path != NormalizePath(p) {
 		t.Fatalf("want only main worktree, got %v, %v", w, err)
+	}
+}
+
+func TestIdentityScanDefersEnrichmentWithoutCachingStatus(t *testing.T) {
+	gitEnv(t)
+	repo := initRepo(t, filepath.Join(t.TempDir(), "repo"))
+	linked := filepath.Join(t.TempDir(), "linked")
+	gitTest(t, repo, "worktree", "add", "-b", "topic", linked)
+	linked = NormalizePath(linked)
+	s := NewScanner(1)
+	original := s.runGit
+	var calls []string
+	s.runGit = func(ctx context.Context, dir string, args ...string) ([]byte, error) {
+		call := strings.Join(args, " ")
+		calls = append(calls, call)
+		if !strings.Contains(call, "worktree list --porcelain") {
+			return nil, fmt.Errorf("enrichment blocked")
+		}
+		return original(ctx, dir, args...)
+	}
+	worktrees, err := s.Scan(context.Background(), repo, Identity)
+	if err != nil || len(worktrees) != 2 || len(calls) != 1 {
+		t.Fatalf("identity scan: %+v %v calls=%v", worktrees, err, calls)
+	}
+	for _, w := range worktrees {
+		branch := "main"
+		if w.Path == linked {
+			branch = "topic"
+		}
+		if w.Branch != branch || w.Head == "" || !w.LastCommitAt.IsZero() || w.LastCommitSubject != "" || w.Dirty != 0 || w.Untracked != 0 {
+			t.Fatalf("identity: %+v", w)
+		}
+	}
+	s.runGit = original
+	worktrees, err = s.Scan(context.Background(), repo, Cached)
+	if err != nil || len(worktrees) != 2 {
+		t.Fatalf("status scan: %+v %v", worktrees, err)
+	}
+	for _, w := range worktrees {
+		if w.LastCommitSubject != "initial subject ü" {
+			t.Fatalf("identity poisoned enrichment cache: %+v", w)
+		}
 	}
 }

@@ -306,7 +306,7 @@ func (a projectAdapter) Collect(ctx context.Context, env adapter.Env) ([]model.S
 	return selected, warnings, nil
 }
 
-// Start publishes sessions and machine health before Git enrichment, followed
+// Start publishes project identities, sessions and machine health before Git enrichment, followed
 // by five-second passes until cancellation.
 // Call Start exactly once, before reading, and Close after cancelling the viewer.
 func (s *LiveSnapshotSource) Start(ctx context.Context) {
@@ -327,6 +327,7 @@ func (s *LiveSnapshotSource) Start(ctx context.Context) {
 				// Repository status (especially untracked files) and socket
 				// probes must not delay the first populated interactive frame.
 				p.Git, p.GitFull, p.Sockets = false, false, false
+				p.GitIdentity = true
 			}
 			_, passErr := collector.Pass(ctx, s.deps, s.st, p)
 			if passErr == nil {

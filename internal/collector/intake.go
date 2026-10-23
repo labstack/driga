@@ -154,7 +154,17 @@ func labelSession(tx *store.Tx, d Deps, s *model.Session, idx derive.ProcIndex, 
 	if err := intakeInput(tx, *s, events, &in, now); err != nil {
 		return err
 	}
-	mixed := derive.LabelWithEvidence(in, now, derive.Thresholds{StalledAfter: d.Cfg.StalledAfter})
+	mixSession(s, in, d.Cfg.StalledAfter, now)
+	if s.Label == "ended" {
+		return tx.CloseAttentionBefore(s.ID, *s.EndedAt)
+	}
+	return nil
+}
+
+// mixSession folds lifecycle evidence independently of persistence. Unseen
+// completion display does not change whether a session is live for orphans.
+func mixSession(s *model.Session, in derive.StateInput, stalledAfter time.Duration, now time.Time) {
+	mixed := derive.LabelWithEvidence(in, now, derive.Thresholds{StalledAfter: stalledAfter})
 	s.Mixer = &mixed
 	s.Label, s.Heuristic, s.Evidence = mixed.Verdict, mixed.Heuristic, mixed.Evidence
 	s.LastPromptAt = in.LastUserPrompt
@@ -171,15 +181,18 @@ func labelSession(tx *store.Tx, d Deps, s *model.Session, idx derive.ProcIndex, 
 			s.EndedAt = &at
 		}
 		// Ending a session closes pending questions, never unread completions.
-		return tx.CloseAttentionBefore(s.ID, *s.EndedAt)
+		return
 	}
 	if s.EndedAt != nil && in.LastLifecycleAt.After(*s.EndedAt) && in.LastLifecycle != "SessionEnd" && (in.Proc != nil || in.Obs.Hosted) {
 		s.EndedAt = nil
 	}
-	return nil
 }
 
-func intakeInput(tx *store.Tx, s model.Session, events []model.Event, in *derive.StateInput, now time.Time) error {
+type intakeReader interface {
+	IntakeState(int64) (store.IntakeState, error)
+}
+
+func intakeInput(tx intakeReader, s model.Session, events []model.Event, in *derive.StateInput, now time.Time) error {
 	latest := func(dst **time.Time, ts time.Time) {
 		if *dst == nil || ts.After(**dst) {
 			at := ts
@@ -209,7 +222,7 @@ func intakeInput(tx *store.Tx, s model.Session, events []model.Event, in *derive
 			latest(&in.LastToolResult, e.TS)
 		}
 	}
-	if s.Adapter != "claude" {
+	if s.Adapter != "claude" || s.ID == 0 {
 		return nil
 	}
 	state, err := tx.IntakeState(s.ID)

@@ -41,13 +41,15 @@ type Deps struct {
 	Plat        platform.Platform
 	Adapters    []adapter.Adapter
 	Sigs        *signatures.Set
-	Git         *gitscan.Scanner
-	SpoolDir    string
-	Now         func() time.Time
-	State       *State
-	spoolSince  time.Time
-	snapshot    bool
-	clock       daemonClock
+	Git         interface {
+		Scan(context.Context, string, gitscan.ScanMode) ([]model.Worktree, error)
+	}
+	SpoolDir   string
+	Now        func() time.Time
+	State      *State
+	spoolSince time.Time
+	snapshot   bool
+	clock      daemonClock
 }
 
 func (d Deps) now() time.Time {
@@ -61,7 +63,7 @@ func (d Deps) now() time.Time {
 // Sockets probes orphan candidates' connections; only repeated passes can use
 // that to verify idleness, so a one-shot snapshot leaves it off and
 // `orphans kill` verifies on demand instead.
-type Plan struct{ Procs, Machine, Git, GitFull, Cwds, Sockets bool }
+type Plan struct{ Procs, Machine, Git, GitFull, GitIdentity, Cwds, Sockets bool }
 
 // PassReport summarizes a committed pass. Source errors do not abort collection.
 type PassReport struct {
@@ -87,7 +89,7 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 	}
 	err = st.Tx(ctx, func(tx *store.Tx) error {
 		share := feed.EffectiveShare(feed.ShareText(d.Cfg.Fleet.ShareText), d.Cfg.CaptureText)
-		feedEnabled, err := configurePassFeed(d, tx)
+		feedEnabled, err := configurePassFeed(d, tx, collected.feedEnabled)
 		if err != nil {
 			return err
 		}
@@ -106,7 +108,7 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 			}
 			return tx.SetSourceOK(name, now)
 		}
-		hooks, err := drainSpool(d, tx, now, source)
+		hooks, err := writeSpool(d, tx, collected.spool, now, source)
 		if err != nil {
 			return err
 		}
@@ -242,10 +244,6 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 			}
 		}
 		ss := collected.sessions
-		// Hook-only background sessions still need a stable local session identity.
-		ss = hookSessions(ss, hooks)
-		copilotCapturePolicy(ss, d.Cfg.CaptureText)
-		reconcileCopilot(ss, d.Plat, now)
 		original := collected.original
 		byKey := make(map[string]int, len(ss))
 		for i, s := range ss {
@@ -311,7 +309,7 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 				}
 			}
 		}
-		if err := observeSessions(tx, work, ss, procs, previousProcs, procsOK, now); err != nil {
+		if err := observeSessions(tx, work, ss, collected.logs, procs, previousProcs, procsOK, now); err != nil {
 			return err
 		}
 		idx, err := derive.NewProcIndexForOS(procs, platform.ProcessOS(d.Plat))
@@ -332,7 +330,7 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 		if err := tx.CloseAttentionGrowth(now); err != nil {
 			return err
 		}
-		if err := resolveInboxJumps(ctx, tx, d, ss, procs); err != nil {
+		if err := writeInboxJumps(tx, ss, collected.jumps); err != nil {
 			return err
 		}
 		items, err := tx.Inbox(time.Time{}, false)
@@ -372,15 +370,20 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 				ss[i].ParentID = &parent
 			}
 		}
-		if p.Git {
-			if err := writeGit(tx, collected.git, collected.gitErr, source, &r); err != nil {
+		if p.Git || p.GitIdentity {
+			if err := writeGit(tx, collected.git, collected.gitErr, func(name string, err error) error {
+				if p.GitIdentity {
+					name = "git_identity"
+				}
+				return source(name, err)
+			}, &r); err != nil {
 				return err
 			}
 			if p.GitFull && r.SourceErrors["git"] == "" {
 				work.gitFullAt = now
 			}
 		}
-		if err := mapRepos(tx, ss); err != nil {
+		if err := mapRepos(tx, ss, collected.paths); err != nil {
 			return err
 		}
 		if procsOK {
@@ -413,25 +416,14 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 				prev[o.ID] = o
 			}
 			orphanOpts := []derive.OrphanOption{derive.WithSpawnMemory(memory)}
-			if f, ok := d.Plat.(platform.SubreaperFinder); ok {
-				if pid, ok := f.UserSubreaper(); ok {
-					orphanOpts = append(orphanOpts, derive.WithSubreaper(pid))
-				}
+			if collected.subreaper > 1 {
+				orphanOpts = append(orphanOpts, derive.WithSubreaper(collected.subreaper))
 			}
 			orphans := derive.FindOrphans(idx, ss, d.Sigs, now, d.Cfg.OrphanMinAge, prev, orphanOpts...)
 			var peers map[int32]bool
-			if probe, ok := d.Plat.(platform.SocketProber); ok && p.Sockets && len(orphans) > 0 {
-				var pids []int32
-				for _, o := range orphans {
-					pids = append(pids, o.PIDs...)
-				}
-				sort.Slice(pids, func(i, j int) bool { return pids[i] < pids[j] })
-				var err error
-				peers, err = probe.ExternalPeers(ctx, pids)
-				if err != nil {
-					peers = nil
-				}
-				if e := source("sockets", err); e != nil {
+			if _, ok := d.Plat.(platform.SocketProber); ok && p.Sockets && len(orphans) > 0 {
+				peers = collected.peers
+				if e := source("sockets", collected.socketErr); e != nil {
 					return e
 				}
 			}
@@ -546,10 +538,9 @@ func explicitParents(tx *store.Tx, ss []model.Session, parents map[int64]int64) 
 	return nil
 }
 
-func configurePassFeed(d Deps, tx *store.Tx) (bool, error) {
+func collectFeedEnabled(d Deps, dir string) (bool, error) {
 	enabled := d.Cfg.Fleet.Serve && !d.snapshot
 	if !enabled && !d.snapshot {
-		dir := tx.DataDir()
 		if dir == "" {
 			dir = config.DataDir()
 		}
@@ -559,43 +550,45 @@ func configurePassFeed(d Deps, tx *store.Tx) (bool, error) {
 		}
 		enabled = len(viewers) > 0
 	}
+	return enabled, nil
+}
+
+func configurePassFeed(d Deps, tx *store.Tx, enabled bool) (bool, error) {
 	if err := tx.SetFeedShare(feed.EffectiveShare(feed.ShareText(d.Cfg.Fleet.ShareText), d.Cfg.CaptureText)); err != nil {
 		return false, err
 	}
 	return enabled, tx.ConfigureFeed(enabled)
 }
 
-func drainSpool(d Deps, tx *store.Tx, now time.Time, source func(string, error) error) ([]model.HookEvent, error) {
-	// Spool-only wakes can follow enrollment without another full pass.
-	if _, err := configurePassFeed(d, tx); err != nil {
-		return nil, err
-	}
+type spoolResult struct {
+	events []model.HookEvent
+	next   map[string]model.Offset
+	err    error
+}
+
+func collectSpool(d Deps, stored map[string]model.Offset) spoolResult {
 	offsets := make(map[string]model.Offset)
-	entries, err := os.ReadDir(d.SpoolDir)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return nil, source("spool", err)
-	}
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".jsonl") || !spool.RecentDay(entry.Name(), d.spoolSince) {
-			continue
+	prefix := spoolOffsetPrefix(d)
+	for path, offset := range stored {
+		if name, ok := strings.CutPrefix(path, prefix); ok && !strings.ContainsAny(name, "/\\") {
+			offsets[name] = offset
 		}
-		o, _, err := tx.GetOffset(spoolOffsetPrefix(d) + entry.Name())
-		if err != nil {
-			return nil, err
-		}
-		offsets[entry.Name()] = o
 	}
 	events, next, err := spool.Drain(d.SpoolDir, offsets, d.spoolSince)
-	if err := source("spool", err); err != nil {
+	return spoolResult{events: events, next: next, err: err}
+}
+
+func writeSpool(d Deps, tx *store.Tx, batch spoolResult, now time.Time, source func(string, error) error) ([]model.HookEvent, error) {
+	if err := source("spool", batch.err); err != nil {
 		return nil, err
 	}
-	for name, o := range next {
+	for name, o := range batch.next {
 		if err := tx.SetOffset(spoolOffsetPrefix(d)+name, o); err != nil {
 			return nil, err
 		}
 	}
 	var hooks []model.HookEvent
-	for _, ev := range events {
+	for _, ev := range batch.events {
 		if ev.Adapter == "copilot" && !d.Cfg.Adapters["copilot"].Enabled {
 			continue
 		}
@@ -628,34 +621,14 @@ func drainSpool(d Deps, tx *store.Tx, now time.Time, source func(string, error) 
 			}
 			continue
 		}
-		if d.Cfg.CaptureSnippets() {
-			ev.Message = scrub.Snippet(ev.Message)
-			ev.Detail = scrub.Snippet(ev.Detail)
-		} else {
-			ev.Message = ""
-			ev.Detail = ""
-			ev.Prompt = ""
-		}
+		ev = prepareHook(d, ev)
 		if ev.Adapter == "copilot" {
 			if err := tx.SetMeta("hooks:copilot:received", "1"); err != nil {
 				return nil, err
 			}
-			if !d.Cfg.CaptureSnippets() {
-				ev.Title = ""
-				if ev.Event == "errorOccurred" {
-					ev.Reason = ""
-				}
-			}
 		}
-		ev.Title = scrub.Snippet(ev.Title)
-		ev.Prompt = scrub.Snippet(ev.Prompt)
-		ev.Tool = scrub.Snippet(ev.Tool)
-		kind := ev.Event
-		// Retain idle as protocol metadata, without manufacturing a permission wait.
-		if ev.Event == "Notification" && ev.NotificationType == "idle_prompt" {
-			kind = "Notification:idle_prompt"
-		}
-		event := model.Event{MachineID: tx.MachineID(), Adapter: ev.Adapter, ExternalID: ev.SessionID, TS: ev.TS, Kind: kind, Summary: ev.Message}
+
+		event := model.Event{MachineID: tx.MachineID(), Adapter: ev.Adapter, ExternalID: ev.SessionID, TS: ev.TS, Kind: hookKind(ev), Summary: ev.Message}
 		if ev.Adapter == "copilot" && ev.Tool != "" {
 			event.Metadata = &model.EventMetadata{Tool: ev.Tool}
 		}
@@ -669,6 +642,35 @@ func drainSpool(d Deps, tx *store.Tx, now time.Time, source func(string, error) 
 		hooks = append(hooks, ev)
 	}
 	return hooks, nil
+}
+
+func hookKind(ev model.HookEvent) string {
+	// Retain idle as protocol metadata, without manufacturing a permission wait.
+	if ev.Event == "Notification" && ev.NotificationType == "idle_prompt" {
+		return "Notification:idle_prompt"
+	}
+	return ev.Event
+}
+
+func prepareHook(d Deps, ev model.HookEvent) model.HookEvent {
+	if d.Cfg.CaptureSnippets() {
+		ev.Message = scrub.Snippet(ev.Message)
+		ev.Detail = scrub.Snippet(ev.Detail)
+	} else {
+		ev.Message = ""
+		ev.Detail = ""
+		ev.Prompt = ""
+	}
+	if ev.Adapter == "copilot" && !d.Cfg.CaptureSnippets() {
+		ev.Title = ""
+		if ev.Event == "errorOccurred" {
+			ev.Reason = ""
+		}
+	}
+	ev.Title = scrub.Snippet(ev.Title)
+	ev.Prompt = scrub.Snippet(ev.Prompt)
+	ev.Tool = scrub.Snippet(ev.Tool)
+	return ev
 }
 
 func appendFeed(tx *store.Tx, kind feed.Kind, row any, share feed.ShareText, now time.Time) error {
@@ -1047,20 +1049,12 @@ func linkCodex(ss []model.Session, procs []model.Proc, plat platform.Platform) {
 	}
 }
 
-func mapRepos(tx *store.Tx, ss []model.Session) error {
+func mapRepos(tx *store.Tx, ss []model.Session, paths map[string]string) error {
 	ws, err := tx.Worktrees(0)
 	if err != nil {
 		return err
 	}
-	paths := make(map[string]string)
-	normalize := func(path string) string {
-		if n, ok := paths[path]; ok {
-			return n
-		}
-		n := gitscan.NormalizePath(path)
-		paths[path] = n
-		return n
-	}
+	normalize := func(path string) string { return paths[path] }
 	for i := range ws {
 		ws[i].Path = normalize(ws[i].Path)
 	}

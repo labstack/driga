@@ -59,7 +59,7 @@ func renameScratch(c Candidate, destination string) error {
 	if err != nil {
 		return err
 	}
-	if !os.SameFile(info, c.identity) {
+	if !os.SameFile(info, c.identity.info) {
 		return fmt.Errorf("scratch identity changed")
 	}
 	target, err := openDir(filepath.Dir(destination))

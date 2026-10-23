@@ -127,38 +127,20 @@ func syncInbox(tx *store.Tx, d Deps, ss []model.Session, parents map[int64]int64
 	return nil
 }
 
-func resolveInboxJumps(ctx context.Context, tx *store.Tx, d Deps, ss []model.Session, processes []model.Proc) error {
+// collectInboxJumps does terminal/tmux I/O without holding a store transaction.
+func collectInboxJumps(ctx context.Context, d Deps, ss []model.Session, processes []model.Proc) map[string]*model.InboxJump {
 	ctx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
 	defer cancel()
-	// Resolve from stored process identities after the integration reads, never
-	// from a guessed pane name or a parent process's activity.
-	rows, err := tx.Inbox(time.Time{}, false)
-	if err != nil {
-		return err
-	}
 	procs := map[int32]model.Proc{}
-	if processes == nil && len(rows) > 0 {
-		processes, err = tx.Procs()
-		if err != nil {
-			return err
-		}
-	}
 	for _, p := range processes {
 		procs[p.PID] = p
 	}
 	var panes []attention.Pane
-	if len(rows) > 0 {
+	if len(ss) > 0 {
 		panes = attention.ReadPanes(ctx, d.InboxRunner)
 	}
-	byID := map[int64]model.Session{}
+	jumps := make(map[string]*model.InboxJump, len(ss))
 	for _, s := range ss {
-		byID[s.ID] = s
-	}
-	for _, i := range rows {
-		s, ok := byID[i.SessionID]
-		if !ok {
-			continue
-		}
 		p := procs[s.PID]
 		tty := ""
 		if s.ProcStart.IsZero() || derive.SameStart(p.StartTime, s.ProcStart) {
@@ -171,8 +153,25 @@ func resolveInboxJumps(ctx context.Context, tx *store.Tx, d Deps, ss []model.Ses
 				j = terminal
 			}
 		}
-		if err := tx.SetInboxJump(i.ID, j); err != nil {
-			return err
+		jumps[sessionKey(s.Adapter, s.ExternalID)] = j
+	}
+	return jumps
+}
+
+func writeInboxJumps(tx *store.Tx, ss []model.Session, jumps map[string]*model.InboxJump) error {
+	rows, err := tx.Inbox(time.Time{}, false)
+	if err != nil {
+		return err
+	}
+	byID := make(map[int64]model.Session, len(ss))
+	for _, s := range ss {
+		byID[s.ID] = s
+	}
+	for _, i := range rows {
+		if s, ok := byID[i.SessionID]; ok {
+			if err := tx.SetInboxJump(i.ID, jumps[sessionKey(s.Adapter, s.ExternalID)]); err != nil {
+				return err
+			}
 		}
 	}
 	return nil

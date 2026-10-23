@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/labstack/driga/internal/adapter"
+	"github.com/labstack/driga/internal/derive"
 	"github.com/labstack/driga/internal/gitscan"
 	attention "github.com/labstack/driga/internal/inbox"
 	"github.com/labstack/driga/internal/model"
@@ -63,10 +64,23 @@ type sourceResults struct {
 	cwdErr       error
 	git          []repoResult
 	gitErr       error
+	feedEnabled  bool
+	spool        spoolResult
+	peers        map[int32]bool
+	socketErr    error
+	subreaper    int32
+	paths        map[string]string
+	logs         map[string]logBaseline
+	jumps        map[string]*model.InboxJump
 }
 
 func collectSources(ctx context.Context, d Deps, st *store.Store, p Plan, state *State, now time.Time) (sourceResults, error) {
 	r := sourceResults{baseline: now}
+	var err error
+	r.feedEnabled, err = collectFeedEnabled(d, st.DataDir())
+	if err != nil {
+		return r, err
+	}
 	base, err := st.Meta("baseline_at")
 	r.first = errors.Is(err, store.ErrNotFound)
 	if err != nil && !r.first {
@@ -86,8 +100,9 @@ func collectSources(ctx context.Context, d Deps, st *store.Store, p Plan, state 
 	if err != nil {
 		return r, err
 	}
+	r.spool = collectSpool(d, offsets)
 	var knownRepos []model.Repo
-	if p.Git {
+	if p.Git || p.GitIdentity {
 		knownRepos, err = st.Repos()
 		if err != nil {
 			return r, err
@@ -269,8 +284,18 @@ func collectSources(ctx context.Context, d Deps, st *store.Store, p Plan, state 
 			}
 			s.EndedAt = nil
 		}
-		if p.Git {
-			r.git, r.gitErr = collectGit(ctx, d, r.sessions, knownRepos, p.GitFull, now)
+		r.sessions = hookSessions(r.sessions, spoolHooks(d, r.spool.events))
+		copilotCapturePolicy(r.sessions, d.Cfg.CaptureText)
+		reconcileCopilot(r.sessions, d.Plat, now)
+		if p.Git || p.GitIdentity {
+			mode := gitscan.Cached
+			if p.GitFull {
+				mode = gitscan.Full
+			}
+			if p.GitIdentity {
+				mode = gitscan.Identity
+			}
+			r.git, r.gitErr = collectGit(ctx, d, r.sessions, knownRepos, mode, now)
 		}
 	})
 	wg.Wait()
@@ -289,10 +314,46 @@ func collectSources(ctx context.Context, d Deps, st *store.Store, p Plan, state 
 			r.sessions = append(r.sessions, model.Session{SessionObs: model.SessionObs{Adapter: "claude", ExternalID: a.ID, Cwd: a.Cwd, Origin: "background", Hosted: true, StartedAt: now}})
 		}
 	}
+	// All remaining filesystem and subprocess evidence is captured before the
+	// write transaction; readers keep using the last committed frame.
+	sessions := r.sessions
+	r.logs = collectLogBaselines(sessions, state.logs)
+	procs := r.procs
+	if r.procErr != nil {
+		procs, err = state.storedProcs(st.Procs)
+		if err != nil {
+			return r, err
+		}
+	}
+	r.jumps = collectInboxJumps(ctx, d, sessions, procs)
+	r.paths = make(map[string]string)
+	for _, s := range sessions {
+		r.paths[s.Cwd] = gitscan.NormalizePath(s.Cwd)
+	}
+	ws, err := st.Worktrees(0)
+	if err != nil {
+		return r, err
+	}
+	for _, w := range ws {
+		r.paths[w.Path] = gitscan.NormalizePath(w.Path)
+	}
+	for _, repo := range r.git {
+		for _, w := range repo.worktrees {
+			r.paths[w.Path] = w.Path
+		}
+	}
+	if finder, ok := d.Plat.(platform.SubreaperFinder); ok {
+		if pid, ok := finder.UserSubreaper(); ok {
+			r.subreaper = pid
+		}
+	}
+	if p.Procs && r.procErr == nil && p.Sockets {
+		r.peers, r.socketErr = collectSocketPeers(ctx, d, st, state, r.procs, sessions, r.procAt, now, r.subreaper, spoolHooks(d, r.spool.events))
+	}
 	return r, ctx.Err()
 }
 
-func collectGit(ctx context.Context, d Deps, ss []model.Session, known []model.Repo, full bool, now time.Time) ([]repoResult, error) {
+func collectGit(ctx context.Context, d Deps, ss []model.Session, known []model.Repo, mode gitscan.ScanMode, now time.Time) ([]repoResult, error) {
 	var cwds []string
 	for _, s := range ss {
 		if !strings.HasSuffix(s.Origin, "/temporary") && (s.EndedAt == nil || !s.LastActivityAt.Before(now.Add(-7*24*time.Hour))) {
@@ -316,7 +377,7 @@ func collectGit(ctx context.Context, d Deps, ss []model.Session, known []model.R
 		wg.Go(func() {
 			for i := range jobs {
 				results[i].path = paths[i]
-				results[i].worktrees, scanErrs[i] = scanner.Scan(ctx, paths[i], full)
+				results[i].worktrees, scanErrs[i] = scanner.Scan(ctx, paths[i], mode)
 				results[i].err = scanErrs[i]
 			}
 		})
@@ -448,4 +509,100 @@ func reconcileClaude(ss []model.Session, observations []model.SessionObs, now ti
 			s.EndedAt = &at
 		}
 	}
+}
+
+func spoolHooks(d Deps, events []model.HookEvent) []model.HookEvent {
+	var hooks []model.HookEvent
+	for _, ev := range events {
+		if ev.Event != "summary" && ev.Event != "ack" && (ev.Adapter != "copilot" || d.Cfg.Adapters["copilot"].Enabled) {
+			hooks = append(hooks, prepareHook(d, ev))
+		}
+	}
+	return hooks
+}
+
+func collectSocketPeers(ctx context.Context, d Deps, st *store.Store, state *State, procs []model.Proc, ss []model.Session, procAt, now time.Time, subreaper int32, hooks []model.HookEvent) (map[int32]bool, error) {
+	probe, ok := d.Plat.(platform.SocketProber)
+	if !ok {
+		return nil, nil
+	}
+	sampled := append([]model.Proc(nil), procs...)
+	for i, p := range sampled {
+		sampled[i].CPUPercent = platform.CPUPercent(state.prev[p.PID], p, procAt.Sub(state.prevAt))
+	}
+	idx, err := derive.NewProcIndexForOS(sampled, platform.ProcessOS(d.Plat))
+	if err != nil {
+		return nil, err
+	}
+	old, err := st.Orphans()
+	if err != nil {
+		return nil, err
+	}
+	prev := make(map[string]model.Orphan, len(old))
+	for _, o := range old {
+		prev[o.ID] = o
+	}
+	// Fold the same lifecycle evidence as labelSession before selecting probe
+	// PIDs. Expanding this set would treat sockets owned by live helpers as
+	// internal, and could incorrectly verify an orphan as idle.
+	events, err := st.LatestEvents(time.Time{})
+	if err != nil {
+		return nil, err
+	}
+	// New hook rows win equal-timestamp ties, in reverse insertion order.
+	hookEvents := make([]model.Event, 0, len(hooks)+len(events))
+	for i := len(hooks) - 1; i >= 0; i-- {
+		h := hooks[i]
+		hookEvents = append(hookEvents, model.Event{Adapter: h.Adapter, ExternalID: h.SessionID, TS: h.TS, Kind: hookKind(h), Summary: h.Message})
+	}
+	events = append(hookEvents, events...)
+	sort.SliceStable(events, func(i, j int) bool { return events[i].TS.After(events[j].TS) })
+	bySession := make(map[string][]model.Event)
+	for _, e := range events {
+		key := sessionKey(e.Adapter, e.ExternalID)
+		bySession[key] = append(bySession[key], e)
+	}
+	sessions := append([]model.Session(nil), ss...)
+	for i := range sessions {
+		s := &sessions[i]
+		in := derive.StateInput{Obs: s.SessionObs, LastUserPrompt: s.LastPromptAt}
+		if p, ok := idx.Get(s.PID); ok && (s.ProcStart.IsZero() || derive.SameStart(p.StartTime, s.ProcStart)) {
+			in.Proc = &p
+		}
+		if err := intakeInput(st, *s, bySession[sessionKey(s.Adapter, s.ExternalID)], &in, now); err != nil {
+			return nil, err
+		}
+		mixSession(s, in, d.Cfg.StalledAfter, now)
+		// New rows receive real IDs in the write transaction. Private IDs keep
+		// their process ownership distinct while planning the probe.
+		if s.ID == 0 {
+			s.ID = -int64(i + 1)
+		}
+	}
+	spawn := derive.SpawnedBySession(idx, sessions)
+	memory := make(map[string]int64)
+	for _, p := range sampled {
+		key := fmt.Sprintf("%d:%d", p.PID, p.StartTime.Unix())
+		id := state.spawn[key]
+		if id == 0 {
+			id = spawn[p.PID]
+		}
+		if id != 0 {
+			memory[key] = id
+		}
+	}
+	candidates := derive.FindOrphans(idx, sessions, d.Sigs, now, d.Cfg.OrphanMinAge, prev, derive.WithSpawnMemory(memory), derive.WithSubreaper(subreaper))
+	var pids []int32
+	for _, o := range candidates {
+		pids = append(pids, o.PIDs...)
+	}
+	if len(pids) == 0 {
+		return nil, nil
+	}
+	sort.Slice(pids, func(i, j int) bool { return pids[i] < pids[j] })
+	peers, err := probe.ExternalPeers(ctx, pids)
+	if err != nil {
+		return nil, err
+	}
+	return peers, nil
 }

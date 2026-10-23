@@ -13,7 +13,9 @@ import (
 
 	"github.com/labstack/driga/internal/config"
 	"github.com/labstack/driga/internal/model"
+	"github.com/labstack/driga/internal/pathx"
 	"github.com/labstack/driga/internal/store"
+	"golang.org/x/sys/windows"
 )
 
 func TestWindowsRecycleRefusesRedirectedParent(t *testing.T) {
@@ -29,7 +31,7 @@ func TestWindowsRecycleRefusesRedirectedParent(t *testing.T) {
 	if err := os.WriteFile(path, []byte("must not be recycled"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	info, err := os.Stat(path)
+	info, err := captureIdentity(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -170,7 +172,7 @@ func TestWindowsRecycleOwnedFile(t *testing.T) {
 	if err := os.WriteFile(sentinel, []byte("keep"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	info, err := os.Stat(path)
+	info, err := captureIdentity(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -190,5 +192,102 @@ func TestWindowsRecycleOwnedFile(t *testing.T) {
 	}
 	if _, err := os.Stat(sentinel); err != nil {
 		t.Fatal("unrelated file touched", err)
+	}
+}
+
+func TestWindowsWorktreeReplacementThroughShortAncestor(t *testing.T) {
+	for _, short := range []bool{false, true} {
+		t.Run(fmt.Sprintf("short=%t", short), func(t *testing.T) { testWindowsWorktreeReplacement(t, short) })
+	}
+}
+
+func testWindowsWorktreeReplacement(t *testing.T, short bool) {
+	parent := filepath.Join(t.TempDir(), "long worktree ancestor")
+	if err := os.Mkdir(parent, 0700); err != nil {
+		t.Fatal(err)
+	}
+	alias := parent
+	if short {
+		u, err := windows.UTF16PtrFromString(parent)
+		if err != nil {
+			t.Fatal(err)
+		}
+		buf := make([]uint16, 32768)
+		n, err := windows.GetShortPathName(u, &buf[0], uint32(len(buf)))
+		if err != nil || n == 0 || n >= uint32(len(buf)) {
+			t.Fatalf("short path: %d %v", n, err)
+		}
+		alias = windows.UTF16ToString(buf[:n])
+		if pathx.Equal(alias, parent) {
+			t.Skip("volume does not provide 8.3 aliases")
+		}
+	}
+
+	work := filepath.Join(alias, "work")
+	if err := os.Mkdir(work, 0700); err != nil {
+		t.Fatal(err)
+	}
+	repo := filepath.Join(parent, "repo")
+	index := filepath.Join(parent, "index")
+	if err := os.WriteFile(index, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-30 * 24 * time.Hour)
+	if err := os.Chtimes(index, old, old); err != nil {
+		t.Fatal(err)
+	}
+	e := Env{Cfg: config.Default().Cleanup, Git: func(_ context.Context, _ string, args ...string) ([]byte, error) {
+		switch strings.Join(args, " ") {
+		case "worktree list --porcelain -z":
+			return []byte("worktree " + repo + "\x00\x00worktree " + work + "\x00branch refs/heads/test\x00\x00"), nil
+		case "rev-parse HEAD", "rev-parse --verify refs/remotes/origin/main":
+			return []byte("head"), nil
+		case "symbolic-ref refs/remotes/origin/HEAD":
+			return []byte("refs/remotes/origin/main"), nil
+		case "status --porcelain=v1 -z --ignored=matching --untracked-files=all", "merge-base --is-ancestor head head":
+			return nil, nil
+		case "rev-parse --symbolic-full-name @{u}":
+			return nil, fmt.Errorf("no upstream")
+		case "log -1 --format=%ct":
+			return []byte(fmt.Sprint(old.Unix())), nil
+		case "rev-parse --git-path index":
+			return []byte(index), nil
+		default:
+			return nil, fmt.Errorf("unexpected git command: %v", args)
+		}
+	}}
+	snap := snapshot{repos: []model.Repo{{ID: 1, Path: repo}}}
+	w := model.Worktree{RepoID: 1, Path: work}
+	c, err := inspectWorktree(context.Background(), e, snap, w, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sink := newRecycleSink(context.Background())
+	sink.validate = func() error { return validateRecycleIdentity(c) }
+	if got := sink.preDelete(0x80); got != 0 {
+		t.Fatalf("unchanged alias refused: %x %v", got, sink.err)
+	}
+	// Rename rather than delete so the old file ID cannot be reused.
+	if err := os.Rename(work, filepath.Join(parent, "original")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(work, 0700); err != nil {
+		t.Fatal(err)
+	}
+	fresh, err := inspectWorktree(context.Background(), e, snap, w, &c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := sink.preDelete(0x80); got == 0 || sink.err == nil || !strings.Contains(sink.err.Error(), "identity changed") {
+		t.Fatalf("Shell pre-delete accepted replacement: %x %v", got, sink.err)
+	}
+	if sameIdentity(c.identity, fresh.identity) {
+		t.Fatal("replacement satisfied both identity observations")
+	}
+	if _, err := trash(context.Background(), e, c, ApplyOpts{}, Result{}); err == nil || !strings.Contains(err.Error(), "identity changed") {
+		t.Fatalf("replacement accepted: %v", err)
+	}
+	if _, err := os.Stat(work); err != nil {
+		t.Fatalf("replacement was touched: %v", err)
 	}
 }
