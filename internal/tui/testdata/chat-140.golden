@@ -1,31 +1,31 @@
-Chat · Driga · Codex/Copilot coming
+Chat · Driga
 answered by Claude Code · confirm
 Conversations end with this client.
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+
+
+
+
+
+
+
+
+
 You · sent
 What needs me?
 
 Driga · complete
 Session #12 needs input. Its last captured state is waiting. Use the session view to inspect the evidence.
 
-pending
-Bash · touch demo
-/project
-{"command":"touch demo"}
-y allow · n deny · alt+y/alt+n while typing
-
 ▸ tools used · 1 · ctrl+t expand/collapse
-
-
-
-
-
-
-
-
-
-
-
+╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ Approve? · Bash                                                                                                                          │
+│ touch demo                                                                                                                               │
+│ in /project · ctrl+t details                                                                                                             │
+│ y allow · n deny · alt+y/alt+n while typing                                                                                              │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 Context [flow] [session #12]
 │ Ask driga anything…                                                                                                                   
 │                                                                                                                                       

@@ -17,7 +17,8 @@ and 👨‍👩‍👧‍👦 keep their display widths. Soft line continues. Ha
 next line.
 
 go
-│ fmt.Println("code is never rewrapped even when it is much longer than the available display width at sixty or twenty-…
+│ fmt.Println("code is never rewrapped even when it is much longer than the available display width at sixty or twenty-f
+│ our columns")
 │     return nil
 │ 
 │ **literal** <script>code</script>

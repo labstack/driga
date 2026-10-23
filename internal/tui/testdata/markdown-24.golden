@@ -25,10 +25,16 @@ break:
 next line.
 
 go
-│ fmt.Println("code is …
+│ fmt.Println("code is n
+│ ever rewrapped even wh
+│ en it is much longer t
+│ han the available disp
+│ lay width at sixty or
+│  twenty-four columns")
 │     return nil
 │ 
-│ **literal** <script>c…
+│ **literal** <script>co
+│ de</script>
 
 │ indented code
 │ another line

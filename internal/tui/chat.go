@@ -2,6 +2,7 @@ package tui
 
 import (
 	"charm.land/lipgloss/v2"
+	"encoding/json"
 	"fmt"
 	"github.com/labstack/driga/internal/pathx"
 	"strings"
@@ -40,6 +41,9 @@ func newChatInput() textarea.Model {
 	m.ShowLineNumbers = false
 	m.SetHeight(3)
 	m.SetWidth(76)
+	// Enter sends, as in most chat apps; Shift+Enter adds a line, and
+	// Alt+Enter where the terminal cannot report Shift+Enter.
+	m.KeyMap.InsertNewline.SetKeys("shift+enter", "alt+enter")
 	return m
 }
 func (m *app) openChat() tea.Cmd {
@@ -121,7 +125,7 @@ func (m *app) chatKey(msg tea.KeyPressMsg) tea.Cmd {
 		}
 		m.chatInput.Blur()
 		return nil
-	case "ctrl+enter", "super+enter", "alt+enter":
+	case "enter":
 		text := m.chatInput.Value()
 		if strings.TrimSpace(text) == "" || m.chatID == "" || m.opts.Chat == nil {
 			return nil
@@ -138,6 +142,7 @@ func (m *app) chatKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.chatID = ""
 		m.chatMessages = nil
 		m.chatActions = nil
+		m.chatAppeared = nil
 		m.chatMode = chat.Confirm
 		m.endChatActivity()
 		m.chatEventSeq = 0
@@ -157,6 +162,7 @@ func (m *app) chatKey(msg tea.KeyPressMsg) tea.Cmd {
 			m.chatID = m.chatHistory[index].ID
 			m.chatMessages = nil
 			m.chatActions = nil
+			m.chatAppeared = nil
 			m.chatMode = chat.Confirm
 			m.endChatActivity()
 			m.chatEventSeq = 0
@@ -214,7 +220,7 @@ func (m *app) chatView() string {
 		left := max(0, m.chatUntil.Sub(m.opts.Now()))
 		label += fmt.Sprintf(" · %dm left", int((left+time.Minute-1)/time.Minute))
 	}
-	header := style.Render("Chat · Driga") + " · Codex/Copilot coming\n" + dim.Render("answered by Claude Code") + " · " + modeStyle.Render(label)
+	header := style.Render("Chat · Driga") + "\n" + dim.Render("answered by Claude Code") + " · " + modeStyle.Render(label)
 	if m.chatEphemeral {
 		header += "\n" + dim.Render("Conversations end with this client.")
 	}
@@ -223,9 +229,15 @@ func (m *app) chatView() string {
 	}
 	var lines []string
 	tools := 0
-	for _, row := range m.chatMessages {
+	for _, row := range m.chatTranscript() {
+		if row.Role == "assistant" && strings.TrimSpace(row.Text) == "" {
+			continue
+		}
 		if row.Role == "action" {
-			card := clean(row.Text) + " · " + row.Status
+			if row.Status == "pending" {
+				continue
+			}
+			card := truncate(clean(row.Text), m.width)
 			for _, a := range m.chatActions {
 				if a.ID == row.ID {
 					card = m.chatCard(a)
@@ -267,9 +279,18 @@ func (m *app) chatView() string {
 				body = chatStreamingCursor(body, max(1, m.width-4), m.opts.NoColor)
 			}
 		} else if row.Status != "" {
-			header += dim.Render(" · " + row.Status)
+			status := row.Status
+			if status == "queued" && m.pendingChat() != nil {
+				status += " · sends after you answer the card"
+			}
+			header += dim.Render(" · " + status)
 		}
-		lines = append(lines, header, body, "")
+		lines = append(lines, header, strings.TrimRight(body, "\n"), "")
+	}
+	if a := m.pendingChat(); a != nil && m.chatTools {
+		// Expanded raw input uses the transcript viewport, so every byte remains
+		// reachable with paging while the decision title and keys stay pinned.
+		lines = append(lines, dim.Render("Raw JSON · "+clean(a.Tool)), wrapText(markdownClean(string(a.Input)), m.width), "")
 	}
 	if tools > 0 {
 		lines = append(lines, dim.Render(fmt.Sprintf("▸ tools used · %d · ctrl+t expand/collapse", tools)))
@@ -279,15 +300,26 @@ func (m *app) chatView() string {
 	}
 	context := m.chatContextLine()
 	m.chatInput.SetWidth(max(1, m.width-4))
+	m.chatInput.SetHeight(3)
+	if m.pendingChat() != nil && m.height < 28 {
+		m.chatInput.SetHeight(2)
+	}
 	textStyle := textarea.StyleState{Text: view.TokenStyle("ink", m.opts.NoColor), Placeholder: view.TokenStyle("muted", m.opts.NoColor), Prompt: view.TokenStyle("accent", m.opts.NoColor)}
 	m.chatInput.SetStyles(textarea.Styles{Focused: textStyle, Blurred: textStyle})
 	inputView := m.chatInput.View()
 	if m.opts.NoColor {
 		inputView = ansi.Strip(inputView)
 	}
-	composer := wrapText(context, m.width) + "\n" + inputView
-	h := max(1, m.bodyHeight()-strings.Count(header, "\n")-strings.Count(composer, "\n")-3)
-	body := strings.Split(strings.Join(lines, "\n"), "\n")
+	composer := inputView
+	if context != "" {
+		composer = wrapText(context, m.width) + "\n" + composer
+	}
+	if a := m.pendingChat(); a != nil {
+		available := m.bodyHeight() - lipgloss.Height(header) - lipgloss.Height(composer) - 2
+		composer = m.chatCard(*a, available) + "\n" + composer
+	}
+	h := max(0, m.bodyHeight()-strings.Count(header, "\n")-strings.Count(composer, "\n")-3)
+	body := strings.Split(strings.TrimRight(strings.Join(lines, "\n"), "\n"), "\n")
 	m.chatPageHeight, m.chatMaxOffset = h, max(0, len(body)-h)
 	m.chatOffset = min(max(0, m.chatOffset), m.chatMaxOffset)
 	offset := m.chatOffset
@@ -298,7 +330,7 @@ func (m *app) chatView() string {
 		position := truncate(fmt.Sprintf("Lines %d–%d/%d · ctrl+end latest ", start+1, end, len(body)), m.width)
 		separator = dim.Render(position + strings.Repeat("─", max(0, m.width-ansi.StringWidth(position))))
 	}
-	return header + "\n" + separator + "\n" + strings.Join(body[start:end], "\n") + strings.Repeat("\n", max(0, h-(end-start))) + "\n" + composer
+	return header + "\n" + separator + "\n" + strings.Repeat("\n", max(0, h-(end-start))) + strings.Join(body[start:end], "\n") + "\n" + composer
 }
 
 func (m *app) chatContextLine() string {
@@ -349,6 +381,9 @@ func (m *app) chatContextLine() string {
 	}
 	if project != "" {
 		chips = append(chips, "[project · "+clean(pathx.RecordedBase(project))+"]")
+	}
+	if len(chips) == 1 {
+		return ""
 	}
 	return strings.Join(chips, " ")
 }
@@ -463,7 +498,7 @@ func (m *app) updateChatActivity(state chat.State) {
 }
 
 func (m *app) animateChat() tea.Cmd {
-	if !m.chatActive || m.chatAnimating || m.tab != chatTab || m.opts.NoColor || m.opts.MotionOff {
+	if !m.chatActive || m.pendingChat() != nil || m.chatAnimating || m.tab != chatTab || m.opts.NoColor || m.opts.MotionOff {
 		return nil
 	}
 	m.chatAnimating = true
@@ -471,11 +506,11 @@ func (m *app) animateChat() tea.Cmd {
 }
 
 func (m *app) chatActivity() string {
+	if a := m.pendingChat(); a != nil {
+		return "waiting for your approval · " + clean(a.Tool) + " · " + chatElapsed(m.chatWaitingElapsed(a.ID))
+	}
 	if m.chatFullAsk {
 		return fullAutoWarning
-	}
-	if m.pendingChat() != nil {
-		return "action waiting"
 	}
 	if !m.chatActive {
 		return m.chatStatus
@@ -507,6 +542,9 @@ func (m *app) chatFrame() string {
 // chatStatusLine colours the spinner of an active reply after cleaning.
 func (m *app) chatStatusLine() string {
 	text := truncate(clean(m.chatActivity()), m.width)
+	if m.pendingChat() != nil {
+		return view.TokenStyle("accent", m.opts.NoColor).Render(text)
+	}
 	if !m.chatActive || m.opts.NoColor {
 		return text
 	}
@@ -570,25 +608,131 @@ func (m *app) cycleChatMode() tea.Cmd {
 	client, ctx, id, generation := m.opts.Chat, m.opts.Context, m.chatID, m.chatGeneration
 	return func() tea.Msg { return chatSentMsg{err: client.SetMode(ctx, id, mode), generation: generation} }
 }
-func (m *app) chatCard(a chat.Action) string {
-	token := "tool"
-	if a.Status == "pending" {
-		token = "accent"
-	} else if a.Status == "denied" || a.Status == "failed" || a.Status == "expired" {
-		token = "crit"
+
+// Keep approvals ahead of the reply they interrupted: the broker accumulates
+// post-action text in the same assistant message.
+func (m *app) chatTranscript() []store.ChatMessage {
+	rows := append([]store.ChatMessage(nil), m.chatMessages...)
+	for i := 0; i < len(rows); i++ {
+		if rows[i].Role != "action" {
+			continue
+		}
+		for j := i - 1; j >= 0; j-- {
+			if rows[j].Role == "user" {
+				break
+			}
+			if rows[j].Role == "assistant" {
+				card := rows[i]
+				copy(rows[j+1:i+1], rows[j:i])
+				rows[j] = card
+				break
+			}
+		}
 	}
-	title := view.TokenStyle(token, m.opts.NoColor).Render(a.Status)
-	if a.DecidedBy != "" {
-		title += " · " + a.DecidedBy
+	return rows
+}
+
+func (m *app) chatCard(a chat.Action, heights ...int) string {
+	if a.Status != "pending" {
+		parts := []string{a.Status}
+		if a.DecidedBy != "" {
+			parts = append(parts, clean(a.DecidedBy))
+		}
+		if a.Result != "" {
+			parts = append(parts, clean(a.Result))
+		}
+		suffix := truncate(" · "+strings.Join(parts, " · "), max(1, m.width-8))
+		return view.TokenStyle("tool", m.opts.NoColor).Render(truncate(clean(a.Title), max(1, m.width-ansi.StringWidth(suffix))) + suffix)
 	}
-	body := clean(a.Directory) + "\n" + clean(string(a.Input))
-	if a.Result != "" {
-		body += "\n" + clean(a.Result)
+	accent, dim := view.TokenStyle("accent", m.opts.NoColor), view.TokenStyle("muted", m.opts.NoColor)
+	width := max(1, m.width-4)
+	var input struct {
+		Command     string `json:"command"`
+		Description string `json:"description"`
+		Path        string `json:"file_path"`
+		Content     string `json:"content"`
+		Old         string `json:"old_string"`
+		New         string `json:"new_string"`
 	}
-	if a.Status == "pending" {
-		body += "\ny allow · n deny · alt+y/alt+n while typing"
+	_ = json.Unmarshal(a.Input, &input)
+	fields := clean(a.Title)
+	switch a.Tool {
+	case "Bash":
+		fields = input.Command
+	case "Edit":
+		fields = fmt.Sprintf("%s · %d → %d bytes", input.Path, len(input.Old), len(input.New))
+	case "Write":
+		fields = fmt.Sprintf("%s · %d bytes", input.Path, len(input.Content))
 	}
-	return title + "\n" + truncate(clean(a.Title), max(1, m.width-4)) + "\n" + wrapText(body, max(1, m.width-4))
+	// Reserve the title, directory and keys even at 80×24. Details consume only
+	// spare space; the command remains readable with the raw input disclosure.
+	rows := []string{accent.Render(truncate("Approve? · "+clean(a.Tool), width))}
+	fields = markdownClean(fields)
+	fieldLines := strings.Split(wrapText(fields, width), "\n")
+	waiting := 0
+	for _, card := range m.chatActions {
+		if card.Status == "pending" {
+			waiting++
+		}
+	}
+	limit := m.bodyHeight() - 8
+	if len(heights) > 0 {
+		limit = heights[0]
+	}
+	fixed := 5 // Title, directory/disclosure, keys, and border.
+	if input.Description != "" && a.Tool == "Bash" {
+		fixed++
+	}
+
+	budget := max(1, limit-fixed)
+	if len(fieldLines) > budget {
+		fieldLines = append(fieldLines[:budget-1], truncate(fieldLines[budget-1], max(1, width-1))+"…")
+	}
+	rows = append(rows, fieldLines...)
+	if input.Description != "" && a.Tool == "Bash" {
+		rows = append(rows, dim.Render(truncate(clean(input.Description), width)))
+	}
+	rows = append(rows, dim.Render(truncate("in "+clean(a.Directory), max(1, width-18))+" · ctrl+t details"))
+	if waiting > 1 {
+		count := fmt.Sprintf(" · +%d more waiting", waiting-1)
+		rows[0] = accent.Render(truncate("Approve? · "+clean(a.Tool), max(1, width-ansi.StringWidth(count)))) + dim.Render(count)
+	}
+	rows = append(rows, accent.Render(truncate("y allow · n deny · alt+y/alt+n while typing", width)))
+	box := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(0, 1).Width(width + 4)
+	if !m.opts.NoColor {
+		box = box.BorderForeground(view.ThemeColor("accent"))
+	}
+	return box.Render(strings.Join(rows, "\n"))
+}
+
+func (m *app) chatWaitingElapsed(id string) time.Duration {
+	if since, ok := m.chatAppeared[id]; ok {
+		return m.opts.Now().Sub(since)
+	}
+	return 0
+}
+
+// Observe arrival separately from animation so NoColor and MotionOff still ring.
+func (m *app) noticeChatActions() tea.Cmd {
+	if m.chatAppeared == nil {
+		m.chatAppeared = make(map[string]time.Time)
+	}
+	ring := false
+	for _, a := range m.chatActions {
+		if a.Status == "pending" {
+			if _, seen := m.chatAppeared[a.ID]; !seen {
+				m.chatAppeared[a.ID] = m.opts.Now()
+				ring = true
+			}
+		}
+	}
+	if m.pendingChat() != nil {
+		m.chatAnimating = false
+	}
+	if ring {
+		return tea.Raw("\a")
+	}
+	return nil
 }
 
 func (m *app) readChatAfterClose(id string, mode chat.Mode) tea.Cmd {

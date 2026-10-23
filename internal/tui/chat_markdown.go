@@ -131,7 +131,10 @@ func (r markdownTerminal) code(body, language string, width int) string {
 	if width < 3 {
 		prefix = "│"
 	}
-	available := max(0, width-ansi.StringWidth(prefix))
+	if width <= ansi.StringWidth(prefix) {
+		prefix = ""
+	}
+	available := max(1, width-ansi.StringWidth(prefix))
 	style := r.style("md-code")
 	if !r.noColor {
 		style = style.Background(view.ThemeColor("md-code-bg"))
@@ -143,7 +146,21 @@ func (r markdownTerminal) code(body, language string, width int) string {
 	body = strings.TrimSuffix(body, "\n")
 	for _, line := range strings.Split(body, "\n") {
 		line = clean(strings.ReplaceAll(line, "\t", "    "))
-		lines = append(lines, style.Render(prefix+ansi.Truncate(line, available, "…")))
+		for {
+			chunk := ansi.Truncate(line, available, "")
+			if trimmed := strings.TrimRight(chunk, " "); trimmed != "" {
+				chunk = trimmed
+			}
+			if chunk == "" && line != "" {
+				cluster, _ := ansi.FirstGraphemeCluster(line, ansi.GraphemeWidth)
+				chunk = cluster
+			}
+			lines = append(lines, style.Render(prefix+ansi.Truncate(chunk, available, "…")))
+			line = strings.TrimPrefix(line, chunk)
+			if line == "" {
+				break
+			}
+		}
 	}
 	return strings.Join(lines, "\n")
 }

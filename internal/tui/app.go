@@ -79,6 +79,7 @@ type app struct {
 	chatFullAsk    bool      // m pressed once on the way to Full auto.
 	prompts        []chat.Prompt
 	chatActions    []chat.Action
+	chatAppeared   map[string]time.Time
 	chatHistory    []store.Conversation
 	chatDrafts     []string
 	chatOffset     int
@@ -301,6 +302,11 @@ func (m *app) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.chatPolling = false
 			return m, nil
 		}
+		oldOffset, oldMax := m.chatOffset, m.chatMaxOffset
+		if oldOffset > 0 {
+			m.chatView()
+			oldOffset, oldMax = m.chatOffset, m.chatMaxOffset
+		}
 		m.chatID = msg.state.Conversation.ID
 		m.chatMessages = msg.state.Messages
 		if msg.state.Reset {
@@ -325,16 +331,21 @@ func (m *app) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.chatActions = m.chatActions[len(m.chatActions)-chat.MaxMessages:]
 			}
 		}
+		bell := m.noticeChatActions()
 		m.chatMode, m.chatUntil = msg.state.Mode, msg.state.Until
 		m.chatHistory = msg.history
 		m.chatEphemeral = msg.state.Ephemeral
 		m.updateChatActivity(msg.state)
 		m.chatEventSeq = max(m.chatEventSeq, msg.state.Cursor)
+		if oldOffset > 0 {
+			m.chatView()
+			m.chatOffset = min(m.chatMaxOffset, max(0, oldOffset+m.chatMaxOffset-oldMax))
+		}
 		if m.chatActive {
-			return m, tea.Batch(nextChatTick(m.chatGeneration), m.animateChat())
+			return m, tea.Batch(bell, nextChatTick(m.chatGeneration), m.animateChat())
 		}
 		m.chatPolling = false
-		return m, nil
+		return m, bell
 	case chatSentMsg:
 		if msg.generation != m.chatGeneration {
 			return m, nil
@@ -356,7 +367,7 @@ func (m *app) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case spinner.TickMsg:
-		if !m.chatActive || m.tab != chatTab || m.opts.NoColor || m.opts.MotionOff {
+		if !m.chatActive || m.pendingChat() != nil || m.tab != chatTab || m.opts.NoColor || m.opts.MotionOff {
 			m.chatAnimating = false
 			return m, nil
 		}
@@ -581,7 +592,7 @@ func (m *app) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, m.chatInput.Focus()
 			}
 			switch k {
-			case "ctrl+enter", "super+enter", "alt+enter", "ctrl+n", "ctrl+h", "ctrl+x", "ctrl+t", "ctrl+0", "pgup", "pgdown", "ctrl+end", "alt+up", "y", "n", "alt+y", "alt+n", "m":
+			case "ctrl+n", "ctrl+h", "ctrl+x", "ctrl+t", "ctrl+0", "pgup", "pgdown", "ctrl+end", "alt+up", "y", "n", "alt+y", "alt+n", "m":
 				return m, m.chatKey(msg)
 			}
 		}

@@ -44,8 +44,17 @@ func TestChatSelectionAndAsync(t *testing.T) {
 	if m.chatContext.SessionID != 1 || m.chatID == "" {
 		t.Fatal(m.chatContext, m.chatID)
 	}
-	m.chatInput.SetValue("line one\nline two")
-	_, cmd = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter, Mod: tea.ModCtrl})
+	// Shift+Enter and Alt+Enter add lines; plain Enter sends.
+	m.chatInput.SetValue("line one")
+	for _, mod := range []tea.KeyMod{tea.ModShift, tea.ModAlt} {
+		if _, cmd = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter, Mod: mod}); cmd != nil && m.chatInput.Value() == "" {
+			t.Fatal("modified Enter sent the draft")
+		}
+	}
+	if got := m.chatInput.Value(); strings.Count(got, "\n") != 2 {
+		t.Fatalf("new lines not inserted: %q", got)
+	}
+	_, cmd = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if cmd == nil {
 		t.Fatal("send missing")
 	}
@@ -227,7 +236,7 @@ func TestChatFocusNavigation(t *testing.T) {
 	if !m.chatInput.Focused() {
 		t.Fatal("Enter must type")
 	}
-	if !strings.Contains(m.footer(), "esc navigate · ctrl+enter send · alt+N tabs") {
+	if !strings.Contains(m.footer(), "esc navigate · enter send · shift+enter new line · alt+N tabs") {
 		t.Fatal(m.footer())
 	}
 	for _, typing := range []bool{true, false} {

@@ -43,7 +43,11 @@ func TestActionHeaderKeepsStatusAndActor(t *testing.T) {
 	for _, status := range []string{"pending", "denied", "done"} {
 		got := m.chatCard(chat.Action{Title: "Write · " + strings.Repeat("界🙂/", 80), Tool: "Write", Status: status, DecidedBy: "you"})
 		first := strings.Split(got, "\n")[0]
-		if first != status+" · you" {
+		if status == "pending" {
+			if !strings.Contains(got, "Approve? · Write") {
+				t.Fatal(got)
+			}
+		} else if !strings.Contains(first, status+" · you") {
 			t.Fatal(first)
 		}
 		for _, line := range strings.Split(got, "\n") {

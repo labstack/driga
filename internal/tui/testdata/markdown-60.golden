@@ -19,7 +19,9 @@ break:
 next line.
 
 go
-│ fmt.Println("code is never rewrapped even when it is much…
+│ fmt.Println("code is never rewrapped even when it is much
+│  longer than the available display width at sixty or twent
+│ y-four columns")
 │     return nil
 │ 
 │ **literal** <script>code</script>

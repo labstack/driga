@@ -111,7 +111,7 @@ func TestChatActionKeys(t *testing.T) {
 		}
 		m.chatMode = mode
 	}
-	if m.chatActivity() != "action waiting" {
+	if !strings.Contains(m.chatActivity(), "waiting for your approval") {
 		t.Fatal(m.chatActivity())
 	}
 }
