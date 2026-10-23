@@ -22,3 +22,11 @@
 .chat-message th{font-weight:700}.chat-message img{max-width:100%;height:auto}
 
 .chat-message [align=left]{text-align:left}.chat-message [align=center]{text-align:center}.chat-message [align=right]{text-align:right}
+
+.chat .chat-stop[hidden]{display:none}
+.chat-who .chat-mark{width:14px;height:14px;margin-right:5px;vertical-align:middle}
+.chat-spinner{display:inline-block;width:10px;height:10px;margin-right:6px;vertical-align:middle;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:chat-spin .8s linear infinite}
+.chat-cursor{color:var(--accent)}
+@keyframes chat-spin{to{transform:rotate(360deg)}}
+.chat.reduced-motion .chat-spinner{animation:none;width:6px;height:6px;border:0;background:var(--accent)}
+@media(prefers-reduced-motion:reduce){.chat-spinner{animation:none;width:6px;height:6px;border:0;background:var(--accent)}}

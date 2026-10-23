@@ -154,13 +154,13 @@ func (m *app) footer() string {
 		}
 	}
 	if m.tab == chatTab {
-		hints = []string{"ctrl+0 Home", "ctrl+n new", "ctrl+h history", "pgup/pgdown scroll", "esc Stop"}
+		mode := "c type · N tabs · q quit"
+		if m.chatInput.Focused() {
+			mode = "esc navigate · ctrl+enter send · alt+N tabs"
+		}
+		return view.TokenStyle("muted", m.opts.NoColor).Render(mode)
 	}
-	if m.tab == chatTab {
-		hints = append(hints, "ctrl+c quit")
-	} else {
-		hints = append(hints, "esc back", "? help", "q quit")
-	}
+	hints = append(hints, "esc back", "? help", "q quit")
 	if m.tab == 5 {
 		hints = append([]string{"x clean (confirm)", "r refresh candidates"}, hints...)
 	}
@@ -303,7 +303,7 @@ func (m *app) View() tea.View {
 		body = m.viewport.View()
 	}
 	if m.help {
-		body = wrapText("0 Home · 1–8 tabs · ↑/↓ or j/k move · enter detail · esc back\n7 Flow · 8 Chat · j/k session · enter jump · [/] family · -/+ zoom · tab needs · C resume · c Chat\nm cycle machine scope · / filter · enter apply · esc clear · s sort: state, age, mem, project · S summarize selected project\ng group by project · →/← expand/collapse families and worktrees\nx/space acknowledge Needs you / Inbox · X acknowledge all Inbox (confirm)\nclick select · click selected row to open · wheel scroll\npgup/pgdown scroll Home · k kill orphan (confirm) · K force (two confirmations)\no open terminal · ? close help · q / ctrl+c quit", m.width)
+		body = wrapText("0 Home · 1–8 tabs · ↑/↓ or j/k move · enter detail · esc back\nChat: esc stops a reply; otherwise navigate · c/enter type · alt+0–8 tabs\nctrl+enter send · ctrl+n new · ctrl+h history · ctrl+t tools · ctrl+x clear context\n7 Flow · 8 Chat · j/k session · enter jump · [/] family · -/+ zoom · tab needs · C resume · c Chat\nm cycle machine scope · / filter · enter apply · esc clear · s sort: state, age, mem, project · S summarize selected project\ng group by project · →/← expand/collapse families and worktrees\nx/space acknowledge Needs you / Inbox · X acknowledge all Inbox (confirm)\nclick select · click selected row to open · wheel scroll\npgup/pgdown scroll Home · k kill orphan (confirm) · K force (two confirmations)\no open terminal · ? close help · q / ctrl+c quit", m.width)
 		if m.tmuxTarget() != "" {
 			body += "\na attach tmux"
 		}
@@ -325,7 +325,7 @@ func (m *app) View() tea.View {
 	body = strings.Join(lines, "\n")
 	status := m.status
 	if m.tab == chatTab {
-		status = m.chatStatus
+		status = m.chatActivity()
 	}
 	if m.busy && m.tab != chatTab {
 		status = "working… · " + status

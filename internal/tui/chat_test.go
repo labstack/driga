@@ -9,8 +9,10 @@ import (
 	"testing"
 	"time"
 
+	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"errors"
 	"github.com/labstack/driga/internal/chat"
 	"github.com/labstack/driga/internal/store"
 )
@@ -51,10 +53,15 @@ func TestChatSelectionAndAsync(t *testing.T) {
 		t.Fatal("composer not cleared")
 	}
 	_, cmd = m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
-	if cmd == nil {
-		t.Fatal("esc did not Stop")
+	if m.chatActive && cmd == nil {
+		t.Fatal("active esc did not Stop")
 	}
-	execute(t, m, cmd)
+	if !m.chatActive && m.chatInput.Focused() {
+		t.Fatal("idle esc did not blur")
+	}
+	if cmd != nil {
+		execute(t, m, cmd)
+	}
 }
 func TestChatGoldens(t *testing.T) {
 	for _, width := range []int{80, 140} {
@@ -115,7 +122,7 @@ func TestChatSingleTurnStatus(t *testing.T) {
 		got := m.View().Content
 		want := "Ready"
 		if active {
-			want = "Claude is answering"
+			want = "thinking…"
 		}
 		if !strings.Contains(got, want) || strings.Contains(got, "working…") || (active && strings.Contains(got, "Ready")) {
 			t.Fatalf("contradictory status: %s", got)
@@ -129,7 +136,7 @@ func TestChatTUIBackendErrorVisible(t *testing.T) {
 	message := "driga MCP server did not connect; refusing Chat"
 	m.Update(chatStateMsg{state: chat.State{Messages: []store.ChatMessage{{ID: "failed", Role: "assistant", Text: message, Status: "error"}}}})
 	got := m.View().Content
-	if !strings.Contains(got, message) || strings.Contains(got, "Claude is answering") {
+	if !strings.Contains(got, message) || strings.Contains(got, "thinking…") {
 		t.Fatalf("backend error was hidden or still shown as answering: %s", got)
 	}
 }
@@ -178,9 +185,358 @@ func TestChatTUIRendersPartialsBeforeResult(t *testing.T) {
 		}
 		m = execute(t, m, m.readChat()).(*app)
 		got := m.View().Content
-		if !m.chatActive || !strings.Contains(got, want) || !strings.Contains(got, "Claude is answering") || strings.Contains(got, "Ready") {
+		if !m.chatActive || !strings.Contains(got, want) || !strings.Contains(got, "writing…") || strings.Contains(got, "Ready") {
 			t.Fatal(got)
 		}
 		a.release <- struct{}{}
+	}
+}
+
+func TestChatFocusNavigation(t *testing.T) {
+	m := setup(t, fixture(), Options{}).(*app)
+	m.openChat()
+	m.chatInput.SetValue("draft text")
+	key(m, 'q')
+	if m.chatInput.Value() != "draft textq" {
+		t.Fatal("typing routed to navigation")
+	}
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if m.chatInput.Focused() {
+		t.Fatal("idle Escape must blur")
+	}
+	if !strings.Contains(m.footer(), "c type · N tabs · q quit") {
+		t.Fatal(m.footer())
+	}
+	key(m, '?')
+	if !m.help {
+		t.Fatal("navigate help unreachable")
+	}
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if m.help {
+		t.Fatal("help did not close")
+	}
+	key(m, '/')
+	if !m.filtering {
+		t.Fatal("navigate filter unreachable")
+	}
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if !m.chatInput.Focused() {
+		t.Fatal("Enter must type")
+	}
+	if !strings.Contains(m.footer(), "esc navigate · ctrl+enter send · alt+N tabs") {
+		t.Fatal(m.footer())
+	}
+	for _, typing := range []bool{true, false} {
+		for n := '0'; n <= '8'; n++ {
+			m.openChat()
+			if !typing {
+				m.chatInput.Blur()
+			}
+			m.Update(tea.KeyPressMsg{Code: n, Mod: tea.ModAlt})
+			want := int(n - '1')
+			if n == '0' {
+				want = homeTab
+			}
+			if n == '7' {
+				want = flowTab
+			}
+			if n == '8' {
+				want = chatTab
+			}
+			if m.tab != want {
+				t.Fatalf("alt+%c typing=%v: tab %d", n, typing, m.tab)
+			}
+			if m.chatInput.Value() != "draft textq" {
+				t.Fatal("tab switch lost draft")
+			}
+		}
+	}
+	m.openChat()
+	m.chatInput.Blur()
+	key(m, '1')
+	if m.tab != 0 {
+		t.Fatal("navigate tab unreachable")
+	}
+	key(m, '8')
+	if m.chatInput.Value() != "draft textq" || !m.chatInput.Focused() {
+		t.Fatal("return did not restore draft")
+	}
+	m.chatInput.Blur()
+	_, cmd := m.Update(tea.KeyPressMsg{Code: 'q'})
+	if cmd == nil {
+		t.Fatal("navigate quit unreachable")
+	}
+	m.openChat()
+	m.chatInput.Blur()
+	key(m, 'c')
+	if !m.chatInput.Focused() {
+		t.Fatal("c must type")
+	}
+}
+
+func TestChatActivityStates(t *testing.T) {
+	now := time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC)
+	m := setup(t, fixture(), Options{Now: func() time.Time { return now }}).(*app)
+	m.tab, m.width, m.height = chatTab, 100, 40
+	row := store.ChatMessage{ID: "reply", Role: "assistant", Status: "streaming"}
+	_, cmd := m.Update(chatStateMsg{state: chat.State{Active: true, Messages: []store.ChatMessage{row}}})
+	if cmd == nil {
+		t.Fatal("active reply must poll")
+	}
+	now = now.Add(65 * time.Second)
+	got := m.View().Content
+	for _, want := range []string{"thinking…", "1m 05s", "Driga", "answered by Claude Code"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("missing %q: %s", want, got)
+		}
+	}
+	if strings.Contains(got, "\x1b") || !strings.Contains(got, "… thinking…") {
+		t.Fatal("NoColor spinner", got)
+	}
+	row.Text = "Hello"
+	m.Update(chatStateMsg{state: chat.State{Active: true, Messages: []store.ChatMessage{row}, Events: []chat.Event{{Seq: 1, Kind: "delta", MessageID: row.ID, Text: "Hello"}}}})
+	got = m.View().Content
+	if !strings.Contains(got, "writing…") || !strings.Contains(got, "Hello▍") {
+		t.Fatal(got)
+	}
+	tool := store.ChatMessage{Role: "tool", Text: "mcp__driga__list_agents"}
+	m.Update(chatStateMsg{state: chat.State{Active: true, Messages: []store.ChatMessage{row, tool}, Events: []chat.Event{{Seq: 2, Kind: "message", Message: &tool}}}})
+	if got = m.View().Content; !strings.Contains(got, "reading agents…") {
+		t.Fatal(got)
+	}
+	m.Update(chatStateMsg{state: chat.State{Active: true, Messages: []store.ChatMessage{row, tool}, Events: []chat.Event{{Seq: 3, Kind: "delta", MessageID: row.ID, Text: "more"}}}})
+	if got = m.View().Content; !strings.Contains(got, "writing…") {
+		t.Fatal(got)
+	}
+	row.Status = "complete"
+	_, cmd = m.Update(chatStateMsg{state: chat.State{Messages: []store.ChatMessage{row}}})
+	if cmd != nil {
+		t.Fatal("idle reply must not schedule ticks")
+	}
+	if got = m.View().Content; strings.Contains(got, "writing…") || strings.Contains(got, "▍") {
+		t.Fatal(got)
+	}
+	_, cmd = m.Update(chatTickMsg{})
+	if cmd != nil {
+		t.Fatal("late tick scheduled idle work")
+	}
+}
+
+func TestChatEscapeStopsBeforeBlurring(t *testing.T) {
+	st, err := store.Open("", store.Memory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	a := partialTUIAgent{make(chan struct{}, 2), make(chan struct{}, 2)}
+	b, err := chat.New(context.Background(), st, a, chat.Options{DataDir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer b.Close()
+	m := setup(t, fixture(), Options{Chat: b}).(*app)
+	m = execute(t, m, m.openChat()).(*app)
+	if err := b.Send(context.Background(), m.chatID, "test", chat.Context{}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-a.emitted:
+	case <-time.After(3 * time.Second):
+		t.Fatal("no reply")
+	}
+	m = execute(t, m, m.readChat()).(*app)
+	m.chatInput.SetValue("keep me")
+	_, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if cmd == nil || !m.chatInput.Focused() {
+		t.Fatal("active Escape must stop before blurring")
+	}
+	execute(t, m, cmd)
+	deadline := time.Now().Add(3 * time.Second)
+	for m.chatActive && time.Now().Before(deadline) {
+		m = execute(t, m, m.readChat()).(*app)
+		if m.chatActive {
+			time.Sleep(time.Millisecond)
+		}
+	}
+	if m.chatActive {
+		t.Fatal("reply did not stop")
+	}
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if m.chatInput.Focused() || m.chatInput.Value() != "keep me" {
+		t.Fatal("second Escape must blur and retain draft")
+	}
+}
+
+func TestChatElapsed(t *testing.T) {
+	for _, tc := range []struct {
+		d    time.Duration
+		want string
+	}{
+		{-time.Second, "0s"}, {0, "0s"}, {999 * time.Millisecond, "0s"}, {59 * time.Second, "59s"}, {60 * time.Second, "1m 00s"}, {65 * time.Second, "1m 05s"}, {time.Hour, "60m 00s"},
+	} {
+		if got := chatElapsed(tc.d); got != tc.want {
+			t.Errorf("%v: %q, want %q", tc.d, got, tc.want)
+		}
+	}
+}
+
+type toolTUIAgent struct{ emitted, release chan struct{} }
+
+func (a toolTUIAgent) Run(ctx context.Context, _ chat.Request, emit func(chat.Delta) error) error {
+	for _, delta := range []chat.Delta{{Tool: "mcp__driga__list_agents"}, {Text: "Found agents"}} {
+		if err := emit(delta); err != nil {
+			return err
+		}
+		a.emitted <- struct{}{}
+		select {
+		case <-a.release:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	return nil
+}
+func TestChatActivityUsesTransportEvents(t *testing.T) {
+	st, err := store.Open("", store.Memory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	a := toolTUIAgent{make(chan struct{}, 2), make(chan struct{}, 2)}
+	b, err := chat.New(context.Background(), st, a, chat.Options{DataDir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer b.Close()
+	m := setup(t, fixture(), Options{Chat: b}).(*app)
+	m = execute(t, m, m.openChat()).(*app)
+	if err := b.Send(context.Background(), m.chatID, "test", chat.Context{}); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"reading agents…", "writing…"} {
+		select {
+		case <-a.emitted:
+		case <-time.After(3 * time.Second):
+			t.Fatal("no event")
+		}
+		m = execute(t, m, m.readChat()).(*app)
+		if got := m.chatActivity(); !strings.Contains(got, want) {
+			t.Fatalf("want %q: %s", want, got)
+		}
+		a.release <- struct{}{}
+	}
+}
+
+func TestChatSpinnerLifecycle(t *testing.T) {
+	m := setup(t, fixture(), Options{}).(*app)
+	m.opts.NoColor = false
+	m.tab = chatTab
+	_, cmd := m.Update(chatStateMsg{state: chat.State{Active: true}})
+	if cmd == nil || !m.chatAnimating {
+		t.Fatal("spinner did not start")
+	}
+	before := m.chatSpinner.View()
+	_, cmd = m.Update(m.chatSpinner.Tick())
+	if cmd == nil || m.chatSpinner.View() == before {
+		t.Fatal("spinner did not animate")
+	}
+	m.Update(chatStateMsg{err: errors.New("Claude Code unavailable")})
+	_, cmd = m.Update(spinner.TickMsg{ID: m.chatSpinner.ID()})
+	if cmd != nil || m.chatActive || m.chatAnimating {
+		t.Fatal("error left spinner running")
+	}
+	if !strings.Contains(m.chatActivity(), "Claude Code unavailable") {
+		t.Fatal(m.chatActivity())
+	}
+	m.opts.NoColor = true
+	m.Update(chatStateMsg{state: chat.State{Active: true}})
+	if m.chatAnimating {
+		t.Fatal("NoColor started animation")
+	}
+	_, cmd = m.Update(m.chatSpinner.Tick())
+	if cmd != nil {
+		t.Fatal("NoColor tick scheduled animation")
+	}
+	m.opts.NoColor = false
+	m.opts.MotionOff = true
+	if cmd = m.animateChat(); cmd != nil {
+		t.Fatal("MotionOff animated")
+	}
+}
+
+func TestChatConversationSwitchInvalidatesTicks(t *testing.T) {
+	m := setup(t, fixture(), Options{}).(*app)
+	m.tab = chatTab
+	m.chatInput.Focus()
+	m.chatActive = true
+	m.chatPolling = true
+	m.chatID = "old"
+	m.chatHistory = []store.Conversation{{ID: "old"}, {ID: "other"}}
+	_, cmd := m.Update(tea.KeyPressMsg{Code: 'h', Mod: tea.ModCtrl})
+	if cmd == nil || m.chatID != "other" || m.chatActive {
+		t.Fatal("history did not restart read")
+	}
+	_, cmd = m.Update(chatTickMsg{generation: 0})
+	if cmd != nil || !m.chatPolling {
+		t.Fatal("stale tick changed new poll")
+	}
+	_, cmd = m.Update(chatStateMsg{generation: 0, state: chat.State{Active: true}})
+	if cmd != nil || m.chatActive {
+		t.Fatal("stale state revived reply")
+	}
+	_, cmd = m.Update(tea.KeyPressMsg{Code: 'n', Mod: tea.ModCtrl})
+	if cmd == nil || m.chatID != "" {
+		t.Fatal("new did not restart read")
+	}
+}
+
+func TestChatCursorAfterMarkdown(t *testing.T) {
+	for _, text := range []string{"---", "```go\nfmt.Println(1)\n```", "# Heading", "**Hello**"} {
+		m := setup(t, fixture(), Options{}).(*app)
+		m.tab = chatTab
+		m.width = 80
+		m.height = 40
+		m.Update(chatStateMsg{state: chat.State{Active: true, Messages: []store.ChatMessage{{ID: "r", Role: "assistant", Status: "streaming", Text: text}}}})
+		if got := m.chatView(); !strings.Contains(got, "▍") {
+			t.Fatal(got)
+		}
+	}
+}
+
+func TestChatNavigateControlsAndAltOverlay(t *testing.T) {
+	m := setup(t, fixture(), Options{}).(*app)
+	m.openChat()
+	m.chatInput.Blur()
+	key(m, '?')
+	m.Update(tea.KeyPressMsg{Code: '1', Mod: tea.ModAlt})
+	if m.help || m.tab != 0 {
+		t.Fatal("Alt tabs did not dismiss help")
+	}
+	m.openChat()
+	m.chatInput.Blur()
+	m.Update(tea.KeyPressMsg{Code: tea.KeyPgUp})
+	if m.chatOffset == 0 {
+		t.Fatal("navigate PgUp did not scroll chat")
+	}
+	m.Update(tea.KeyPressMsg{Code: 't', Mod: tea.ModCtrl})
+	if !m.chatTools || m.chatInput.Focused() {
+		t.Fatal("navigate chat controls")
+	}
+	m.confirm = &confirmation{}
+	m.Update(tea.KeyPressMsg{Code: '8', Mod: tea.ModAlt})
+	if m.confirm != nil {
+		t.Fatal("Alt tabs kept a stale confirmation")
+	}
+}
+
+func TestChatReadErrorEndsCursor(t *testing.T) {
+	m := setup(t, fixture(), Options{}).(*app)
+	m.tab = chatTab
+	m.height = 40
+	m.Update(chatStateMsg{state: chat.State{Active: true, Messages: []store.ChatMessage{{ID: "reply", Role: "assistant", Status: "streaming", Text: "Partial"}}}})
+	m.Update(chatStateMsg{err: errors.New("connection failed")})
+	if got := m.chatView(); strings.Contains(got, "▍") || strings.Contains(got, "· streaming") {
+		t.Fatal(got)
 	}
 }

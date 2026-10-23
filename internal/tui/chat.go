@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"charm.land/bubbles/v2/spinner"
 	"charm.land/bubbles/v2/textarea"
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -23,10 +24,11 @@ type chatStateMsg struct {
 	err        error
 }
 type chatSentMsg struct {
-	err  error
-	text string
+	err        error
+	text       string
+	generation uint64
 }
-type chatTickMsg struct{}
+type chatTickMsg struct{ generation uint64 }
 
 func newChatInput() textarea.Model {
 	m := textarea.New()
@@ -62,23 +64,25 @@ func (m *app) openChat() tea.Cmd {
 		}
 	}
 	m.tab = chatTab
+	m.confirm = nil
+	m.filter.Blur()
 	m.detail = false
 	m.filtering = false
 	m.help = false
-	m.chatInput.Focus()
+	focus := m.chatInput.Focus()
 	m.rebuild()
 	if m.opts.Chat == nil {
 		m.chatStatus = "Chat unavailable"
-		return nil
+		return focus
 	}
 	if m.chatPolling {
-		return nil
+		return tea.Batch(focus, m.animateChat())
 	}
 	m.chatPolling = true
-	return m.readChat()
+	return tea.Batch(m.readChat(), focus, m.animateChat())
 }
 func (m *app) readChat() tea.Cmd {
-	client, ctx, id, generation := m.opts.Chat, m.opts.Context, m.chatID, m.chatGeneration
+	client, ctx, id, generation, after := m.opts.Chat, m.opts.Context, m.chatID, m.chatGeneration, m.chatEventSeq
 	return func() tea.Msg {
 		rows, err := client.List(ctx)
 		if err != nil {
@@ -92,32 +96,37 @@ func (m *app) readChat() tea.Cmd {
 			id = c.ID
 			rows = append([]store.Conversation{c}, rows...)
 		}
-		state, err := client.Read(ctx, id, 0)
+		state, err := client.Read(ctx, id, after)
 		return chatStateMsg{generation: generation, state: state, history: rows, err: err}
 	}
 }
 func (m *app) chatKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch msg.String() {
 	case "esc":
-		return m.stopChat()
+		if m.chatActive {
+			return m.stopChat()
+		}
+		m.chatInput.Blur()
+		return nil
 	case "ctrl+enter", "super+enter", "alt+enter":
 		text := m.chatInput.Value()
 		if strings.TrimSpace(text) == "" || m.chatID == "" || m.opts.Chat == nil {
 			return nil
 		}
 		m.chatInput.SetValue("")
-		client, ctx, id, scope := m.opts.Chat, m.opts.Context, m.chatID, m.chatContext
+		client, ctx, id, scope, generation := m.opts.Chat, m.opts.Context, m.chatID, m.chatContext, m.chatGeneration
 		m.chatStatus = "Sending…"
-		return func() tea.Msg { return chatSentMsg{err: client.Send(ctx, id, text, scope), text: text} }
+		return func() tea.Msg {
+			return chatSentMsg{err: client.Send(ctx, id, text, scope), text: text, generation: generation}
+		}
 	case "ctrl+n":
 		m.chatGeneration++
 		m.chatID = ""
 		m.chatMessages = nil
-		if !m.chatPolling {
-			m.chatPolling = true
-			return m.readChat()
-		}
-		return nil
+		m.endChatActivity()
+		m.chatEventSeq = 0
+		m.chatPolling = true
+		return m.readChat()
 	case "ctrl+h":
 		if len(m.chatHistory) > 0 {
 			index := 0
@@ -130,10 +139,10 @@ func (m *app) chatKey(msg tea.KeyPressMsg) tea.Cmd {
 			m.chatGeneration++
 			m.chatID = m.chatHistory[index].ID
 			m.chatMessages = nil
-			if !m.chatPolling {
-				m.chatPolling = true
-				return m.readChat()
-			}
+			m.endChatActivity()
+			m.chatEventSeq = 0
+			m.chatPolling = true
+			return m.readChat()
 		}
 		return nil
 	case "ctrl+x":
@@ -154,10 +163,7 @@ func (m *app) chatKey(msg tea.KeyPressMsg) tea.Cmd {
 		}
 		return nil
 	case "ctrl+0":
-		m.tab = homeTab
-		m.chatInput.Blur()
-		m.rebuild()
-		return nil
+		return m.selectTab('0')
 	}
 	var cmd tea.Cmd
 	m.chatInput, cmd = m.chatInput.Update(msg)
@@ -167,13 +173,13 @@ func (m *app) stopChat() tea.Cmd {
 	if m.opts.Chat == nil || m.chatID == "" {
 		return nil
 	}
-	client, ctx, id := m.opts.Chat, m.opts.Context, m.chatID
-	return func() tea.Msg { return chatSentMsg{err: client.Stop(ctx, id)} }
+	client, ctx, id, generation := m.opts.Chat, m.opts.Context, m.chatID, m.chatGeneration
+	return func() tea.Msg { return chatSentMsg{err: client.Stop(ctx, id), generation: generation} }
 }
 func (m *app) chatView() string {
 	style := view.TokenStyle("accent", m.opts.NoColor)
 	dim := view.TokenStyle("muted", m.opts.NoColor)
-	header := style.Render("Chat · Claude") + " · Codex/Copilot coming\n" + dim.Render("[Confirm · Auto · Full auto] disabled · actions arrive in the next release") + "\n" + dim.Render("Read-only · driga tools only · esc Stop")
+	header := style.Render("Chat · Driga") + " · Codex/Copilot coming\n" + dim.Render("answered by Claude Code") + "\n" + dim.Render("[Confirm · Auto · Full auto] disabled · actions arrive in the next release") + "\n" + dim.Render("Read-only · driga tools only")
 	if m.chatEphemeral {
 		header += "\n" + dim.Render("Conversations end with this client.")
 	}
@@ -187,7 +193,7 @@ func (m *app) chatView() string {
 			}
 			continue
 		}
-		name := "Claude"
+		name := "Driga"
 		if row.Role == "user" {
 			name = "You"
 		}
@@ -205,7 +211,14 @@ func (m *app) chatView() string {
 		} else {
 			body = wrapText(text, max(1, m.width-4))
 		}
-		lines = append(lines, style.Render(name)+dim.Render(" · "+row.Status), body, "")
+		label := row.Status
+		if row.Role == "assistant" && row.Status == "streaming" {
+			label = m.chatActivity()
+			if row.Text != "" && m.chatActive {
+				body = chatStreamingCursor(body, max(1, m.width-4), m.opts.NoColor)
+			}
+		}
+		lines = append(lines, style.Render(name)+dim.Render(" · "+label), body, "")
 	}
 	if tools > 0 {
 		lines = append(lines, dim.Render(fmt.Sprintf("▸ tools used · %d · ctrl+t expand/collapse", tools)))
@@ -281,6 +294,157 @@ func (m *app) chatContextLine() string {
 	}
 	return strings.Join(chips, " ")
 }
-func nextChatTick() tea.Cmd {
-	return tea.Tick(150*time.Millisecond, func(time.Time) tea.Msg { return chatTickMsg{} })
+func nextChatTick(generation uint64) tea.Cmd {
+	return tea.Tick(150*time.Millisecond, func(time.Time) tea.Msg { return chatTickMsg{generation: generation} })
+}
+
+// selectTab is shared by normal navigation and Alt+N, including focused inputs.
+func (m *app) selectTab(number byte) tea.Cmd {
+	if number == '8' {
+		return m.openChat()
+	}
+	tab := int(number - '1')
+	if number == '0' {
+		tab = homeTab
+	}
+	if number == '7' {
+		tab = flowTab
+	}
+	if !m.tabVisible(tab) {
+		return nil
+	}
+	m.chatInput.Blur()
+	m.confirm = nil
+	m.chatAnimating = false
+	m.chatSpinner = spinner.New(spinner.WithSpinner(spinner.MiniDot))
+	m.filtering = false
+	m.filter.Blur()
+	m.help = false
+	if tab == flowTab {
+		m.flowID = 0
+		m.flowExpanded = false
+		m.flowOffset = 0
+		m.cursors[flowTab] = 0
+		m.flowPulse, m.flowSeen = nil, nil
+	}
+	m.tab = tab
+	m.homeOffset = 0
+	m.detail = false
+	m.showAckPending()
+	m.rebuild()
+	if tab == flowTab {
+		return m.loadFlow()
+	}
+	if tab == 5 && m.opts.CleanupList != nil && !m.busy {
+		return m.loadCleanup()
+	}
+	return nil
+}
+
+func (m *app) endChatActivity() {
+	m.chatActive = false
+	m.chatStarted = time.Time{}
+	m.chatReplyID = ""
+	m.chatTool = ""
+	m.chatAnimating = false
+	// Invalidate any outstanding spinner frame from the previous turn.
+	m.chatSpinner = spinner.New(spinner.WithSpinner(spinner.MiniDot))
+}
+
+func (m *app) updateChatActivity(state chat.State) {
+	m.chatStatus = "Ready"
+	if !state.Active {
+		m.endChatActivity()
+		return
+	}
+	if !m.chatActive {
+		m.chatStarted = m.opts.Now()
+	}
+	m.chatActive = true
+	for _, row := range state.Messages {
+		if row.Role == "assistant" && row.Status == "streaming" && row.ID != m.chatReplyID {
+			m.chatReplyID = row.ID
+			m.chatStarted = m.opts.Now()
+			if !row.CreatedAt.IsZero() {
+				m.chatStarted = row.CreatedAt
+			}
+			m.chatTool = ""
+		}
+	}
+	if state.Reset {
+		m.chatTool = ""
+		for _, row := range state.Messages {
+			if row.ID == m.chatReplyID {
+				m.chatTool = ""
+			}
+			if row.Role == "tool" {
+				m.chatTool = row.Text
+			}
+		}
+	}
+	for _, event := range state.Events {
+		if event.Seq <= m.chatEventSeq {
+			continue
+		}
+		m.chatEventSeq = event.Seq
+		if event.Kind == "delta" {
+			m.chatTool = ""
+		}
+		if event.Message != nil {
+			if event.Message.Role == "assistant" {
+				m.chatTool = ""
+			}
+			if event.Message.Role == "tool" {
+				m.chatTool = event.Message.Text
+			}
+		}
+	}
+}
+
+func (m *app) animateChat() tea.Cmd {
+	if !m.chatActive || m.chatAnimating || m.tab != chatTab || m.opts.NoColor || m.opts.MotionOff {
+		return nil
+	}
+	m.chatAnimating = true
+	return m.chatSpinner.Tick
+}
+
+func (m *app) chatActivity() string {
+	if !m.chatActive {
+		return m.chatStatus
+	}
+	label := "thinking…"
+	for _, row := range m.chatMessages {
+		if row.Role == "assistant" && row.Status == "streaming" && row.Text != "" {
+			label = "writing…"
+		}
+	}
+	if m.chatTool != "" {
+		name := strings.TrimPrefix(m.chatTool, "mcp__driga__")
+		name = strings.TrimPrefix(strings.TrimPrefix(name, "list_"), "get_")
+		label = "reading " + strings.ReplaceAll(clean(name), "_", " ") + "…"
+	}
+	frame := "…"
+	if !m.opts.NoColor && !m.opts.MotionOff {
+		m.chatSpinner.Style = view.TokenStyle("accent", false)
+		frame = m.chatSpinner.View()
+	}
+	return frame + " " + label + " · " + chatElapsed(m.opts.Now().Sub(m.chatStarted))
+}
+
+func chatElapsed(elapsed time.Duration) string {
+	seconds := max(0, int(elapsed/time.Second))
+	if seconds < 60 {
+		return fmt.Sprintf("%ds", seconds)
+	}
+	return fmt.Sprintf("%dm %02ds", seconds/60, seconds%60)
+}
+
+func chatStreamingCursor(body string, width int, noColor bool) string {
+	cursor := view.TokenStyle("accent", noColor).Render("▍")
+	last := body[strings.LastIndex(body, "\n")+1:]
+	if ansi.StringWidth(last) >= width {
+		return body + "\n" + cursor
+	}
+	return body + cursor
 }

@@ -598,16 +598,27 @@ No real agent CLI is run by tests.
 
 Open **8:chat** or press **c** on any web console page to dock Chat on the right.
 Non-command text in the command bar opens the composer. Send with ⌘Enter (or
-Ctrl+Enter), use Stop / Escape to cancel the current turn and queued messages,
-and use History to reopen a conversation. Context chips describe the current
-page, selected session/project and machine; remove a chip to leave it out.
+Ctrl+Enter), use Stop to cancel the current turn and queued messages,
+and use History to reopen a conversation. Escape closes the panel when the input
+is empty; with a draft, the first Escape blurs the input and keeps the draft.
+Context chips describe the current page, selected session/project and machine;
+remove a chip to leave it out.
 Session references in answers select the session on the current page. Tool calls
-appear in a collapsed **Tools used** list. Agent output is rendered as text.
+appear in a collapsed **Tools used** list. Driga replies are rendered as Markdown
+and marked **answered by Claude Code**. A timed indicator shows thinking, writing
+or the current read tool. Streaming follows the bottom until you scroll up; reduced
+motion uses a static dot.
 
 In `driga top`, press **8** or **c** for Chat with the current selection. Enter
-adds a line; Ctrl+Enter or Alt+Enter sends; Escape stops. PgUp/PgDown scroll,
-Alt+Up recalls the last draft, Ctrl+H cycles history, Ctrl+N starts a conversation,
-Ctrl+X clears context and Ctrl+0 returns Home. Flow's copy-resume key is **C**.
+adds a line; Ctrl+Enter or Alt+Enter sends. Escape stops an active reply; otherwise
+it enters **navigate** mode and keeps the draft. In navigate mode, normal keys
+work: **0–8** switch tabs, **q** quits, **?** opens help and **/** filters. Press
+**c** or **Enter** to type again. **Alt+0–Alt+8** switch tabs from either mode;
+returning to Chat restores the draft. The footer shows the current mode.
+PgUp/PgDown scroll, Alt+Up recalls the last draft, Ctrl+H cycles history, Ctrl+N
+starts a conversation, Ctrl+T toggles tool details, Ctrl+X clears context and
+Ctrl+0 returns Home. Thinking/writing/tool status includes elapsed time and a
+streaming cursor; NoColor uses a static indicator. Flow's copy-resume key is **C**.
 
 Chat understands collected state only. Native shell/file tools are disabled
 with `--tools ""`; each run injects driga's read-only MCP server using a private

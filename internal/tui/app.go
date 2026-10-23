@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"charm.land/bubbles/v2/spinner"
 	"charm.land/bubbles/v2/table"
 	"charm.land/bubbles/v2/textarea"
 	"charm.land/bubbles/v2/textinput"
@@ -61,6 +62,12 @@ type Options struct {
 type app struct {
 	chatGeneration uint64
 	chatActive     bool
+	chatSpinner    spinner.Model
+	chatAnimating  bool
+	chatStarted    time.Time
+	chatReplyID    string
+	chatTool       string
+	chatEventSeq   uint64
 	chatInput      textarea.Model
 	chatContext    chat.Context
 	chatID         string
@@ -179,7 +186,7 @@ func New(src Source, opts Options) tea.Model {
 	input.Prompt = "/ "
 	input.Placeholder = "filter"
 	input.SetStyles(textinput.Styles{})
-	m := &app{chatInput: newChatInput(), chatEphemeral: opts.ChatEphemeral, tab: homeTab, machineScope: opts.Machine, src: src, opts: opts, width: 80, height: 24, expanded: map[string]bool{}, filter: input, table: table.New(table.WithFocused(true)), viewport: viewport.New()}
+	m := &app{chatInput: newChatInput(), chatSpinner: spinner.New(spinner.WithSpinner(spinner.MiniDot)), chatEphemeral: opts.ChatEphemeral, tab: homeTab, machineScope: opts.Machine, src: src, opts: opts, width: 80, height: 24, expanded: map[string]bool{}, filter: input, table: table.New(table.WithFocused(true)), viewport: viewport.New()}
 	if opts.InitialTab == "machine" {
 		m.tab = 4
 	}
@@ -250,14 +257,10 @@ func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case chatStateMsg:
 		if msg.generation != m.chatGeneration {
-			if m.tab == chatTab {
-				return m, m.readChat()
-			}
-			m.chatPolling = false
 			return m, nil
 		}
-		m.chatActive = msg.state.Active
 		if msg.err != nil {
+			m.endChatActivity()
 			m.chatStatus = msg.err.Error()
 			m.chatPolling = false
 			return m, nil
@@ -266,16 +269,17 @@ func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.chatMessages = msg.state.Messages
 		m.chatHistory = msg.history
 		m.chatEphemeral = msg.state.Ephemeral
-		m.chatStatus = "Ready"
-		if msg.state.Active {
-			m.chatStatus = fmt.Sprintf("Claude is answering · %d queued", msg.state.Queued)
-		}
-		if m.tab == chatTab {
-			return m, nextChatTick()
+		m.updateChatActivity(msg.state)
+		m.chatEventSeq = max(m.chatEventSeq, msg.state.Cursor)
+		if m.chatActive {
+			return m, tea.Batch(nextChatTick(m.chatGeneration), m.animateChat())
 		}
 		m.chatPolling = false
 		return m, nil
 	case chatSentMsg:
+		if msg.generation != m.chatGeneration {
+			return m, nil
+		}
 		if msg.err != nil {
 			m.chatStatus = msg.err.Error()
 			if msg.text != "" && m.chatInput.Value() == "" {
@@ -287,9 +291,24 @@ func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.chatDrafts = m.chatDrafts[len(m.chatDrafts)-100:]
 			}
 		}
+		if msg.err == nil && m.opts.Chat != nil && !m.chatPolling {
+			m.chatPolling = true
+			return m, m.readChat()
+		}
 		return m, nil
+	case spinner.TickMsg:
+		if !m.chatActive || m.tab != chatTab || m.opts.NoColor || m.opts.MotionOff {
+			m.chatAnimating = false
+			return m, nil
+		}
+		var cmd tea.Cmd
+		m.chatSpinner, cmd = m.chatSpinner.Update(msg)
+		return m, cmd
 	case chatTickMsg:
-		if m.tab != chatTab {
+		if msg.generation != m.chatGeneration {
+			return m, nil
+		}
+		if !m.chatActive || m.opts.Chat == nil {
 			m.chatPolling = false
 			return m, nil
 		}
@@ -472,8 +491,21 @@ func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if k == "ctrl+c" {
 			return m, tea.Quit
 		}
-		if m.tab == chatTab {
-			return m, m.chatKey(msg)
+		// Modified tab keys bypass focused composers, filters and overlays.
+		if msg.Mod == tea.ModAlt && msg.Code >= '0' && msg.Code <= '8' {
+			return m, m.selectTab(byte(msg.Code))
+		}
+		if m.tab == chatTab && !m.filtering && !m.help {
+			if k == "esc" || m.chatInput.Focused() {
+				return m, m.chatKey(msg)
+			}
+			if k == "c" || k == "enter" {
+				return m, m.chatInput.Focus()
+			}
+			switch k {
+			case "ctrl+enter", "super+enter", "alt+enter", "ctrl+n", "ctrl+h", "ctrl+x", "ctrl+t", "ctrl+0", "pgup", "pgdown", "alt+up":
+				return m, m.chatKey(msg)
+			}
 		}
 		if (k == "c" || k == "8") && !m.filtering && m.confirm == nil {
 			return m, m.openChat()
@@ -519,36 +551,7 @@ func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if k >= "0" && k <= "7" {
-			tab := int(k[0] - '1')
-			if k == "0" {
-				tab = homeTab
-			}
-			if k == "7" {
-				tab = flowTab
-			}
-			if m.tabVisible(tab) {
-				if tab == flowTab {
-					// A tab key requests the shared default. Only explicit session
-					// navigation pins an ID across refreshes.
-					m.flowID = 0
-					m.flowExpanded = false
-					m.flowOffset = 0
-					m.cursors[flowTab] = 0
-					m.flowPulse, m.flowSeen = nil, nil
-				}
-				m.tab = tab
-				m.homeOffset = 0
-				m.detail = false
-				m.showAckPending()
-				m.rebuild()
-				if tab == flowTab {
-					return m, m.loadFlow()
-				}
-				if tab == 5 && m.opts.CleanupList != nil && !m.busy {
-					return m, m.loadCleanup()
-				}
-			}
-			return m, nil
+			return m, m.selectTab(k[0])
 		}
 		if m.tab == flowTab && !m.detail {
 			if k == "tab" && len(m.flow.Attention.Waits) > 0 {

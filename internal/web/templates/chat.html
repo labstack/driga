@@ -1,18 +1,18 @@
 {{define "chat"}}
 <aside id="chat" class="chat" aria-label="Chat" hidden data-ephemeral="{{.ChatEphemeral}}">
  <header class="chat-head">
-  <div class="chat-row"><b>Chat</b><label class="sr-only" for="chat-agent">Agent</label><select id="chat-agent"><option>Claude</option><option disabled>Codex · coming</option><option disabled>Copilot · coming</option></select><span class="chat-spacer"></span><button id="chat-stop" class="chat-stop" type="button">■ Stop</button><button id="chat-close" type="button" aria-label="Close Chat">×</button></div>
+  <div class="chat-row"><b>Chat</b><label class="sr-only" for="chat-agent">Agent</label><select id="chat-agent"><option>Driga</option><option disabled>Codex · coming</option><option disabled>Copilot · coming</option></select><span class="chat-spacer"></span><button id="chat-stop" class="chat-stop" type="button" hidden>■ Stop</button><button id="chat-close" type="button" aria-label="Close Chat">×</button></div>
   <div class="chat-row"><fieldset class="chat-trust" disabled aria-label="Trust mode"><button type="button">Confirm</button><button type="button">Auto</button><button type="button">Full auto</button></fieldset><span class="chat-note">actions arrive in the next release</span></div>
-  <p class="chat-note">Read-only · driga tools only · your Claude login</p>
+  <p class="chat-note">Read-only · driga tools only · answered by Claude Code</p>
   <p class="chat-note" id="chat-lifetime" {{if not .ChatEphemeral}}hidden{{end}}>Conversations end with this client.</p>
   <div class="chat-row"><label for="chat-history">History</label><select id="chat-history" aria-label="Conversation history"><option value="">New conversation</option></select><button id="chat-new" type="button">+ New</button></div>
  </header>
  <div id="chat-log" class="chat-log" role="log" aria-label="Conversation" aria-live="polite"><p class="chat-note">Ask what needs you, why a session is stalled, or what this screen means.</p></div>
  <form id="chat-form" class="chat-compose">
   <div id="chat-context" class="chat-context" aria-label="Context"></div>
-  <label class="sr-only" for="chat-input">Message to Claude</label><textarea id="chat-input" rows="3" maxlength="131072" placeholder="Ask driga anything…"></textarea>
+  <label class="sr-only" for="chat-input">Message to Driga</label><textarea id="chat-input" rows="3" maxlength="131072" placeholder="Ask driga anything…"></textarea>
   <div class="chat-row"><span id="chat-status" class="chat-note" role="status"></span><span class="chat-spacer"></span><button id="chat-send" class="chat-send" type="submit">Send</button></div>
-  <div class="chat-note">⌘↵ send · ↑ edit last · esc stop · c toggle</div>
+  <div class="chat-note">Ctrl/⌘+Enter send · ↑ edit last · Esc blur / close · c toggle</div>
  </form>
 </aside>
 {{end}}
