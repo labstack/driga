@@ -1,4 +1,5 @@
 /driga
+/bin/
 /dist/
 /cmd/driga/rsrc_windows_*.syso
 *.db*

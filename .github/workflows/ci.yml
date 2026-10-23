@@ -39,58 +39,30 @@ jobs:
           go-version-file: go.mod
           check-latest: false
           cache: true
-      # Tests must never see a real home, agent config or Driga data. The Go
-      # caches stay where setup-go restored them; they hold no user state.
-      - name: Isolate test and build state
+      # just is installed from its pinned release asset rather than through
+      # extractions/setup-just, which resolves the version through the GitHub
+      # releases API on every run and fails when that lookup is rate limited.
+      # The checksum makes CI run exactly this artifact or stop.
+      - name: Install just and tools
         run: |
-          gocache=$(go env GOCACHE) gomodcache=$(go env GOMODCACHE)
-          task_root=$(mktemp -d "$RUNNER_TEMP/driga-ci.XXXXXX")
-          mkdir -p "$task_root/home" "$task_root/data" "$task_root/spool"
-          {
-            echo "HOME=$task_root/home"
-            echo "CODEX_HOME=$task_root/home/.codex"
-            echo "GEMINI_CLI_HOME=$task_root/home/.gemini"
-            echo "XDG_CONFIG_HOME=$task_root/home/.config"
-            echo "XDG_DATA_HOME=$task_root/home/.local/share"
-            echo "XDG_STATE_HOME=$task_root/home/.local/state"
-            echo "DRIGA_DATA_DIR=$task_root/data"
-            echo "DRIGA_SPOOL_DIR=$task_root/spool"
-            echo "DRIGA_CONFIG=$task_root/config.toml"
-            echo "GOCACHE=$gocache"
-            echo "GOMODCACHE=$gomodcache"
-          } >> "$GITHUB_ENV"
-      - name: Format, vet and generated files
-        run: |
-          unformatted=$(gofmt -l .)
-          if [ -n "$unformatted" ]; then echo "gofmt needed:"; echo "$unformatted"; exit 1; fi
-          go vet ./...
-          go generate ./internal/config
-          git diff --exit-code -- .env.example
-      - name: Vulnerability check
-        run: |
+          version=1.58.0
+          archive=just-${version}-x86_64-unknown-linux-musl.tar.gz
+          curl -fsSL --retry 3 -o "$archive" "https://github.com/casey/just/releases/download/${version}/${archive}"
+          echo "4a5cc2f53e6f0f8c59092a6cc38291eb729d46a7dd95d3ae582008881b84931d  ${archive}" | sha256sum --check --strict -
+          tar -xzf "$archive" just
+          sudo install -m 0755 just /usr/local/bin/just
+          rm -f "$archive" just
           go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
-          "$(go env GOPATH)/bin/govulncheck" ./...
-      - name: Test on Linux
-        run: go test ./...
-      - name: Race test
-        env:
-          CGO_ENABLED: "1"
-        run: go test -race ./...
-      # The snapshot cross-builds every release target.
-      - name: Validate GoReleaser configuration
-        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
           distribution: goreleaser
           version: v2.18.0
-          args: check
-      - name: Build release snapshot
-        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
-        with:
-          distribution: goreleaser
-          version: v2.18.0
-          args: release --snapshot --clean --skip=publish,sign,notarize
-      - name: Inspect release snapshot
-        run: scripts/verify-release-dist.sh dist
+          install-only: true
+      # Tests run with a disposable home and Driga data (scripts/isolated.sh).
+      - name: Verify repository
+        run: just ci
 
   windows:
     name: Windows tests

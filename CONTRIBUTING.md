@@ -35,22 +35,25 @@ exists.
 
 ## Setting up
 
-Use Go (the version in [go.mod](go.mod)) and Git on PATH:
+Use Go (the version in [go.mod](go.mod)), Git and [just](https://just.systems) on PATH:
 
 ```sh
-CGO_ENABLED=0 go build ./cmd/driga
-./driga --help
+just build        # builds ./bin/driga, which is not on PATH
+./bin/driga --help
+just install      # deliberately copies it to ~/.local/bin
 ```
 
 ## Verify
 
 ```sh
-gofmt -l .
-go vet ./...
-go test ./...
-go test -race ./...
-GOOS=linux go build ./...
+just check        # gofmt, go mod tidy, vet (native and Windows), generated files, tests
+just race         # the suite under the race detector
+just ci           # what the Linux CI job runs: check, race, govulncheck, actionlint, release snapshot
 ```
+
+`just ci` also needs `govulncheck`, `actionlint`, `shellcheck` and `goreleaser`.
+Tests run through `scripts/isolated.sh`, which gives them a disposable home and
+Driga data, so they never see your real agent configuration.
 
 Tests that read macOS processes fail with `operation not permitted` inside a
 sandbox; run them on the host.
@@ -66,7 +69,7 @@ sandbox; run them on the host.
 ## Releasing (maintainers)
 
 ```sh
-scripts/release.sh
+just release      # runs scripts/release.sh
 ```
 
 Driga is in alpha. The script creates the next `vYYYY.M.REVISION-alpha` tag,
