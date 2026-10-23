@@ -63,3 +63,27 @@ func TestMarkdownPartialAndBounded(t *testing.T) {
 		_ = MarkdownHTML(input)
 	}
 }
+
+// Assistant text is untrusted: raw HTML and script URLs must never reach the page.
+func TestMarkdownHTMLNeutralizesActiveContent(t *testing.T) {
+	for _, input := range []string{
+		"<script>alert(1)</script>",
+		"<img src=x onerror=alert(1)>",
+		"[click](javascript:alert(1))",
+		"![x](javascript:alert(1))",
+		"[v](vbscript:msgbox(1))",
+		"<a href=\"javascript:alert(1)\">a</a>",
+		"| a |\n|---|\n| <b onclick=alert(1)>x</b> |",
+	} {
+		got := strings.ToLower(MarkdownHTML(input))
+		// Dangerous URLs may remain as visible text, never as an attribute.
+		for _, bad := range []string{"<script", "onerror=", "onclick=", "href=\"javascript", "src=\"javascript", "href=\"vbscript", "<img src=x"} {
+			if strings.Contains(got, bad) {
+				t.Errorf("%q rendered %q (contains %q)", input, got, bad)
+			}
+		}
+	}
+	if got := MarkdownHTML("[ok](https://example.com)"); !strings.Contains(got, `href="https://example.com"`) {
+		t.Errorf("safe link dropped: %q", got)
+	}
+}
