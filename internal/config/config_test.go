@@ -178,3 +178,15 @@ func TestCaptureNoneRejected(t *testing.T) {
 		t.Fatal("capture_text=none accepted")
 	}
 }
+
+func TestMalformedExcludeRejectedAtLoad(t *testing.T) {
+	for _, pattern := range []string{"[", "foo/[abc", "**/[abc"} {
+		path := filepath.Join(t.TempDir(), "config.toml")
+		if err := os.WriteFile(path, []byte("exclude = ['"+pattern+"']\n"), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := config.Load(path); err == nil {
+			t.Fatalf("accepted malformed exclude %q", pattern)
+		}
+	}
+}

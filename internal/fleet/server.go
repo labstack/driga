@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/labstack/driga/internal/secfile"
 	"io"
 	"net"
 	"net/http"
@@ -19,11 +18,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/labstack/driga/internal/secfile"
+
 	"github.com/labstack/driga/internal/config"
 	"github.com/labstack/driga/internal/feed"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/spool"
 	"github.com/labstack/driga/internal/store"
+	"golang.org/x/net/netutil"
 )
 
 const streamBuffer = 1000
@@ -182,7 +184,7 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 		return err
 	}
 	defer control.Close()
-	limited := &limitedListener{Listener: ln, admission: newAdmission(s.now)}
+	limited := netutil.LimitListener(&connectionRateListener{Listener: ln, admission: newAdmission(s.now)}, 16)
 	tlsConfig := PinnedTLS(s.id, func(fp [32]byte) bool { _, ok := s.viewer(fp); return ok || s.enrollmentAccepts(fp) })
 	tlsConfig.NextProtos = []string{"http/1.1"}
 	srv := &http.Server{Handler: s, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 5 * time.Second, IdleTimeout: confirmTimeout + 5*time.Second, MaxHeaderBytes: 32 << 10, BaseContext: func(net.Listener) context.Context { return runCtx }, ConnState: func(c net.Conn, state http.ConnState) {
@@ -545,7 +547,6 @@ type admission struct {
 	mu       sync.Mutex
 	now      func() time.Time
 	accepted []time.Time
-	active   int
 }
 
 func newAdmission(now func() time.Time) *admission { return &admission{now: now} }
@@ -556,21 +557,19 @@ func (a *admission) acquire() bool {
 	for len(a.accepted) > 0 && !now.Before(a.accepted[0].Add(time.Second)) {
 		a.accepted = a.accepted[1:]
 	}
-	if len(a.accepted) >= 10 || a.active >= 16 {
+	if len(a.accepted) >= 10 {
 		return false
 	}
 	a.accepted = append(a.accepted, now)
-	a.active++
 	return true
 }
-func (a *admission) release() { a.mu.Lock(); a.active--; a.mu.Unlock() }
 
-type limitedListener struct {
+type connectionRateListener struct {
 	net.Listener
 	admission *admission
 }
 
-func (l *limitedListener) Accept() (net.Conn, error) {
+func (l *connectionRateListener) Accept() (net.Conn, error) {
 	for {
 		c, err := l.Listener.Accept()
 		if err != nil {
@@ -580,17 +579,9 @@ func (l *limitedListener) Accept() (net.Conn, error) {
 			_ = c.Close()
 			continue
 		}
-		return &limitedConn{Conn: c, release: l.admission.release}, nil
+		return c, nil
 	}
 }
-
-type limitedConn struct {
-	net.Conn
-	once    sync.Once
-	release func()
-}
-
-func (c *limitedConn) Close() error { err := c.Conn.Close(); c.once.Do(c.release); return err }
 
 func jsonError(w http.ResponseWriter, message string, status int) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")

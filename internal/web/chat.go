@@ -22,7 +22,7 @@ func (s *Server) chatAPI(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "method not allowed", 405)
 			return
 		}
-		if r.Header.Get("Origin") != "http://"+r.Host || subtle.ConstantTimeCompare([]byte(r.Header.Get("X-CSRF-Token")), []byte(s.csrf)) != 1 {
+		if s.origin.Check(r) != nil || r.Header.Get("Origin") != "http://"+r.Host || subtle.ConstantTimeCompare([]byte(r.Header.Get("X-CSRF-Token")), []byte(s.csrf)) != 1 {
 			http.Error(w, "Origin or CSRF token rejected", 403)
 			return
 		}

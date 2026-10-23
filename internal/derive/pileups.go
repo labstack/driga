@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"path"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
-	"unicode"
 
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/signatures"
@@ -364,7 +364,7 @@ var localPort = regexp.MustCompile(`((?:localhost|127\.[0-9]+\.[0-9]+\.[0-9]+|\[
 var portOption = regexp.MustCompile(`(?i)^--?(?:[a-z_-]+[-_])?port$`)
 
 func normalizedMCPCommand(p model.Proc) string {
-	args := commandWords(p.Cmdline)
+	args := slices.Clone(p.Argv)
 	if len(args) == 0 {
 		if p.Cmdline != "" || p.Exe == "" {
 			return ""
@@ -409,56 +409,4 @@ func normalizedMCPCommand(p model.Proc) string {
 		}
 	}
 	return strings.Join(args, " ")
-}
-
-// Process tables expose a command string rather than argv. Honor available
-// quoting without executing it; malformed quoting is insufficient evidence.
-func commandWords(command string) []string {
-	var words []string
-	var word strings.Builder
-	var quote rune
-	escaped, started := false, false
-	for _, c := range command {
-		if escaped {
-			word.WriteRune(c)
-			escaped = false
-			started = true
-			continue
-		}
-		if c == '\\' && quote != '\'' {
-			escaped = true
-			started = true
-			continue
-		}
-		if quote != 0 {
-			if c == quote {
-				quote = 0
-			} else {
-				word.WriteRune(c)
-			}
-			continue
-		}
-		if c == '\'' || c == '"' {
-			quote = c
-			started = true
-			continue
-		}
-		if unicode.IsSpace(c) {
-			if started {
-				words = append(words, word.String())
-				word.Reset()
-				started = false
-			}
-			continue
-		}
-		word.WriteRune(c)
-		started = true
-	}
-	if quote != 0 || escaped {
-		return nil
-	}
-	if started {
-		words = append(words, word.String())
-	}
-	return words
 }

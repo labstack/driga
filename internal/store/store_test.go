@@ -60,7 +60,7 @@ func TestBaselineAndRoundTrip(t *testing.T) {
 	repo := model.Repo{MachineID: s.MachineID(), Path: "/repo", Name: "repo", RemoteURL: "remote"}
 	wt := model.Worktree{MachineID: s.MachineID(), Path: "/repo", Branch: "main", Head: "abc", Ahead: 1, Behind: 2, Dirty: 3, Untracked: 4, OldestDirtyMtime: now, LastCommitAt: now, LastCommitSubject: "subject", UpdatedAt: now}
 	session := model.Session{MachineID: s.MachineID(), SessionObs: model.SessionObs{Adapter: "test", ExternalID: "one", Origin: "cli", Version: "v1", PID: 12, ProcStart: now, Cwd: "/repo", Branch: "main", Title: "title", LastPrompt: "prompt", RegistryStatus: "alive", StartedAt: now, LastActivityAt: now, Hosted: true, TurnOpen: true, SourcePath: "/log"}, Label: "working", Heuristic: true, Evidence: "evidence"}
-	proc := model.Proc{MachineID: s.MachineID(), PID: 12, PPID: 1, StartTime: now, RSS: 123, CPUSeconds: 1.5, CPUPercent: 2.5, Cmdline: "agent", Exe: "/agent", Cwd: "/repo", Role: "host", Agent: "test"}
+	proc := model.Proc{MachineID: s.MachineID(), PID: 12, PPID: 1, StartTime: now, RSS: 123, CPUSeconds: 1.5, CPUPercent: 2.5, Cmdline: "agent", Argv: []string{"agent"}, Exe: "/agent", Cwd: "/repo", Role: "host", Agent: "test"}
 	sample := model.MachineSample{MachineID: s.MachineID(), TS: now, MemUsed: 1, MemCompressed: 2, MemTotal: 3, SwapUsed: 4, SwapTotal: 5, DiskFree: 6, PressureFree: 7.5, Load1: 8, Load5: 9, Load15: 10, Cores: 11}
 	orphan := model.Orphan{MachineID: s.MachineID(), ID: "20:123", RootPID: 20, StartTime: now, Signature: "helper", ProcCount: 2, RSSTotal: 100, Cwd: "/repo", Young: true, Evidence: []string{"parent exited", "signature"}, FirstSeen: now, PIDs: []int32{20, 21}}
 	offset := model.Offset{MachineID: s.MachineID(), Inode: 42, Size: 100, Pos: 90, Mtime: now}

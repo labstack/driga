@@ -256,7 +256,7 @@ func (m *app) rebuild() {
 				if r.FinishedChildren > 0 {
 					title += fmt.Sprintf(" (%d workers finished)", r.FinishedChildren)
 				}
-				add(tabRow{machine: r.MachineID, key: key, agent: r.ID, cells: []string{"", r.Label, strings.Repeat(" ", depth) + mark + r.Adapter, r.Project, r.Branch, title, agentAge(r.Age), humanBytes(r.Mem)}})
+				add(tabRow{machine: r.MachineID, key: key, agent: r.ID, cells: []string{"", r.Label, strings.Repeat(" ", depth) + mark + r.Adapter, r.Project, r.Branch, title, agentAge(r.Age), view.HumanBytes(r.Mem)}})
 				// Filtering searches through collapsed families as well.
 				if m.expanded[key] || query != "" {
 					agents(r.Children, depth+1)
@@ -333,7 +333,7 @@ func (m *app) rebuild() {
 			if o.Young {
 				age = "young"
 			}
-			add(tabRow{machine: r.MachineID, key: "orphan:" + r.MachineID + ":" + o.ID, cwd: o.Cwd, orphan: &o, cells: []string{"", o.ID, age, o.Signature, strconv.Itoa(o.ProcCount), "~" + humanBytes(o.RSSTotal), o.Cwd, strconv.FormatBool(o.Verified), strings.Join(o.Evidence, "; ")}})
+			add(tabRow{machine: r.MachineID, key: "orphan:" + r.MachineID + ":" + o.ID, cwd: o.Cwd, orphan: &o, cells: []string{"", o.ID, age, o.Signature, strconv.Itoa(o.ProcCount), "~" + view.HumanBytes(o.RSSTotal), o.Cwd, strconv.FormatBool(o.Verified), strings.Join(o.Evidence, "; ")}})
 		}
 	case 4:
 		titles = []string{"", "METRIC / APP / PROCESS", "CPU/#", "MEASURE / HOST / ATTRIBUTION", "MEM"}

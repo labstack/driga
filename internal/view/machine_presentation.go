@@ -33,11 +33,11 @@ func MachineSummary(v MachineView) string {
 	if total > 0 {
 		pct = 100 * float64(a.Memory) / float64(total)
 	}
-	text := fmt.Sprintf("agents %s of %s (%.0f%%)", humanBytes(a.Memory), humanBytes(total), pct)
+	text := fmt.Sprintf("agents %s of %s (%.0f%%)", HumanBytes(a.Memory), HumanBytes(total), pct)
 	if a.LikelyMemory > 0 {
-		text += " · likely +" + humanBytes(a.LikelyMemory)
+		text += " · likely +" + HumanBytes(a.LikelyMemory)
 	}
-	return text + fmt.Sprintf(" · %.1f%% CPU · %d processes · %d MCP servers · pressure %s · swap %s/%s · disk %s free", a.CPUPercent, a.Processes, a.MCPServers, s.PressureLevel, humanBytes(s.SwapUsed), humanBytes(s.SwapTotal), humanBytes(s.DiskFree))
+	return text + fmt.Sprintf(" · %.1f%% CPU · %d processes · %d MCP servers · pressure %s · swap %s/%s · disk %s free", a.CPUPercent, a.Processes, a.MCPServers, s.PressureLevel, HumanBytes(s.SwapUsed), HumanBytes(s.SwapTotal), HumanBytes(s.DiskFree))
 }
 
 // MachineOtherApps falls back to the available ranking totals for older peers.

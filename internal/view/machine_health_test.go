@@ -16,10 +16,10 @@ import (
 
 func TestMCPRollupSummaryAndDetails(t *testing.T) {
 	ps := []model.Proc{
-		{PID: 1, Cmdline: "claude"},
-		{PID: 2, PPID: 1, Cmdline: "node exec firecrawl-mcp", RSS: 10 << 20},
-		{PID: 3, PPID: 2, Cmdline: "node /cache/node_modules/.bin/firecrawl-mcp", RSS: 20 << 20},
-		{PID: 4, PPID: 1, Cmdline: "node /cache/node_modules/.bin/firecrawl-mcp", RSS: 30 << 20},
+		{PID: 1, Cmdline: "claude", Argv: []string{"claude"}},
+		{PID: 2, PPID: 1, Cmdline: "node exec firecrawl-mcp", Argv: []string{"node", "exec", "firecrawl-mcp"}, RSS: 10 << 20},
+		{PID: 3, PPID: 2, Cmdline: "node /cache/node_modules/.bin/firecrawl-mcp", Argv: []string{"node", "/cache/node_modules/.bin/firecrawl-mcp"}, RSS: 20 << 20},
+		{PID: 4, PPID: 1, Cmdline: "node /cache/node_modules/.bin/firecrawl-mcp", Argv: []string{"node", "/cache/node_modules/.bin/firecrawl-mcp"}, RSS: 30 << 20},
 	}
 	servers := derive.MCPServers(ps, nil, time.Time{})
 	var buf bytes.Buffer
@@ -113,9 +113,9 @@ func TestMachineTopTenAndMixedMeasures(t *testing.T) {
 
 func TestMachineVersionedAppsStaySeparate(t *testing.T) {
 	mem, _ := machineApps([]model.Proc{
-		{PID: 1, Exe: "/home/fixture/.local/share/claude/versions/2.1.304", Cmdline: "claude", RSS: 30},
-		{PID: 2, Exe: "/home/fixture/.local/share/claude/versions/2.1.303", Cmdline: "claude", RSS: 20},
-		{PID: 3, Exe: "/home/fixture/.local/share/claude/versions/2.1.304", Cmdline: "claude", RSS: 10},
+		{PID: 1, Exe: "/home/fixture/.local/share/claude/versions/2.1.304", Cmdline: "claude", Argv: []string{"claude"}, RSS: 30},
+		{PID: 2, Exe: "/home/fixture/.local/share/claude/versions/2.1.303", Cmdline: "claude", Argv: []string{"claude"}, RSS: 20},
+		{PID: 3, Exe: "/home/fixture/.local/share/claude/versions/2.1.304", Cmdline: "claude", Argv: []string{"claude"}, RSS: 10},
 	}, nil)
 	if len(mem) != 2 || mem[0].Name != "claude 2.1.304" || mem[0].Memory != 40 || mem[1].Name != "claude 2.1.303" {
 		t.Fatal(mem)
@@ -126,9 +126,9 @@ func TestMachinePileupsStayWithinMachineAndRenderEvidence(t *testing.T) {
 	st := fleetFixture(t)
 	if err := st.Tx(context.Background(), func(tx *store.Tx) error {
 		for _, id := range []string{tx.MachineID(), "remote"} {
-			ps := []model.Proc{{PID: 10, Cmdline: "claude", StartTime: testNow.Add(-31 * time.Hour)}, {PID: 11, PPID: 10, Cmdline: "node /opt/codegraph/dist/index.js", RSS: 100, StartTime: testNow.Add(-time.Hour)}}
+			ps := []model.Proc{{PID: 10, Cmdline: "claude", Argv: []string{"claude"}, StartTime: testNow.Add(-31 * time.Hour)}, {PID: 11, PPID: 10, Cmdline: "node /opt/codegraph/dist/index.js", Argv: []string{"node", "/opt/codegraph/dist/index.js"}, RSS: 100, StartTime: testNow.Add(-time.Hour)}}
 			if id == tx.MachineID() {
-				ps = append(ps, model.Proc{PID: 12, PPID: 10, Cmdline: "node /opt/codegraph/dist/index.js", RSS: 100, StartTime: testNow})
+				ps = append(ps, model.Proc{PID: 12, PPID: 10, Cmdline: "node /opt/codegraph/dist/index.js", Argv: []string{"node", "/opt/codegraph/dist/index.js"}, RSS: 100, StartTime: testNow})
 			}
 			if err := tx.ForMachine(id).ReplaceProcs(ps); err != nil {
 				return err

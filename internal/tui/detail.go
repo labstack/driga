@@ -36,9 +36,9 @@ func (m *app) openDetail(r tabRow) {
 		fmt.Fprintln(&buf, wrapText(view.MCPPileupText(*r.pileup), m.width))
 	case r.app != nil:
 		a := r.app
-		fmt.Fprintf(&buf, "%s · %s · %.1f%% CPU · %s\n", clean(a.Name), humanBytes(a.Memory), a.CPUPercent, a.MemoryMeasure)
+		fmt.Fprintf(&buf, "%s · %s · %.1f%% CPU · %s\n", clean(a.Name), view.HumanBytes(a.Memory), a.CPUPercent, a.MemoryMeasure)
 		for _, p := range a.Processes {
-			fmt.Fprintf(&buf, "PID %d · %s · %s (%s) · %.1f%% CPU\n", p.PID, clean(p.Exe), humanBytes(p.Memory), p.MemoryMeasure, p.CPUPercent)
+			fmt.Fprintf(&buf, "PID %d · %s · %s (%s) · %.1f%% CPU\n", p.PID, clean(p.Exe), view.HumanBytes(p.Memory), p.MemoryMeasure, p.CPUPercent)
 			if p.Attribution != nil {
 				fmt.Fprintf(&buf, "  %s · proof: %s\n", clean(view.AttributionText(p.Attribution)), p.Attribution.Proof)
 			} else {
@@ -130,12 +130,12 @@ func agentDetail(d view.AgentView, width int) string {
 	for _, p := range d.Procs {
 		pidWidth = max(pidWidth, len(strconv.Itoa(int(p.PID))))
 		ppidWidth = max(ppidWidth, len(strconv.Itoa(int(p.PPID))))
-		memWidth = max(memWidth, len(humanBytes(p.RSS)))
+		memWidth = max(memWidth, len(view.HumanBytes(p.RSS)))
 	}
 	line(fmt.Sprintf("%-*s  %-*s  %-*s  COMMAND", pidWidth, "PID", ppidWidth, "PPID", memWidth, "MEM"))
 	for _, p := range d.Procs {
 		command := strings.Join(strings.Fields(clean(p.Cmdline)), " ")
-		line(fmt.Sprintf("%-*d  %-*d  %-*s  %s", pidWidth, p.PID, ppidWidth, p.PPID, memWidth, humanBytes(p.RSS), command))
+		line(fmt.Sprintf("%-*d  %-*d  %-*s  %s", pidWidth, p.PID, ppidWidth, p.PPID, memWidth, view.HumanBytes(p.RSS), command))
 	}
 	line("Events")
 	for _, e := range d.Events {

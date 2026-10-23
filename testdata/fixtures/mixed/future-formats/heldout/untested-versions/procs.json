@@ -6,7 +6,7 @@
     "rss_bytes": 72351744,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "claude",
+    "cmdline": "claude", "argv": ["claude"],
     "exe": "/opt/heldout/bin/claude",
     "cwd": "{{FIXTURE_HOME}}/orchards/grove-000"
   }

@@ -5,6 +5,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/labstack/driga/internal/textfmt"
+
 	"charm.land/lipgloss/v2"
 	"github.com/NimbleMarkets/ntcharts/v2/barchart"
 	"github.com/labstack/driga/internal/cleanup"
@@ -203,7 +205,7 @@ func (m *app) homeView() string {
 				continue
 			}
 			n := max(1, machineW-4-14)
-			machine = append(machine, mid.Render(fmt.Sprintf("%-7s", metric.name))+gaugeBar(metric.used, metric.total, n, m.opts.NoColor)+" "+view.GaugeStyle(metric.used, metric.total, m.opts.NoColor).Render(fmt.Sprintf("%3.0f%%", view.GaugePercent(metric.used, metric.total))), dim.Render(fmt.Sprintf("        %s/%s", humanBytes(metric.used), humanBytes(metric.total))))
+			machine = append(machine, mid.Render(fmt.Sprintf("%-7s", metric.name))+gaugeBar(metric.used, metric.total, n, m.opts.NoColor)+" "+view.GaugeStyle(metric.used, metric.total, m.opts.NoColor).Render(fmt.Sprintf("%3.0f%%", view.GaugePercent(metric.used, metric.total))), dim.Render(fmt.Sprintf("        %s/%s", view.HumanBytes(metric.used), view.HumanBytes(metric.total))))
 		}
 		token := "ok"
 		if view.LoadLevel(sample.Load1, sample.Cores) == "critical" {
@@ -211,7 +213,7 @@ func (m *app) homeView() string {
 		} else if view.LoadLevel(sample.Load1, sample.Cores) == "warning" {
 			token = "warn"
 		}
-		machine = append(machine, mid.Render("load    ")+view.TokenStyle(token, m.opts.NoColor).Render(view.FormatLoad(sample.Load1, "%.1f"))+dim.Render(fmt.Sprintf(" / %d cores", sample.Cores)), mid.Render("disk    ")+humanBytes(sample.DiskFree)+dim.Render(" free"))
+		machine = append(machine, mid.Render("load    ")+view.TokenStyle(token, m.opts.NoColor).Render(view.FormatLoad(sample.Load1, "%.1f"))+dim.Render(fmt.Sprintf(" / %d cores", sample.Cores)), mid.Render("disk    ")+view.HumanBytes(sample.DiskFree)+dim.Render(" free"))
 	}
 	if len(machine) == 0 {
 		machine = append(machine, "Health unavailable")
@@ -321,7 +323,7 @@ func (m *app) homeView() string {
 		projects = append(projects, "No projects")
 	}
 	summary := m.visibleSummary()
-	leftovers := []string{fmt.Sprintf("orphans    %d · ~%s reclaimable", summary.Orphans, humanBytes(summary.Reclaim))}
+	leftovers := []string{fmt.Sprintf("orphans    %d · ~%s reclaimable", summary.Orphans, view.HumanBytes(summary.Reclaim))}
 	ready, refused := 0, 0
 	var history int64
 	for _, c := range m.snap.Cleanup {
@@ -468,8 +470,7 @@ func styledSpark(buckets []view.ActivityBucket, width int, load, noColor bool) s
 			ceiling = max(ceiling, float64(b.Events))
 		}
 	}
-	glyphs := []rune("▁▂▃▄▅▆▇█")
-	var out strings.Builder
+	cells := make([]textfmt.SparkCell, 0, count)
 	for x := 0; x < count; x++ {
 		from, to := x*len(buckets)/count, (x+1)*len(buckets)/count
 		span := activityMinuteColumn(x+1, count, max(1, width)) - activityMinuteColumn(x, count, max(1, width))
@@ -490,7 +491,7 @@ func styledSpark(buckets []view.ActivityBucket, width int, load, noColor bool) s
 			}
 		}
 		if !valid {
-			out.WriteString(view.TokenStyle("faint", noColor).Render(strings.Repeat("·", span)))
+			cells = append(cells, textfmt.SparkCell{Missing: true, Span: span, Token: "faint"})
 			continue
 		}
 		token := "idle"
@@ -500,10 +501,9 @@ func styledSpark(buckets []view.ActivityBucket, width int, load, noColor bool) s
 				token = "crit"
 			}
 		}
-		level := min(7, max(0, int(value/ceiling*8)-1))
-		out.WriteString(view.TokenStyle(token, noColor).Render(strings.Repeat(string(glyphs[level]), span)))
+		cells = append(cells, textfmt.SparkCell{Value: value, Span: span, Token: token})
 	}
-	return out.String()
+	return textfmt.Spark(cells, ceiling, '▁', textfmt.SparkFloor, func(token, text string) string { return view.TokenStyle(token, noColor).Render(text) })
 }
 
 func activityRow(buckets []view.ActivityBucket, width int, load, noColor bool) string {

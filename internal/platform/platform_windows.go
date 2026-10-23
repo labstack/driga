@@ -96,6 +96,10 @@ func winInspect(pid int32) (winDetails, error) {
 	}
 	if cmd, err := winCommandLine(h); err == nil {
 		d.Cmdline = cmd
+		d.Argv, err = windows.DecomposeCommandLine(cmd)
+		if err != nil {
+			d.Partial = true
+		}
 	} else {
 		d.Partial = true
 	}

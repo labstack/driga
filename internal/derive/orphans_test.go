@@ -93,9 +93,9 @@ func orphanFixture(t *testing.T) ([]model.Proc, *signatures.Set, time.Time) {
 		t.Fatal(err)
 	}
 	return []model.Proc{
-		{PID: 10, PPID: 1, Cmdline: "node /plugin/app-server-broker.mjs", StartTime: now.Add(-2 * time.Hour), RSS: 100, Cwd: "/repo"},
-		{PID: 11, PPID: 10, Cmdline: "codex app-server", StartTime: now.Add(-time.Hour), RSS: 200},
-		{PID: 12, PPID: 11, Cmdline: "claude mcp serve", StartTime: now.Add(-time.Hour), RSS: 300},
+		{PID: 10, PPID: 1, Cmdline: "node /plugin/app-server-broker.mjs", Argv: []string{"node", "/plugin/app-server-broker.mjs"}, StartTime: now.Add(-2 * time.Hour), RSS: 100, Cwd: "/repo"},
+		{PID: 11, PPID: 10, Cmdline: "codex app-server", Argv: []string{"codex", "app-server"}, StartTime: now.Add(-time.Hour), RSS: 200},
+		{PID: 12, PPID: 11, Cmdline: "claude mcp serve", Argv: []string{"claude", "mcp", "serve"}, StartTime: now.Add(-time.Hour), RSS: 300},
 	}, sigs, now
 }
 
@@ -105,12 +105,12 @@ func TestCodexAppServerDaemonNeverOrphan(t *testing.T) {
 	for _, cmd := range []string{exe + " app-server --remote-control", exe + " app-server daemon pid-update 123", "codex app-server"} {
 		for _, classified := range []bool{false, true} {
 			t.Run(fmt.Sprintf("%s/classified=%t", cmd, classified), func(t *testing.T) {
-				root := model.Proc{PID: 10, PPID: 1, Cmdline: cmd, StartTime: now.Add(-time.Hour)}
+				root := model.Proc{PID: 10, PPID: 1, Cmdline: cmd, Argv: fixtureArgv(cmd), StartTime: now.Add(-time.Hour)}
 				if classified {
 					sig, _ := sigs.Match(cmd, "")
 					root.Role = string(sig.Role)
 				}
-				procs := []model.Proc{root, {PID: 11, PPID: 10, Cmdline: "claude mcp serve", StartTime: root.StartTime}}
+				procs := []model.Proc{root, {PID: 11, PPID: 10, Cmdline: "claude mcp serve", Argv: []string{"claude", "mcp", "serve"}, StartTime: root.StartTime}}
 				got := FindOrphans(unixOrphanIndex(procs), nil, sigs, now, 0, nil, WithSpawnMemory(map[string]int64{"10:" + fmt.Sprint(root.StartTime.Unix()): 99, "11:" + fmt.Sprint(root.StartTime.Unix()): 99}))
 				want := 0
 				if cmd == "codex app-server" {
@@ -181,6 +181,7 @@ func TestNotOrphanUnmatched(t *testing.T) {
 	procs, sigs, now := orphanFixture(t)
 	procs = procs[:1]
 	procs[0].Cmdline = "vim"
+	procs[0].Argv = []string{"vim"}
 	if got := FindOrphans(unixOrphanIndex(procs), nil, sigs, now, 0, nil); len(got) != 0 {
 		t.Fatal(got)
 	}
@@ -197,7 +198,7 @@ func TestOrphanSameDirIsEvidenceOnly(t *testing.T) {
 
 func TestOrphanSpawnMemory(t *testing.T) {
 	procs, sigs, now := orphanFixture(t)
-	procs = []model.Proc{{PID: 100, PPID: 1}, {PID: 10, PPID: 100, Cmdline: "worker", StartTime: procs[0].StartTime}, {PID: 11, PPID: 10, Cmdline: "worker"}}
+	procs = []model.Proc{{PID: 100, PPID: 1}, {PID: 10, PPID: 100, Cmdline: "worker", Argv: []string{"worker"}, StartTime: procs[0].StartTime}, {PID: 11, PPID: 10, Cmdline: "worker", Argv: []string{"worker"}}}
 	sessions := []model.Session{familySession(7, 100)}
 	memory := SpawnedBySession(unixOrphanIndex(procs), sessions)
 	if !reflect.DeepEqual(memory, map[int32]int64{10: 7, 11: 7}) {
@@ -239,6 +240,7 @@ func TestOrphanTopmostAndLiveSessionProtection(t *testing.T) {
 	}
 	prev := map[string]model.Orphan{fmt.Sprintf("10:%d", procs[0].StartTime.Unix()): {Evidence: []string{"spawned by session"}}}
 	procs[0].Cmdline = "worker"
+	procs[0].Argv = []string{"worker"}
 	if got := FindOrphans(unixOrphanIndex(procs[:1]), nil, sigs, now, 0, prev); len(got) != 1 {
 		t.Fatal(got)
 	}

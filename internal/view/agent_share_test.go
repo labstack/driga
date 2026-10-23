@@ -12,7 +12,7 @@ import (
 func shareFixture(t *testing.T, agent, editor bool) MachineView {
 	t.Helper()
 	at := testNow.Add(-time.Hour)
-	ps := []model.Proc{{PID: 1, Exe: "/bin/editor", RSS: 100}, {PID: 10, PPID: 1, Exe: "/bin/worker", StartTime: at, RSS: 20, CPUPercent: 2}, {PID: 11, PPID: 10, Exe: "/bin/worker", StartTime: at.Add(time.Second), RSS: 30, CPUPercent: 3}, {PID: 12, PPID: 10, Exe: "/bin/worker", StartTime: at.Add(time.Second), RSS: 40, CPUPercent: 4}, {PID: 20, Cmdline: "codex app-server", Exe: "/bin/codex", RSS: 50}, {PID: 21, PPID: 1, Cmdline: "node /x/weather-mcp.js", RSS: 60}}
+	ps := []model.Proc{{PID: 1, Exe: "/bin/editor", RSS: 100}, {PID: 10, PPID: 1, Exe: "/bin/worker", StartTime: at, RSS: 20, CPUPercent: 2}, {PID: 11, PPID: 10, Exe: "/bin/worker", StartTime: at.Add(time.Second), RSS: 30, CPUPercent: 3}, {PID: 12, PPID: 10, Exe: "/bin/worker", StartTime: at.Add(time.Second), RSS: 40, CPUPercent: 4}, {PID: 20, Cmdline: "codex app-server", Argv: []string{"codex", "app-server"}, Exe: "/bin/codex", RSS: 50}, {PID: 21, PPID: 1, Cmdline: "node /x/weather-mcp.js", Argv: []string{"node", "/x/weather-mcp.js"}, RSS: 60}}
 	if editor {
 		ps[0].Exe = "/Applications/Editor.app/Contents/MacOS/Editor"
 	}

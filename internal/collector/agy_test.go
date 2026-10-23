@@ -1,16 +1,17 @@
 package collector
 
 import (
-	"github.com/labstack/driga/internal/model"
 	"testing"
 	"time"
+
+	"github.com/labstack/driga/internal/model"
 )
 
 func TestAgyProcessSession(t *testing.T) {
 	d, st, p, a := setup(t)
 	a.obs = nil
 	start := d.Now().Add(-time.Hour)
-	p.procs = []model.Proc{{PID: 42, Exe: "/opt/bin/agy", Cmdline: "/opt/bin/agy", Cwd: t.TempDir(), StartTime: start}}
+	p.procs = []model.Proc{{PID: 42, Exe: "/opt/bin/agy", Cmdline: "/opt/bin/agy", Argv: []string{"/opt/bin/agy"}, Cwd: t.TempDir(), StartTime: start}}
 	pass(t, d, st, Plan{Procs: true, Cwds: true})
 	ss := sessions(t, st)
 	if len(ss) != 1 {

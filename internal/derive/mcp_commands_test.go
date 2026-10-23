@@ -103,12 +103,12 @@ func TestMCPLauncherEvidence(t *testing.T) {
 		{"server workers", "node /cache/node_modules/.bin/firecrawl-mcp", "node /cache/node_modules/.bin/firecrawl-mcp", false, false, 2},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			ps := []model.Proc{{PID: 1, Cmdline: "claude", StartTime: at.Add(-time.Hour)}, {PID: 2, PPID: 1, Cmdline: tc.launcher, StartTime: at, RSS: 10}, {PID: 3, PPID: 2, Cmdline: tc.child, StartTime: at.Add(time.Second), RSS: 20}}
+			ps := []model.Proc{{PID: 1, Cmdline: "claude", Argv: []string{"claude"}, StartTime: at.Add(-time.Hour)}, {PID: 2, PPID: 1, Cmdline: tc.launcher, Argv: fixtureArgv(tc.launcher), StartTime: at, RSS: 10}, {PID: 3, PPID: 2, Cmdline: tc.child, Argv: fixtureArgv(tc.child), StartTime: at.Add(time.Second), RSS: 20}}
 			if tc.older {
 				ps[2].StartTime = at.Add(-time.Second)
 			}
 			if tc.extra {
-				ps = append(ps, model.Proc{PID: 4, PPID: 2, Cmdline: "sleep 60", StartTime: at.Add(time.Second), RSS: 5})
+				ps = append(ps, model.Proc{PID: 4, PPID: 2, Cmdline: "sleep 60", Argv: []string{"sleep", "60"}, StartTime: at.Add(time.Second), RSS: 5})
 			}
 			got := MCPServers(ps, nil, at.Add(time.Hour))
 			count := 0
@@ -132,7 +132,7 @@ func TestMCPPackageGroupingPreservesArgumentsAndScopes(t *testing.T) {
 		{"node /a/tool.js", "node /b/tool.js"},
 		{"/Applications/Editor.app/Contents/Resources/server --project /one", "/Applications/Editor.app/Contents/Resources/server --project /two"},
 	} {
-		got := MCPServers([]model.Proc{{PID: 1, Cmdline: "claude"}, {PID: 2, PPID: 1, Cmdline: pair[0]}, {PID: 3, PPID: 1, Cmdline: pair[1]}}, nil, time.Time{})
+		got := MCPServers([]model.Proc{{PID: 1, Cmdline: "claude", Argv: []string{"claude"}}, {PID: 2, PPID: 1, Cmdline: pair[0], Argv: fixtureArgv(pair[0])}, {PID: 3, PPID: 1, Cmdline: pair[1], Argv: fixtureArgv(pair[1])}}, nil, time.Time{})
 		if len(got.Commands) != 2 {
 			t.Fatalf("merged distinct servers: %+v", got)
 		}
@@ -141,18 +141,18 @@ func TestMCPPackageGroupingPreservesArgumentsAndScopes(t *testing.T) {
 
 func TestMCPLauncherReportedScale(t *testing.T) {
 	var ps []model.Proc
-	ps = append(ps, model.Proc{PID: 1, Cmdline: "codex app-server"})
+	ps = append(ps, model.Proc{PID: 1, Cmdline: "codex app-server", Argv: []string{"codex", "app-server"}})
 	for i := range 85 {
 		pid := int32(10 + i*2)
 		ps = append(ps,
-			model.Proc{PID: pid, PPID: 1, Cmdline: "node exec firecrawl-mcp", Footprint: 15, MemoryMeasure: "physical_footprint"},
-			model.Proc{PID: pid + 1, PPID: pid, Cmdline: "node /Users/example/.npm/_npx/12b05d58670d8359/node_modules/.bin/firecrawl-mcp", Footprint: 85, MemoryMeasure: "physical_footprint"})
+			model.Proc{PID: pid, PPID: 1, Cmdline: "node exec firecrawl-mcp", Argv: []string{"node", "exec", "firecrawl-mcp"}, Footprint: 15, MemoryMeasure: "physical_footprint"},
+			model.Proc{PID: pid + 1, PPID: pid, Cmdline: "node /Users/example/.npm/_npx/12b05d58670d8359/node_modules/.bin/firecrawl-mcp", Argv: []string{"node", "/Users/example/.npm/_npx/12b05d58670d8359/node_modules/.bin/firecrawl-mcp"}, Footprint: 85, MemoryMeasure: "physical_footprint"})
 	}
 	for i := range 166 {
 		pid := int32(1000 + i*2)
 		ps = append(ps,
-			model.Proc{PID: pid, PPID: 1, Cmdline: "/Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node_repl", RSS: 1},
-			model.Proc{PID: pid + 1, PPID: pid, Cmdline: "/Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node_repl", RSS: 1})
+			model.Proc{PID: pid, PPID: 1, Cmdline: "/Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node_repl", Argv: []string{"/Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node_repl"}, RSS: 1},
+			model.Proc{PID: pid + 1, PPID: pid, Cmdline: "/Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node_repl", Argv: []string{"/Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node_repl"}, RSS: 1})
 	}
 	got := MCPServers(ps, nil, time.Time{})
 	if len(got.Commands) != 2 || len(got.Pileups) != 2 {
@@ -171,13 +171,14 @@ func TestMCPLauncherReportedScale(t *testing.T) {
 func TestMCPUnseenPackageInstallLayouts(t *testing.T) {
 	// Held-out names/layouts pin structural rules, without another signature.
 	ps := []model.Proc{
-		{PID: 1, Cmdline: "claude"},
-		{PID: 2, PPID: 1, Cmdline: "/usr/local/bin/node /usr/local/lib/node_modules/@harbor/scribe/dist/cli.js --stdio", RSS: 1},
-		{PID: 3, PPID: 1, Cmdline: "/home/test/.local/share/mise/installs/node/22/bin/node /home/test/.local/share/mise/installs/node/22/lib/node_modules/@harbor/scribe/dist/cli.js --stdio", RSS: 2},
-		{PID: 4, PPID: 1, Cmdline: "/Applications/Research Desk.app/Contents/Resources/search_node/bin/node_repl", RSS: 3},
+		{PID: 1, Cmdline: "claude", Argv: []string{"claude"}},
+		{PID: 2, PPID: 1, Cmdline: "/usr/local/bin/node /usr/local/lib/node_modules/@harbor/scribe/dist/cli.js --stdio", Argv: []string{"/usr/local/bin/node", "/usr/local/lib/node_modules/@harbor/scribe/dist/cli.js", "--stdio"}, RSS: 1},
+		{PID: 3, PPID: 1, Cmdline: "/home/test/.local/share/mise/installs/node/22/bin/node /home/test/.local/share/mise/installs/node/22/lib/node_modules/@harbor/scribe/dist/cli.js --stdio", Argv: []string{"/home/test/.local/share/mise/installs/node/22/bin/node", "/home/test/.local/share/mise/installs/node/22/lib/node_modules/@harbor/scribe/dist/cli.js", "--stdio"}, RSS: 2},
+		{PID: 4, PPID: 1, Cmdline: "/Applications/Research Desk.app/Contents/Resources/search_node/bin/node_repl", Argv: []string{"/Applications/Research", "Desk.app/Contents/Resources/search_node/bin/node_repl"}, RSS: 3},
 	}
 	// Command strings with spaces require the quoting supplied by the OS.
 	ps[3].Cmdline = `"/Applications/Research Desk.app/Contents/Resources/search_node/bin/node_repl"`
+	ps[3].Argv = []string{"/Applications/Research Desk.app/Contents/Resources/search_node/bin/node_repl"}
 	got := MCPServers(ps, nil, time.Time{})
 	if len(got.Commands) != 2 {
 		t.Fatal(got)
@@ -200,11 +201,11 @@ func TestMCPUnseenPackageInstallLayouts(t *testing.T) {
 
 func TestMCPLauncherPackageScopesRemainDistinct(t *testing.T) {
 	got := MCPServers([]model.Proc{
-		{PID: 1, Cmdline: "claude"},
-		{PID: 2, PPID: 1, Cmdline: "node exec @north/tool"},
-		{PID: 3, PPID: 2, Cmdline: "node /a/node_modules/.bin/tool"},
-		{PID: 4, PPID: 1, Cmdline: "node exec @south/tool"},
-		{PID: 5, PPID: 4, Cmdline: "node /b/node_modules/.bin/tool"},
+		{PID: 1, Cmdline: "claude", Argv: []string{"claude"}},
+		{PID: 2, PPID: 1, Cmdline: "node exec @north/tool", Argv: []string{"node", "exec", "@north/tool"}},
+		{PID: 3, PPID: 2, Cmdline: "node /a/node_modules/.bin/tool", Argv: []string{"node", "/a/node_modules/.bin/tool"}},
+		{PID: 4, PPID: 1, Cmdline: "node exec @south/tool", Argv: []string{"node", "exec", "@south/tool"}},
+		{PID: 5, PPID: 4, Cmdline: "node /b/node_modules/.bin/tool", Argv: []string{"node", "/b/node_modules/.bin/tool"}},
 	}, nil, time.Time{})
 	if len(got.Commands) != 2 || len(got.Pileups) != 0 {
 		t.Fatalf("merged different launcher packages: %+v", got)
@@ -213,10 +214,10 @@ func TestMCPLauncherPackageScopesRemainDistinct(t *testing.T) {
 
 func TestMCPPackageAliasAlsoGroupsUnwrappedBins(t *testing.T) {
 	got := MCPServers([]model.Proc{
-		{PID: 1, Cmdline: "claude"},
-		{PID: 2, PPID: 1, Cmdline: "node exec @harbor/scribe"},
-		{PID: 3, PPID: 2, Cmdline: "node /a/node_modules/.bin/scribe"},
-		{PID: 4, PPID: 1, Cmdline: "/another/bin/node /b/node_modules/.bin/scribe"},
+		{PID: 1, Cmdline: "claude", Argv: []string{"claude"}},
+		{PID: 2, PPID: 1, Cmdline: "node exec @harbor/scribe", Argv: []string{"node", "exec", "@harbor/scribe"}},
+		{PID: 3, PPID: 2, Cmdline: "node /a/node_modules/.bin/scribe", Argv: []string{"node", "/a/node_modules/.bin/scribe"}},
+		{PID: 4, PPID: 1, Cmdline: "/another/bin/node /b/node_modules/.bin/scribe", Argv: []string{"/another/bin/node", "/b/node_modules/.bin/scribe"}},
 	}, nil, time.Time{})
 	if len(got.Commands) != 1 || got.Commands[0].Count != 2 {
 		t.Fatal(got)

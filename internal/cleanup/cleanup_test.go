@@ -600,7 +600,7 @@ func TestListIgnoresOtherUsersProcesses(t *testing.T) {
 		t.Fatalf("worktree %s missing from %+v", wt, cs)
 	}
 	// An own agent whose cwd cannot be read still blocks listing.
-	p.procs = append(p.procs, model.Proc{PID: 202, Cmdline: "claude", OwnerUID: uint32(os.Getuid()), OwnerKnown: true})
+	p.procs = append(p.procs, model.Proc{PID: 202, Cmdline: "claude", Argv: []string{"claude"}, OwnerUID: uint32(os.Getuid()), OwnerKnown: true})
 	if _, err := List(context.Background(), e); err == nil {
 		t.Fatal("unreadable own process cwd must fail closed")
 	}

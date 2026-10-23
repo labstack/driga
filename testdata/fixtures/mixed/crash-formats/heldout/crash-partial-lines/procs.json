@@ -6,7 +6,7 @@
     "rss_bytes": 85983232,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "unrelated-worker",
+    "cmdline": "unrelated-worker", "argv": ["unrelated-worker"],
     "exe": "/usr/bin/unrelated-worker",
     "cwd": "{{FIXTURE_HOME}}/terraces/grove-002"
   }

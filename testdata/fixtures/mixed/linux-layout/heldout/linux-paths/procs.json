@@ -6,7 +6,7 @@
     "rss_bytes": 82837504,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "codex",
+    "cmdline": "codex", "argv": ["codex"],
     "exe": "/opt/heldout/bin/codex",
     "cwd": "{{FIXTURE_HOME}}/home/linnea/src/研究 grove/grove-000"
   },
@@ -17,7 +17,7 @@
     "rss_bytes": 76546048,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "claude",
+    "cmdline": "claude", "argv": ["claude"],
     "exe": "/opt/heldout/bin/claude",
     "cwd": "{{FIXTURE_HOME}}/home/linnea/src/研究 grove/grove-001-branch-001"
   }

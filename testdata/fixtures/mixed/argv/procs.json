@@ -1,0 +1,33 @@
+[
+  {
+    "pid": 1,
+    "cmdline": "claude",
+    "argv": [
+      "claude"
+    ]
+  },
+  {
+    "pid": 2,
+    "ppid": 1,
+    "exe": "C:\\Program Files\\nodejs\\node.exe",
+    "cmdline": "\"C:\\Program Files\\nodejs\\node.exe\" C:\\Users\\Example\\node_modules\\@harbor\\scribe\\cli.js --project \"C:\\Users\\Example\\My Project\"",
+    "argv": [
+      "C:\\Program Files\\nodejs\\node.exe",
+      "C:\\Users\\Example\\node_modules\\@harbor\\scribe\\cli.js",
+      "--project",
+      "C:\\Users\\Example\\My Project"
+    ]
+  },
+  {
+    "pid": 3,
+    "ppid": 1,
+    "exe": "/usr/bin/node",
+    "cmdline": "/usr/bin/node /opt/node_modules/@harbor/scribe/cli.js --project /home/example/My Project",
+    "argv": [
+      "/usr/bin/node",
+      "/opt/node_modules/@harbor/scribe/cli.js",
+      "--project",
+      "/home/example/My Project"
+    ]
+  }
+]

@@ -8,12 +8,13 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/labstack/driga/internal/secfile"
 	"math/rand"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/labstack/driga/internal/secfile"
 
 	"github.com/labstack/driga/internal/model"
 )
@@ -99,7 +100,7 @@ func Write(dir string, sc Scenario) error {
 		start := at.Add(-time.Hour)
 		pid := int32(4000 + i)
 		cwd := filepath.ToSlash(filepath.Join(HomeToken, worktreePath(sc, a.Repo, a.Worktree)))
-		proc := model.Proc{PID: pid, PPID: 200, StartTime: start, RSS: uint64(40+rng.Intn(60)) << 20, CPUSeconds: 3, Cmdline: a.Adapter, Exe: "/opt/heldout/bin/" + a.Adapter, Cwd: cwd}
+		proc := model.Proc{PID: pid, PPID: 200, StartTime: start, RSS: uint64(40+rng.Intn(60)) << 20, CPUSeconds: 3, Cmdline: a.Adapter, Argv: []string{a.Adapter}, Exe: "/opt/heldout/bin/" + a.Adapter, Cwd: cwd}
 		if a.PIDReuse {
 			proc.StartTime = start.Add(time.Minute)
 			proc.Cmdline, proc.Exe = "unrelated-worker", "/usr/bin/unrelated-worker"

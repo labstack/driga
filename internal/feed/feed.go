@@ -81,7 +81,7 @@ func (s SessionKey) String() string { return Key(s.Adapter, s.ExternalID) }
 // SessionRow supplies natural references for a stored session.
 type SessionRow struct {
 	model.Session
-	Parent       *SessionKey `json:"parent,omitempty"`
+	Parent       *SessionKey `json:"parent,omitzero"`
 	RepoPath     string      `json:"repo_path,omitempty"`
 	WorktreePath string      `json:"worktree_path,omitempty"`
 }
@@ -164,62 +164,28 @@ func object(row any) map[string]any {
 	return result
 }
 
-// metadataCommand keeps the executable and flag names, never positional or
-// flag values. Quotes keep a prompt containing whitespace in a single argument.
-func metadataCommand(command string) string {
-	var args []string
-	var token strings.Builder
-	var quote rune
-	escaped := false
-	for _, r := range command {
-		switch {
-		case escaped:
-			token.WriteRune(r)
-			escaped = false
-		case r == '\\' && quote != '\'':
-			escaped = true
-		case quote != 0:
-			if r == quote {
-				quote = 0
-			} else {
-				token.WriteRune(r)
-			}
-		case r == '\'' || r == '"':
-			quote = r
-		case unicode.IsSpace(r) || r == 0:
-			if token.Len() > 0 {
-				args = append(args, token.String())
-				token.Reset()
-			}
-		default:
-			token.WriteRune(r)
-		}
-	}
-	if token.Len() > 0 {
-		args = append(args, token.String())
-	}
+// metadataArgv keeps the executable and flag names, never argument values.
+func metadataArgv(args []string) []string {
 	if len(args) == 0 {
-		return ""
+		return nil
 	}
-	result := []string{filepath.Base(args[0])}
+	// Process paths can be recorded on a different OS from the publisher.
+	result := []string{filepath.Base(strings.ReplaceAll(args[0], `\`, "/"))}
 	for _, arg := range args[1:] {
 		if arg == "--" {
 			break
 		}
 		if strings.HasPrefix(arg, "-") {
 			flag, _, _ := strings.Cut(arg, "=")
-			// Short options can carry an attached value (-pPROMPT). Without
-			// an option schema, conservatively retain only the first letter.
 			if !strings.HasPrefix(flag, "--") && len(flag) > 2 {
 				flag = flag[:2]
 			}
-			if strings.ContainsFunc(flag, unicode.IsSpace) {
-				continue
+			if !strings.ContainsFunc(flag, unicode.IsSpace) {
+				result = append(result, flag)
 			}
-			result = append(result, flag)
 		}
 	}
-	return strings.Join(result, " ")
+	return result
 }
 
 // Encode returns the natural key and payload. A nil payload withholds a handoff
@@ -361,9 +327,15 @@ func Encode(kind Kind, row any, share ShareText) (key string, payload []byte) {
 				continue
 			}
 			if share != Snippets {
-				proc.Cmdline = metadataCommand(proc.Cmdline)
+				proc.Argv = metadataArgv(proc.Argv)
+				proc.Cmdline = strings.Join(proc.Argv, " ")
 			}
 			proc.Cmdline = scrub.Snippet(proc.Cmdline)
+			argv := make([]string, len(proc.Argv))
+			for i, arg := range proc.Argv {
+				argv[i] = scrub.Snippet(arg)
+			}
+			proc.Argv = argv
 			v := object(proc)
 			delete(v, "session_id")
 			if s, ok := p.Sessions[proc.SessionID]; ok {

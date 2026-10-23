@@ -365,13 +365,10 @@ func TestAcceptLimits(t *testing.T) {
 		}
 	}
 	now = now.Add(time.Second)
-	if a.acquire() {
-		t.Fatal("connection cap exceeded")
-	}
-	a.release()
 	if !a.acquire() {
-		t.Fatal("slot not released")
+		t.Fatal("expired rate window retained")
 	}
+
 }
 func TestPresenceTouchesHeartbeat(t *testing.T) {
 	s, st, id := serverFixture(t)
@@ -499,7 +496,7 @@ func TestSnapshotAllReferencesAndPrivacy(t *testing.T) {
 		if err := tx.InsertHandoff(ids["handoff"], now, "private handoff"); err != nil {
 			return err
 		}
-		if err := tx.ReplaceProcs([]model.Proc{{PID: 1, Agent: "claude", SessionID: ids["proc"], Cmdline: "claude ghp_abcdefghijklmnopqrstuvwxyz1234567890"}, {PID: 2, Cmdline: "unrelated process"}}); err != nil {
+		if err := tx.ReplaceProcs([]model.Proc{{PID: 1, Agent: "claude", SessionID: ids["proc"], Cmdline: "claude ghp_abcdefghijklmnopqrstuvwxyz1234567890", Argv: []string{"claude", "ghp_abcdefghijklmnopqrstuvwxyz1234567890"}}, {PID: 2, Cmdline: "unrelated process", Argv: []string{"unrelated", "process"}}}); err != nil {
 			return err
 		}
 		if err := tx.ReplaceOrphans([]model.Orphan{{ID: "orphan", PIDs: []int32{1}, Evidence: []string{"reparented"}, Verified: true, ProcessStarts: map[int32]time.Time{1: now}}}); err != nil {

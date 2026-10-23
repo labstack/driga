@@ -3,6 +3,8 @@ package view
 import (
 	"fmt"
 	"strings"
+
+	"github.com/labstack/driga/internal/textfmt"
 )
 
 // ObservationSpark compresses the entire hour to fit a panel. Maxima preserve
@@ -19,16 +21,11 @@ func ObservationSpark(buckets []int64, width int) string {
 		cells[j] = max(cells[j], n)
 		peak = max(peak, n)
 	}
-	var b strings.Builder
-	blocks := []rune("▁▂▃▄▅▆▇█")
-	for _, n := range cells {
-		if n <= 0 || peak == 0 {
-			b.WriteRune('·')
-		} else {
-			b.WriteRune(blocks[min(7, int(float64(n)/float64(peak)*7))])
-		}
+	draw := make([]textfmt.SparkCell, len(cells))
+	for i, n := range cells {
+		draw[i].Value = float64(n)
 	}
-	return b.String()
+	return textfmt.Spark(draw, float64(peak), '·', textfmt.SparkLinear, nil)
 }
 
 // ObservationPath is SVG geometry only; callers keep all styling in static CSS.

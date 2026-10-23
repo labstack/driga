@@ -3,6 +3,7 @@
 package secfile
 
 import (
+	"errors"
 	"fmt"
 	"os"
 )
@@ -42,3 +43,11 @@ func CheckPrivate(path string) error {
 }
 
 func createTemp(dir, pattern string) (*os.File, error) { return os.CreateTemp(dir, pattern) }
+
+func syncDir(path string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	return errors.Join(f.Sync(), f.Close())
+}

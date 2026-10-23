@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/labstack/driga/internal/textfmt"
+
 	"github.com/labstack/driga/internal/cleanup"
 	"github.com/labstack/driga/internal/inbox"
 	"github.com/labstack/driga/internal/store"
@@ -583,13 +585,7 @@ func humanBytes(value any) string {
 	case int64:
 		n = float64(v)
 	}
-	units := []string{"B", "KiB", "MiB", "GiB", "TiB"}
-	i := 0
-	for n >= 1024 && i < len(units)-1 {
-		n /= 1024
-		i++
-	}
-	return fmt.Sprintf("%.1f %s", n, units[i])
+	return textfmt.Bytes(n, false)
 }
 
 func pageLink(path, scope string, all ...bool) string {

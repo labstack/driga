@@ -20,7 +20,7 @@ func TestRecordedProcessOS(t *testing.T) {
 				d, st, _, a := setup(t)
 				a.obs = nil
 				start := d.Now().Add(-time.Hour)
-				root := model.Proc{PID: 200, PPID: 700, StartTime: start, Cmdline: "claude mcp serve"}
+				root := model.Proc{PID: 200, PPID: 700, StartTime: start, Cmdline: "claude mcp serve", Argv: []string{"claude", "mcp", "serve"}}
 				procs := []model.Proc{root}
 				if shape == "linux" {
 					procs[0].PPID = 1

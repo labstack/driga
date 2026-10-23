@@ -36,7 +36,7 @@ func TestClaudeRegistrySwitchOwnsProcess(t *testing.T) {
 		t.Fatal(err)
 	}
 	start, _ := time.Parse(time.RFC3339Nano, entry["startedAt"].(string))
-	p.procs = []model.Proc{{PID: 4000, StartTime: start, Cmdline: "claude", RSS: 100, CPUSeconds: 1}}
+	p.procs = []model.Proc{{PID: 4000, StartTime: start, Cmdline: "claude", Argv: []string{"claude"}, RSS: 100, CPUSeconds: 1}}
 	d.Adapters = []adapter.Adapter{claude.New()}
 	pass(t, d, st, Plan{Procs: true})
 	old := sessions(t, st)[0]

@@ -19,10 +19,10 @@ func TestMCPTrendCollectionAndPressure(t *testing.T) {
 	at := time.Date(2026, 10, 20, 8, 12, 0, 0, time.UTC)
 	now := at
 	d.Now = func() time.Time { return now }
-	procs := []model.Proc{{PID: 100, Cmdline: "codex app-server", StartTime: at.Add(-time.Hour)}}
+	procs := []model.Proc{{PID: 100, Cmdline: "codex app-server", Argv: []string{"codex", "app-server"}, StartTime: at.Add(-time.Hour)}}
 	for i := range 3 {
 		now = at.Add(time.Duration(i) * 80 * time.Minute)
-		procs = append(procs, model.Proc{PID: int32(i + 1), PPID: 100, Cmdline: "java -cp /opt/maestro/lib/* maestro.cli.AppKt mcp", StartTime: now, RSS: 100})
+		procs = append(procs, model.Proc{PID: int32(i + 1), PPID: 100, Cmdline: "java -cp /opt/maestro/lib/* maestro.cli.AppKt mcp", Argv: []string{"java", "-cp", "/opt/maestro/lib/*", "maestro.cli.AppKt", "mcp"}, StartTime: now, RSS: 100})
 		p.procs = procs
 		pass(t, d, st, Plan{Procs: true})
 		if i == 1 {
@@ -81,10 +81,10 @@ func TestMCPPressureHistoryBoundedTo24Hours(t *testing.T) {
 	_, st, _, _ := setup(t)
 	now := time.Date(2026, 10, 22, 12, 0, 0, 0, time.UTC)
 	// The same currently visible host/command has an old observed-growth history.
-	procs := []model.Proc{{PID: 100, Cmdline: "claude", StartTime: now.Add(-72 * time.Hour)}}
+	procs := []model.Proc{{PID: 100, Cmdline: "claude", Argv: []string{"claude"}, StartTime: now.Add(-72 * time.Hour)}}
 	for i := 0; i < 3; i++ {
 		at := now.Add(-48*time.Hour + time.Duration(i)*time.Hour)
-		procs = append(procs, model.Proc{PID: int32(i + 1), PPID: 100, Cmdline: "node /opt/server.js", StartTime: at, RSS: 1 << 30})
+		procs = append(procs, model.Proc{PID: int32(i + 1), PPID: 100, Cmdline: "node /opt/server.js", Argv: []string{"node", "/opt/server.js"}, StartTime: at, RSS: 1 << 30})
 		observations := derive.MCPServers(procs, nil, at).Samples
 		if err := st.Tx(context.Background(), func(tx *store.Tx) error { return tx.ObserveMCP(at, observations) }); err != nil {
 			t.Fatal(err)

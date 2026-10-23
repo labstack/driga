@@ -21,7 +21,7 @@ type MachineAttribution struct {
 type MachineProcess struct {
 	model.Proc
 	Memory      uint64              `json:"memory_bytes"`
-	Attribution *MachineAttribution `json:"attribution,omitempty"`
+	Attribution *MachineAttribution `json:"attribution,omitzero"`
 }
 type MachineApp struct {
 	ID            string           `json:"id"`
@@ -99,14 +99,14 @@ func machineAppsPlaced(procs []model.Proc, placements map[int32]derive.ProcPlace
 // MCPPileupText supplies the same evidence and read-only advice to CLI/TUI.
 func MCPPileupText(p derive.MCPPileup) string {
 	return fmt.Sprintf("%s: %d processes · %s (%s)\n%s\nHost: %s (PID %d) · age %s\nHost started: %s\nHost project: %s\nOldest: %s\nNewest: %s\n%s",
-		p.Name, p.Count, humanBytes(p.Memory), p.MemoryMeasure, MCPCommandDetails(p.MCPCommand),
+		p.Name, p.Count, HumanBytes(p.Memory), p.MemoryMeasure, MCPCommandDetails(p.MCPCommand),
 		p.Host.Name, p.Host.PID, age(p.Host.Age), p.Host.StartedAt.Format(time.RFC3339), p.Host.Cwd,
 		p.OldestStart.Format(time.RFC3339), p.NewestStart.Format(time.RFC3339), strings.ReplaceAll(p.Advice, "; ", ";\n"))
 }
 
 // MCPCommandSummary is shared by CLI, TUI and web roll-ups.
 func MCPCommandSummary(c derive.MCPCommand) string {
-	text := fmt.Sprintf("%s  %s · %s", c.Name, MCPProcessLabel(c), humanBytes(c.Memory))
+	text := fmt.Sprintf("%s  %s · %s", c.Name, MCPProcessLabel(c), HumanBytes(c.Memory))
 	if marker := MCPCommandTrendMarker(c); marker != "" {
 		text += " · " + marker
 	}

@@ -15,6 +15,7 @@ import (
 	"io/fs"
 	"net"
 	"net/http"
+"path"
 	"strings"
 	"sync"
 	"time"
@@ -47,6 +48,8 @@ type Options struct {
 }
 
 type Server struct {
+	routes          *http.ServeMux
+	origin          http.CrossOriginProtection
 	source          Source
 	opts            Options
 	token           string
@@ -101,12 +104,14 @@ func New(source Source, opts Options) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Server{
+	s := &Server{
 		source: source, opts: opts, token: base64.RawURLEncoding.EncodeToString(token[:32]), csrf: base64.RawURLEncoding.EncodeToString(token[32:]), chatStreams: make(chan struct{}, 32),
 		themeCSS: view.ThemeCSS(), templates: t, static: http.StripPrefix("/static/", http.FileServer(http.FS(static))),
 		clients: map[chan struct{}]bool{}, ready: make(chan struct{}),
 		cache: map[snapshotKey]cachedSnapshot{}, cookieName: instanceCookie(opts.Host), sseWriteTimeout: 10 * time.Second, watchInterval: time.Second, refreshInterval: 15 * time.Second,
-	}, nil
+	}
+	s.routes = s.newRoutes()
+	return s, nil
 }
 
 func (s *Server) URL() string { return "http://" + s.opts.Host + "/?token=" + s.token }
@@ -196,30 +201,44 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unauthorized", 401)
 		return
 	}
-	if strings.HasPrefix(r.URL.Path, "/chat/api/") {
-		s.chatAPI(w, r)
-		return
+ // Match the decoded path, as the dashboard routes have always done.
+ if r.URL.RawPath!="" {
+  r=r.Clone(r.Context())
+  r.URL.RawPath=""
+ }
+ // ServeMux redirects noncanonical paths before matching. These routes retain
+ // their direct responses (including API errors and static file handling).
+ clean:=path.Clean(r.URL.Path)
+ if clean!=r.URL.Path && clean+"/"!=r.URL.Path {
+  switch {
+  case strings.HasPrefix(r.URL.Path,"/chat/api/"):s.chatAPI(w,r)
+  case strings.HasPrefix(r.URL.Path,"/static/"):s.static.ServeHTTP(w,r)
+  default:s.page(w,r)
+  }
+  return
+ }
+ s.routes.ServeHTTP(w,r)
+}
+
+func (s *Server) newRoutes() *http.ServeMux {
+	mux := http.NewServeMux()
+ mux.HandleFunc("GET /static", s.page)
+ mux.HandleFunc("GET /chat/api", s.page)
+	mux.HandleFunc("GET /chat/api/", s.chatAPI)
+	for _, path := range []string{"/chat/api/new", "/chat/api/send", "/chat/api/stop"} {
+		mux.HandleFunc("POST "+path, s.chatAPI)
 	}
-	if r.URL.Path == "/static/theme.css" {
+	mux.HandleFunc("GET /static/theme.css", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/css; charset=utf-8")
 		if r.Method != http.MethodHead {
 			_, _ = fmt.Fprint(w, s.themeCSS)
 		}
-		return
-	}
-	if strings.HasPrefix(r.URL.Path, "/static/") {
-		s.static.ServeHTTP(w, r)
-		return
-	}
-	if r.URL.Path == "/flow.json" {
-		s.flowJSON(w, r)
-		return
-	}
-	if r.URL.Path == "/events" {
-		s.events(w, r)
-		return
-	}
-	s.page(w, r)
+	})
+	mux.Handle("GET /static/", s.static)
+	mux.HandleFunc("GET /flow.json", s.flowJSON)
+	mux.HandleFunc("GET /events", s.events)
+	mux.HandleFunc("GET /", s.page)
+	return mux
 }
 
 func (s *Server) validToken(token string) bool {

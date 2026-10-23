@@ -75,26 +75,26 @@ func (d darwinPlatform) Procs(ctx context.Context) ([]model.Proc, error) {
 			continue
 		}
 		key := identKey{start: start, comm: unix.ByteSliceToString(k.Proc.P_comm[:])}
-		cmdline, exe, err := d.idents.get(pid, key, func() (string, string, error) {
-			cmdline, err := p.CmdlineWithContext(ctx)
+		argv, exe, err := d.idents.get(pid, key, func() ([]string, string, error) {
+			argv, err := p.CmdlineSliceWithContext(ctx)
 			if err != nil {
-				return "", "", err
+				return nil, "", err
 			}
 			exe, err := p.ExeWithContext(ctx)
-			return cmdline, exe, err
+			return argv, exe, err
 		})
 		if err != nil {
 			// argv may be unreadable during exec or for other users. Keep the
 			// sampled resources for the machine view; expose only the sysctl
 			// command name when another user's executable is inaccessible.
-			cmdline, exe = "", unix.ByteSliceToString(k.Proc.P_comm[:])
+			argv, exe = nil, unix.ByteSliceToString(k.Proc.P_comm[:])
 			if k.Eproc.Pcred.P_ruid == uid {
 				exe = ""
 			}
 		}
 		seen[pid] = struct{}{}
 		sample.RSS, sample.CPUSeconds = rss.RSS, times.User+times.System
-		sample.Cmdline, sample.Exe = cmdline, exe
+		sample.Cmdline, sample.Exe, sample.Argv = strings.Join(argv, " "), exe, argv
 		sample.MemoryMeasure = "rss"
 		if footprint, err := physicalFootprint(pid); err == nil {
 			sample.Footprint, sample.MemoryMeasure = footprint, "physical_footprint"

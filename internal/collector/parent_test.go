@@ -17,7 +17,7 @@ func TestParentExternalIDLinks(t *testing.T) {
 		{Adapter: "claude", ExternalID: "inferred", PID: 101},
 		{Adapter: "claude", ExternalID: "parent"},
 	}
-	p.procs = append(p.procs, model.Proc{PID: 102, PPID: 101, Cmdline: "claude"})
+	p.procs = append(p.procs, model.Proc{PID: 102, PPID: 101, Cmdline: "claude", Argv: []string{"claude"}})
 	pass(t, d, st, Plan{Procs: true})
 	assertParentExternalID(t, sessions(t, st))
 }

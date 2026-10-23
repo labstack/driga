@@ -6,7 +6,7 @@
     "rss_bytes": 49283072,
     "cpu_ms": 3000,
     "cpu_percent": 0,
-    "cmdline": "claude",
+    "cmdline": "claude", "argv": ["claude"],
     "exe": "/opt/heldout/bin/claude",
     "cwd": "{{FIXTURE_HOME}}/studios/cedar grove/grove-000"
   }
