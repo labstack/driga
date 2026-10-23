@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"github.com/charmbracelet/x/ansi"
 	"os"
 	"path/filepath"
 	"strings"
@@ -204,7 +205,7 @@ func TestChatFocusNavigation(t *testing.T) {
 	if m.chatInput.Focused() {
 		t.Fatal("idle Escape must blur")
 	}
-	if !strings.Contains(m.footer(), "c type · N tabs · q quit") {
+	if !strings.Contains(m.footer(), "c type · N tabs · ? help · q quit") {
 		t.Fatal(m.footer())
 	}
 	key(m, '?')
@@ -423,6 +424,11 @@ func TestChatActivityUsesTransportEvents(t *testing.T) {
 		m = execute(t, m, m.readChat()).(*app)
 		if got := m.chatActivity(); !strings.Contains(got, want) {
 			t.Fatalf("want %q: %s", want, got)
+		}
+		// Colour is applied after cleaning: no escape remnants on screen.
+		frame := ansi.Strip(m.View().Content)
+		if strings.Contains(frame, "[38;") || strings.Contains(frame, "[m") || strings.Count(frame, want) != 1 {
+			t.Fatalf("activity rendered badly:\n%s", frame)
 		}
 		a.release <- struct{}{}
 	}

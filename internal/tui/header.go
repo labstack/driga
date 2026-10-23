@@ -136,11 +136,24 @@ func (m *app) footer() string {
 		}
 	}
 	if m.tab == chatTab {
-		mode := "c type · N tabs · q quit"
+		// One line, most important first: hints that do not fit are dropped
+		// rather than wrapped, so the layout height never changes.
+		hints := []string{"c type", "N tabs", "? help", "q quit"}
 		if m.chatInput.Focused() {
-			mode = "esc navigate · ctrl+enter send · alt+N tabs"
+			hints = []string{"esc navigate", "ctrl+enter send", "alt+N tabs", "alt+↑ edit last", "ctrl+x clear context"}
 		}
-		return view.TokenStyle("muted", m.opts.NoColor).Render(mode)
+		line := ""
+		for _, hint := range hints {
+			next := hint
+			if line != "" {
+				next = line + " · " + hint
+			}
+			if ansi.StringWidth(next) > m.width {
+				break
+			}
+			line = next
+		}
+		return view.TokenStyle("muted", m.opts.NoColor).Render(line)
 	}
 	hints = append(hints, "esc back", "? help", "q quit")
 	if m.tab == 5 {
@@ -305,14 +318,14 @@ func (m *app) View() tea.View {
 		lines = lines[:m.bodyHeight()]
 	}
 	body = strings.Join(lines, "\n")
-	status := m.status
-	if m.tab == chatTab {
-		status = m.chatActivity()
-	}
+	status := truncate(clean(m.status), m.width)
 	if m.busy && m.tab != chatTab {
-		status = "working… · " + status
+		status = truncate(clean("working… · "+m.status), m.width)
 	}
-	content := m.header() + "\n" + m.tabBar() + "\n" + strings.Repeat("─", m.width) + "\n" + body + "\n" + truncate(clean(status), m.width) + "\n" + m.footer()
+	if m.tab == chatTab {
+		status = m.chatStatusLine()
+	}
+	content := m.header() + "\n" + m.tabBar() + "\n" + strings.Repeat("─", m.width) + "\n" + body + "\n" + status + "\n" + m.footer()
 	lines = strings.Split(content, "\n")
 	for i, line := range lines {
 		// Normalize before measuring so tabs cannot shift borders or escape in

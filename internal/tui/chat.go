@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"charm.land/lipgloss/v2"
 	"fmt"
 	"github.com/labstack/driga/internal/pathx"
 	"strings"
@@ -211,14 +212,16 @@ func (m *app) chatView() string {
 		} else {
 			body = wrapText(text, max(1, m.width-4))
 		}
-		label := row.Status
+		header := style.Render(name)
 		if row.Role == "assistant" && row.Status == "streaming" {
-			label = m.chatActivity()
+			// Activity is shown once, on the status line above the composer.
 			if row.Text != "" && m.chatActive {
 				body = chatStreamingCursor(body, max(1, m.width-4), m.opts.NoColor)
 			}
+		} else if row.Status != "" {
+			header += dim.Render(" · " + row.Status)
 		}
-		lines = append(lines, style.Render(name)+dim.Render(" · "+label), body, "")
+		lines = append(lines, header, body, "")
 	}
 	if tools > 0 {
 		lines = append(lines, dim.Render(fmt.Sprintf("▸ tools used · %d · ctrl+t expand/collapse", tools)))
@@ -234,7 +237,7 @@ func (m *app) chatView() string {
 	if m.opts.NoColor {
 		inputView = ansi.Strip(inputView)
 	}
-	composer := wrapText(context, m.width) + "\n" + inputView + "\n" + dim.Render("ctrl+enter send · alt+↑ edit last · ctrl+x clear context")
+	composer := wrapText(context, m.width) + "\n" + inputView
 	h := max(1, m.bodyHeight()-strings.Count(header, "\n")-strings.Count(composer, "\n")-3)
 	body := strings.Split(strings.Join(lines, "\n"), "\n")
 	offset := min(m.chatOffset, max(0, len(body)-h))
@@ -424,12 +427,30 @@ func (m *app) chatActivity() string {
 		name = strings.TrimPrefix(strings.TrimPrefix(name, "list_"), "get_")
 		label = "reading " + strings.ReplaceAll(clean(name), "_", " ") + "…"
 	}
-	frame := "…"
-	if !m.opts.NoColor && !m.opts.MotionOff {
-		m.chatSpinner.Style = view.TokenStyle("accent", false)
-		frame = m.chatSpinner.View()
+	return m.chatFrame() + " " + label + " · " + chatElapsed(m.opts.Now().Sub(m.chatStarted))
+}
+
+// chatFrame is the plain spinner frame: status text is cleaned of control
+// characters before it is drawn, so colour is applied only afterwards.
+func (m *app) chatFrame() string {
+	if m.opts.NoColor || m.opts.MotionOff {
+		return "…"
 	}
-	return frame + " " + label + " · " + chatElapsed(m.opts.Now().Sub(m.chatStarted))
+	m.chatSpinner.Style = lipgloss.NewStyle()
+	return m.chatSpinner.View()
+}
+
+// chatStatusLine colours the spinner of an active reply after cleaning.
+func (m *app) chatStatusLine() string {
+	text := truncate(clean(m.chatActivity()), m.width)
+	if !m.chatActive || m.opts.NoColor {
+		return text
+	}
+	frame := m.chatFrame()
+	if rest, ok := strings.CutPrefix(text, frame); ok {
+		return view.TokenStyle("accent", false).Render(frame) + view.TokenStyle("muted", false).Render(rest)
+	}
+	return text
 }
 
 func chatElapsed(elapsed time.Duration) string {
