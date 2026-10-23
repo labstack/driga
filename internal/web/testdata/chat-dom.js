@@ -50,4 +50,19 @@ async function runChatTests(){
  assert(get('chat-log').textContent.includes('DRIGA_SMOKE_OK'),'identifier underscores were consumed');
  assert(walk(get('chat-log')).some(n=>n.tagName==='em'&&n.textContent==='italic'));
  assert(walk(get('chat-log')).some(n=>n.tagName==='strong'&&n.textContent==='bold'));
+ // Run the Go parser's grammar fixtures through the actual text-only DOM path.
+ function canonical(node){
+  if(node.tagName==='#text')return node.textContent?{tag:'#text',text:node.textContent}:null;
+  const children=[];
+  if(node._text)children.push({tag:'#text',text:node._text});
+  for(const child of node.children){const n=canonical(child);if(!n)continue;const last=children.at(-1);if(n.tag==='#text'&&last?.tag==='#text')last.text+=n.text;else children.push(n);}
+  return children.length?{tag:node.tagName,children}:{tag:node.tagName};
+ }
+ for(const tc of markdownCases){
+  reset([{id:'grammar',role:'assistant',status:'complete',text:tc.input}]);
+  const article=get('chat-log').children[0];
+  assert.deepEqual(article.children.slice(1).map(canonical),tc.want,tc.name);
+ }
+ reset([{id:'plain',role:'user',status:'sent',text:'# **plain**\n- item\n```code```'}]);
+ assert(!walk(get('chat-log')).some(n=>['h1','strong','ul','pre','code'].includes(n.tagName)),'user Markdown was rendered');
 }

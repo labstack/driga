@@ -32,6 +32,8 @@
   const lines=text.replace(/\r\n?/g,"\n").split("\n");
   const list=line=>line.match(/^\s*(?:([-+*])|([0-9]+)[.)])\s+(.*)$/);
   const fence=line=>line.match(/^\s*(`{3,}|~{3,})/);
+  // Keep this text-only subset aligned with internal/chat/markdown.go.
+  const heading=line=>line.match(/^\s*(#{1,6})(?:[ \t]+(.*))?$/);
   for(let i=0;i<lines.length;){
    if(!lines[i].trim()){i++;continue;}
    const start=fence(lines[i]);
@@ -40,6 +42,8 @@
     while(i<lines.length){const end=fence(lines[i]);if(end&&end[1][0]===start[1][0]&&end[1].length>=start[1].length){i++;break;}body.push(lines[i++]);}
     const pre=document.createElement("pre"),code=document.createElement("code");code.textContent=body.join("\n");pre.append(code);node.append(pre);continue;
    }
+   const title=heading(lines[i]);
+   if(title){const h=document.createElement("h"+title[1].length);inline(h,(title[2]||"").replace(/[ \t]+#+[ \t]*$/,"").trim());node.append(h);i++;continue;}
    const first=list(lines[i]);
    if(first){
     const ordered=!!first[2],ul=document.createElement(ordered?"ol":"ul");
@@ -47,7 +51,7 @@
     node.append(ul);continue;
    }
    const body=[lines[i++]];
-   while(i<lines.length&&lines[i].trim()&&!fence(lines[i])&&!list(lines[i]))body.push(lines[i++]);
+   while(i<lines.length&&lines[i].trim()&&!fence(lines[i])&&!list(lines[i])&&!heading(lines[i]))body.push(lines[i++]);
    const p=document.createElement("p");inline(p,body.join("\n"));node.append(p);
   }
  }

@@ -199,7 +199,13 @@ func (m *app) chatView() string {
 				text = "Message body not retained by capture policy."
 			}
 		}
-		lines = append(lines, style.Render(name)+dim.Render(" · "+row.Status), wrapText(text, max(1, m.width-4)), "")
+		var body string
+		if row.Role == "assistant" {
+			body = chatMarkdown(text, max(1, m.width-4), m.opts.NoColor)
+		} else {
+			body = wrapText(text, max(1, m.width-4))
+		}
+		lines = append(lines, style.Render(name)+dim.Render(" · "+row.Status), body, "")
 	}
 	if tools > 0 {
 		lines = append(lines, dim.Render(fmt.Sprintf("▸ tools used · %d · ctrl+t expand/collapse", tools)))
