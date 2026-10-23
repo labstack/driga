@@ -56,7 +56,8 @@ async function runChatTests(){
  change({seq:1,kind:'message',message:{id:'pending-reply',role:'assistant',status:'streaming',text:''}});
  assert.equal(article(),placeholder,'thinking placeholder lost identity on reply start');
  now=65000;timer();
- assert(get('chat-status').textContent.includes('1m 05s'),'elapsed time');
+ assert(placeholder.textContent.includes('1m 05s'),'elapsed time');
+ assert.equal(get('chat-status').textContent,'','activity duplicated in status');
  reset([{id:'answer',role:'assistant',status:'complete',text:'raw fallback',html:serverHTML.answer}]);
  assert.equal(body().innerHTML,serverHTML.answer,'server HTML not inserted');
  for(const tag of ['<h1>','<strong>','<em>','<code>','<table>','type="checkbox"'])assert(body().innerHTML.includes(tag),'missing server Markdown '+tag);
@@ -102,6 +103,13 @@ async function runChatTests(){
  assert.equal(body().textContent,'**plain fallback**','client still parses Markdown');
  assert(!get('chat-log').textContent.includes('Claude'),'provider used as message label');
  const input=get('chat-input');
+ // Enter sends; Shift+Enter and an IME composition do not.
+ {let submits=0;const form=get('chat-form');const before=form.requestSubmit;form.requestSubmit=()=>{submits++;};
+  const press=extra=>{const e={key:'Enter',target:input,preventDefault(){this.defaultPrevented=true;},...extra};input.handlers.keydown(e);return e;};
+  assert.equal(press({}).defaultPrevented,true);assert.equal(submits,1,'Enter did not send');
+  assert(!press({shiftKey:true}).defaultPrevented);assert.equal(submits,1,'Shift+Enter sent');
+  press({isComposing:true});assert.equal(submits,1,'IME Enter sent');
+  form.requestSubmit=before;}
  input.value='draft';input.focus();escape(input);
  assert.equal(document.activeElement,null,'Escape did not blur draft');
  assert.equal(get('chat').hidden,false,'draft Escape closed panel');
@@ -132,8 +140,8 @@ async function runChatTests(){
  source.handlers.reset({data:JSON.stringify({cursor:30,messages:[{id:'action',role:'action',status:'pending',text:'Bash'}],actions:[action],mode:'full auto',active:true})});
  assert.equal(get('chat-mode-full')['aria-pressed'],'true');
  assert(get('chat-mode-full').classList.contains('danger'),'Full auto must be red');
- assert(get('chat-status').textContent.includes('action waiting'),'pending status missing');
- const buttons=walk(get('chat-log')).filter(n=>n.tagName==='button');
+ assert(get('chat-status').textContent.includes('waiting for your approval · Bash · 0s'),'pending status missing');
+ const buttons=walk(get('chat-approval')).filter(n=>n.tagName==='button');
  assert.deepEqual(buttons.map(n=>n.textContent),['Allow','Deny']);
  assert(buttons.every(n=>n.type==='button'&&n['aria-label']),'action buttons lack native keyboard semantics');
  buttons[1].focus();
@@ -150,13 +158,20 @@ async function runChatTests(){
  change({seq:30.4,kind:'message',message:{id:'card-reply',role:'assistant',status:'streaming',text:''}});
  change({seq:30.5,kind:'delta',message_id:'card-reply',text:'token',html:'token'});
  assert.equal(document.activeElement,buttons[1],'text delta removed approval focus');
- assert.equal(walk(get('chat-log')).filter(n=>n.tagName==='button').length,2,'text delta lost unchanged action');
- await buttons[0].handlers.click();
+ assert.equal(walk(get('chat-approval')).filter(n=>n.tagName==='button').length,2,'text delta lost unchanged action');
+ // A card must not take focus from typing, and an immediate Allow is ignored.
+ {const input=get('chat-input');input.focus();source.handlers.reset({data:JSON.stringify({cursor:30.6,messages:[{id:'late',role:'action',status:'pending',text:'Bash'}],actions:[{...action,id:'late'}],mode:'confirm',active:true})});
+  assert.equal(document.activeElement,input,'new card stole typing focus');
+  const late=walk(get('chat-approval')).filter(n=>n.tagName==='button');const sent=payloads.length;
+  await late[0].handlers.click();assert.equal(payloads.filter(p=>p.path==='/chat/api/decide').length,payloads.slice(0,sent).filter(p=>p.path==='/chat/api/decide').length,'Allow accepted before it was armed');
+  source.handlers.reset({data:JSON.stringify({cursor:30.7,messages:[{id:'action',role:'action',status:'pending',text:'Bash'}],actions:[action],mode:'full auto',active:true})});}
+ const armed=walk(get('chat-approval')).filter(n=>n.tagName==='button');
+ now+=600;await armed[0].handlers.click();
  const decision=payloads.find(p=>p.path==='/chat/api/decide');
  assert(decision&&JSON.parse(decision.options.body).allow===true,'Allow did not decide');
  assert.equal(decision.options.headers['X-CSRF-Token'],'csrf');
  change({seq:31,kind:'action',action:{...action,status:'denied',decided_by:'you'}});
- assert(!walk(get('chat-log')).some(n=>n.tagName==='button'),'decided card kept buttons');
+ assert(!walk(get('chat-approval')).some(n=>n.tagName==='button'),'decided card kept buttons');
  await get('chat-mode-auto').handlers.click();
  assert(payloads.some(p=>p.path==='/chat/api/mode'&&JSON.parse(p.options.body).mode==='auto'));
  change({seq:32,kind:'mode',mode:'auto'});
@@ -173,6 +188,83 @@ async function runChatTests(){
  assert.equal(get('chat-mode-left').hidden,true);
  source.readyState=EventSource.CLOSED;source.onerror();
  assert(get('chat-status').textContent.includes('authenticate the new web URL, then reload'),'terminal stream recovery missing');
+ await testPendingApprovalUX({change,reset,status,input,log,escape});
  location.pathname='/chat';input.value='';input.focus();escape(input);
  assert.equal(get('chat').hidden,true,'dedicated page Escape did not close');
+}
+
+async function testPendingApprovalUX({change,reset,status,input,log,escape}) {
+ const approval=get('chat-approval');
+ const card={id:'first',tool:'Bash',title:'Bash · check',input:{command:'echo > result',description:'Check output'},directory:'/project',status:'pending'};
+ input.value='';
+ source.handlers.reset({data:JSON.stringify({cursor:100,active:true,messages:[{id:'empty',role:'assistant',status:'streaming',text:''},{id:'first',role:'action',status:'pending'},{id:'q',role:'user',status:'queued',text:'later'}],actions:[card,{...card,id:'second'},{...card,id:'third'}]})});
+ // testApprovalPinnedDecodedAndFocused
+ assert.equal(approval.hidden,false);
+ assert(approval.textContent.includes('Approve? · Bash'));
+ assert(approval.textContent.includes('echo > result'));
+ assert(approval.textContent.includes('Check output'));
+ assert(approval.textContent.includes('in /project'));
+ assert(approval.textContent.includes('+2 more waiting'));
+ assert(!log.textContent.includes('Approve?'),'pending card still in transcript');
+ const buttons=walk(approval).filter(n=>n.tagName==='button');
+ assert.equal(buttons.length,2,'only oldest approval must have controls');
+ assert(!buttons.includes(document.activeElement),'a new card must not take focus');
+ const details=walk(approval).find(n=>n.tagName==='details');
+ assert(!details.open,'raw JSON starts expanded');
+ assert(details.textContent.includes('"command"'),'raw JSON missing');
+ // testApprovalElapsedNoSpinnerQueuedAndNoEmptyBubble
+ now+=65000;timer();
+ assert.equal(get('chat-status').textContent,'waiting for your approval · Bash · 1m 05s');
+ assert(!walk(get('chat-status')).some(n=>n.className==='chat-spinner'),'approval spun');
+ assert(log.textContent.includes('queued · sends after you answer the card'));
+ assert(!walk(log).some(n=>n.className==='chat-who'&&n.textContent==='Driga'),'empty Driga bubble');
+ details.open=true;status({active:true});
+ assert.equal(walk(approval).find(n=>n.tagName==='details'),details,'heartbeat replaced card');
+ assert.equal(details.open,true);
+ // testFinalAnswerFollowsDecisionAndPreservesReadingPosition
+ log.scrollHeight=1200;log.clientHeight=100;log.scrollTop=1100;log.handlers.scroll();
+ change({seq:101,kind:'action',action:{...card,status:'denied',decided_by:'you',result:'Denied'}});
+ change({seq:102,kind:'delta',message_id:'empty',text:'AFTER-ACTION-ANSWER'});
+ change({seq:103,kind:'message',message:{id:'empty',role:'assistant',status:'complete',text:'AFTER-ACTION-ANSWER'}});
+ assert.equal(log.scrollTop,1200,'final answer did not follow bottom');
+ assert(log.textContent.indexOf('denied · you · Denied')<log.textContent.indexOf('AFTER-ACTION-ANSWER'),'reply before decision');
+ assert.equal(approval.hidden,false,'next approval disappeared');
+ assert(approval.textContent.includes('+1 more waiting'));
+ log.scrollTop=0;log.handlers.scroll();
+ change({seq:104,kind:'message',message:{id:'empty',role:'assistant',status:'complete',text:'AFTER-ACTION-ANSWER more'}});
+ assert.equal(log.scrollTop,0,'completion stole reading position');
+ // testHistoricalDecisionsStayCompact
+ source.handlers.reset({data:JSON.stringify({cursor:109,active:false,messages:[{id:'saved',role:'action',status:'done',text:'Bash · done · you · success'}]})});
+ assert.equal(log.textContent,'Bash · done · you · success');
+ assert(!walk(log).some(n=>n.className==='chat-who'),'saved action became a Driga bubble');
+ // testEditWriteAndDrigaReadableFields
+ for(const [tool,input,want]of [['Edit',{file_path:'/a',old_string:'é',new_string:'new'},'/a · 2 → 3 bytes'],['Write',{file_path:'/b',content:'界'},'/b · 3 bytes'],['mcp__driga__kill',{},'Kill session #12']]){
+  source.handlers.reset({data:JSON.stringify({cursor:110,active:true,messages:[],actions:[{...card,id:tool,tool,input,title:'Kill session #12'}]})});
+  assert(approval.textContent.includes(want),'readable fields missing for '+tool);
+ }
+ source.handlers.reset({data:JSON.stringify({cursor:120,active:false,messages:[{id:'q',role:'user',status:'queued',text:'later'}],actions:[]})});
+ assert.equal(approval.hidden,true);
+ assert(log.textContent.includes('queued')&&!log.textContent.includes('sends after'),'idle queued label');
+ // testSinglePlaceholderForEmptyStreamingMessages
+ source.handlers.reset({data:JSON.stringify({cursor:125,active:true,actions:[],messages:[{id:'old-empty',role:'assistant',status:'streaming',text:''},{id:'current-empty',role:'assistant',status:'streaming',text:''}]})});
+ assert.equal(log.children.filter(n=>n.className==='chat-placeholder').length,1,'duplicate placeholder rows');
+ now+=1000;timer();
+ assert.equal(get('chat-status').textContent,'','placeholder also showed status activity');
+ // testEscapeYieldsToFocusedFilterAndHelp
+ const filter=new Element('input');filter.closest=selector=>selector==='.filter'?filter:filter;
+ escape(filter);assert.equal(get('chat').hidden,false,'filter Escape closed Chat');
+ get('help').open=true;escape(input);assert.equal(get('chat').hidden,false,'help Escape closed Chat');get('help').open=false;
+ // testNoContextLabelWithoutChips
+ for(const chip of [...get('chat-context').children])if(chip.tagName==='button')chip.handlers.click();
+ assert.equal(get('chat-context').textContent,'');
+ assert.equal(get('chat-context').hidden,true);
+ console.log('Pending approval DOM regressions passed');
+}
+
+// Also runnable directly, without Go or a server. The Go test supplies actual
+// goldmark fixtures; these minimal fixtures exercise the same DOM transitions.
+if(require.main===module){
+ global.serverHTML={answer:'<h1>Heading</h1><strong>bold</strong><em>italic</em><code>code</code><table></table><input type="checkbox"><button data-chat-session="42">session</button>',partial:'<p>**Hel</p>',complete:'<p><strong>Hello</strong></p>'};
+ require('node:vm').runInThisContext(require('node:fs').readFileSync(require('node:path').join(__dirname,'../static/chat.js'),'utf8'));
+ runChatTests().then(()=>console.log('Chat DOM tests passed')).catch(e=>{console.error(e);process.exitCode=1;});
 }

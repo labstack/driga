@@ -49,7 +49,7 @@ func TestFlowMapGeometryJavaScript(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cmd := exec.Command(runtime, "-e", string(js)+"\n"+string(test))
+	cmd := nodeScript(runtime, string(js)+"\n"+string(test))
 	cmd.Env = []string{"PATH=" + t.TempDir(), "HOME=" + t.TempDir()}
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("geometry: %v: %s", err, out)

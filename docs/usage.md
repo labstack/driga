@@ -599,8 +599,8 @@ the first turn, and an unsupported CLI fails with the missing flag and version.
 No real agent CLI is run by tests.
 
 Open **8:chat** or press **c** on any web console page to dock Chat on the right.
-Non-command text in the command bar opens the composer. Send with ⌘Enter (or
-Ctrl+Enter), use Stop to cancel the current turn and queued messages,
+Non-command text in the command bar opens the composer. Enter sends and
+Shift+Enter adds a line; use Stop to cancel the current turn and queued messages,
 and use History to reopen a conversation. Escape closes the panel when the input
 is empty; with a draft, the first Escape blurs the input and keeps the draft.
 Context chips describe the current page, selected session/project and machine;
@@ -612,7 +612,8 @@ or the current read tool. Streaming follows the bottom until you scroll up; redu
 motion uses a static dot.
 
 In `driga top`, press **8** or **c** for Chat with the current selection. Enter
-adds a line; Ctrl+Enter or Alt+Enter sends. Escape stops an active reply; otherwise
+sends; Shift+Enter adds a line, or Alt+Enter in terminals that cannot report
+Shift+Enter. Escape stops an active reply; otherwise
 it enters **navigate** mode and keeps the draft. In navigate mode, normal keys
 work: **0–8** switch tabs, **q** quits, **?** opens help and **/** filters. Press
 **c** or **Enter** to type again. **Alt+0–Alt+8** switch tabs from either mode;
