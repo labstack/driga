@@ -438,18 +438,18 @@ func isClaudeHook(value any, driga string) bool {
 	command, _ := entry["command"].(string)
 	if args, exists := entry["args"]; runtime.GOOS == "windows" && exists {
 		words, ok := args.([]any)
-		return ok && len(words) == 3 && words[0] == "hook" && words[1] == "claude" && ours(command, driga)
+		return ok && len(words) == 3 && words[0] == "hook" && words[1] == "claude" && validHookEvent(fmt.Sprint(words[2])) && ours(command, driga)
 	}
 	program, rest, ok := hookProgram(command)
-	return ok && ours(program, driga) && strings.HasPrefix(rest, " hook ")
+	return ok && ours(program, driga) && hookArguments(rest, "claude")
 }
 
 func ours(program, driga string) bool {
-	match := program == driga
+	name := pathx.RecordedBase(program)
 	if runtime.GOOS == "windows" {
-		match = pathx.Equal(program, driga)
+		name = strings.ToLower(name)
 	}
-	return program != "" && ((driga != "" && match) || filepath.Base(program) == "driga" || runtime.GOOS == "windows" && strings.EqualFold(filepath.Base(program), "driga.exe"))
+	return program != "" && (driga != "" && sameBinary(program, driga) || name == "driga" || name == "driga.exe" || strings.HasPrefix(name, "driga-"))
 }
 
 func currentBinary() string {

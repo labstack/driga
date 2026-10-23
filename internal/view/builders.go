@@ -358,6 +358,9 @@ func inboxLocal(r Reader, f Filter, now time.Time) (InboxView, error) {
 	if err != nil {
 		return v, err
 	}
+	if len(items) == 0 {
+		return v, nil
+	}
 	repos, err := r.Repos()
 	if err != nil {
 		return v, err

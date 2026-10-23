@@ -74,10 +74,14 @@ func Jump(ctx context.Context, g Environment, runner attention.Runner, j *model.
 		return err
 	}
 	if command := attention.JumpCommand(j); command != "" {
-		fmt.Fprintln(g.Stdout, command)
+		if _, err := fmt.Fprintln(g.Stdout, command); err != nil {
+			return err
+		}
 	}
 	if notice != "" {
-		fmt.Fprintln(g.Stdout, notice)
+		if _, err := fmt.Fprintln(g.Stdout, notice); err != nil {
+			return err
+		}
 	}
 	return nil
 }

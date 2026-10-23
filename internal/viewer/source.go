@@ -72,18 +72,18 @@ func NewStoreSource(st *store.Store, dataDir string, f view.Filter) *StoreSource
 // DataVersion checks the existing connection, so tokens are comparable.
 func (s *StoreSource) DataVersion(ctx context.Context) (int64, error) { return s.st.DataVersion(ctx) }
 
-// Load builds all views inside one read transaction.
+// Load builds overview views inside one read transaction; selection loads details.
 func (s *StoreSource) Load(ctx context.Context) (Snapshot, error) {
-	return s.load(ctx, "daemon", store.Scope{}, true)
+	return s.load(ctx, "daemon", store.Scope{})
 }
 
 // LoadScope builds views for a browser-selected machine scope. An optional all
 // overrides visibility for this request without mutating the source filter.
 func (s *StoreSource) LoadScope(ctx context.Context, scope store.Scope, all ...bool) (Snapshot, error) {
-	return s.load(ctx, "daemon", scope, false, all...)
+	return s.load(ctx, "daemon", scope, all...)
 }
 
-func (s *StoreSource) load(ctx context.Context, mode string, scope store.Scope, details bool, all ...bool) (Snapshot, error) {
+func (s *StoreSource) load(ctx context.Context, mode string, scope store.Scope, all ...bool) (Snapshot, error) {
 	snap := Snapshot{AgentDetails: map[int64]view.AgentView{}, ProjectDetails: map[int64]view.WhereView{}}
 	now := time.Now()
 	if s.Now != nil {
@@ -164,16 +164,6 @@ func (s *StoreSource) load(ctx context.Context, mode string, scope store.Scope, 
 			snap.Hostname = machine.Hostname
 		} else if !errors.Is(err, store.ErrNotFound) {
 			return err
-		}
-		if details {
-			for _, r := range snap.Projects.Rows {
-				d, err := view.WhereFiltered(tx, r.Status.Repo.Path, now, view.Filter{All: f.All, Scope: store.Scope{Machines: []string{r.MachineID}}})
-				if err != nil {
-					return err
-				}
-				snap.ProjectDetails[r.Status.Repo.ID] = d
-			}
-
 		}
 		if !f.Since.IsZero() {
 			snap.CoverageGaps, err = view.CoverageGaps(tx, f.Since, f.Scope)
@@ -350,15 +340,15 @@ func (s *LiveSnapshotSource) Start(ctx context.Context) {
 
 // Load waits for the first pass and returns a consistent disposable snapshot.
 func (s *LiveSnapshotSource) Load(ctx context.Context) (Snapshot, error) {
-	return s.loadSnapshot(ctx, store.Scope{}, true)
+	return s.loadSnapshot(ctx, store.Scope{})
 }
 
 // LoadScope serializes scoped reads with disposable snapshot collection.
 func (s *LiveSnapshotSource) LoadScope(ctx context.Context, scope store.Scope, all ...bool) (Snapshot, error) {
-	return s.loadSnapshot(ctx, scope, false, all...)
+	return s.loadSnapshot(ctx, scope, all...)
 }
 
-func (s *LiveSnapshotSource) loadSnapshot(ctx context.Context, scope store.Scope, details bool, all ...bool) (Snapshot, error) {
+func (s *LiveSnapshotSource) loadSnapshot(ctx context.Context, scope store.Scope, all ...bool) (Snapshot, error) {
 	select {
 	case <-ctx.Done():
 		return Snapshot{}, ctx.Err()
@@ -369,7 +359,7 @@ func (s *LiveSnapshotSource) loadSnapshot(ctx context.Context, scope store.Scope
 	if s.lastErr != nil {
 		return Snapshot{}, s.lastErr
 	}
-	snap, err := s.load(ctx, "snapshot", scope, details, all...)
+	snap, err := s.load(ctx, "snapshot", scope, all...)
 	return snap, err
 }
 

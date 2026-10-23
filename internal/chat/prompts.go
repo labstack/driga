@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -46,7 +47,18 @@ func (p Prompt) Detail() string {
 		}
 		return in.Path
 	}
-	return string(p.Input)
+	var input any
+	if json.Unmarshal(p.Input, &input) != nil {
+		return string(p.Input)
+	}
+	var display bytes.Buffer
+	encoder := json.NewEncoder(&display)
+	encoder.SetEscapeHTML(false)
+	encoder.SetIndent("", "  ")
+	if encoder.Encode(input) != nil {
+		return string(p.Input)
+	}
+	return strings.TrimSuffix(display.String(), "\n")
 }
 
 func ParsePromptAnswer(raw json.RawMessage) (string, bool, error) {
@@ -120,6 +132,7 @@ func (b *Broker) WaitPrompt(ctx context.Context, in Prompt) (PromptDecision, err
 	defer cancel()
 	p := &pendingPrompt{Prompt: in, answer: make(chan PromptDecision, 1), wait: wait}
 	b.prompts[in.ID] = p
+	b.wakePromptWatcher()
 	b.mu.Unlock()
 	var out PromptDecision
 	var err error
@@ -134,6 +147,7 @@ func (b *Broker) WaitPrompt(ctx context.Context, in Prompt) (PromptDecision, err
 	defer b.mu.Unlock()
 	if b.prompts[in.ID] == p {
 		delete(b.prompts, in.ID)
+		b.wakePromptWatcher()
 	}
 	// An answer committed under this same lock wins over cancellation. Never
 	// report success to a client and then discard its decision in the waiter.
@@ -145,17 +159,45 @@ func (b *Broker) WaitPrompt(ctx context.Context, in Prompt) (PromptDecision, err
 	return out, err
 }
 
-// SessionEnd retires prompts immediately. This single slow ticker covers ends
-// observed by the collector when a hook could not reach the broker.
+// Only pending hooks need the collector-end fallback. Idle TUI and web brokers
+// sleep until registration, retirement or shutdown changes that requirement.
+func (b *Broker) wakePromptWatcher() {
+	select {
+	case b.promptWake <- struct{}{}:
+	default:
+	}
+}
 func (b *Broker) watchPrompts() {
 	defer b.wg.Done()
-	tick := time.NewTicker(5 * time.Second)
-	defer tick.Stop()
+	b.watchPromptChanges(func() (<-chan time.Time, func()) {
+		ticker := time.NewTicker(5 * time.Second)
+		return ticker.C, ticker.Stop
+	})
+}
+func (b *Broker) watchPromptChanges(start func() (<-chan time.Time, func())) {
+	var ticks <-chan time.Time
+	var stop func()
+	defer func() {
+		if stop != nil {
+			stop()
+		}
+	}()
 	for {
+		b.mu.Lock()
+		pending := len(b.prompts) > 0
+		b.mu.Unlock()
+		if pending && ticks == nil {
+			ticks, stop = start()
+		}
+		if !pending && ticks != nil {
+			stop()
+			ticks, stop = nil, nil
+		}
 		select {
 		case <-b.ctx.Done():
 			return
-		case <-tick.C:
+		case <-b.promptWake:
+		case <-ticks:
 			b.refreshPrompts()
 		}
 	}
@@ -179,6 +221,7 @@ func (b *Broker) refreshPrompts() {
 				p.SessionID = s.ID
 				if s.EndedAt != nil {
 					delete(b.prompts, id)
+					b.wakePromptWatcher()
 					p.answer <- PromptDecision{}
 				}
 			}
@@ -203,9 +246,11 @@ func (b *Broker) answerPrompt(id string, allow bool) error {
 	p := b.prompts[id]
 	if p == nil || p.wait.Err() != nil || b.ctx.Err() != nil {
 		delete(b.prompts, id)
+		b.wakePromptWatcher()
 		return errors.New("prompt no longer waiting")
 	}
 	delete(b.prompts, id)
+	b.wakePromptWatcher()
 	out := PromptDecision{Behavior: "deny", Message: "Denied from driga"}
 	if allow {
 		out = PromptDecision{Behavior: "allow"}
@@ -224,6 +269,7 @@ func (b *Broker) EndPrompts(session, cwd string) {
 	for id, p := range b.prompts {
 		if p.Session == session && p.Cwd == cwd {
 			delete(b.prompts, id)
+			b.wakePromptWatcher()
 			p.answer <- PromptDecision{}
 		}
 	}

@@ -103,3 +103,23 @@ func TestTerminalAppAncestry(t *testing.T) {
 		})
 	}
 }
+
+func TestRunJumpFromDifferentTmuxServer(t *testing.T) {
+	var calls [][]string
+	r := runnerFunc(func(_ context.Context, name string, args ...string) ([]byte, error) {
+		calls = append(calls, append([]string{name}, args...))
+		if len(args) > 2 && args[2] == "list-clients" {
+			return []byte("100 attached /dev/ttys002\n"), nil
+		}
+		return nil, nil
+	})
+	j := &model.InboxJump{Kind: "tmux", Server: "/target/socket", Target: "dev:1.2"}
+	_, err := RunJump(context.Background(), r, j, JumpOptions{OS: "linux", Tmux: "/other/socket,1,0"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := [][]string{{"tmux", "-S", j.Server, "list-clients", "-F", "#{client_activity} #{client_name} #{client_tty}"}, {"tmux", "-S", j.Server, "switch-client", "-c", "attached", "-t", j.Target}, {"tmux", "-S", j.Server, "select-pane", "-t", j.Target}}
+	if !reflect.DeepEqual(calls, want) {
+		t.Fatalf("destination client was not selected: %v", calls)
+	}
+}

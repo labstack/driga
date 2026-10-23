@@ -98,7 +98,7 @@ func TestClaudeInstallIdempotent(t *testing.T) {
 
 func TestClaudeUninstallRemovesOnlyDriga(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "settings.json")
-	before := `{"unknown":42,"hooks":{"Stop":[{"matcher":"mixed","extra":1,"hooks":[{"command":"'/old path/driga' hook claude Stop"},{"command":"echo stay"}]},{"hooks":[{"command":"/old/driga hook claude Stop"}]}],"SessionEnd":[{"hooks":[{"command":"driga hook claude SessionEnd"}]}],"PreToolUse":[{"hooks":[{"command":"/bin/driga-other hook claude Stop"}]}]}}`
+	before := `{"unknown":42,"hooks":{"Stop":[{"matcher":"mixed","extra":1,"hooks":[{"command":"'/old path/driga' hook claude Stop"},{"command":"echo stay"}]},{"hooks":[{"command":"/old/driga hook claude Stop"}]}],"SessionEnd":[{"hooks":[{"command":"driga hook claude SessionEnd"}]}],"PreToolUse":[{"hooks":[{"command":"/bin/other-tool hook claude Stop"}]}]}}`
 	writeFixture(t, path, before)
 	d, err := hooks.ClaudeUninstall(path, false)
 	if err != nil || !d.Changed {

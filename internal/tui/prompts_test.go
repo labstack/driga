@@ -103,3 +103,17 @@ func TestPromptDetailKeepsFullInput(t *testing.T) {
 		t.Fatal("prompt input truncated", m.detailText)
 	}
 }
+
+func TestPromptDetailDecodesEscapesAndKeepsRaw(t *testing.T) {
+	m := setup(t, fixture(), Options{}).(*app)
+	raw := json.RawMessage(`{"command":"echo \u754c \u003e result"}`)
+	p := chat.Prompt{ID: "one", Session: "s", Tool: "Bash", Input: raw}
+	m.openDetail(tabRow{prompt: &p})
+	decoded, rawPart, ok := strings.Cut(m.detailText, "Raw JSON")
+	if !ok || !strings.Contains(decoded, "echo 界 > result") || strings.Contains(decoded, `\u003e`) || !strings.Contains(rawPart, `\u003e`) {
+		t.Fatal(m.detailText)
+	}
+	if string(p.Input) != string(raw) {
+		t.Fatal("raw payload changed")
+	}
+}
