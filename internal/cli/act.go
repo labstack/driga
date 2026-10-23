@@ -26,9 +26,10 @@ import (
 
 // OrphansKillCmd terminates explicitly confirmed orphan trees.
 type OrphansKillCmd struct {
-	ID    string `arg:"" optional:"" help:"Orphan candidate ID."`
-	All   bool   `help:"Ask for confirmation for each candidate."`
-	Force bool   `help:"Also SIGKILL survivors, with a second confirmation."`
+	approved bool
+	ID       string `arg:"" optional:"" help:"Orphan candidate ID."`
+	All      bool   `help:"Ask for confirmation for each candidate."`
+	Force    bool   `help:"Also SIGKILL survivors, with a second confirmation."`
 }
 
 // InboxAckCmd records explicit acknowledgments through the collector's spool.
@@ -51,11 +52,11 @@ var (
 	verifyWindow = 3 * time.Second
 )
 
-func (c OrphansKillCmd) Run(g *Globals) error {
+func (c OrphansKillCmd) Run(g *Globals) error { return c.run(context.Background(), g) }
+func (c OrphansKillCmd) run(ctx context.Context, g *Globals) error {
 	if err := actionSelection(c.ID, c.All); err != nil {
 		return err
 	}
-	ctx := context.Background()
 	st, _, closeFn, err := OpenReader(ctx, g)
 	if err != nil {
 		return err
@@ -193,14 +194,17 @@ func (c OrphansKillCmd) killCandidates(ctx context.Context, g *Globals, cfg conf
 		if _, err := fmt.Fprintf(g.Stdout, "~reclaim %d bytes (RSS estimate)\n", o.RSSTotal); err != nil {
 			return err
 		}
-		yes, err := confirmAction(input, g.Stdout, "Kill "+o.ID+"? [y/N]")
+		yes, err := true, error(nil)
+		if !c.approved {
+			yes, err = confirmAction(input, g.Stdout, "Kill "+o.ID+"? [y/N]")
+		}
 		if err != nil {
 			return err
 		}
 		if !yes {
 			continue
 		}
-		if c.Force {
+		if c.Force && !c.approved {
 			yes, err = confirmAction(input, g.Stdout, "Really SIGKILL survivors? [y/N]")
 			if err != nil {
 				return err

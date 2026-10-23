@@ -73,6 +73,10 @@ type app struct {
 	chatID         string
 	chatStatus     string
 	chatMessages   []store.ChatMessage
+	chatMode       chat.Mode
+	chatUntil      time.Time // Full auto end, from the broker.
+	chatFullAsk    bool      // m pressed once on the way to Full auto.
+	chatActions    []chat.Action
 	chatHistory    []store.Conversation
 	chatDrafts     []string
 	chatOffset     int
@@ -267,6 +271,7 @@ func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.chatID = msg.state.Conversation.ID
 		m.chatMessages = msg.state.Messages
+		m.chatActions, m.chatMode, m.chatUntil = msg.state.Actions, msg.state.Mode, msg.state.Until
 		m.chatHistory = msg.history
 		m.chatEphemeral = msg.state.Ephemeral
 		m.updateChatActivity(msg.state)
@@ -495,6 +500,10 @@ func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Mod == tea.ModAlt && msg.Code >= '0' && msg.Code <= '8' {
 			return m, m.selectTab(byte(msg.Code))
 		}
+		if m.chatFullAsk && k != "m" {
+			m.chatFullAsk = false
+			m.chatStatus = "Full auto not enabled."
+		}
 		if m.tab == chatTab && !m.filtering && !m.help {
 			if k == "esc" || m.chatInput.Focused() {
 				return m, m.chatKey(msg)
@@ -503,7 +512,7 @@ func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, m.chatInput.Focus()
 			}
 			switch k {
-			case "ctrl+enter", "super+enter", "alt+enter", "ctrl+n", "ctrl+h", "ctrl+x", "ctrl+t", "ctrl+0", "pgup", "pgdown", "alt+up":
+			case "ctrl+enter", "super+enter", "alt+enter", "ctrl+n", "ctrl+h", "ctrl+x", "ctrl+t", "ctrl+0", "pgup", "pgdown", "alt+up", "y", "n", "alt+y", "alt+n", "m":
 				return m, m.chatKey(msg)
 			}
 		}

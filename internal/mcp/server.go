@@ -37,6 +37,9 @@ type Options struct {
 	Read        func(context.Context, Query, Builder) (view.Envelope, error)
 	Doctor      func(context.Context) (view.Envelope, error)
 	Cleanup     func(context.Context, string, bool) (view.Envelope, error)
+	Chat        bool
+	Action      func(context.Context, string, json.RawMessage) (string, error)
+	Approve     func(context.Context, json.RawMessage) (json.RawMessage, error)
 }
 
 type machineInput struct {
@@ -167,6 +170,9 @@ func NewServer(o Options) *sdk.Server {
 		}
 		return o.Cleanup(ctx, in.Kind, in.Sizes)
 	})
+	if o.Chat {
+		registerActions(s, o)
+	}
 	return s
 }
 

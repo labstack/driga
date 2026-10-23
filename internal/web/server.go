@@ -228,7 +228,7 @@ func (s *Server) newRoutes() *http.ServeMux {
 	mux.HandleFunc("GET /static", s.page)
 	mux.HandleFunc("GET /chat/api", s.page)
 	mux.HandleFunc("GET /chat/api/", s.chatAPI)
-	for _, path := range []string{"/chat/api/new", "/chat/api/send", "/chat/api/stop"} {
+	for _, path := range []string{"/chat/api/new", "/chat/api/send", "/chat/api/stop", "/chat/api/mode", "/chat/api/decide"} {
 		mux.HandleFunc("POST "+path, s.chatAPI)
 	}
 	mux.HandleFunc("GET /static/theme.css", func(w http.ResponseWriter, r *http.Request) {

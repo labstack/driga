@@ -2,8 +2,8 @@
 <aside id="chat" class="chat" aria-label="Chat" hidden data-ephemeral="{{.ChatEphemeral}}">
  <header class="chat-head">
   <div class="chat-row"><b>Chat</b><label class="sr-only" for="chat-agent">Agent</label><select id="chat-agent"><option>Driga</option><option disabled>Codex · coming</option><option disabled>Copilot · coming</option></select><span class="chat-spacer"></span><button id="chat-stop" class="chat-stop" type="button" hidden>■ Stop</button><button id="chat-close" type="button" aria-label="Close Chat">×</button></div>
-  <div class="chat-row"><fieldset class="chat-trust" disabled aria-label="Trust mode"><button type="button">Confirm</button><button type="button">Auto</button><button type="button">Full auto</button></fieldset><span class="chat-note">actions arrive in the next release</span></div>
-  <p class="chat-note">Read-only · driga tools only · answered by Claude Code</p>
+  <div class="chat-row"><fieldset class="chat-trust" aria-label="Trust mode"><button id="chat-mode-confirm" data-mode="confirm" aria-pressed="true" type="button">Confirm</button><button id="chat-mode-auto" data-mode="auto" aria-pressed="false" type="button">Auto</button><button id="chat-mode-full" data-mode="full auto" aria-pressed="false" type="button">Full auto</button></fieldset><span id="chat-mode-left" class="chat-note danger" hidden></span></div>
+  <p class="chat-note">Local actions · answered by Claude Code</p>
   <p class="chat-note" id="chat-lifetime" {{if not .ChatEphemeral}}hidden{{end}}>Conversations end with this client.</p>
   <div class="chat-row"><label for="chat-history">History</label><select id="chat-history" aria-label="Conversation history"><option value="">New conversation</option></select><button id="chat-new" type="button">+ New</button></div>
  </header>

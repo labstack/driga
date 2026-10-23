@@ -15,7 +15,7 @@ import (
 )
 
 func isChatPOST(path string) bool {
-	return path == "/chat/api/send" || path == "/chat/api/stop" || path == "/chat/api/new"
+	return path == "/chat/api/send" || path == "/chat/api/stop" || path == "/chat/api/new" || path == "/chat/api/mode" || path == "/chat/api/decide"
 }
 func (s *Server) chatAPI(w http.ResponseWriter, r *http.Request) {
 	if isChatPOST(r.URL.Path) {
@@ -62,6 +62,24 @@ func (s *Server) chatAPI(w http.ResponseWriter, r *http.Request) {
 				err = s.opts.Chat.Stop(ctx, in.ID)
 			} else {
 				err = s.opts.Chat.Send(ctx, in.ID, in.Text, in.Context)
+			}
+		}
+		out = map[string]bool{"ok": err == nil}
+	case "/chat/api/mode", "/chat/api/decide":
+		var in struct {
+			ID     string    `json:"id"`
+			Mode   chat.Mode `json:"mode"`
+			Action string    `json:"action"`
+			Allow  bool      `json:"allow"`
+		}
+		decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096))
+		decoder.DisallowUnknownFields()
+		err = decoder.Decode(&in)
+		if err == nil {
+			if r.URL.Path == "/chat/api/mode" {
+				err = s.opts.Chat.SetMode(ctx, in.ID, in.Mode)
+			} else {
+				err = s.opts.Chat.Decide(ctx, in.ID, in.Action, in.Allow)
 			}
 		}
 		out = map[string]bool{"ok": err == nil}

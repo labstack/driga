@@ -74,6 +74,8 @@ func TestChatGoldens(t *testing.T) {
 			m.chatEphemeral = true
 			m.chatContext = chat.Context{Page: "flow", SessionID: 12, Machine: "local"}
 			m.chatMessages = []store.ChatMessage{{ID: "one", Role: "user", Text: "What needs me?", Status: "sent"}, {ID: "two", Role: "tool", Text: "mcp__driga__list_inbox", Status: "used"}, {ID: "three", Role: "assistant", Text: "Session #12 needs input. Its last captured state is waiting.\nUse the session view to inspect the evidence.", Status: "complete"}}
+			m.chatMessages = append(m.chatMessages, store.ChatMessage{ID: "card", Role: "action", Status: "pending", Text: "Bash · touch demo"})
+			m.chatActions = []chat.Action{{ID: "card", Tool: "Bash", Title: "Bash · touch demo", Input: []byte(`{"command":"touch demo"}`), Directory: "/project", Status: "pending"}}
 			got := m.chatView() + "\n"
 			if strings.Contains(got, "\x1b") {
 				t.Fatal("NO_COLOR emitted ANSI")
@@ -205,7 +207,7 @@ func TestChatFocusNavigation(t *testing.T) {
 	if m.chatInput.Focused() {
 		t.Fatal("idle Escape must blur")
 	}
-	if !strings.Contains(m.footer(), "c type · N tabs · ? help · q quit") {
+	if !strings.Contains(m.footer(), "c type · m trust mode · N tabs · ? help · q quit") {
 		t.Fatal(m.footer())
 	}
 	key(m, '?')

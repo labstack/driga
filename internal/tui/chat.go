@@ -103,6 +103,16 @@ func (m *app) readChat() tea.Cmd {
 }
 func (m *app) chatKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch msg.String() {
+	case "alt+y", "alt+n":
+		return m.decideChat(msg.String() == "alt+y")
+	case "y", "n":
+		if !m.chatInput.Focused() {
+			return m.decideChat(msg.String() == "y")
+		}
+	case "m":
+		if !m.chatInput.Focused() {
+			return m.cycleChatMode()
+		}
 	case "esc":
 		if m.chatActive {
 			return m.stopChat()
@@ -121,15 +131,19 @@ func (m *app) chatKey(msg tea.KeyPressMsg) tea.Cmd {
 			return chatSentMsg{err: client.Send(ctx, id, text, scope), text: text, generation: generation}
 		}
 	case "ctrl+n":
+		oldID, oldMode := m.chatID, m.chatMode
 		m.chatGeneration++
 		m.chatID = ""
 		m.chatMessages = nil
+		m.chatActions = nil
+		m.chatMode = chat.Confirm
 		m.endChatActivity()
 		m.chatEventSeq = 0
 		m.chatPolling = true
-		return m.readChat()
+		return m.readChatAfterClose(oldID, oldMode)
 	case "ctrl+h":
 		if len(m.chatHistory) > 0 {
+			oldID, oldMode := m.chatID, m.chatMode
 			index := 0
 			for i, c := range m.chatHistory {
 				if c.ID == m.chatID {
@@ -140,10 +154,12 @@ func (m *app) chatKey(msg tea.KeyPressMsg) tea.Cmd {
 			m.chatGeneration++
 			m.chatID = m.chatHistory[index].ID
 			m.chatMessages = nil
+			m.chatActions = nil
+			m.chatMode = chat.Confirm
 			m.endChatActivity()
 			m.chatEventSeq = 0
 			m.chatPolling = true
-			return m.readChat()
+			return m.readChatAfterClose(oldID, oldMode)
 		}
 		return nil
 	case "ctrl+x":
@@ -180,13 +196,37 @@ func (m *app) stopChat() tea.Cmd {
 func (m *app) chatView() string {
 	style := view.TokenStyle("accent", m.opts.NoColor)
 	dim := view.TokenStyle("muted", m.opts.NoColor)
-	header := style.Render("Chat · Driga") + " · Codex/Copilot coming\n" + dim.Render("answered by Claude Code") + "\n" + dim.Render("[Confirm · Auto · Full auto] disabled · actions arrive in the next release") + "\n" + dim.Render("Read-only · driga tools only")
+	mode := m.chatMode
+	if mode == "" {
+		mode = chat.Confirm
+	}
+	modeStyle := style
+	if mode == chat.FullAuto {
+		modeStyle = view.TokenStyle("crit", m.opts.NoColor)
+	}
+	label := string(mode)
+	if mode == chat.FullAuto && !m.chatUntil.IsZero() {
+		left := max(0, m.chatUntil.Sub(m.opts.Now()))
+		label += fmt.Sprintf(" · %dm left", int((left+time.Minute-1)/time.Minute))
+	}
+	header := style.Render("Chat · Driga") + " · Codex/Copilot coming\n" + dim.Render("answered by Claude Code") + " · " + modeStyle.Render(label)
 	if m.chatEphemeral {
 		header += "\n" + dim.Render("Conversations end with this client.")
 	}
 	var lines []string
 	tools := 0
 	for _, row := range m.chatMessages {
+		if row.Role == "action" {
+			card := clean(row.Text) + " · " + row.Status
+			for _, a := range m.chatActions {
+				if a.ID == row.ID {
+					card = m.chatCard(a)
+					break
+				}
+			}
+			lines = append(lines, card, "")
+			continue
+		}
 		if row.Role == "tool" {
 			tools++
 			if m.chatTools {
@@ -413,6 +453,9 @@ func (m *app) animateChat() tea.Cmd {
 }
 
 func (m *app) chatActivity() string {
+	if m.pendingChat() != nil {
+		return "action waiting"
+	}
 	if !m.chatActive {
 		return m.chatStatus
 	}
@@ -468,4 +511,75 @@ func chatStreamingCursor(body string, width int, noColor bool) string {
 		return body + "\n" + cursor
 	}
 	return body + cursor
+}
+
+func (m *app) pendingChat() *chat.Action {
+	for i := range m.chatActions {
+		if m.chatActions[i].Status == "pending" {
+			return &m.chatActions[i]
+		}
+	}
+	return nil
+}
+func (m *app) decideChat(allow bool) tea.Cmd {
+	a := m.pendingChat()
+	if a == nil || m.opts.Chat == nil {
+		return nil
+	}
+	client, ctx, id, action, generation := m.opts.Chat, m.opts.Context, m.chatID, a.ID, m.chatGeneration
+	return func() tea.Msg { return chatSentMsg{err: client.Decide(ctx, id, action, allow), generation: generation} }
+}
+func (m *app) cycleChatMode() tea.Cmd {
+	if m.opts.Chat == nil || m.chatID == "" {
+		return nil
+	}
+	mode := chat.Auto
+	if m.chatMode == chat.Auto {
+		mode = chat.FullAuto
+	} else if m.chatMode == chat.FullAuto {
+		mode = chat.Confirm
+	}
+	// Full auto runs commands without cards, so it takes a second press.
+	if mode == chat.FullAuto && !m.chatFullAsk {
+		m.chatFullAsk = true
+		m.chatStatus = "Full auto runs every action without asking for 30 minutes · m again to confirm"
+		return nil
+	}
+	m.chatFullAsk = false
+	client, ctx, id, generation := m.opts.Chat, m.opts.Context, m.chatID, m.chatGeneration
+	return func() tea.Msg { return chatSentMsg{err: client.SetMode(ctx, id, mode), generation: generation} }
+}
+func (m *app) chatCard(a chat.Action) string {
+	token := "tool"
+	if a.Status == "pending" {
+		token = "accent"
+	} else if a.Status == "denied" || a.Status == "failed" || a.Status == "expired" {
+		token = "crit"
+	}
+	title := view.TokenStyle(token, m.opts.NoColor).Render(clean(a.Title) + " · " + a.Status)
+	if a.DecidedBy != "" {
+		title += " · " + a.DecidedBy
+	}
+	body := clean(a.Directory) + "\n" + clean(string(a.Input))
+	if a.Result != "" {
+		body += "\n" + clean(a.Result)
+	}
+	if a.Status == "pending" {
+		body += "\ny allow · n deny · alt+y/alt+n while typing"
+	}
+	return title + "\n" + wrapText(body, max(1, m.width-4))
+}
+
+func (m *app) readChatAfterClose(id string, mode chat.Mode) tea.Cmd {
+	read := m.readChat()
+	if mode != chat.FullAuto || id == "" || m.opts.Chat == nil {
+		return read
+	}
+	client, ctx, generation := m.opts.Chat, m.opts.Context, m.chatGeneration
+	return func() tea.Msg {
+		if err := client.SetMode(ctx, id, chat.Confirm); err != nil {
+			return chatStateMsg{generation: generation, err: err}
+		}
+		return read()
+	}
 }

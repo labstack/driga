@@ -620,12 +620,42 @@ starts a conversation, Ctrl+T toggles tool details, Ctrl+X clears context and
 Ctrl+0 returns Home. Thinking/writing/tool status includes elapsed time and a
 streaming cursor; NoColor uses a static indicator. Flow's copy-resume key is **C**.
 
-Chat understands collected state only. Native shell/file tools are disabled
-with `--tools ""`; each run injects driga's read-only MCP server using a private
-config and `--strict-mcp-config`. `--safe-mode` disables hooks, plugins, skills
-and other customizations while retaining Claude's authentication/model/permission
-settings. Only the explicit driga read-tool list is approved. Trust controls are
-disabled. Chat does not dispatch tasks or approve agent actions.
+Chat can acknowledge inbox items, jump to a session terminal, kill an agent or
+orphan, clean up a candidate and refresh project summaries. It also has Claude’s
+built-in shell and file tools. Actions are local-only and keep the CLI’s process,
+cleanup and jump safety checks. Chat never types into a live agent terminal.
+
+Each conversation starts in **Confirm**. Change trust mode with the web header
+buttons or **m** in TUI navigate mode:
+
+| Mode | Runs without asking | Asks |
+|---|---|---|
+| Confirm | Reads | Every other call |
+| Auto | Reads, inbox acknowledgments, jumps, summaries, Edit/Write inside the conversation working directory | Bash, kill, cleanup, WebFetch, outside writes and unknown tools |
+| Full auto | Everything | Nothing |
+
+Full auto is shown in red. It ends when you switch it off, close the conversation
+or restart the broker; it is never persisted. Only clients can change modes or
+decide cards. Model text, files and tool output cannot change that authority.
+
+An action card shows the tool, exact input, working directory, status, who decided
+and the result. Click **Allow** or **Deny** on the web. In TUI navigate mode,
+**y** allows and **n** denies the oldest pending card; while typing use **Alt+y**
+and **Alt+n**. The status line says **action waiting**. Stop denies pending cards
+before stopping the turn and queue. Unanswered cards expire after ten minutes.
+Action log entries follow the conversation capture policy and retention.
+
+The explicit read allowlist includes driga’s read tools and Read, Glob, Grep, LS,
+TodoWrite and NotebookRead. Claude also detects its own read-only shell commands
+(such as `echo` and `cat`) and runs them without calling the permission bridge;
+reads are allowed in every mode. Other calls go through driga’s permission gate.
+Chat uses `--tools default`, `--setting-sources ""` and `--strict-mcp-config` to
+keep user settings, hooks, plugins and other MCP servers out. If Claude lacks
+`--permission-prompts`, Chat stays read-only and explains why once.
+
+`driga ask` stays read-only: it has no action cards. The ordinary `driga mcp`
+server for your own agents also stays read-only. Chat’s private `mcp --chat`
+child supplies its action tools and permission bridge.
 
 The collector owns the broker and its local socket, using the shared directory
 rule described in Fleet setup. Web, TUI and ask connect locally. Without a service, the opening
@@ -643,8 +673,8 @@ chat message bodies under `capture_text = "titles"`; `snippets` retains scrubbed
 and browser history stores no chat text on disk. Tool names are retained as
 metadata. Downgrading to titles erases retained bodies when the broker starts.
 Claude's own session history is vendor-managed and enables `--resume`; driga's
-capture policy does not control that vendor history. Chat makes no new network
-connection except the selected CLI's existing vendor connection.
+capture policy does not control that vendor history. Chat tools may make network connections when approved; Claude uses its existing
+vendor connection.
 
 ## Web dashboard
 
@@ -659,8 +689,7 @@ It listens on loopback only (`--listen` refuses other addresses), runs as its ow
 process so the collector's footprint is unchanged, and updates live as the collector
 writes. The token in the printed URL sets a cookie for that browser; restarting
 `driga web` issues a new token. Pages: Home, Agents, Projects, Inbox, Orphans,
-Machines, Cleanup (listing only), Flow and Chat. Nothing in the browser can kill, acknowledge or
-clean up in this version.
+Machines, Cleanup (listing only), Flow and Chat. Chat provides local actions through approval cards.
 
 ## MCP registration
 

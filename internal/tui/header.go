@@ -138,9 +138,16 @@ func (m *app) footer() string {
 	if m.tab == chatTab {
 		// One line, most important first: hints that do not fit are dropped
 		// rather than wrapped, so the layout height never changes.
-		hints := []string{"c type", "N tabs", "? help", "q quit"}
+		hints := []string{"c type", "m trust mode", "N tabs", "? help", "q quit"}
 		if m.chatInput.Focused() {
 			hints = []string{"esc navigate", "ctrl+enter send", "alt+N tabs", "alt+↑ edit last", "ctrl+x clear context"}
+		}
+		if m.pendingChat() != nil {
+			hint := "y/n allow/deny"
+			if m.chatInput.Focused() {
+				hint = "alt+y/alt+n allow/deny"
+			}
+			hints = append([]string{hint}, hints...)
 		}
 		line := ""
 		for _, hint := range hints {
@@ -298,7 +305,7 @@ func (m *app) View() tea.View {
 		body = m.viewport.View()
 	}
 	if m.help {
-		body = wrapText("0 Home · 1–8 tabs · ↑/↓ or j/k move · enter detail · esc back\nChat: esc stops a reply; otherwise navigate · c/enter type · alt+0–8 tabs\nctrl+enter send · ctrl+n new · ctrl+h history · ctrl+t tools · ctrl+x clear context\n7 Flow · 8 Chat · j/k session · enter jump · [/] family · -/+ zoom · tab needs · C resume · c Chat\nm cycle machine scope · / filter · enter apply · esc clear · s sort: state, age, mem, project · S summarize selected project\ng group by project · →/← expand/collapse families and worktrees\nx/space acknowledge Needs you / Inbox · X acknowledge all Inbox (confirm)\nclick select · click selected row to open · wheel scroll\npgup/pgdown scroll Home · k kill orphan (confirm) · K force (two confirmations)\no open terminal · ? close help · q / ctrl+c quit", m.width)
+		body = wrapText("0 Home · 1–8 tabs · ↑/↓ or j/k move · enter detail · esc back\nChat: esc stops a reply; otherwise navigate · c/enter type · alt+0–8 tabs\nChat: y/n allow/deny · alt+y/alt+n while typing · m trust mode (navigate)\nctrl+enter send · ctrl+n new · ctrl+h history · ctrl+t tools · ctrl+x clear context\n7 Flow · 8 Chat · j/k session · enter jump · [/] family · -/+ zoom · tab needs · C resume · c Chat\nm cycle machine scope · / filter · enter apply · esc clear · s sort: state, age, mem, project · S summarize selected project\ng group by project · →/← expand/collapse families and worktrees\nx/space acknowledge Needs you / Inbox · X acknowledge all Inbox (confirm)\nclick select · click selected row to open · wheel scroll\npgup/pgdown scroll Home · k kill orphan (confirm) · K force (two confirmations)\no open terminal · ? close help · q / ctrl+c quit", m.width)
 		if m.tmuxTarget() != "" {
 			body += "\na attach tmux"
 		}

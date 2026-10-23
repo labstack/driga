@@ -73,7 +73,7 @@ echo '{"type":"result","result":"answer","is_error":false}'`)
 	if err := json.Unmarshal(content, &got); err != nil {
 		t.Fatal(err)
 	}
-	expected := map[string]any{"mcpServers": map[string]any{"driga": map[string]any{"command": executable, "args": []any{"mcp", "--chat"}, "env": map[string]any{"DRIGA_DATA_DIR": config.DataDir(), "DRIGA_CONFIG": config.Path(), "DRIGA_SPOOL_DIR": config.SpoolDir()}}}}
+	expected := map[string]any{"mcpServers": map[string]any{"driga": map[string]any{"command": executable, "args": []any{"mcp", "--chat"}, "env": map[string]any{"DRIGA_CHAT_READ_ONLY": "1", "DRIGA_DATA_DIR": config.DataDir(), "DRIGA_CONFIG": config.Path(), "DRIGA_SPOOL_DIR": config.SpoolDir()}}}}
 	if !reflect.DeepEqual(got, expected) {
 		t.Fatalf("MCP config=%s", content)
 	}

@@ -3,9 +3,11 @@ package chat
 import (
 	"bytes"
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/google/uuid"
 	"github.com/labstack/driga/internal/fleet"
 	"github.com/labstack/driga/internal/secfile"
 	"io"
@@ -15,6 +17,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/labstack/driga/internal/store"
@@ -25,6 +28,11 @@ func SocketPath(dataDir string) string { return fleet.WatchSocketPath(dataDir, "
 // Listen is owned by the collector lock holder. Never replace a live socket or
 // a regular file. The private parent prevents access during listen/chmod.
 func Listen(ctx context.Context, dataDir string, b *Broker) (func(), error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return listen(ctx, dataDir, b)
+}
+func listen(ctx context.Context, dataDir string, b *Broker) (func(), error) {
 	if err := secfile.MkdirPrivate(dataDir); err != nil {
 		return nil, err
 	}
@@ -61,18 +69,84 @@ func Listen(ctx context.Context, dataDir string, b *Broker) (func(), error) {
 			return nil, err
 		}
 	}
-	server := &http.Server{Handler: handler(b), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 10 * time.Second, IdleTimeout: time.Minute, BaseContext: func(net.Listener) context.Context { return ctx }}
+	if b.clientToken == "" {
+		b.clientToken = uuid.NewString() + uuid.NewString()
+	}
+	key := b.clientToken
+	keyPath := filepath.Join(dataDir, "chat.key")
+	f, err := secfile.CreateTemp(dataDir, "chat-key-*")
+	if err != nil {
+		l.Close()
+		return nil, err
+	}
+	name := f.Name()
+	if _, err = f.WriteString(key); err == nil {
+		err = f.Close()
+	} else {
+		f.Close()
+	}
+	if err == nil {
+		err = os.Rename(name, keyPath)
+	}
+	if err != nil {
+		os.Remove(name)
+		l.Close()
+		return nil, err
+	}
+	b.socket = path
+	server := &http.Server{Handler: handler(b), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: ApprovalTTL + time.Minute, WriteTimeout: ApprovalTTL + time.Minute, IdleTimeout: time.Minute, BaseContext: func(net.Listener) context.Context { return ctx }}
 	done := make(chan struct{})
 	go func() { defer close(done); _ = server.Serve(l) }()
-	closeFn := func() { _ = server.Close(); <-done }
+	var once sync.Once
+	closeFn := func() { once.Do(func() { _ = server.Close(); <-done; _ = os.Remove(path); _ = os.Remove(keyPath) }) }
 	return closeFn, nil
 }
-func handler(b Client) http.Handler {
+func handler(b *Broker) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		var out any
 		var err error
+		bridge := r.URL.Path == "/approve" || r.URL.Path == "/claim" || r.URL.Path == "/complete"
+		if !bridge && (b.clientToken == "" || subtle.ConstantTimeCompare([]byte(r.Header.Get("Authorization")), []byte(b.clientToken)) != 1) {
+			http.Error(w, "invalid client token", 403)
+			return
+		}
 		switch {
+		case r.Method == "POST" && bridge:
+			var in struct {
+				Approval
+				ID, Result string
+				Failed     bool
+			}
+			decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, MaxText+8192))
+			decoder.DisallowUnknownFields()
+			err = decoder.Decode(&in)
+			if err == nil {
+				switch r.URL.Path {
+				case "/approve":
+					out, err = b.Approve(r.Context(), in.Approval)
+				case "/claim":
+					out, err = b.Claim(in.Approval)
+				case "/complete":
+					err = b.Complete(in.Approval, in.ID, in.Result, in.Failed)
+				}
+			}
+		case r.Method == "POST" && (r.URL.Path == "/mode" || r.URL.Path == "/decide"):
+			var in struct {
+				ID, Action string
+				Mode       Mode
+				Allow      bool
+			}
+			decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096))
+			decoder.DisallowUnknownFields()
+			err = decoder.Decode(&in)
+			if err == nil {
+				if r.URL.Path == "/mode" {
+					err = b.SetMode(r.Context(), in.ID, in.Mode)
+				} else {
+					err = b.Decide(r.Context(), in.ID, in.Action, in.Allow)
+				}
+			}
 		case r.Method == "GET" && r.URL.Path == "/health":
 			out = map[string]bool{"ok": true}
 		case r.Method == "GET" && r.URL.Path == "/conversations":
@@ -116,12 +190,31 @@ func handler(b Client) http.Handler {
 }
 
 type Remote struct {
+	mu        sync.Mutex
+	fullAuto  map[string]bool
+	token     string
 	http      *http.Client
 	transport *http.Transport
 }
 
 func Dial(ctx context.Context, dataDir string) (*Remote, error) {
 	path := SocketPath(dataDir)
+	c, err := dialPath(ctx, path)
+	if err != nil {
+		return nil, err
+	}
+	key, err := os.ReadFile(filepath.Join(dataDir, "chat.key"))
+	if err == nil {
+		c.token = string(key)
+		err = c.call(ctx, "GET", "/health", nil, nil)
+	}
+	if err != nil {
+		c.Close()
+		return nil, err
+	}
+	return c, nil
+}
+func dialPath(ctx context.Context, path string) (*Remote, error) {
 	if err := fleet.CheckSocketDir(path); err != nil {
 		return nil, err
 	}
@@ -135,14 +228,21 @@ func Dial(ctx context.Context, dataDir string) (*Remote, error) {
 	t := &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 		return (&net.Dialer{Timeout: time.Second}).DialContext(ctx, "unix", path)
 	}}
-	c := &Remote{http: &http.Client{Transport: t, Timeout: 10 * time.Second}, transport: t}
-	if err := c.call(ctx, "GET", "/health", nil, nil); err != nil {
-		c.Close()
-		return nil, err
-	}
+	c := &Remote{http: &http.Client{Transport: t, Timeout: ApprovalTTL + time.Minute}, transport: t}
 	return c, nil
 }
-func (c *Remote) Close() { c.transport.CloseIdleConnections() }
+func (c *Remote) Close() {
+	c.mu.Lock()
+	ids := c.fullAuto
+	c.fullAuto = nil
+	c.mu.Unlock()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	for id := range ids {
+		_ = c.call(ctx, "POST", "/mode", map[string]any{"id": id, "mode": Confirm}, nil)
+	}
+	c.transport.CloseIdleConnections()
+}
 func (c *Remote) call(ctx context.Context, method, path string, in, out any) error {
 	var body bytes.Buffer
 	if in != nil {
@@ -154,6 +254,7 @@ func (c *Remote) call(ctx context.Context, method, path string, in, out any) err
 	if err != nil {
 		return err
 	}
+	req.Header.Set("Authorization", c.token)
 	res, err := c.http.Do(req)
 	if err != nil {
 		return err
@@ -217,11 +318,105 @@ func Open(ctx context.Context, dataDir string, snippets bool) (Client, bool, fun
 		st.Close()
 		return nil, false, nil, err
 	}
+	private, err := os.MkdirTemp("", "driga-chat-")
+	if err != nil {
+		b.Close()
+		if collected != nil {
+			collected.Close()
+		}
+		st.Close()
+		return nil, false, nil, err
+	}
+	stopSocket, err := Listen(ctx, private, b)
+	if err != nil {
+		os.RemoveAll(private)
+		b.Close()
+		if collected != nil {
+			collected.Close()
+		}
+		st.Close()
+		return nil, false, nil, err
+	}
 	return b, true, func() {
 		b.Close()
+		stopSocket()
+		os.RemoveAll(private)
 		if collected != nil {
 			_ = collected.Close()
 		}
 		_ = st.Close()
 	}, nil
+}
+
+func (c *Remote) SetMode(ctx context.Context, id string, mode Mode) error {
+	err := c.call(ctx, "POST", "/mode", map[string]any{"id": id, "mode": mode}, nil)
+	if err == nil {
+		c.mu.Lock()
+		if mode == FullAuto {
+			if c.fullAuto == nil {
+				c.fullAuto = map[string]bool{}
+			}
+			c.fullAuto[id] = true
+		} else {
+			delete(c.fullAuto, id)
+		}
+		c.mu.Unlock()
+	}
+	return err
+}
+func (c *Remote) Decide(ctx context.Context, id, action string, allow bool) error {
+	return c.call(ctx, "POST", "/decide", map[string]any{"id": id, "action": action, "allow": allow}, nil)
+}
+func Bridge(ctx context.Context, path string, in Approval) (Permission, error) {
+	c, err := dialPath(ctx, path)
+	if err != nil {
+		return Permission{}, err
+	}
+	defer c.Close()
+	var out Permission
+	err = c.call(ctx, "POST", "/approve", in, &out)
+	return out, err
+}
+func ApproveFromEnvironment(ctx context.Context, in Approval) (Permission, error) {
+	in.Conversation, in.Token = os.Getenv("DRIGA_CHAT_CONVERSATION"), os.Getenv("DRIGA_CHAT_TOKEN")
+	return Bridge(ctx, os.Getenv("DRIGA_CHAT_SOCKET"), in)
+}
+func Claim(ctx context.Context, path string, in Approval) (string, error) {
+	c, err := dialPath(ctx, path)
+	if err != nil {
+		return "", err
+	}
+	defer c.Close()
+	var out string
+	err = c.call(ctx, "POST", "/claim", in, &out)
+	return out, err
+}
+func Complete(ctx context.Context, path string, in Approval, id, result string, failed bool) error {
+	c, err := dialPath(ctx, path)
+	if err != nil {
+		return err
+	}
+	defer c.Close()
+	return c.call(ctx, "POST", "/complete", struct {
+		Approval
+		ID, Result string
+		Failed     bool
+	}{in, id, result, failed}, nil)
+}
+
+func (b *Broker) ensureSocket() error {
+	if b.socket != "" {
+		return nil
+	}
+	dir, err := os.MkdirTemp("", "driga-chat-")
+	if err != nil {
+		return err
+	}
+	closeSocket, err := listen(b.ctx, dir, b)
+	if err != nil {
+		os.RemoveAll(dir)
+		return err
+	}
+	b.closeSocket = func() { closeSocket(); _ = os.RemoveAll(dir) }
+	return nil
 }

@@ -1,7 +1,5 @@
 Chat · Driga · Codex/Copilot coming
-answered by Claude Code
-[Confirm · Auto · Full auto] disabled · actions arrive in the next release
-Read-only · driga tools only
+answered by Claude Code · confirm
 Conversations end with this client.
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 You · sent
@@ -10,10 +8,12 @@ What needs me?
 Driga · complete
 Session #12 needs input. Its last captured state is waiting. Use the session view to inspect the evidence.
 
+Bash · touch demo · pending
+/project
+{"command":"touch demo"}
+y allow · n deny · alt+y/alt+n while typing
+
 ▸ tools used · 1 · ctrl+t expand/collapse
-
-
-
 
 
 

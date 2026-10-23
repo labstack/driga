@@ -67,7 +67,7 @@ func TestChatSecurity(t *testing.T) {
 	if w := request(s, "GET", "/chat/api/send", s.token); w.Code != 405 {
 		t.Fatal(w.Code)
 	}
-	if w := request(s, "GET", "/chat", s.token); w.Code != 200 || !strings.Contains(w.Body.String(), "actions arrive in the next release") {
+	if w := request(s, "GET", "/chat", s.token); w.Code != 200 || !strings.Contains(w.Body.String(), `id="chat-mode-confirm"`) || strings.Contains(w.Body.String(), "actions arrive in the next release") {
 		t.Fatal(w.Code, w.Body)
 	}
 }
