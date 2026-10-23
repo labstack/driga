@@ -35,7 +35,13 @@ if [ "$snapshot" != true ]; then
   jq '{status, statusSummary, issues}' "$build_dir/notary-log.json"
   jq -e '.status == "Accepted"' "$build_dir/notary-result.json" >/dev/null
   jq -e '[.issues[]? | select(.severity == "error")] | length == 0' "$build_dir/notary-log.json" >/dev/null
-  xcrun stapler staple "$app"
+  # Stapling fetches the ticket from Apple's CDN, which a runner's network
+  # can drop briefly; notarization itself has already succeeded.
+  for attempt in 1 2 3 4 5; do
+    xcrun stapler staple "$app" && break
+    [ "$attempt" = 5 ] && exit 1
+    sleep 30
+  done
   xcrun stapler validate "$app"
   codesign --verify --deep --strict --verbose=2 "$app"
   spctl --assess --type execute --verbose=2 "$app"
