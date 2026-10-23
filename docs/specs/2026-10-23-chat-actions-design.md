@@ -124,8 +124,18 @@ Chat should be able to do what the maintainer would do at the keyboard:
 | **Full auto** | Everything | Nothing; header shows it in red |
 
 - The mode belongs to one conversation and starts as Confirm.
-- Full auto ends when the user switches it off, the conversation is closed, or
-  the broker restarts. It never carries over.
+- Full auto runs for 30 minutes, then drops back to Auto by itself.
+  - The header shows the time left.
+  - Switching it on again restarts the 30 minutes.
+  - It also ends when the user switches it off, the conversation is closed,
+    or the broker restarts. It never carries over.
+- Why the limit: Chat reads other sessions' transcripts, files and web pages.
+  Text in any of them can try to steer the model (prompt injection). In
+  Confirm and Auto, a shell command, kill or cleanup still stops at a card.
+  In Full auto nothing stops it, and it runs with the user's full account
+  access. A short window keeps that exposure deliberate and brief.
+- Switching to Full auto asks once, in the client, to confirm. The
+  confirmation says that commands will run without cards for 30 minutes.
 - Unknown tools always ask in Auto, so new tools never run silently.
 
 ## Action cards
