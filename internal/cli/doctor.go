@@ -216,11 +216,13 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 			}
 			others := 0
 			for _, p := range procs {
-				if !isCollectorProc(p) {
-					continue
-				}
-				if !held || p.PID <= 0 || int64(p.PID) != ownerPID || !alive(p.PID, p.StartTime) {
-					others++
+				// The lock owner is this data directory's collector whatever its
+				// binary is called; other collectors are recognised by name.
+				owned := held && p.PID > 0 && int64(p.PID) == ownerPID && alive(p.PID, p.StartTime) && len(p.Argv) >= 2 && p.Argv[1] == "collect"
+				if !owned {
+					if isCollectorProc(p) {
+						others++
+					}
 					continue
 				}
 				rss = p.RSS
