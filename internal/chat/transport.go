@@ -168,13 +168,22 @@ func handler(b *Broker) http.Handler {
 			if err == nil {
 				err = b.Stop(r.Context(), in.ID)
 			}
-		case r.Method == "GET" && r.URL.Path == "/state":
+		case r.Method == "GET" && (r.URL.Path == "/state" || r.URL.Path == "/wait"):
 			var seq uint64
 			if raw := r.URL.Query().Get("after"); raw != "" {
 				_, err = fmt.Sscan(raw, &seq)
 			}
 			if err == nil {
-				out, err = b.Read(r.Context(), r.URL.Query().Get("id"), seq)
+				if r.URL.Path == "/wait" {
+					ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+					out, err = b.Wait(ctx, r.URL.Query().Get("id"), seq)
+					cancel()
+					if errors.Is(err, context.DeadlineExceeded) && r.Context().Err() == nil {
+						out, err = b.Read(r.Context(), r.URL.Query().Get("id"), seq)
+					}
+				} else {
+					out, err = b.Read(r.Context(), r.URL.Query().Get("id"), seq)
+				}
 			}
 		default:
 			http.NotFound(w, r)
@@ -193,6 +202,7 @@ type Remote struct {
 	mu        sync.Mutex
 	fullAuto  map[string]bool
 	token     string
+	keyPath   string
 	http      *http.Client
 	transport *http.Transport
 }
@@ -203,7 +213,8 @@ func Dial(ctx context.Context, dataDir string) (*Remote, error) {
 	if err != nil {
 		return nil, err
 	}
-	key, err := os.ReadFile(filepath.Join(dataDir, "chat.key"))
+	c.keyPath = filepath.Join(dataDir, "chat.key")
+	key, err := os.ReadFile(c.keyPath)
 	if err == nil {
 		c.token = string(key)
 		err = c.call(ctx, "GET", "/health", nil, nil)
@@ -244,6 +255,9 @@ func (c *Remote) Close() {
 	c.transport.CloseIdleConnections()
 }
 func (c *Remote) call(ctx context.Context, method, path string, in, out any) error {
+	return c.callOnce(ctx, method, path, in, out, true)
+}
+func (c *Remote) callOnce(ctx context.Context, method, path string, in, out any, retry bool) error {
 	var body bytes.Buffer
 	if in != nil {
 		if err := json.NewEncoder(&body).Encode(in); err != nil {
@@ -254,7 +268,10 @@ func (c *Remote) call(ctx context.Context, method, path string, in, out any) err
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Authorization", c.token)
+	c.mu.Lock()
+	token := c.token
+	c.mu.Unlock()
+	req.Header.Set("Authorization", token)
 	res, err := c.http.Do(req)
 	if err != nil {
 		return err
@@ -262,9 +279,29 @@ func (c *Remote) call(ctx context.Context, method, path string, in, out any) err
 	defer res.Body.Close()
 	reader := io.LimitReader(res.Body, 40<<20)
 	if res.StatusCode != 200 {
+		data, _ := io.ReadAll(reader)
+		// A rejected client token has not reached a handler, so retry once
+		// with the collector's new owner-only key, including for POSTs.
+		if res.StatusCode == http.StatusForbidden && retry && c.keyPath != "" {
+			key, err := os.ReadFile(c.keyPath)
+			if err != nil {
+				return err
+			}
+			if string(key) != token {
+				c.mu.Lock()
+				c.token = string(key)
+				c.fullAuto = nil
+				c.mu.Unlock()
+				res.Body.Close()
+				return c.callOnce(ctx, method, path, in, out, false)
+			}
+		}
 		var e struct{ Error string }
-		_ = json.NewDecoder(reader).Decode(&e)
-		return fmt.Errorf("chat broker: %s", e.Error)
+		_ = json.Unmarshal(data, &e)
+		if e.Error == "" {
+			e.Error = strings.TrimSpace(string(data))
+		}
+		return fmt.Errorf("chat broker: HTTP %d: %s", res.StatusCode, e.Error)
 	}
 	if out == nil {
 		_, err = io.Copy(io.Discard, reader)
@@ -419,4 +456,10 @@ func (b *Broker) ensureSocket() error {
 	}
 	b.closeSocket = func() { closeSocket(); _ = os.RemoveAll(dir) }
 	return nil
+}
+
+func (c *Remote) Wait(ctx context.Context, id string, after uint64) (State, error) {
+	var out State
+	err := c.call(ctx, "GET", fmt.Sprintf("/wait?id=%s&after=%d", id, after), nil, &out)
+	return out, err
 }

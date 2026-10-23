@@ -26,14 +26,15 @@ type MarkdownDocument struct {
 var markdown = goldmark.New(goldmark.WithExtensions(extension.GFM),
 	goldmark.WithRendererOptions(extension.WithTableCellAlignMethod(extension.TableCellAlignAttribute)))
 
-func ParseMarkdown(input string) MarkdownDocument {
+func ParseMarkdown(input string) MarkdownDocument { return parseMarkdown(PlainCitations(input)) }
+func parseMarkdown(input string) MarkdownDocument {
 	if len(input) > MaxText {
 		input = input[:MaxText]
 		for !utf8.ValidString(input) && len(input) > 0 {
 			input = input[:len(input)-1]
 		}
 	}
-	source := []byte(PlainCitations(input))
+	source := []byte(input)
 	return MarkdownDocument{Source: source, Root: markdown.Parser().Parse(text.NewReader(source))}
 }
 
@@ -63,7 +64,8 @@ func safeMarkdownURL(value []byte) bool {
 // MarkdownHTML is the only producer of assistant HTML. Images and unsupported
 // URL schemes become escaped text, including relative and protocol-relative URLs.
 func MarkdownHTML(input string) string {
-	d := ParseMarkdown(input)
+	d := parseMarkdown(input)
+	renderCitations(d)
 	var blocked []ast.Node
 	_ = ast.Walk(d.Root, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
 		if !entering {
@@ -116,4 +118,64 @@ func MarkdownHTML(input string) string {
 	// bytes.Buffer writes cannot fail.
 	_ = markdown.Renderer().Render(&out, d.Source, d.Root)
 	return out.String()
+}
+
+// Only digit IDs from the citation grammar enter generated markup. Raw assistant
+// HTML remains disabled. Code examples and link labels stay literal.
+func renderCitations(d MarkdownDocument) {
+	var nodes []*ast.Text
+	_ = ast.Walk(d.Root, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
+		}
+		if _, ok := n.(*ast.CodeSpan); ok {
+			return ast.WalkSkipChildren, nil
+		}
+		if _, ok := n.(*ast.Link); ok {
+			return ast.WalkSkipChildren, nil
+		}
+		if _, ok := n.(*ast.Image); ok {
+			return ast.WalkSkipChildren, nil
+		}
+		if n, ok := n.(*ast.Text); ok {
+			nodes = append(nodes, n)
+		}
+		return ast.WalkContinue, nil
+	})
+	for _, n := range nodes {
+		if n.Parent() == nil {
+			continue
+		}
+		for {
+			next, ok := n.NextSibling().(*ast.Text)
+			if !ok || n.Segment.Stop != next.Segment.Start || n.SoftLineBreak() || n.HardLineBreak() {
+				break
+			}
+			n.Segment.Stop = next.Segment.Stop
+			n.SetSoftLineBreak(next.SoftLineBreak())
+			n.SetHardLineBreak(next.HardLineBreak())
+			n.Parent().RemoveChild(n.Parent(), next)
+		}
+		if !citation.Match(n.Segment.Value(d.Source)) {
+			continue
+		}
+		value := string(n.Segment.Value(d.Source))
+		var out strings.Builder
+		end := 0
+		for _, match := range citation.FindAllStringSubmatchIndex(value, -1) {
+			out.WriteString(html.EscapeString(MarkdownText([]byte(value[end:match[0]]))))
+			id := value[match[2]:match[3]]
+			out.WriteString(`<button type="button" class="chat-chip" data-chat-session="` + id + `">session #` + id + `</button>`)
+			end = match[1]
+		}
+		out.WriteString(html.EscapeString(MarkdownText([]byte(value[end:]))))
+		if n.HardLineBreak() {
+			out.WriteString("<br>\n")
+		} else if n.SoftLineBreak() {
+			out.WriteByte('\n')
+		}
+		replacement := ast.NewString([]byte(out.String()))
+		replacement.SetCode(true)
+		n.Parent().ReplaceChild(n.Parent(), n, replacement)
+	}
 }

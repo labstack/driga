@@ -1,8 +1,12 @@
 const assert = require('node:assert/strict');
 class Element {
  constructor(tag, text=''){this.tagName=tag;this.children=[];this._text=text;this.handlers={};this.dataset={};this.value='';this.hidden=true;this.scrollHeight=0;this.scrollTop=0;this.clientHeight=0;this.classList={values:new Set(),add(...v){v.forEach(x=>this.values.add(x));},remove(...v){v.forEach(x=>this.values.delete(x));},contains(v){return this.values.has(v);},toggle(v,on){if(on)this.add(v);else this.remove(v);}};}
- append(...nodes){this.children.push(...nodes);}
- replaceChildren(...nodes){this._text='';this._html='';this.children=nodes;}
+ append(...nodes){for(const node of nodes){if(node.parentElement)node.parentElement.removeChild(node);node.parentElement=this;this.children.push(node);}}
+ insertBefore(node,before){if(node.parentElement)node.parentElement.removeChild(node);const i=before?this.children.indexOf(before):this.children.length;this.children.splice(i,0,node);node.parentElement=this;}
+ removeChild(node){if(walk(node).includes(document.activeElement))document.activeElement=null;this.children.splice(this.children.indexOf(node),1);node.parentElement=null;return node;}
+ get lastChild(){return this.children.at(-1);}
+
+ replaceChildren(...nodes){this._text='';this._html='';for(const node of [...this.children])this.removeChild(node);this.append(...nodes);}
  set textContent(text){this._text=String(text);this._html='';this.children=[];}
  get textContent(){return this._text+this.children.map(n=>n.textContent).join('');}
  set innerHTML(html){this._html=html;this.children=[];this._text='';}
@@ -16,7 +20,7 @@ class Element {
 const elements=new Map();
 const get=id=>{if(!elements.has(id))elements.set(id,new Element('div'));return elements.get(id);};
 const documentHandlers={};
-global.document={activeElement:null,getElementById:get,createElement:tag=>new Element(tag),createTextNode:text=>new Element('#text',text),querySelector:selector=>selector.startsWith('meta')?{content:'csrf'}:null,addEventListener(kind,fn){documentHandlers[kind]=fn;},dispatchEvent(){},body:new Element('body')};
+global.document={activeElement:null,getElementById:get,createElement:tag=>new Element(tag),createTextNode:text=>new Element('#text',text),querySelector:selector=>selector.startsWith('meta')?{content:'csrf'}:null,addEventListener(kind,fn){documentHandlers[kind]=fn;},dispatchEvent(event){this.lastEvent=event;},body:new Element('body')};
 let reduced=true;
 const motion={matches:reduced,addEventListener(kind,fn){this.change=fn;}};
 global.window={addEventListener(){},matchMedia(){return motion;}};
@@ -30,7 +34,7 @@ global.CustomEvent=class {constructor(type,options){this.type=type;this.detail=o
 const requests=[],payloads=[];
 global.fetch=async (path,options)=>(requests.push(path),payloads.push({path,options}),({ok:true,json:async()=>path.endsWith('new')?{id:'conversation'}:[] }));
 let source;
-global.EventSource=class extends Element {constructor(){super('source');source=this;}close(){}};
+global.EventSource=class extends Element {static CLOSED=2;constructor(){super('source');source=this;}close(){}};
 const walk=node=>[node,...node.children.flatMap(walk)];
 const change=e=>source.handlers.change({data:JSON.stringify(e)});
 const reset=(messages,active=messages.some(m=>m.status==='streaming'))=>source.handlers.reset({data:JSON.stringify({cursor:10,messages,active,ephemeral:false})});
@@ -56,7 +60,11 @@ async function runChatTests(){
  reset([{id:'answer',role:'assistant',status:'complete',text:'raw fallback',html:serverHTML.answer}]);
  assert.equal(body().innerHTML,serverHTML.answer,'server HTML not inserted');
  for(const tag of ['<h1>','<strong>','<em>','<code>','<table>','type="checkbox"'])assert(body().innerHTML.includes(tag),'missing server Markdown '+tag);
- assert(body().innerHTML.includes('#42'),'citation lost');
+ assert(body().innerHTML.includes('data-chat-session="42"'),'citation button lost');
+ get('chat-log').handlers.click({target:{closest(){return {dataset:{chatSession:'42'}};}}});
+ assert.equal(document.lastEvent.type,'driga:select-session');
+ assert.equal(document.lastEvent.detail.id,'42');
+ assert(get('chat-context').textContent.includes('session: 42'),'citation did not select context');
  assert(!body().innerHTML.includes('<script>')&&!body().innerHTML.includes('href="javascript:'),'unsafe server HTML');
  reset([{id:'stream',role:'assistant',status:'streaming',text:'',html:''}]);
  const streamNode=article();
@@ -122,6 +130,17 @@ async function runChatTests(){
  const buttons=walk(get('chat-log')).filter(n=>n.tagName==='button');
  assert.deepEqual(buttons.map(n=>n.textContent),['Allow','Deny']);
  assert(buttons.every(n=>n.type==='button'&&n['aria-label']),'action buttons lack native keyboard semantics');
+ buttons[1].focus();
+ status({active:true,queued:0});
+ assert.equal(document.activeElement,buttons[1],'heartbeat removed approval focus');
+ change({seq:30.2,kind:'message',message:{id:'tool-a',role:'tool',text:'read'}});
+ assert.equal(document.activeElement,buttons[1],'unrelated update removed approval focus');
+ const disclosure=walk(get('chat-log')).find(n=>n.tagName==='details');disclosure.open=true;
+ status({active:true,queued:0});
+ assert.equal(disclosure.open,true,'heartbeat collapsed tools');
+ change({seq:30.3,kind:'message',message:{id:'tool-b',role:'tool',text:'read more'}});
+ assert.equal(walk(get('chat-log')).find(n=>n.tagName==='details'),disclosure,'stream replaced disclosure');
+ assert.equal(disclosure.open,true,'stream collapsed tools');
  await buttons[0].handlers.click();
  const decision=payloads.find(p=>p.path==='/chat/api/decide');
  assert(decision&&JSON.parse(decision.options.body).allow===true,'Allow did not decide');
@@ -142,6 +161,8 @@ async function runChatTests(){
  assert.equal(get('chat-mode-left').hidden,false);assert.equal(get('chat-mode-left').textContent,'30m left');
  change({seq:34,kind:'mode',mode:'auto'});
  assert.equal(get('chat-mode-left').hidden,true);
+ source.readyState=EventSource.CLOSED;source.onerror();
+ assert(get('chat-status').textContent.includes('authenticate the new web URL, then reload'),'terminal stream recovery missing');
  location.pathname='/chat';input.value='';input.focus();escape(input);
  assert.equal(get('chat').hidden,true,'dedicated page Escape did not close');
 }

@@ -8,13 +8,13 @@ What needs me?
 Driga · complete
 Session #12 needs input. Its last captured state is waiting. Use the session view to inspect the evidence.
 
-Bash · touch demo · pending
+pending
+Bash · touch demo
 /project
 {"command":"touch demo"}
 y allow · n deny · alt+y/alt+n while typing
 
 ▸ tools used · 1 · ctrl+t expand/collapse
-
 
 
 

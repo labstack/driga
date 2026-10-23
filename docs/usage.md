@@ -615,7 +615,10 @@ it enters **navigate** mode and keeps the draft. In navigate mode, normal keys
 work: **0–8** switch tabs, **q** quits, **?** opens help and **/** filters. Press
 **c** or **Enter** to type again. **Alt+0–Alt+8** switch tabs from either mode;
 returning to Chat restores the draft. The footer shows the current mode.
-PgUp/PgDown scroll, Alt+Up recalls the last draft, Ctrl+H cycles history, Ctrl+N
+Help scrolls with arrows, PgUp/PgDown or the mouse wheel. Applied list filters
+stay visible in the status line; Escape clears the filter when no overlay is open.
+Session details load when selected, rather than for every overview row.
+PgUp/PgDown scroll the visible transcript with a one-line overlap and stop at its ends. Alt+Up recalls the last draft, Ctrl+H cycles history, Ctrl+N
 starts a conversation, Ctrl+T toggles tool details, Ctrl+X clears context and
 Ctrl+0 returns Home. Thinking/writing/tool status includes elapsed time and a
 streaming cursor; NoColor uses a static indicator. Flow's copy-resume key is **C**.
@@ -634,7 +637,9 @@ buttons or **m** in TUI navigate mode:
 | Auto | Reads, inbox acknowledgments, jumps, summaries, Edit/Write inside the conversation working directory | Bash, kill, cleanup, WebFetch, outside writes and unknown tools |
 | Full auto | Everything | Nothing |
 
-Full auto is shown in red. It ends when you switch it off, close the conversation
+Full auto requires confirmation and is shown in red with its remaining time.
+The TUI warning stays visible while replies and action cards update; press **m**
+again to confirm, or another key to cancel. Full auto lasts at most 30 minutes. It ends when you switch it off, close the conversation
 or restart the broker; it is never persisted. Only clients can change modes or
 decide cards. Model text, files and tool output cannot change that authority.
 
@@ -643,7 +648,10 @@ and the result. Click **Allow** or **Deny** on the web. In TUI navigate mode,
 **y** allows and **n** denies the oldest pending card; while typing use **Alt+y**
 and **Alt+n**. The status line says **action waiting**. Stop denies pending cards
 before stopping the turn and queue. Unanswered cards expire after ten minutes.
-Action log entries follow the conversation capture policy and retention.
+Action log entries follow the conversation capture policy and retention. Tool,
+status and deciding actor survive a restart even when message bodies are not
+captured. Completed cards leave the bounded live buffer as new actions arrive;
+pending and running actions remain available until decided or completed.
 
 The explicit read allowlist includes driga’s read tools and Read, Glob, Grep, LS,
 TodoWrite and NotebookRead. Claude also detects its own read-only shell commands
@@ -664,14 +672,18 @@ No driga conversation history survives that client. With the service, conversati
 IDs, vendor resume IDs and capture-filtered messages persist in SQLite for 30 days;
 interrupted work is marked interrupted after restart and is never replayed to the
 agent automatically. SSE cursors replay bounded ordered events; an expired cursor
-or service restart sends a replacement snapshot.
+or service restart sends a replacement snapshot. Existing web and TUI clients
+reload the local broker key after a collector restart. Chat streams wake on broker
+events and retain a 15-second heartbeat. If the web process itself restarts, reopen
+its newly printed authentication URL, then reload any disconnected tab.
 
 Your explicitly submitted question is scrubbed and sent to Claude. Context and
 MCP evidence pass the capture policy before reaching the agent. Driga retains no
 chat message bodies under `capture_text = "titles"`; `snippets` retains scrubbed
 200-character snippets. Live conversation text and drafts are bounded in memory,
-and browser history stores no chat text on disk. Tool names are retained as
-metadata. Downgrading to titles erases retained bodies when the broker starts.
+and browser history stores no chat text on disk. Tool names and safe action decision metadata are retained as
+metadata. Process command lines and argv require `capture_text = "snippets"` in
+Chat tool responses; other policies remove both argument-bearing fields. Downgrading to titles erases retained bodies when the broker starts.
 Claude's own session history is vendor-managed and enables `--resume`; driga's
 capture policy does not control that vendor history. Chat tools may make network connections when approved; Claude uses its existing
 vendor connection.

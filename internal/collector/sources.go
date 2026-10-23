@@ -360,10 +360,13 @@ func collectGit(ctx context.Context, d Deps, ss []model.Session, known []model.R
 			cwds = append(cwds, s.Cwd)
 		}
 	}
+	// Known repositories are exact inventory roots. A removed checkout must
+	// not be rediscovered as an unrelated repository in its parent directory.
+	roots := append([]string(nil), d.Cfg.Roots...)
 	for _, repo := range known {
-		cwds = append(cwds, repo.Path)
+		roots = append(roots, repo.Path)
 	}
-	paths, err := gitscan.DiscoverRepos(cwds, d.Cfg.Roots, d.Cfg.RootDepth, d.Cfg.Exclude)
+	paths, err := gitscan.DiscoverRepos(cwds, roots, d.Cfg.RootDepth, d.Cfg.Exclude)
 	errs := []error{err}
 	scanner := d.Git
 	if scanner == nil {
@@ -388,6 +391,9 @@ func collectGit(ctx context.Context, d Deps, ss []model.Session, known []model.R
 	close(jobs)
 	wg.Wait()
 	errs = append(errs, scanErrs...)
+	if err == nil && ctx.Err() == nil {
+		scanner.Prune(paths)
+	}
 	if err == nil {
 		present := make(map[string]bool, len(paths))
 		for _, path := range paths {

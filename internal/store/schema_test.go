@@ -214,7 +214,7 @@ func TestForwardMigrationFromBaseline(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Rewind to a baseline-only database, as created by the previous release.
-	for _, stmt := range []string{"ALTER TABLE procs DROP COLUMN argv", "DELETE FROM goose_db_version WHERE version_id > 1"} {
+	for _, stmt := range []string{"DROP INDEX sessions_active_activity", "ALTER TABLE messages DROP COLUMN decided_by", "ALTER TABLE messages DROP COLUMN tool", "ALTER TABLE procs DROP COLUMN argv", "DELETE FROM goose_db_version WHERE version_id > 1"} {
 		if _, err := db.Exec(stmt); err != nil {
 			t.Fatal(err)
 		}

@@ -15,6 +15,8 @@ type Conversation struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 type ChatMessage struct {
+	Tool           string    `json:"tool,omitempty"`
+	DecidedBy      string    `json:"decided_by,omitempty"`
 	ID             string    `json:"id"`
 	MachineID      string    `json:"machine_id"`
 	ConversationID string    `json:"conversation_id"`
@@ -57,11 +59,11 @@ func (s *Store) ChatConversation(id string) (Conversation, error) {
 	return c, err
 }
 func (s *Store) SaveChatMessage(ctx context.Context, m ChatMessage) error {
-	_, err := s.db.ExecContext(ctx, `INSERT INTO messages(id,machine_id,conversation_id,role,text,status,created_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET text=excluded.text,status=excluded.status`, m.ID, s.MachineID(), m.ConversationID, m.Role, m.Text, m.Status, unix(m.CreatedAt))
+	_, err := s.db.ExecContext(ctx, `INSERT INTO messages(id,machine_id,conversation_id,role,text,status,created_at,tool,decided_by) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET text=excluded.text,status=excluded.status,tool=excluded.tool,decided_by=excluded.decided_by`, m.ID, s.MachineID(), m.ConversationID, m.Role, m.Text, m.Status, unix(m.CreatedAt), m.Tool, m.DecidedBy)
 	return err
 }
 func (s *Store) ChatMessages(id string) ([]ChatMessage, error) {
-	rows, err := s.db.QueryContext(s.ctx, `SELECT id,machine_id,conversation_id,role,text,status,created_at FROM (SELECT * FROM messages WHERE conversation_id=? AND machine_id=? ORDER BY created_at DESC LIMIT 256) ORDER BY created_at`, id, s.MachineID())
+	rows, err := s.db.QueryContext(s.ctx, `SELECT id,machine_id,conversation_id,role,text,status,created_at,tool,decided_by FROM (SELECT * FROM messages WHERE conversation_id=? AND machine_id=? ORDER BY created_at DESC LIMIT 256) ORDER BY created_at`, id, s.MachineID())
 	if err != nil {
 		return nil, err
 	}
@@ -70,7 +72,7 @@ func (s *Store) ChatMessages(id string) ([]ChatMessage, error) {
 	for rows.Next() {
 		var m ChatMessage
 		var at int64
-		if err := rows.Scan(&m.ID, &m.MachineID, &m.ConversationID, &m.Role, &m.Text, &m.Status, &at); err != nil {
+		if err := rows.Scan(&m.ID, &m.MachineID, &m.ConversationID, &m.Role, &m.Text, &m.Status, &at, &m.Tool, &m.DecidedBy); err != nil {
 			return nil, err
 		}
 		m.CreatedAt = fromUnix(at)

@@ -1,9 +1,11 @@
 package view
 
 import (
+	"math"
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -47,7 +49,7 @@ func TestConsoleThemeTokenParity(t *testing.T) {
 	// Catppuccin Mocha (official) and Latte (text roles darkened for 4.5:1).
 	for _, set := range []string{
 		`--bg:#1E1E2E;--pane:#181825;--raise:#313244;--line:#45475A;--fg:#CDD6F4;--mid:#BAC2DE;--dim:#A6ADC8;--accent:#CBA6F7;--on-accent:#1E1E2E;--working:#A6E3A1;--waiting:#F9E2AF;--stalled:#F38BA8;--idle:#89B4FA;--finished:#A6ADC8;--crit:#F38BA8;--warn:#FAB387;`,
-		`--bg:#EFF1F5;--pane:#E6E9EF;--raise:#CCD0DA;--line:#BCC0CC;--fg:#4C4F69;--mid:#5C5F77;--dim:#6C6F85;--accent:#7629D6;--on-accent:#EFF1F5;--working:#256817;--waiting:#7A4C07;--stalled:#B50C30;--idle:#1A5AD8;--finished:#5C5F77;--crit:#B50C30;--warn:#963F06;`,
+		`--bg:#EFF1F5;--pane:#E6E9EF;--raise:#CCD0DA;--line:#BCC0CC;--fg:#4C4F69;--mid:#5C5F77;--dim:#5C5F77;--accent:#7629D6;--on-accent:#EFF1F5;--working:#256817;--waiting:#7A4C07;--stalled:#B50C30;--idle:#1A5AD8;--finished:#5C5F77;--crit:#B50C30;--warn:#963F06;`,
 	} {
 		if !strings.Contains(css, set) {
 			t.Errorf("missing exact console token set %s", set)
@@ -123,5 +125,33 @@ func TestWebAssetsUseConsoleTokens(t *testing.T) {
 				t.Errorf("%s uses --%s, which has no console value", filepath.Base(f), m[1])
 			}
 		}
+	}
+}
+
+func TestChatLightMetadataContrast(t *testing.T) {
+	colors := map[string]string{}
+	for _, token := range consoleTokens {
+		colors[token.Name] = token.Light
+	}
+	luminance := func(hex string) float64 {
+		n, err := strconv.ParseUint(strings.TrimPrefix(hex, "#"), 16, 32)
+		if err != nil {
+			t.Fatal(err)
+		}
+		channel := func(c uint64) float64 {
+			v := float64(c) / 255
+			if v <= 0.04045 {
+				return v / 12.92
+			}
+			return math.Pow((v+0.055)/1.055, 2.4)
+		}
+		return .2126*channel(n>>16&255) + .7152*channel(n>>8&255) + .0722*channel(n&255)
+	}
+	for _, bg := range []string{"bg", "pane"} {
+		ratio := (luminance(colors[bg]) + .05) / (luminance(colors["dim"]) + .05)
+		if ratio < 4.5 {
+			t.Fatalf("dim on %s: %.2f:1", bg, ratio)
+		}
+		t.Logf("dim on %s: %.2f:1", bg, ratio)
 	}
 }

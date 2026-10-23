@@ -17,6 +17,7 @@ import (
 )
 
 const chatTab = 8
+const fullAutoWarning = "Full auto runs every action without asking for 30 minutes · m again to confirm"
 
 type chatStateMsg struct {
 	generation uint64
@@ -65,6 +66,7 @@ func (m *app) openChat() tea.Cmd {
 		}
 	}
 	m.tab = chatTab
+	m.chatFullAsk = false
 	m.confirm = nil
 	m.filter.Blur()
 	m.detail = false
@@ -169,10 +171,10 @@ func (m *app) chatKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.chatTools = !m.chatTools
 		return nil
 	case "pgup":
-		m.chatOffset += max(1, m.bodyHeight()/2)
+		m.scrollChat(1, true)
 		return nil
 	case "pgdown":
-		m.chatOffset = max(0, m.chatOffset-max(1, m.bodyHeight()/2))
+		m.scrollChat(-1, true)
 		return nil
 	case "alt+up":
 		if len(m.chatDrafts) > 0 {
@@ -212,6 +214,9 @@ func (m *app) chatView() string {
 	header := style.Render("Chat · Driga") + " · Codex/Copilot coming\n" + dim.Render("answered by Claude Code") + " · " + modeStyle.Render(label)
 	if m.chatEphemeral {
 		header += "\n" + dim.Render("Conversations end with this client.")
+	}
+	if m.chatFullAsk {
+		header += "\n" + wrapText(fullAutoWarning, m.width)
 	}
 	var lines []string
 	tools := 0
@@ -280,7 +285,9 @@ func (m *app) chatView() string {
 	composer := wrapText(context, m.width) + "\n" + inputView
 	h := max(1, m.bodyHeight()-strings.Count(header, "\n")-strings.Count(composer, "\n")-3)
 	body := strings.Split(strings.Join(lines, "\n"), "\n")
-	offset := min(m.chatOffset, max(0, len(body)-h))
+	m.chatPageHeight, m.chatMaxOffset = h, max(0, len(body)-h)
+	m.chatOffset = min(max(0, m.chatOffset), m.chatMaxOffset)
+	offset := m.chatOffset
 	end := len(body) - offset
 	start := max(0, end-h)
 	return header + "\n" + strings.Repeat("─", m.width) + "\n" + strings.Join(body[start:end], "\n") + strings.Repeat("\n", max(0, h-(end-start))) + "\n" + composer
@@ -357,6 +364,7 @@ func (m *app) selectTab(number byte) tea.Cmd {
 		return nil
 	}
 	m.chatInput.Blur()
+	m.chatFullAsk = false
 	m.confirm = nil
 	m.chatAnimating = false
 	m.chatSpinner = spinner.New(spinner.WithSpinner(spinner.MiniDot))
@@ -395,7 +403,9 @@ func (m *app) endChatActivity() {
 }
 
 func (m *app) updateChatActivity(state chat.State) {
-	m.chatStatus = "Ready"
+	if !m.chatFullAsk {
+		m.chatStatus = "Ready"
+	}
 	if !state.Active {
 		m.endChatActivity()
 		return
@@ -453,6 +463,9 @@ func (m *app) animateChat() tea.Cmd {
 }
 
 func (m *app) chatActivity() string {
+	if m.chatFullAsk {
+		return fullAutoWarning
+	}
 	if m.pendingChat() != nil {
 		return "action waiting"
 	}
@@ -542,7 +555,7 @@ func (m *app) cycleChatMode() tea.Cmd {
 	// Full auto runs commands without cards, so it takes a second press.
 	if mode == chat.FullAuto && !m.chatFullAsk {
 		m.chatFullAsk = true
-		m.chatStatus = "Full auto runs every action without asking for 30 minutes · m again to confirm"
+		m.chatStatus = fullAutoWarning
 		return nil
 	}
 	m.chatFullAsk = false
@@ -556,7 +569,7 @@ func (m *app) chatCard(a chat.Action) string {
 	} else if a.Status == "denied" || a.Status == "failed" || a.Status == "expired" {
 		token = "crit"
 	}
-	title := view.TokenStyle(token, m.opts.NoColor).Render(clean(a.Title) + " · " + a.Status)
+	title := view.TokenStyle(token, m.opts.NoColor).Render(a.Status)
 	if a.DecidedBy != "" {
 		title += " · " + a.DecidedBy
 	}
@@ -567,7 +580,7 @@ func (m *app) chatCard(a chat.Action) string {
 	if a.Status == "pending" {
 		body += "\ny allow · n deny · alt+y/alt+n while typing"
 	}
-	return title + "\n" + wrapText(body, max(1, m.width-4))
+	return title + "\n" + truncate(clean(a.Title), max(1, m.width-4)) + "\n" + wrapText(body, max(1, m.width-4))
 }
 
 func (m *app) readChatAfterClose(id string, mode chat.Mode) tea.Cmd {
@@ -582,4 +595,12 @@ func (m *app) readChatAfterClose(id string, mode chat.Mode) tea.Cmd {
 		}
 		return read()
 	}
+}
+
+func (m *app) scrollChat(delta int, page bool) {
+	m.chatView() // Measure the actual transcript after headers and composer.
+	if page {
+		delta *= max(1, m.chatPageHeight-1)
+	}
+	m.chatOffset = min(max(0, m.chatOffset+delta), m.chatMaxOffset)
 }

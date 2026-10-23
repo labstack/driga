@@ -44,6 +44,7 @@ type Deps struct {
 	Sigs        *signatures.Set
 	Git         interface {
 		Scan(context.Context, string, gitscan.ScanMode) ([]model.Worktree, error)
+		Prune([]string)
 	}
 	SpoolDir   string
 	Now        func() time.Time

@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
@@ -145,10 +146,6 @@ func (s *Server) chatEvents(w http.ResponseWriter, r *http.Request) {
 		}
 		return rc.Flush()
 	}
-	tick := time.NewTicker(150 * time.Millisecond)
-	defer tick.Stop()
-	heartbeat := time.NewTicker(15 * time.Second)
-	defer heartbeat.Stop()
 	var active bool
 	queued := -1
 	for {
@@ -164,22 +161,29 @@ func (s *Server) chatEvents(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		after = state.Cursor
+		state.Reset, state.Events = false, nil
 		if state.Active != active || state.Queued != queued {
 			active, queued = state.Active, state.Queued
 			if err := write(after, "status", map[string]any{"active": active, "queued": queued}); err != nil {
 				return
 			}
 		}
-		select {
-		case <-r.Context().Done():
-			return
-		case <-heartbeat.C:
+		waitCtx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+		next, waitErr := s.opts.Chat.Wait(waitCtx, r.URL.Query().Get("id"), after)
+		cancel()
+		if errors.Is(waitErr, context.DeadlineExceeded) && r.Context().Err() == nil {
 			if err := write(after, "status", map[string]any{"active": active, "queued": queued}); err != nil {
 				return
 			}
-		case <-tick.C:
+			continue
 		}
-		state, err = s.opts.Chat.Read(r.Context(), r.URL.Query().Get("id"), after)
+		if waitErr == nil && next.Cursor == after {
+			if err := write(after, "status", map[string]any{"active": next.Active, "queued": next.Queued}); err != nil {
+				return
+			}
+			continue
+		}
+		state, err = next, waitErr
 		if err != nil {
 			return
 		}

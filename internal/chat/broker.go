@@ -56,6 +56,7 @@ type Client interface {
 	SetMode(context.Context, string, Mode) error
 	Decide(context.Context, string, string, bool) error
 	Read(context.Context, string, uint64) (State, error)
+	Wait(context.Context, string, uint64) (State, error)
 }
 type Options struct {
 	Snippets     bool
@@ -104,6 +105,7 @@ type conversation struct {
 	queue            []turn
 	events           []Event
 	seq              uint64
+	changed          chan struct{}
 	cancel           context.CancelFunc
 }
 type Broker struct {
@@ -144,9 +146,26 @@ func (b *Broker) Close() {
 	b.cancel()
 	b.mu.Unlock()
 	b.wg.Wait()
+	b.mu.Lock()
+	for _, c := range b.conversations {
+		b.dispose(c)
+	}
+	b.mu.Unlock()
 	if b.closeSocket != nil {
 		b.closeSocket()
 	}
+}
+func (b *Broker) dispose(c *conversation) {
+	if c.expire != nil {
+		c.expire.Stop()
+		c.expire = nil
+	}
+	if c.changed != nil {
+		close(c.changed)
+		c.changed = nil
+	}
+	c.mode, c.until = Confirm, time.Time{}
+	c.actions, c.messages, c.events, c.queue, c.result = nil, nil, nil, nil, nil
 }
 func (b *Broker) Create(ctx context.Context) (store.Conversation, error) {
 	b.mu.Lock()
@@ -183,6 +202,7 @@ func (b *Broker) load(id string) (*conversation, error) {
 		if oldest == nil {
 			return nil, errors.New("too many active conversations")
 		}
+		b.dispose(oldest)
 		delete(b.conversations, key)
 	}
 	row, err := b.st.ChatConversation(id)
@@ -199,7 +219,13 @@ func (b *Broker) load(id string) (*conversation, error) {
 			messages[i].Text = b.capture(messages[i].Text)
 		}
 	}
-	c := &conversation{mode: Confirm, row: row, messages: messages, seq: uint64(time.Now().UnixMicro())}
+	c := &conversation{changed: make(chan struct{}), mode: Confirm, row: row, messages: messages, seq: uint64(time.Now().UnixMicro())}
+	for _, m := range messages {
+		if m.Role == "action" && m.Tool != "" {
+			title := m.Tool
+			c.actions = append(c.actions, &pendingAction{Action: Action{ID: m.ID, Tool: m.Tool, Title: title, Status: m.Status, DecidedBy: m.DecidedBy, Input: json.RawMessage(`{}`)}})
+		}
+	}
 	b.conversations[id] = c
 	return c, nil
 }
@@ -224,6 +250,10 @@ func (b *Broker) event(c *conversation, kind string, m *store.ChatMessage) {
 	b.appendEvent(c, e)
 }
 func (b *Broker) appendEvent(c *conversation, e Event) {
+	if c.changed != nil {
+		close(c.changed)
+	}
+	c.changed = make(chan struct{})
 	c.seq++
 	e.Seq = c.seq
 	c.events = append(c.events, e)
@@ -524,4 +554,27 @@ func (b *Broker) Read(ctx context.Context, id string, after uint64) (State, erro
 		}
 	}
 	return s, nil
+}
+
+// Wait returns the next state without waking idle streams. Taking the channel
+// and cursor under the event lock prevents a missed update between reads.
+func (b *Broker) Wait(ctx context.Context, id string, after uint64) (State, error) {
+	b.mu.Lock()
+	c, err := b.load(id)
+	if err != nil {
+		b.mu.Unlock()
+		return State{}, err
+	}
+	changed, ready := c.changed, c.seq != after
+	b.mu.Unlock()
+	if !ready {
+		select {
+		case <-ctx.Done():
+			return State{}, ctx.Err()
+		case <-b.ctx.Done():
+			return State{}, b.ctx.Err()
+		case <-changed:
+		}
+	}
+	return b.Read(ctx, id, after)
 }

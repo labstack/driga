@@ -139,7 +139,8 @@
       }
     };
   }
-  globalThis.DrigaConsole = Object.freeze({parseCommand, familyEvent, flowWireGeometry, observationPulses, transcriptSize, createInboxController, createMachineController});
+  function connectionText(connected,closed) { return connected?"● live":closed?"○ disconnected · authenticate the new web URL, then reload":"○ reconnecting…"; }
+  globalThis.DrigaConsole = Object.freeze({connectionText,parseCommand, familyEvent, flowWireGeometry, observationPulses, transcriptSize, createInboxController, createMachineController});
   if (typeof document === "undefined") return;
 
   const root = document.documentElement;
@@ -500,7 +501,7 @@
   if (document.fonts) document.fonts.ready.then(() => charts.draw());
   system.addEventListener("change", () => { if (preference === "system") charts.draw(); });
   phone.addEventListener("change", () => charts.draw());
-  function connection(connected) { document.querySelectorAll(".connection").forEach(el => { el.textContent = connected ? "● live" : "○ reconnecting…"; el.classList.toggle("working", connected); el.classList.toggle("waiting", !connected); }); }
+  function connection(connected) { document.querySelectorAll(".connection").forEach(el => { el.textContent = connectionText(connected,stream.readyState===EventSource.CLOSED); el.classList.toggle("working", connected); el.classList.toggle("waiting", !connected); }); }
   const stream = new EventSource("/events" + window.location.search);
   stream.addEventListener("open", () => connection(true)); stream.addEventListener("error", () => connection(false));
   const refresh = () => { if(document.querySelector("[data-flow-map]")){document.dispatchEvent(new Event("driga:flow-refresh"));return;} const main = document.getElementById("main"); if (window.htmx) htmx.trigger(main, "console:refresh"); };

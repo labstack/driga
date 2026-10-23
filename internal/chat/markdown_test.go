@@ -23,7 +23,7 @@ func TestMarkdownCommonMarkGFM(t *testing.T) {
 			t.Errorf("missing %s", kind)
 		}
 	}
-	if got := MarkdownHTML("**[[session:42]]**"); got != "<p><strong>#42</strong></p>\n" {
+	if got := MarkdownHTML("**[[session:42]]**"); got != "<p><strong><button type=\"button\" class=\"chat-chip\" data-chat-session=\"42\">session #42</button></strong></p>\n" {
 		t.Fatal(got)
 	}
 }
@@ -92,5 +92,17 @@ func TestMarkdownHTMLNeutralizesActiveContent(t *testing.T) {
 	}
 	if got := MarkdownHTML("[ok](https://example.com)"); !strings.Contains(got, `href="https://example.com"`) {
 		t.Errorf("safe link dropped: %q", got)
+	}
+}
+
+func TestMarkdownCitationsStayLiteralInCode(t *testing.T) {
+	for _, text := range []string{"`[[session:42]]`", "```\n[[session:42]]\n```", "[label [[session:42]]](https://example.com)"} {
+		if got := MarkdownHTML(text); strings.Contains(got, "data-chat-session") {
+			t.Fatal(got)
+		}
+	}
+	got := MarkdownHTML("Inspect [[session:42]] and **[[session:7]]**.")
+	if strings.Count(got, "data-chat-session=") != 2 || !strings.Contains(got, `data-chat-session="42"`) {
+		t.Fatal(got)
 	}
 }

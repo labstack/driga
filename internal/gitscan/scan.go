@@ -224,13 +224,18 @@ type repoCache struct {
 	Topology stamp
 }
 
+type scanLock struct {
+	sync.Mutex
+	refs int
+}
+
 // Scanner caches local Git state and bounds Git subprocess concurrency across
 // all concurrent Scan calls. Construct it with NewScanner.
 type Scanner struct {
 	mu          sync.Mutex
 	cache       map[string]worktreeCache
 	repos       map[string]repoCache
-	locks       map[string]*sync.Mutex
+	locks       map[string]*scanLock
 	sem         chan struct{}
 	concurrency int
 	runGit      func(ctx context.Context, dir string, args ...string) ([]byte, error)
@@ -244,7 +249,7 @@ func NewScanner(concurrency int) *Scanner {
 	return &Scanner{
 		cache:       make(map[string]worktreeCache),
 		repos:       make(map[string]repoCache),
-		locks:       make(map[string]*sync.Mutex),
+		locks:       make(map[string]*scanLock),
 		sem:         make(chan struct{}, concurrency),
 		concurrency: concurrency,
 		runGit:      runGit,
@@ -325,17 +330,29 @@ const (
 // Scan reads the repository's non-bare worktrees. A full scan bypasses metadata
 // caching; its caller schedules one at least every five minutes.
 func (s *Scanner) Scan(ctx context.Context, repoPath string, mode ScanMode) ([]model.Worktree, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	full := mode == Full
 	repoPath = NormalizePath(repoPath)
 	s.mu.Lock()
 	lock := s.locks[repoPath]
 	if lock == nil {
-		lock = &sync.Mutex{}
+		lock = &scanLock{}
 		s.locks[repoPath] = lock
 	}
+	lock.refs++
 	s.mu.Unlock()
 	lock.Lock()
-	defer lock.Unlock()
+	defer func() {
+		lock.Unlock()
+		s.mu.Lock()
+		lock.refs--
+		if lock.refs == 0 {
+			delete(s.locks, repoPath)
+		}
+		s.mu.Unlock()
+	}()
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -483,4 +500,34 @@ func (s *Scanner) scanWorktree(ctx context.Context, entry WorktreeEntry, full bo
 	s.cache[entry.Path] = worktreeCache{Worktree: w, Times: times, FullPasses: passes}
 	s.mu.Unlock()
 	return w, nil
+}
+
+// Prune discards cached repositories outside the current discovery and worktrees
+// removed from their topology. Call after all scans in an inventory have finished.
+func (s *Scanner) Prune(paths []string) {
+	keep := make(map[string]bool, len(paths))
+	for _, path := range paths {
+		keep[NormalizePath(path)] = true
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	trees := map[string]bool{}
+	for path, repo := range s.repos {
+		if !keep[path] {
+			delete(s.repos, path)
+			continue
+		}
+		for _, e := range repo.Entries {
+			if !e.Bare {
+				if _, err := os.Stat(e.Path); err == nil {
+					trees[e.Path] = true
+				}
+			}
+		}
+	}
+	for path := range s.cache {
+		if !trees[path] {
+			delete(s.cache, path)
+		}
+	}
 }

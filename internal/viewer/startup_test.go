@@ -271,3 +271,5 @@ func TestLiveSnapshotSocketProbeDoesNotBlockReads(t *testing.T) {
 		t.Fatal("blocked socket probe stalled viewer")
 	}
 }
+
+func (s *startupScanner) Prune(paths []string) { s.scanner.Prune(paths) }

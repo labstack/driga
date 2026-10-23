@@ -48,15 +48,24 @@
  }
  function scope(){const q=new URLSearchParams(location.search),ctx={page:location.pathname,machine:q.get("machine")||"local"};const row=document.querySelector('[data-worker].sel,[data-row].sel,[data-map-row].selected');const href=row&&row.getAttribute("href");let session=selectedSession||Number(row&&(row.dataset.session||row.dataset.mapRow))||Number(q.get("id"))||0;if(href&&/^\/agents\/\d+/.test(href))session=Number(href.match(/\d+/)[0]);if(/^\/agents\/\d+$/.test(location.pathname))session=Number(location.pathname.split("/").pop());if(session)ctx.session_id=session;const map=document.querySelector("[data-flow-map]");if(map?.dataset.selectedMachine)ctx.machine=map.dataset.selectedMachine;const project=q.get("project")||document.querySelector(".status")?.dataset.chatProject||row?.dataset.chatProject;if(project)ctx.project=project;for(const key of removed)delete ctx[key];return ctx;}
  function contextChips(){const node=document.getElementById("chat-context");node.replaceChildren(document.createTextNode("Context "));for(const [key,value]of Object.entries(scope())){const b=document.createElement("button");b.type="button";b.className="chat-chip";b.textContent=(key==="session_id"?"session":key)+": "+value+" ×";b.addEventListener("click",()=>{removed.add(key);contextChips();});node.append(b);}}
+ function selectSession(session){selectedSession=Number(session);removed.delete("session_id");document.dispatchEvent(new CustomEvent("driga:select-session",{detail:{id:session}}));contextChips();}
+ log.addEventListener("click",event=>{const chip=event.target.closest("[data-chat-session]");if(chip)selectSession(chip.dataset.chatSession);});
  function content(node,text){const pattern=/\[\[session:([1-9][0-9]*)\]\]/g;let end=0;for(const match of text.matchAll(pattern)){node.append(document.createTextNode(text.slice(end,match.index)));const chip=document.createElement("button");chip.type="button";chip.className="chat-chip";chip.textContent="session #"+match[1];chip.addEventListener("click",()=>{selectedSession=Number(match[1]);removed.delete("session_id");document.dispatchEvent(new CustomEvent("driga:select-session",{detail:{id:match[1]}}));contextChips();});node.append(chip);end=match.index+match[0].length;}node.append(document.createTextNode(text.slice(end)));}
  function render(){
   const scrollTop=log.scrollTop,nodes=[],live=new Set();let tools=null;
   const rows=[...messages.values()];
   if(active&&!rows.some(m=>m.role==="assistant"&&m.status==="streaming"))rows.push({id:"pending",role:"assistant",status:"streaming",text:""});
   for(const m of rows){
-   if(m.role==="action"&&actions.has(m.id)){nodes.push(actionCard(actions.get(m.id)));continue;}
+   if(m.role==="action"&&actions.has(m.id)){
+    live.add(m.id);const a=actions.get(m.id),signature=JSON.stringify(a);let entry=rendered.get(m.id);
+    if(!entry||entry.signature!==signature){entry={node:actionCard(a),signature};rendered.set(m.id,entry);}
+    nodes.push(entry.node);tools=null;continue;
+   }
    if(m.role==="tool"){
-    if(!tools){const details=document.createElement("details"),summary=document.createElement("summary");details.className="chat-tools";summary.textContent="Tools used";tools=document.createElement("ul");details.append(summary,tools);nodes.push(details);}
+    if(!tools){live.add(m.id);let entry=rendered.get(m.id);
+     if(!entry){const details=document.createElement("details"),summary=document.createElement("summary"),list=document.createElement("ul");details.className="chat-tools";summary.textContent="Tools used";details.append(summary,list);entry={node:details,list};rendered.set(m.id,entry);}
+     tools=entry.list;tools.replaceChildren();nodes.push(entry.node);
+    }
     const item=document.createElement("li");item.textContent=m.text||"driga read tool";tools.append(item);continue;
    }
    tools=null;live.add(m.id);
@@ -80,7 +89,9 @@
   }
   for(const key of rendered.keys())if(!live.has(key))rendered.delete(key);
   if(!rows.length){const empty=document.createElement("p");empty.className="chat-note";empty.textContent="Ask what needs you, why a session is stalled, or what this screen means.";nodes.push(empty);}
-  log.replaceChildren(...nodes);log.scrollTop=stickToBottom?log.scrollHeight:scrollTop;progress();
+  for(let i=0;i<nodes.length;i++)if(log.children[i]!==nodes[i])log.insertBefore(nodes[i],log.children[i]||null);
+  while(log.children.length>nodes.length)log.removeChild(log.lastChild);
+  log.scrollTop=stickToBottom?log.scrollHeight:scrollTop;progress();
  }
  function apply(m){
   messages.set(m.id,m);while(messages.size>256)messages.delete(messages.keys().next().value);
@@ -106,8 +117,8 @@
    }
    if(e.message){apply(e.message);if(e.message.role==="assistant"&&e.message.id===replyID&&e.message.status!=="streaming")setActive(false);render();}
   });
-  source.addEventListener("status",event=>{const s=JSON.parse(event.data);setActive(!!s.active);render();});
-  source.onerror=()=>{setActive(false);render();note("Reconnecting…");};
+  source.addEventListener("status",event=>{const s=JSON.parse(event.data),changed=active!==!!s.active;setActive(!!s.active);if(changed)render();});
+  source.onerror=()=>{setActive(false);render();note(source.readyState===EventSource.CLOSED?"Disconnected · authenticate the new web URL, then reload":"Reconnecting…");};
  }
  async function loadHistory(){const rows=await api("history");history.replaceChildren();for(const row of rows){const option=document.createElement("option");option.value=row.id;option.textContent="Driga · "+new Date(row.updated_at).toLocaleString();history.append(option);}history.value=id;}
  async function fresh(){await leaveConversation();const row=await api("new",{});id=row.id;remember();cursor=0;resetActivity();messages.clear();connect();await loadHistory();}

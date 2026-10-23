@@ -523,6 +523,7 @@ func TestChatNavigateControlsAndAltOverlay(t *testing.T) {
 	}
 	m.openChat()
 	m.chatInput.Blur()
+	m.chatMessages = []store.ChatMessage{{ID: "reply", Role: "user", Text: strings.Repeat("scrollable line\n", 100)}}
 	m.Update(tea.KeyPressMsg{Code: tea.KeyPgUp})
 	if m.chatOffset == 0 {
 		t.Fatal("navigate PgUp did not scroll chat")

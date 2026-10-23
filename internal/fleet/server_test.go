@@ -559,7 +559,7 @@ func TestControlJSONLinesAndModes(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer ln.Close()
-	path := filepath.Join(s.dataDir, "fleet", "fleet.sock")
+	path := ControlSocketPath(s.dataDir)
 	info, err := os.Stat(path)
 	if err != nil || info.Mode().Perm() != 0600 {
 		t.Fatalf("socket: %v %v", info, err)

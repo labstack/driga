@@ -128,7 +128,7 @@ func (b *Broker) Decide(ctx context.Context, id, action string, allow bool) erro
 func (b *Broker) actionEvent(c *conversation, a *pendingAction) error {
 	a.Title = scrub.Snippet(strings.Join(strings.Fields(a.Title), " "))
 	a.Result = scrub.Snippet(strings.Join(strings.Fields(a.Result), " "))
-	m := store.ChatMessage{ID: a.ID, MachineID: c.row.MachineID, ConversationID: c.row.ID, Role: "action", Text: a.Title + " · " + a.Status, Status: a.Status, CreatedAt: time.Now().UTC()}
+	m := store.ChatMessage{ID: a.ID, MachineID: c.row.MachineID, ConversationID: c.row.ID, Role: "action", Tool: scrub.Snippet(a.Tool), DecidedBy: a.DecidedBy, Text: a.Title + " · " + a.Status, Status: a.Status, CreatedAt: time.Now().UTC()}
 	if a.DecidedBy != "" {
 		m.Text += " · " + a.DecidedBy
 	}
@@ -188,9 +188,23 @@ func (b *Broker) Approve(ctx context.Context, in Approval) (Permission, error) {
 		b.mu.Unlock()
 		return Permission{}, err
 	}
-	bytes := len(in.Input)
+	// Historical cards must never consume the outstanding-work budget.
+	// Their audit messages remain in storage after leaving this live window.
+	size := func(a *pendingAction) int { return len(a.Input) + len(a.Title) + len(a.Directory) + len(a.Result) }
+	bytes := len(in.Input) + len(b.actionTitle(in)) + len(c.directory)
 	for _, a := range c.actions {
-		bytes += len(a.Input) + len(a.Title)
+		bytes += size(a)
+	}
+	for i := 0; i < len(c.actions) && (len(c.actions) >= MaxMessages || bytes > MaxBufferBytes); {
+		a := c.actions[i]
+		if a.Status == "pending" || a.Status == "allowed" {
+			i++
+			continue
+		}
+		bytes -= size(a)
+		copy(c.actions[i:], c.actions[i+1:])
+		c.actions[len(c.actions)-1] = nil
+		c.actions = c.actions[:len(c.actions)-1]
 	}
 	if len(c.actions) >= MaxMessages || bytes > MaxBufferBytes {
 		b.mu.Unlock()

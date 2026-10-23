@@ -38,3 +38,10 @@ var geometry=DrigaConsole.flowWireGeometry({right:100,y:30},{left:140,right:240,
 if (geometry.trunk !== "M 240 30 H 270 M 270 20 V 80") throw Error("shared trunk geometry: "+geometry.trunk);
 if (geometry.branches[0].d !== "M 270 20 H 300" || geometry.branches[1].d !== "M 270 80 H 300") throw Error("short horizontal branches");
 if (geometry.routes["two"] !== "M 240 30 H 270 V 80 H 300") throw Error("pulse must travel trunk then matching branch");
+
+(() => {
+ const text=globalThis.DrigaConsole.connectionText;
+ if(text(false,false)!=="○ reconnecting…")throw new Error("retry status");
+ if(!text(false,true).includes("authenticate the new web URL, then reload"))throw new Error("terminal stream recovery missing");
+ if(text(true,false)!=="● live")throw new Error("live status");
+})();

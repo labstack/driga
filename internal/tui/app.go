@@ -30,6 +30,7 @@ import (
 	"github.com/labstack/driga/internal/spool"
 	"github.com/labstack/driga/internal/store"
 	"github.com/labstack/driga/internal/view"
+	"github.com/labstack/driga/internal/viewer"
 )
 
 // Options configures scope, appearance, and injectable action dependencies.
@@ -83,6 +84,8 @@ type app struct {
 	chatEphemeral  bool
 	chatTools      bool
 	chatPolling    bool
+	chatPageHeight int
+	chatMaxOffset  int
 
 	flow             view.FlowView
 	flowID           int64
@@ -123,6 +126,8 @@ type app struct {
 	viewport         viewport.Model
 	confirm          *confirmation
 	help             bool
+	helpOffset       int
+	selectionKey     string
 	status           string
 	busy             bool
 	width, height    int
@@ -254,7 +259,27 @@ func heartbeat(dir string, now time.Time) error {
 }
 
 func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	model, cmd := m.update(msg)
+	return model, tea.Batch(cmd, m.loadSelection())
+}
+func (m *app) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case selectedDetailMsg:
+		if msg.key != m.selectionKey {
+			return m, nil
+		}
+		if msg.err != nil {
+			m.status = "detail: " + msg.err.Error()
+			return m, nil
+		}
+		m.snap.AgentDetails = map[int64]view.AgentView{msg.id: msg.detail}
+		m.rebuild()
+		if m.detail && m.detailRow != nil && m.detailRow.agent == msg.id {
+			offset := m.viewport.YOffset()
+			m.openDetail(*m.detailRow)
+			m.viewport.SetYOffset(offset)
+		}
+		return m, nil
 	case tea.BackgroundColorMsg:
 		view.SetDarkBackground(msg.IsDark())
 		m.rebuild()
@@ -547,6 +572,9 @@ func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.confirmKey(k)
 		}
 		if k == "esc" {
+			if !m.detail && !m.help {
+				m.filter.SetValue("")
+			}
 			m.detail = false
 			m.help = false
 			m.rebuild()
@@ -554,9 +582,20 @@ func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if k == "?" {
 			m.help = !m.help
+			m.helpOffset = 0
 			return m, nil
 		}
 		if m.help {
+			switch k {
+			case "j", "down":
+				m.scrollHelp(1)
+			case "k", "up":
+				m.scrollHelp(-1)
+			case "pgdown":
+				m.scrollHelp(max(1, m.bodyHeight()-1))
+			case "pgup":
+				m.scrollHelp(-max(1, m.bodyHeight()-1))
+			}
 			return m, nil
 		}
 		if k >= "0" && k <= "7" {
@@ -979,5 +1018,40 @@ func (m *app) showAckPending() {
 	}
 	if strings.HasPrefix(m.status, "ack pending → ") {
 		m.status = ""
+	}
+}
+
+type selectedDetailMsg struct {
+	key    string
+	id     int64
+	detail view.AgentView
+	err    error
+}
+
+func (m *app) loadSelection() tea.Cmd {
+	source, ok := m.src.(viewer.DetailSource)
+	if !ok || !m.loaded || m.tab == chatTab || m.tab == flowTab {
+		return nil
+	}
+	row, ok := m.selected()
+	if m.detail && m.detailRow != nil {
+		row, ok = *m.detailRow, true
+	}
+	if !ok || row.agent == 0 {
+		m.selectionKey = ""
+		return nil
+	}
+	key := fmt.Sprintf("%d/%s/%d", m.version, row.machine, row.agent)
+	if key == m.selectionKey {
+		return nil
+	}
+	m.selectionKey = key
+	ctx, scope, id := m.opts.Context, m.flowScope(), row.agent
+	if row.machine != "" {
+		scope = store.Scope{Machines: []string{row.machine}}
+	}
+	return func() tea.Msg {
+		detail, err := source.LoadAgent(ctx, scope, id)
+		return selectedDetailMsg{key: key, id: id, detail: detail, err: err}
 	}
 }

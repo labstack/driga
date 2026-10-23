@@ -22,6 +22,19 @@ func captureEvidence(value any, policy string) any {
 					}
 					continue
 				}
+			case "argv":
+				if policy != "snippets" {
+					v[key] = []any{}
+					continue
+				}
+				if args, ok := item.([]any); ok {
+					for i, arg := range args {
+						if text, ok := arg.(string); ok {
+							args[i] = scrub.Snippet(text)
+						}
+					}
+					continue
+				}
 			case "handoffs":
 				if policy != "snippets" {
 					v[key] = []any{}
