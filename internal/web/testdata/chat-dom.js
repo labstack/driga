@@ -159,7 +159,14 @@ async function runChatTests(){
  change({seq:30.5,kind:'delta',message_id:'card-reply',text:'token',html:'token'});
  assert.equal(document.activeElement,buttons[1],'text delta removed approval focus');
  assert.equal(walk(get('chat-approval')).filter(n=>n.tagName==='button').length,2,'text delta lost unchanged action');
- await buttons[0].handlers.click();
+ // A card must not take focus from typing, and an immediate Allow is ignored.
+ {const input=get('chat-input');input.focus();source.handlers.reset({data:JSON.stringify({cursor:30.6,messages:[{id:'late',role:'action',status:'pending',text:'Bash'}],actions:[{...action,id:'late'}],mode:'confirm',active:true})});
+  assert.equal(document.activeElement,input,'new card stole typing focus');
+  const late=walk(get('chat-approval')).filter(n=>n.tagName==='button');const sent=payloads.length;
+  await late[0].handlers.click();assert.equal(payloads.filter(p=>p.path==='/chat/api/decide').length,payloads.slice(0,sent).filter(p=>p.path==='/chat/api/decide').length,'Allow accepted before it was armed');
+  source.handlers.reset({data:JSON.stringify({cursor:30.7,messages:[{id:'action',role:'action',status:'pending',text:'Bash'}],actions:[action],mode:'full auto',active:true})});}
+ const armed=walk(get('chat-approval')).filter(n=>n.tagName==='button');
+ now+=600;await armed[0].handlers.click();
  const decision=payloads.find(p=>p.path==='/chat/api/decide');
  assert(decision&&JSON.parse(decision.options.body).allow===true,'Allow did not decide');
  assert.equal(decision.options.headers['X-CSRF-Token'],'csrf');
@@ -201,7 +208,7 @@ async function testPendingApprovalUX({change,reset,status,input,log,escape}) {
  assert(!log.textContent.includes('Approve?'),'pending card still in transcript');
  const buttons=walk(approval).filter(n=>n.tagName==='button');
  assert.equal(buttons.length,2,'only oldest approval must have controls');
- assert.equal(document.activeElement,buttons[0],'Allow not focused');
+ assert(!buttons.includes(document.activeElement),'a new card must not take focus');
  const details=walk(approval).find(n=>n.tagName==='details');
  assert(!details.open,'raw JSON starts expanded');
  assert(details.textContent.includes('"command"'),'raw JSON missing');

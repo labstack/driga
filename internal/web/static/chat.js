@@ -62,7 +62,10 @@
   if(a.tool==="Bash"&&v.description){const description=document.createElement("p");description.className="chat-note";description.textContent=v.description;node.append(description);}
   directory.className="chat-note";directory.textContent="in "+a.directory;node.append(directory);
   summary.textContent="Raw JSON";raw.textContent=JSON.stringify(a.input,null,2);details.append(summary,raw);node.append(details);
-  for(const allow of [true,false]){const button=document.createElement("button");button.type="button";button.textContent=allow?"Allow":"Deny";button.setAttribute("aria-label",button.textContent+" "+a.title);button.addEventListener("click",async()=>{button.disabled=true;try{await api("decide",{id,action:a.id,allow});}catch(e){button.disabled=false;note(e.message);}});node.append(button);}
+  // Never move focus to a card, and ignore Allow briefly after it appears, so a
+  // keystroke or click meant for something else cannot approve an action.
+  const shown=Date.now();
+  for(const allow of [true,false]){const button=document.createElement("button");button.type="button";button.textContent=allow?"Allow":"Deny";button.setAttribute("aria-label",button.textContent+" "+a.title);button.addEventListener("click",async()=>{if(allow&&Date.now()-shown<500)return;button.disabled=true;try{await api("decide",{id,action:a.id,allow});}catch(e){button.disabled=false;note(e.message);}});node.append(button);}
   return node;
  }
  function renderApproval(){
@@ -72,8 +75,6 @@
   if(!pinned||pinned.signature!==signature){
    const node=actionCard(a),count=document.createElement("p");count.className="chat-note";
    approval.replaceChildren(node,count);pinned={signature,node,count};
-   // Make the default decision reachable immediately with the keyboard.
-   node.children[node.children.length-2].focus();
   }
   const more=[...actions.values()].filter(a=>a.status==="pending").length-1;
   pinned.count.textContent=more?"+"+more+" more waiting":"";pinned.count.hidden=!more;
