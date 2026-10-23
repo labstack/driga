@@ -190,3 +190,18 @@ func TestMalformedExcludeRejectedAtLoad(t *testing.T) {
 		}
 	}
 }
+
+// The Chat MCP child inherits these from its broker; config must accept them.
+func TestChatChildEnvironmentAccepted(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("DRIGA_CONFIG", path)
+	for _, name := range []string{"DRIGA_CHAT_SOCKET", "DRIGA_CHAT_CONVERSATION", "DRIGA_CHAT_TOKEN", "DRIGA_CHAT_READ_ONLY"} {
+		t.Setenv(name, "x")
+	}
+	if _, err := config.Load(config.Path()); err != nil {
+		t.Fatal(err)
+	}
+}

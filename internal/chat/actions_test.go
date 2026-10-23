@@ -220,6 +220,12 @@ func TestAutoRules(t *testing.T) {
 	if err := os.Symlink(filepath.Join(outside, "missing"), filepath.Join(dir, "dangling")); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.MkdirAll(filepath.Join(dir, ".git", "hooks"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(dir, ".git", "hooks"), filepath.Join(dir, "hooks")); err != nil {
+		t.Fatal(err)
+	}
 	for _, tc := range []struct {
 		tool, path string
 		want       bool
@@ -227,6 +233,11 @@ func TestAutoRules(t *testing.T) {
 		{"Edit", "file", true}, {"Write", filepath.Join(dir, "new", "file"), true},
 		{"Write", "../escape", false}, {"Write", "~/outside", false}, {"Write", filepath.Join(outside, "file"), false},
 		{"Write", "escape/file", false}, {"Write", "escape/../file", false}, {"Write", "escape/../file", false}, {"Write", "dangling", false},
+		// Files that run code or steer agents without a command always ask.
+		{"Write", ".git/hooks/pre-commit", false}, {"Edit", ".claude/settings.json", false}, {"Write", ".mcp.json", false},
+		{"Write", ".envrc", false}, {"Write", ".vscode/tasks.json", false}, {"Edit", "CLAUDE.md", false}, {"Edit", "sub/AGENTS.md", false},
+		{"Write", ".github/workflows/ci.yml", false}, {"Write", "hooks/pre-commit", false}, {"Write", ".GIT/config", false},
+		{"Edit", "src/claude.go", true}, {"Write", "docs/git.md", true},
 		{"Bash", "file", false}, {"WebFetch", "file", false}, {"Unknown", "file", false},
 		{"mcp__driga__kill", "", false}, {"mcp__driga__cleanup", "", false},
 		{"mcp__driga__ack_inbox", "", true}, {"mcp__driga__jump", "", true}, {"mcp__driga__summarize", "", true},

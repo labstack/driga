@@ -364,32 +364,52 @@ func autoAllowed(tool string, input json.RawMessage, dir string) bool {
 		if json.Unmarshal(input, &in) != nil || in.Path == "" {
 			return false
 		}
-		return insideDirectory(dir, in.Path)
+		// Check the resolved path too: a link inside the project may point at .git.
+		rel, ok := insideDirectory(dir, in.Path)
+		return ok && !configPath(in.Path) && !configPath(rel)
 	}
 	return false
 }
-func insideDirectory(dir, path string) bool {
+
+// configPath reports files that run code or steer agents with no command:
+// git hooks, agent settings and instructions, editor tasks, direnv, MCP
+// servers and CI. Writes there always ask, even in Auto, so an edit cannot
+// become an unasked command.
+func configPath(path string) bool {
+	for _, part := range strings.FieldsFunc(filepath.ToSlash(path), func(r rune) bool { return r == '/' }) {
+		switch strings.ToLower(part) {
+		case ".git", ".claude", ".codex", ".gemini", ".copilot", ".github", ".vscode", ".idea", ".husky", ".devcontainer",
+			".mcp.json", ".envrc", "claude.md", "agents.md", "gemini.md":
+			return true
+		}
+	}
+	return false
+}
+
+// insideDirectory resolves path against dir, following links, and returns
+// the result relative to dir when it stays inside.
+func insideDirectory(dir, path string) (string, bool) {
 	if strings.HasPrefix(path, "~") {
-		return false
+		return "", false
 	}
 	root, err := filepath.EvalSymlinks(dir)
 	if err != nil {
-		return false
+		return "", false
 	}
 	root, err = filepath.Abs(root)
 	if err != nil {
-		return false
+		return "", false
 	}
 	current := root
 	if len(path) > 0 && os.IsPathSeparator(path[0]) && !filepath.IsAbs(path) {
-		return false
+		return "", false
 	}
 	if filepath.IsAbs(path) {
 		volume := filepath.VolumeName(path)
 		current = volume + string(filepath.Separator)
 		path = strings.TrimLeft(path[len(volume):], string(filepath.Separator))
 	} else if filepath.VolumeName(path) != "" {
-		return false
+		return "", false
 	}
 	// Walk before cleaning: link/../file follows the link before applying '..'.
 	for _, part := range strings.FieldsFunc(path, func(r rune) bool { return r <= 127 && os.IsPathSeparator(uint8(r)) }) {
@@ -406,17 +426,17 @@ func insideDirectory(dir, path string) bool {
 			continue
 		}
 		if err != nil {
-			return false
+			return "", false
 		}
 		if info.Mode()&os.ModeSymlink != 0 {
 			current, err = filepath.EvalSymlinks(current)
 			if err != nil {
-				return false
+				return "", false
 			}
 		}
 	}
 	rel, err := filepath.Rel(root, current)
-	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel)
+	return rel, err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel)
 }
 
 func (b *Broker) remoteTarget(in Approval) bool {
