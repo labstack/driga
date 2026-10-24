@@ -236,6 +236,7 @@ func TestBoardStopNeedsConfirmation(t *testing.T) {
 			t.Fatalf("%c confirmed a stop", key)
 		}
 	}
+	id = m.boardSelected().Node.ID
 	m.Update(tea.KeyPressMsg{Code: 'K'})
 	_, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	execute(t, m, cmd)
@@ -303,5 +304,15 @@ func TestFlowFullPromptInspector(t *testing.T) {
 	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if !m.detail || !strings.Contains(m.detailText, "end-marker") || strings.Contains(m.detailText, "…") {
 		t.Fatal("prompt command truncated")
+	}
+}
+
+func TestBoardOpensOnTheOldestNeed(t *testing.T) {
+	m := boardApp(t, "busy")
+	if len(m.board.Needs) == 0 {
+		t.Fatal("fixture has no needs")
+	}
+	if got, want := m.boardSelected().Key, m.board.Needs[0].Key; got != want {
+		t.Fatalf("first selection = %s, want the oldest need %s", got, want)
 	}
 }

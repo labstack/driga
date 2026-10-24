@@ -78,8 +78,14 @@ func (m *app) syncBoard() {
 	})
 	m.boardPinned = previous
 	m.board = b
+	// Until the user moves the selection, it follows the oldest session that
+	// needs you rather than whichever row sorts first.
+	want := previous
+	if !m.boardTouched && len(b.Needs) > 0 {
+		want = b.Needs[0].Key
+	}
 	for i, r := range m.boardRows() {
-		if r.Key == previous {
+		if r.Key == want {
 			m.boardCursor = i
 			break
 		}
@@ -190,6 +196,7 @@ func (m *app) boardKey(k string) (tea.Cmd, bool) {
 			m.flowAskCursor = max(0, min(len(m.board.Needs)-1, m.flowAskCursor+d))
 		} else {
 			m.boardCursor = max(0, min(len(m.boardRows())-1, m.boardCursor+d))
+			m.boardTouched = true
 		}
 		m.armBoardPrompt()
 		return nil, true
@@ -311,7 +318,11 @@ func (m *app) boardLayout() (string, []flowHit) {
 		}
 		action := "Enter open · J Terminal"
 		if r.PromptID != "" {
-			action = "y Allow · n Deny · Enter open full command"
+			// y/n answer only a focused prompt, so say how to focus it first.
+			action = "Tab, then y Allow · n Deny · Enter open full command"
+			if m.flowAttention {
+				action = "y Allow · n Deny · Enter open full command"
+			}
 		}
 		add("  " + action)
 		hits = append(hits, flowHit{y: 4, width: w, height: max(1, len(lines)-3), index: -idx - 1})

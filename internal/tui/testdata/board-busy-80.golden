@@ -9,22 +9,23 @@ NEEDS YOU · 7 · oldest first
   ◆ Add board view · from Editor · relay · 14m
   +4 more · Tab then j/k
 ────────────────────────────────────────────────────────────────────────────────
-atlas
-├── › ○ Fix retry after recon… codex   ░░░░░░░░░░░░░░░░░░░░░░░░░░░░─ 1h 50m
-├──   ▶ Fix retry after recon… codex   ░━━━░░━━━━━░░━━━━░░━━━━░░━━━━ 1h 26m
-├──   ○ Investigate cache inv… codex   ░░░░░░░░░░░░░░░░░░░░░░░░░░░░─ 1h 14m
-├──   ✓ Fix retry after recon… codex   ░░░░░░░░░━━░░━━━━░✓━━━━  ━━━━ 1h 2m
-└──   ○ Investigate cache inv… codex       ░░░░░░░░░░░░░░░░░░░░░░░░─ 50m
-    └──   ‖ Investigate cache … codex   ░░░░░░░━━━━░░━━━━░░━━━━░░━━━░ 5m
-canon
-├──   ▶ Add board view · from… claude  ░░━━░░━━━━━░░━━━━░░━━━━░░━━━┿ 1h 49m
-├──   ◆ 流れを整える 🌊        claude  ░░░░░░━━━━━░░━━━━░░━━━◆◆◆◆◆◆◆ 13m
-├──   ▶ Add board view · from… claude  ━━━━░░━━━━━░░━━━━░░━━━━░░━━━┿ 1h 25m
-├──   ▶ 流れを整える 🌊        claude  ░░░░░░━━━━━░░━━━━░░━━━━░░━━━┿ 1h 13m
-├──   ▶ Add board view · from… claude  ░░░░░░░░━━━░░━━━━░░━━━━░░━━━┿ 1h 1m
-└──   ▶ 流れを整える 🌊        claude    ━━ ░━━━━━░░━━━━░░━━━━░░━━━┿ 49m
-driga
-├──   ▶ 流れを整える 🌊        claude  ━━━━░░━━━━━░░━━━━░░━━━━░░━━━┿ 1h 45m
+echo-pro
+├──   ▶ Investigate cache inv… codex   ░━━━░░━━━━━░░━━━━░░━━━━░░━━━━ 1h 46m
+├──   ✓ Investigate cache inv… codex   ░░░░░░░░░━━░░━━━━░░━━✓━  ━━━━ 1h 22m
+├──   ○ Fix retry after recon… codex   ░░░░░░░░░░░░░░░░░░░░░░░░░░░░─ 1h 10m
+├──   ‖ Investigate cache inv… codex   ░░░░░░░━━━━░░━━━━░░━━━━░░━━━░ 1m
+└──   ▶ Fix retry after recon… codex    ━━━  ━━━━━░░━━━━░░━━━━░░━━━━ 46m
+    └──   ○ Fix retry after re… codex   ░░░░░░░░░░░░░░░░░░░░░░░░░░░░─ 1h 34m
+inloop
+├──   ‖ An intentionally long… gemini  ░░━━░░━━━━━░░━━━━░░━━━━░░━━━░ 3m
+├──   ○ An intentionally long… gemini  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░─ 1h 24m
+├──   ✓ Polish onboarding copy gemini  ░░░░░░━━━━━░░━━━━░░━━━━░░━✓━━ 1h 12m
+├──   ○ An intentionally long… gemini  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░─ 1h 0m
+└──   ‖ Polish onboarding copy gemini    ━━ ░━━━━━░░━━━━░░━━━━░░━━━░ 3m
+    └──   ▶ Polish onboarding … gemini  ░░░░░░━━━━━░░━━━━░░━━━━░░━━━━ 1h 36m
+monk
+├── › ◆ Ship the release pipe… copilot ░━━━░░━━━━━░░━━━━◆◆◆◆◆◆◆◆◆◆◆◆ 23m
 ────────────────────────────────────────────────────────────────────────────────
-Fix retry after reconnect · codex · idle
+Ship the release pipeline safely · copilot · waiting
+cost $0.49 · retained window
 Enter Open session · J Terminal · K Stop · c Ask Chat · Tab Needs you · / Find

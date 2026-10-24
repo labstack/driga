@@ -800,3 +800,8 @@ meter::-moz-meter-bar {
 .machine-app code { overflow-wrap:anywhere; }
 
 .reclaim-nav{display:flex;gap:18px;padding:10px 14px;border-bottom:1px solid var(--line)}
+
+/* Feedback that survives a refresh: outside #main, announced politely. */
+.app-notice{position:fixed;left:50%;bottom:24px;z-index:50;margin:0;padding:10px 16px;border:1px solid var(--line);border-radius:8px;background:var(--raise);color:var(--fg);box-shadow:0 8px 30px rgb(0 0 0 / .25);transform:translate(-50%,8px);opacity:0;pointer-events:none;transition:opacity .15s,transform .15s}
+.app-notice.show{opacity:1;transform:translate(-50%,0)}
+@media (prefers-reduced-motion:reduce){.app-notice{transition:none}}
