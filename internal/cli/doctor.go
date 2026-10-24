@@ -434,7 +434,7 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 		detail, err := status()
 		if err != nil {
 			if errors.Is(err, attention.ErrNotificationsDenied) {
-				add("notifications", "warn", err.Error(), "System Settings > Notifications > Driga > Allow notifications")
+				add("notifications", "warn", err.Error(), attention.MacNotificationSettings)
 			} else {
 				add("notifications", "info", err.Error(), "brew install --cask labstack/tap/driga")
 			}

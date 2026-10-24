@@ -14,6 +14,11 @@ import (
 // ErrNotificationsDenied means macOS has Driga's notifications turned off.
 var ErrNotificationsDenied = errors.New("Driga is not allowed to send notifications")
 
+// MacNotificationSettings opens Driga's page in System Settings > Notifications.
+// macOS asks only once, so after a refusal or a prompt withdrawn by a restart
+// this is the only way to turn notifications on.
+const MacNotificationSettings = `open "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=run.driga"`
+
 // NativeNotificationRequest is the value-only boundary to UserNotifications.
 // No Objective-C objects escape the Darwin implementation.
 type NativeNotificationRequest struct {
@@ -46,6 +51,36 @@ func (m *MacNotifier) Notify(ctx context.Context, n Notification) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	ch := m.authorize()
+	select {
+	case <-ch:
+		return m.post(ctx, n)
+	default:
+	}
+	// While the user considers permission, keep only the latest alert per
+	// destination and post them once answered; collection never waits.
+	m.mu.Lock()
+	if m.pending == nil {
+		m.pending = map[string]Notification{}
+		go m.flush(ctx, ch)
+	}
+	m.pending[nativeNotificationRequest(n).Identifier] = n
+	m.mu.Unlock()
+	return nil
+}
+
+// RequestPermission asks macOS once at startup, while the user who just
+// installed or restarted the service is likely present. macOS shows its prompt
+// only while undecided and answers silently from the saved setting otherwise.
+func (m *MacNotifier) RequestPermission() {
+	if m.Center != nil {
+		m.authorize()
+	}
+}
+
+// authorize starts at most one permission request and returns the channel
+// closed when macOS answers.
+func (m *MacNotifier) authorize() chan struct{} {
 	m.mu.Lock()
 	ch, start := m.authorized, m.authorized == nil
 	if start {
@@ -67,21 +102,7 @@ func (m *MacNotifier) Notify(ctx context.Context, n Notification) error {
 			close(ch)
 		})
 	}
-	select {
-	case <-ch:
-		return m.post(ctx, n)
-	default:
-	}
-	// While the user considers permission, keep only the latest alert per
-	// destination and post them once answered; collection never waits.
-	m.mu.Lock()
-	if m.pending == nil {
-		m.pending = map[string]Notification{}
-		go m.flush(ctx, ch)
-	}
-	m.pending[nativeNotificationRequest(n).Identifier] = n
-	m.mu.Unlock()
-	return nil
+	return ch
 }
 
 func (m *MacNotifier) flush(ctx context.Context, ch chan struct{}) {

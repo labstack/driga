@@ -27,6 +27,10 @@ func MacDesktopNotifier() Notifier { return macNotifier }
 // a viewer without the service, must leave alerts for the collector.
 func DesktopNotificationsReady() bool { return macNotifier.(*MacNotifier).Center != nil }
 
+// RequestNotificationPermission asks macOS for permission when this process
+// runs the native center (the bundled collector); elsewhere it does nothing.
+func RequestNotificationPermission() { macNotifier.(*MacNotifier).RequestPermission() }
+
 func nsClass(name string) objc.ID { return objc.ID(objc.GetClass(name)) }
 func nsString(s string) objc.ID {
 	return nsClass("NSString").Send(objc.RegisterName("stringWithUTF8String:"), s)
@@ -60,7 +64,7 @@ func MacNotificationStatus() (string, error) {
 	case 1:
 		return "", ErrNotificationsDenied
 	case 0:
-		return "native, not asked yet: macOS asks when Driga first notifies", nil
+		return "native, not asked yet: macOS asks when the collector starts", nil
 	case -1:
 		return "native UserNotifications (Driga); permission unknown", nil
 	}
