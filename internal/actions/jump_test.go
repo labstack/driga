@@ -6,6 +6,7 @@ import (
 	"github.com/labstack/driga/internal/model"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -15,6 +16,9 @@ var errOutput = errors.New("output failed")
 
 func (failedOutput) Write([]byte) (int, error) { return 0, errOutput }
 func TestJumpReportsOutputFailure(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows opens a terminal for resume jumps instead of printing the command")
+	}
 	path := filepath.Join(t.TempDir(), "config.toml")
 	if err := os.WriteFile(path, nil, 0600); err != nil {
 		t.Fatal(err)
