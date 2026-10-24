@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"runtime"
 	"structs"
 	"time"
 	"unsafe"
@@ -36,9 +37,16 @@ func goString(s objc.ID) string {
 	}
 	return objc.Send[string](s, objc.RegisterName("UTF8String"))
 }
+
+// autoreleasePool pins the goroutine to its OS thread until drained: a pool
+// must be drained on the thread that created it, or Cocoa crashes.
 func autoreleasePool() func() {
+	runtime.LockOSThread()
 	pool := nsClass("NSAutoreleasePool").Send(objc.RegisterName("new"))
-	return func() { pool.Send(objc.RegisterName("drain")) }
+	return func() {
+		pool.Send(objc.RegisterName("drain"))
+		runtime.UnlockOSThread()
+	}
 }
 
 func MacNotificationStatus() (string, error) {
