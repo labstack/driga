@@ -25,5 +25,9 @@ func NewDeps(cfg config.Config) (collector.Deps, error) {
 		return collector.Deps{}, err
 	}
 	runner := newInboxRunner()
-	return collector.Deps{Cfg: cfg, Plat: platform.New(), Adapters: []adapter.Adapter{claude.New(), codex.New(), gemini.New()}, Sigs: sigs, Git: gitscan.NewScanner(4), SpoolDir: config.SpoolDir(), Now: time.Now, State: collector.NewState(), InboxRunner: runner, Notifier: attention.DesktopNotifier{Runner: runner, Toast: nativeToast, Mac: attention.MacDesktopNotifier()}}, nil
+	var notifier attention.Notifier // nil: leave alerts unconsumed for a process that can post
+	if attention.DesktopNotificationsReady() {
+		notifier = attention.DesktopNotifier{Runner: runner, Toast: nativeToast, Mac: attention.MacDesktopNotifier()}
+	}
+	return collector.Deps{Cfg: cfg, Plat: platform.New(), Adapters: []adapter.Adapter{claude.New(), codex.New(), gemini.New()}, Sigs: sigs, Git: gitscan.NewScanner(4), SpoolDir: config.SpoolDir(), Now: time.Now, State: collector.NewState(), InboxRunner: runner, Notifier: notifier}, nil
 }

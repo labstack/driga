@@ -68,7 +68,7 @@ func TestRecordedMachineWarnings(t *testing.T) {
 	samples := []struct {
 		level string
 		want  int
-	}{{"critical", 0}, {"normal", 0}, {"critical", 0}, {"critical", 1}, {"critical", 1}, {"warning", 1}, {"critical", 1}, {"critical", 2}}
+	}{{"critical", 0}, {"normal", 0}, {"critical", 0}, {"critical", 1}, {"critical", 1}, {"warning", 1}, {"critical", 1}, {"critical", 1}, {"normal", 1}, {"critical", 1}, {"critical", 2}}
 	for i, s := range samples {
 		now := at.Add(time.Duration(i) * time.Minute)
 		err := st.Tx(context.Background(), func(tx *store.Tx) error {

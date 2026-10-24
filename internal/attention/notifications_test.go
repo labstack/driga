@@ -45,6 +45,12 @@ func (f *fakeNotificationCenter) Add(_ context.Context, n NativeNotificationRequ
 	return f.addErr
 }
 
+func (f *fakeNotificationCenter) count() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.requests)
+}
+
 func TestMacNativeMappingAndConcurrentAuthorization(t *testing.T) {
 	f := &fakeNotificationCenter{}
 	m := &MacNotifier{Center: f}
@@ -62,7 +68,12 @@ func TestMacNativeMappingAndConcurrentAuthorization(t *testing.T) {
 		})
 	}
 	wg.Wait()
-	if f.authorizations != 1 || len(f.requests) != 8 {
+	// Alerts arriving while permission is pending coalesce per destination.
+	deadline := time.Now().Add(2 * time.Second)
+	for f.count() == 0 && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	if f.authorizations != 1 || f.count() < 1 || f.count() > 8 {
 		t.Fatal(f)
 	}
 	first := f.requests[0]
@@ -171,6 +182,14 @@ func TestDrigaAppExecutable(t *testing.T) {
 		}
 		if drigaAppExecutable(path) != (rel == "Driga.app/Contents/MacOS/driga") {
 			t.Fatal(rel)
+		}
+	}
+}
+
+func TestDecimalBytesFloor(t *testing.T) {
+	for n, want := range map[uint64]string{12_154_470_400: "12.1 GB", 19_960_000_000: "19.9 GB", 20_000_000_000: "20 GB", 999: "999 B"} {
+		if got := DecimalBytesFloor(n); got != want {
+			t.Fatalf("%d: %s, want %s", n, got, want)
 		}
 	}
 }

@@ -83,7 +83,7 @@ func TestDoctorMacNotifier(t *testing.T) {
 		}
 		status, detail, fix := "ok", "native UserNotifications (Driga)", ""
 		if !available {
-			status, detail, fix = "info", "notifications unavailable: install Driga.app for native macOS notifications (unbundled builds cannot send them)", "install Driga.app (brew install --cask driga)"
+			status, detail, fix = "info", "install Driga.app for native macOS notifications (unbundled builds cannot send them)", "brew install --cask labstack/tap/driga"
 		}
 		c := requireCheck(t, Doctor(context.Background(), d), "notifications", status, fix)
 		if c.Detail != detail || c.Fix != fix {

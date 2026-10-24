@@ -5,6 +5,7 @@ package main
 import (
 	"os"
 	"runtime"
+	"strings"
 
 	"github.com/labstack/driga/internal/attention"
 )
@@ -16,10 +17,19 @@ func init() { runtime.LockOSThread() }
 // Only the collector posts notifications. Other commands, including hooks
 // that run on every agent event, skip AppKit and release the thread.
 func notificationMain(run func()) {
-	if len(os.Args) < 2 || os.Args[1] != "collect" {
+	if command(os.Args[1:]) != "collect" {
 		runtime.UnlockOSThread()
 		run()
 		return
 	}
 	attention.RunNotificationMain(run)
+}
+
+func command(args []string) string {
+	for _, a := range args {
+		if !strings.HasPrefix(a, "-") {
+			return a
+		}
+	}
+	return ""
 }

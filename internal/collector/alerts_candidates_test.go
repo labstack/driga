@@ -124,7 +124,7 @@ func TestMachineNotificationsRearmOnlyAfterRecovery(t *testing.T) {
 		}
 	}
 	step(0, 12_154_470_400, "critical", false, 1)
-	if n.notes[0].Title != "Low disk space" || n.notes[0].Body != "12.2 GB free, below 20 GB" {
+	if n.notes[0].Title != "Low disk space" || n.notes[0].Body != "12.1 GB free, below 20 GB" {
 		t.Fatal(n.notes)
 	}
 	step(time.Minute, 12_000_000_000, "critical", false, 2)
@@ -136,6 +136,31 @@ func TestMachineNotificationsRearmOnlyAfterRecovery(t *testing.T) {
 	// Recovered conditions re-arm even inside the session repeat interval.
 	step(31*24*time.Hour+2*time.Minute, 12_000_000_000, "critical", false, 3)
 	step(31*24*time.Hour+3*time.Minute, 12_000_000_000, "critical", false, 4)
+}
+
+func TestLowDiskHoveringAtLimitAlertsOnce(t *testing.T) {
+	d, st, _, _ := setup(t)
+	n := &fakeNotifier{}
+	d.Notifier = n
+	d.Cfg.Machine.DiskFreeMin = 20_000_000_000
+	at := d.now()
+	for i, free := range []uint64{19_500_000_000, 20_500_000_000, 19_800_000_000, 21_900_000_000, 19_000_000_000, 22_000_000_000, 19_000_000_000} {
+		now := at.Add(time.Duration(i) * time.Minute)
+		d.Now = func() time.Time { return now }
+		d.State = NewState()
+		if err := st.Tx(t.Context(), func(tx *store.Tx) error {
+			return lowDiskInbox(tx, d.Cfg.Machine, model.MachineSample{TS: now, DiskTotal: 1_000_000_000_000, DiskFree: free}, now)
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if err := alertInbox(t.Context(), d, st); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Dips inside 10% of the limit keep one episode; 22 GB recovers and re-arms.
+	if len(n.notes) != 2 {
+		t.Fatal(len(n.notes), n.notes)
+	}
 }
 
 func TestAlertCandidatesRemoteReplayAndMetadataExpiry(t *testing.T) {

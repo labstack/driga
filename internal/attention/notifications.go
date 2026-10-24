@@ -35,6 +35,7 @@ type MacNotifier struct {
 	mu         sync.Mutex
 	authorized chan struct{}
 	authErr    error
+	pending    map[string]Notification // queued while permission is undecided
 }
 
 func (m *MacNotifier) Notify(ctx context.Context, n Notification) error {
@@ -66,16 +67,30 @@ func (m *MacNotifier) Notify(ctx context.Context, n Notification) error {
 	case <-ch:
 		return m.post(ctx, n)
 	default:
-		// Keep the first alert queued while the user considers permission,
-		// without stalling collection or imposing a timeout on their answer.
-		go func() {
-			select {
-			case <-ctx.Done():
-			case <-ch:
-				_ = m.post(ctx, n)
-			}
-		}()
-		return nil
+	}
+	// While the user considers permission, keep only the latest alert per
+	// destination and post them once answered; collection never waits.
+	m.mu.Lock()
+	if m.pending == nil {
+		m.pending = map[string]Notification{}
+		go m.flush(ctx, ch)
+	}
+	m.pending[nativeNotificationRequest(n).Identifier] = n
+	m.mu.Unlock()
+	return nil
+}
+
+func (m *MacNotifier) flush(ctx context.Context, ch chan struct{}) {
+	select {
+	case <-ctx.Done():
+	case <-ch:
+	}
+	m.mu.Lock()
+	queued := m.pending
+	m.pending = nil
+	m.mu.Unlock()
+	for _, n := range queued {
+		_ = m.post(ctx, n)
 	}
 }
 

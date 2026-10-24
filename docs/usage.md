@@ -97,13 +97,16 @@ show `ack pending` and retry on reconnect.
 
 Desktop alerts show the session title or project and why it needs you, within
 your capture policy. macOS notifications require the installed **Driga.app**
-(`brew install --cask driga`); they use Driga's name and icon through the native
+(`brew install --cask labstack/tap/driga`); they use Driga's name and icon through the native
 UserNotifications API. Allow alerts and sounds for Driga when macOS asks, or in
 System Settings → Notifications → Driga. Unbundled builds (`go run`, checkout
 binaries) cannot send macOS notifications; `driga doctor` explains how to install
 the app. No notification helpers are needed. `driga doctor` warns when
 notifications are turned off for Driga; turning them back on takes effect from
-the next notification, without restarting the collector.
+the next notification, without restarting the collector. Alerts raised while
+notifications are off are not replayed; they stay in the inbox. Only the
+background collector posts notifications on macOS, so run the service
+(`driga service install`) to receive them.
 
 Clicking a local item's notification runs `driga inbox jump <item-id>` without
 acknowledging it. Jumps select a proven tmux pane, focus a proven Terminal/iTerm

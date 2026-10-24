@@ -21,6 +21,11 @@ var macStartupErr error
 
 func MacDesktopNotifier() Notifier { return macNotifier }
 
+// DesktopNotificationsReady reports whether this process can post. On macOS
+// only the bundled collector runs the native center; other processes, such as
+// a viewer without the service, must leave alerts for the collector.
+func DesktopNotificationsReady() bool { return macNotifier.(*MacNotifier).Center != nil }
+
 func nsClass(name string) objc.ID { return objc.ID(objc.GetClass(name)) }
 func nsString(s string) objc.ID {
 	return nsClass("NSString").Send(objc.RegisterName("stringWithUTF8String:"), s)
@@ -37,23 +42,11 @@ func autoreleasePool() func() {
 }
 
 func MacNotificationStatus() (string, error) {
-	exe, err := os.Executable()
-	if err != nil {
+	if err := macBundleIdentity(); err != nil {
 		return "", err
-	}
-	if !drigaAppExecutable(exe) {
-		return "", fmt.Errorf("install Driga.app for native macOS notifications (unbundled builds cannot send them)")
 	}
 	if macStartupErr != nil {
 		return "", macStartupErr
-	}
-	if _, err := purego.Dlopen("/System/Library/Frameworks/Foundation.framework/Foundation", purego.RTLD_GLOBAL|purego.RTLD_NOW); err != nil {
-		return "", err
-	}
-	defer autoreleasePool()()
-	bundle := nsClass("NSBundle").Send(objc.RegisterName("mainBundle"))
-	if goString(bundle.Send(objc.RegisterName("bundleIdentifier"))) != "run.driga" {
-		return "", fmt.Errorf("Driga.app must have the run.driga bundle identity; reinstall the app")
 	}
 	switch macAuthorizationStatus() {
 	case 1:
@@ -64,6 +57,27 @@ func MacNotificationStatus() (string, error) {
 		return "native UserNotifications (Driga); permission unknown", nil
 	}
 	return "native UserNotifications (Driga), allowed", nil
+}
+
+// macBundleIdentity checks that this executable can post as Driga. Permission
+// is separate: a refusal is re-checked on each notification, never fatal.
+func macBundleIdentity() error {
+	exe, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	if !drigaAppExecutable(exe) {
+		return fmt.Errorf("install Driga.app for native macOS notifications (unbundled builds cannot send them)")
+	}
+	if _, err := purego.Dlopen("/System/Library/Frameworks/Foundation.framework/Foundation", purego.RTLD_GLOBAL|purego.RTLD_NOW); err != nil {
+		return err
+	}
+	defer autoreleasePool()()
+	bundle := nsClass("NSBundle").Send(objc.RegisterName("mainBundle"))
+	if goString(bundle.Send(objc.RegisterName("bundleIdentifier"))) != "run.driga" {
+		return fmt.Errorf("Driga.app must have the run.driga bundle identity; reinstall the app")
+	}
+	return nil
 }
 
 // macAuthorizationStatus reads UNAuthorizationStatus without prompting:
@@ -123,7 +137,7 @@ func startMacNotifications(exe string) (objc.ID, *macNotificationCenter, error) 
 		}
 	}
 	defer autoreleasePool()()
-	if _, err := MacNotificationStatus(); err != nil {
+	if err := macBundleIdentity(); err != nil {
 		return 0, nil, err
 	}
 	app := nsClass("NSApplication").Send(objc.RegisterName("sharedApplication"))

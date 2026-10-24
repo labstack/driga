@@ -35,9 +35,10 @@ func memoryPressureInbox(tx *store.Tx, s model.MachineSample, now time.Time, pro
 		if err := tx.SetMeta("machine:critical_count", "0"); err != nil {
 			return err
 		}
-		// Failed/unknown readings break the sample streak, but only a known
-		// recovery clears an episode and re-arms its notification.
-		if s.PressureLevel != "normal" && s.PressureLevel != "warning" {
+		// Failed/unknown and warning readings break the sample streak, but only
+		// a return to normal clears an episode and re-arms its notification, so
+		// critical/warning flapping cannot alert repeatedly.
+		if s.PressureLevel != "normal" {
 			return nil
 		}
 		if err := tx.SetMeta("machine:pressure_active", "0"); err != nil {
