@@ -8,10 +8,11 @@ import (
 	"io"
 	"os"
 	"runtime"
+	"slices"
 	"strings"
-	"time"
 
 	"github.com/alecthomas/kong"
+	"github.com/charmbracelet/x/term"
 	"github.com/labstack/driga/internal/config"
 	"github.com/labstack/driga/internal/platform"
 	"github.com/labstack/driga/internal/scrub"
@@ -30,7 +31,6 @@ type Globals struct {
 	Snapshot        bool              `kong:"-"`
 	Theme           *string           `kong:"-"`
 	NoColor         bool              `kong:"-"`
-	Watch           time.Duration     `kong:"-"`
 
 	Version string    `kong:"-"`
 	Commit  string    `kong:"-"`
@@ -45,31 +45,29 @@ type Root struct {
 	Globals
 	VersionFlag kong.VersionFlag `name:"version" help:"Print the driga version."`
 
-	Summary    SummaryCmd   `cmd:"" default:"withargs" help:"Show a one-screen summary."`
-	Flow       FlowCmd      `cmd:"" help:"Show a session family and its state signals."`
-	Activity   ActivityCmd  `cmd:"" help:"Show the last hour of machine activity."`
-	Agents     AgentsCmd    `cmd:"" help:"List agents grouped by family."`
-	Projects   ProjectsCmd  `cmd:"" help:"List project status."`
-	Inbox      InboxCmd     `cmd:"" help:"List attention and completion events."`
-	Conflicts  ConflictsCmd `cmd:"" help:"Show current and recent overlaps."`
-	Orphans    OrphansCmd   `cmd:"" help:"List orphan process trees."`
-	Machines   MachinesCmd  `cmd:"" help:"List known machines and their connection health."`
-	Cleanup    CleanupCmd   `cmd:"" help:"Inspect and explicitly clean local agent disk candidates."`
-	Top        TopCmd       `cmd:"" help:"Open the interactive session viewer."`
-	Web        WebCmd       `cmd:"" help:"Serve the interactive browser dashboard on loopback."`
-	Ask        AskCmd       `cmd:"" help:"Ask a one-shot Chat question through Claude and driga's read-only tools."`
-	MCP        MCPCmd       `cmd:"" name:"mcp" help:"Serve read-only MCP tools over stdio."`
-	Doctor     DoctorCmd    `cmd:"" help:"Check setup and collection health."`
-	Init       InitCmd      `cmd:"" help:"Guide optional setup."`
-	Config     ConfigCmd    `cmd:"" help:"Inspect or edit configuration."`
-	Collect    CollectCmd   `cmd:"" help:"Run the collector (what launchd runs)."`
-	Service    ServiceCmd   `cmd:"" help:"Manage the collector service."`
-	Hooks      HooksCmd     `cmd:"" help:"Manage agent hooks."`
-	Fleet      FleetCmd     `cmd:"" help:"Inspect fleet identity, serving status and viewers."`
-	Hook       HookCmd      `cmd:"" hidden:"" help:"Record an agent hook."`
-	Feed       FeedCmd      `cmd:"" hidden:"" help:"Inspect the local fleet feed."`
-	Dev        DevCmd       `cmd:"" hidden:"" help:"Inspect unsupported agent formats."`
-	VersionCmd VersionCmd   `cmd:"" name:"version" help:"Print the driga version."`
+	Summary    SummaryCmd  `cmd:"" default:"withargs" help:"Show a one-screen summary. Bare driga opens top in a terminal."`
+	Flow       FlowCmd     `cmd:"" help:"Show a session family and its state signals."`
+	Agents     AgentsCmd   `cmd:"" help:"List agents grouped by family."`
+	Projects   ProjectsCmd `cmd:"" help:"List project status."`
+	Inbox      InboxCmd    `cmd:"" help:"List attention and completion events."`
+	Orphans    OrphansCmd  `cmd:"" help:"List orphan process trees."`
+	Machines   MachinesCmd `cmd:"" help:"List known machines and their connection health."`
+	Cleanup    CleanupCmd  `cmd:"" help:"Inspect and explicitly clean local agent disk candidates."`
+	Top        TopCmd      `cmd:"" help:"Open the interactive session viewer."`
+	Web        WebCmd      `cmd:"" help:"Serve the interactive browser dashboard on loopback."`
+	Ask        AskCmd      `cmd:"" help:"Ask a one-shot Chat question through Claude and driga's read-only tools."`
+	MCP        MCPCmd      `cmd:"" name:"mcp" help:"Serve read-only MCP tools over stdio."`
+	Doctor     DoctorCmd   `cmd:"" help:"Check setup and collection health."`
+	Init       InitCmd     `cmd:"" help:"Guide optional setup."`
+	Config     ConfigCmd   `cmd:"" help:"Inspect or edit configuration."`
+	Collect    CollectCmd  `cmd:"" help:"Run the collector (what launchd runs)."`
+	Service    ServiceCmd  `cmd:"" help:"Manage the collector service."`
+	Hooks      HooksCmd    `cmd:"" help:"Manage agent hooks."`
+	Fleet      FleetCmd    `cmd:"" help:"Inspect fleet identity, serving status and viewers."`
+	Hook       HookCmd     `cmd:"" hidden:"" help:"Record an agent hook."`
+	Feed       FeedCmd     `cmd:"" hidden:"" help:"Inspect the local fleet feed."`
+	Dev        DevCmd      `cmd:"" hidden:"" help:"Inspect unsupported agent formats."`
+	VersionCmd VersionCmd  `cmd:"" name:"version" help:"Print the driga version."`
 }
 
 // VersionCmd prints the version and release build metadata.
@@ -183,7 +181,12 @@ func run(args []string, version string, stdin io.Reader, stdout, stderr io.Write
 			report(err, 2)
 			return 2
 		}
-		if err := ctx.Run(); err != nil {
+		run := ctx.Run
+		if ctx.Command() == "summary" && !slices.Contains(args, "summary") && !root.JSON && interactive(stdin, stdout) {
+			// Bare driga in a terminal is the viewer; pipes and --json keep the summary.
+			run = func(...any) error { return TopCmd{Tab: "flow"}.Run(&root.Globals) }
+		}
+		if err := run(); err != nil {
 			code := 1
 			var exitErr interface{ ExitCode() int }
 			if errors.As(err, &exitErr) {
@@ -202,6 +205,12 @@ func run(args []string, version string, stdin io.Reader, stdout, stderr io.Write
 
 type exitPanic struct{}
 
+func interactive(in io.Reader, out io.Writer) bool {
+	i, iok := in.(interface{ Fd() uintptr })
+	o, ook := out.(interface{ Fd() uintptr })
+	return iok && ook && term.IsTerminal(i.Fd()) && term.IsTerminal(o.Fd())
+}
+
 // reportedError preserves a structured partial mutation result already written.
 type reportedError struct{ error }
 
@@ -212,7 +221,7 @@ func supportsJSON(command string) bool {
 		return false
 	}
 	switch words[0] {
-	case "flow", "summary", "activity", "conflicts", "ask", "doctor", "version", "dev", "feed":
+	case "flow", "summary", "ask", "doctor", "version", "dev", "feed":
 		return true
 	case "agents":
 		return len(words) < 2 || words[1] == "list" || words[1] == "show"

@@ -105,13 +105,13 @@ See [Windows setup details](docs/usage.md#windows-experimental).
 ## Quick start
 
 ```sh
-driga
-driga agents
-driga projects
-driga top
+driga service install   # per-user collector: history, inbox and notifications
+driga                   # opens the terminal viewer (driga top)
+driga web               # the same views in your browser, on loopback
+driga doctor            # check setup
 ```
 
-Without a collector, read commands take a disposable snapshot and show
+Without a collector, Driga takes a disposable snapshot and shows
 `snapshot · no history`. That collection writes no persistent database. One
 agent in one repository works without configuring roots or a service.
 
@@ -119,20 +119,24 @@ For guided setup, run `driga init`. Repository roots, text capture, hooks, and
 service installation are optional steps. Session working directories also
 contribute to repository discovery; there are no default scanning roots.
 
-For ongoing history and inbox events:
+Service installation starts a per-user collector and asks macOS for notification
+permission. The first import marks older events as already seen. Reading an
+inbox item never acknowledges it; use the Flow Activity controls in the TUI or `driga inbox ack <item-id>`.
+
+### Scripting and agents
+
+Every read command prints one snapshot, with versioned output under `--json`,
+and actions confirm before they change anything:
 
 ```sh
-driga service install
-driga doctor
+driga agents --json --project .
 driga inbox --since yesterday
+driga inbox ack <item-id>
+driga cleanup list --sizes
 ```
 
-Service installation starts a per-user collector. The first import marks older
-events as already seen. Reading an inbox item never acknowledges it; use
-`driga inbox ack <item-id>` or the Flow Activity controls in the TUI.
-
-Use `driga web` for the local browser dashboard, `driga top --project .` to focus
-on the current project, and `driga <command> --help` for command-specific flags.
+`driga mcp` serves the same reads as MCP tools. Use `driga <command> --help`
+for command-specific flags.
 
 ## Privacy and what it reads
 

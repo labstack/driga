@@ -1,8 +1,17 @@
 # Using Driga
 
-## Everyday commands
+## Everyday use
+
+Run `driga` in a terminal to open the viewer (`driga top`), or `driga web` for
+the browser dashboard. Both refresh live; the CLI below is for scripts, agents
+and actions.
+
+## Scripting and actions
+
+Read commands print one snapshot. Add `--json` for versioned output.
 
 ```sh
+driga summary --json                # bare driga prints this when piped or with --json
 driga agents --all                 # include sessions ended within 24 hours
 driga agents --json --project .
 driga agents show <id>                   # numeric ID from the agents table or --json
@@ -10,14 +19,12 @@ driga projects show <project>
 driga inbox                       # current waits and recent completions; "inbox list" also works
 driga inbox list --all                # complete history, including acks and ended waits
 driga inbox ack <item-id>          # explicit acknowledgment
-driga conflicts
 driga orphans                     # "orphans list" also works
 driga orphans kill <candidate-id>  # previews the tree and requires y
 driga machines show                     # compact report with 24h trends
 driga machines show --full              # all retained trends and process detail
 driga machines                     # local + paired machine health
 driga agents --machine vm-1
-driga agents --watch=2s
 ```
 
 Hosted sessions (marked hosted or with an origin starting with `hosted`) idle for
@@ -86,8 +93,9 @@ from Flow's monetary cost.
 Flow shows only stored evidence: purple spawn links use session ParentID; red dashed
 same-file links require full paths on the same machine. Tool counts/ticks are labelled
 **telemetry** and appear only for actual Claude/Copilot tool events. Cost is labelled
-**retained window**. Unknown history remains neutral. `driga activity` still prints
-machine samples and events per minute; missing samples are gaps.
+**retained window**. Unknown history remains neutral. The web Activity page and
+the MCP `get_activity` tool show machine samples and events per minute; missing
+samples are gaps.
 
 Machine text and JSON default to ten rows per evidence list and three nested
 process/command/install entries per row. MCP trends read only the last 24 hours;
@@ -900,24 +908,22 @@ contains related sessions; selecting a session never selects the whole family.
 
 | Command | Purpose and options |
 | --- | --- |
-| `summary` | One-screen summary; supports machine, project, since, snapshot, watch, JSON and color options. |
+| `summary` | One-screen summary; supports machine, project, since, snapshot, JSON and color options. Bare `driga` runs it when output is piped or `--json` is given, and opens `top` in a terminal. |
 | `flow [<session-id>]` | Session-family flow; `--minutes=15\|60\|240`. Omit ID to select the newest live interactive session; `--since` limits that selection. |
-| `activity` | Last hour of activity; supports machine, project, snapshot, watch, JSON and color options. |
 | `agents list` | Sessions grouped by family; `--all` includes sessions ended within 24 hours. Supports read-view options. |
-| `agents show <session-id>` | One session; supports machine, project, snapshot, watch, JSON and color options. |
+| `agents show <session-id>` | One session; supports machine, project, snapshot, JSON and color options. |
 | `agents jump <session-id>` | Confirm and jump to one local session; `--yes/-y` skips confirmation. |
 | `agents kill <session-id>` | Confirm and terminate one local idle session; `--force`, `--yes/-y`. Identity and idle checks always apply. |
 | `projects list` | Project status; `--active`, `--at-risk`, and read-view options. |
-| `projects show <project>` | Project status, worktrees and sessions; `--machine`, `--snapshot`, `--watch`, `--json`, `--no-color`. |
+| `projects show <project>` | Project status, worktrees and sessions; `--machine`, `--snapshot`, `--json`, `--no-color`. |
 | `projects summarize <project>...` or `projects summarize --all` | Refresh opt-in local summaries through Claude; `--json`. Explicit projects and `--all` are mutually exclusive. |
 | `inbox list` | Attention and completion items; `--all` includes acknowledged/history items. Supports read-view options. |
 | `inbox ack <item-id>` or `inbox ack --all` | Explicit acknowledgment; `--machine` selects the source. |
 | `inbox jump <item-id>` | Jump to a local inbox destination without acknowledgment. |
-| `conflicts` | Current/recent overlaps; supports read-view options. |
 | `orphans list` | Orphan candidates and evidence; supports read-view options. |
 | `orphans kill <orphan-id>` or `orphans kill --all` | `--all`: Select all local orphan candidates; verify and confirm each unless --yes. Supports `--machine`, `--snapshot`, `--force`, `--yes/-y`. |
-| `machines list` | Known machine connection health; `--machine`, `--snapshot`, `--watch`, `--json`, `--no-color`. |
-| `machines show [<machine>]` | Default target is `local`; `all` is rejected. `--full`, `--project`, `--snapshot`, `--watch`, `--json`, `--no-color`. |
+| `machines list` | Known machine connection health; `--machine`, `--snapshot`, `--json`, `--no-color`. |
+| `machines show [<machine>]` | Default target is `local`; `all` is rejected. `--full`, `--project`, `--snapshot`, `--json`, `--no-color`. |
 | `machines reset-id` | Confirm local cloned-machine identity repair; `--yes/-y`. |
 | `cleanup list` | Local candidates; `--kind=worktree\|scratch\|history`, `--sizes`, `--why`, `--json`. History is report-only. |
 | `cleanup remove <candidate-id>` | Verify and remove one candidate; `--dry-run`, `--sizes`, `--include-ignored`, `--yes/-y`, `--json`. |
@@ -946,7 +952,8 @@ contains related sessions; selecting a session never selects the whole family.
 | `version` / `--version` | Build metadata or version discovery; `version` supports `--json`. |
 
 Read-view options are `--machine`, `--project`, `--since`, `--snapshot`,
-`--watch=<duration>`, `--json`, and `--no-color`, on the commands listed above.
+`--json`, and `--no-color`, on the commands listed above. For live views use
+`top` or `web`.
 Unsupported flags and conflicting selectors are errors. `--theme` is scoped to
 `top`. Flags belong after the command or its explicit `list` verb.
 
