@@ -105,7 +105,8 @@ func TestApprovalStopExpiryAndCapabilities(t *testing.T) {
 		t.Run(map[bool]string{true: "expiry", false: "stop"}[expiry], func(t *testing.T) {
 			b, r := actionTurn(t)
 			if expiry {
-				b.approvalTTL = 15 * time.Millisecond
+				// Long enough for a slow runner to observe the pending card first.
+				b.approvalTTL = 500 * time.Millisecond
 			}
 			in := Approval{Conversation: r.Conversation, Token: r.Token, Tool: "Bash", Input: json.RawMessage(`{}`)}
 			bad := in
