@@ -70,6 +70,7 @@ type app struct {
 	chatTool       string
 	chatEventSeq   uint64
 	chatInput      textarea.Model
+	chatBodies     map[string]chatBodyRender
 	chatContext    chat.Context
 	chatID         string
 	chatStatus     string
@@ -283,9 +284,16 @@ func (m *app) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status = "detail: " + msg.err.Error()
 			return m, nil
 		}
-		m.snap.AgentDetails = map[int64]view.AgentView{msg.id: msg.detail}
+		if msg.project != nil {
+			if m.snap.ProjectDetails == nil {
+				m.snap.ProjectDetails = map[int64]view.WhereView{}
+			}
+			m.snap.ProjectDetails[msg.id] = *msg.project
+		} else {
+			m.snap.AgentDetails = map[int64]view.AgentView{msg.id: msg.detail}
+		}
 		m.rebuild()
-		if m.detail && m.detailRow != nil && m.detailRow.agent == msg.id {
+		if m.detail && m.detailRow != nil && (msg.project == nil && m.detailRow.agent == msg.id || msg.project != nil && m.detailRow.project == msg.id) {
 			offset := m.viewport.YOffset()
 			m.openDetail(*m.detailRow)
 			m.viewport.SetYOffset(offset)
@@ -1086,10 +1094,11 @@ func (m *app) showAckPending() {
 }
 
 type selectedDetailMsg struct {
-	key    string
-	id     int64
-	detail view.AgentView
-	err    error
+	key     string
+	id      int64
+	detail  view.AgentView
+	project *view.WhereView
+	err     error
 }
 
 func (m *app) loadSelection() tea.Cmd {
@@ -1101,20 +1110,24 @@ func (m *app) loadSelection() tea.Cmd {
 	if m.detail && m.detailRow != nil {
 		row, ok = *m.detailRow, true
 	}
-	if !ok || row.agent == 0 {
+	if !ok || row.agent == 0 && row.project == 0 {
 		m.selectionKey = ""
 		return nil
 	}
-	key := fmt.Sprintf("%d/%s/%d", m.version, row.machine, row.agent)
+	key := fmt.Sprintf("%d/%s/%d/%d", m.version, row.machine, row.agent, row.project)
 	if key == m.selectionKey {
 		return nil
 	}
 	m.selectionKey = key
-	ctx, scope, id := m.opts.Context, m.flowScope(), row.agent
+	ctx, scope, id, project := m.opts.Context, m.flowScope(), row.agent, row.project
 	if row.machine != "" {
 		scope = store.Scope{Machines: []string{row.machine}}
 	}
 	return func() tea.Msg {
+		if project != 0 && id == 0 {
+			detail, err := source.LoadProject(ctx, scope, project, false)
+			return selectedDetailMsg{key: key, id: project, project: &detail, err: err}
+		}
 		detail, err := source.LoadAgent(ctx, scope, id)
 		return selectedDetailMsg{key: key, id: id, detail: detail, err: err}
 	}

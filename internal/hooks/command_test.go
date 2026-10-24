@@ -33,3 +33,16 @@ func TestWindowsHookCommand(t *testing.T) {
 		t.Fatal(unix, err)
 	}
 }
+
+func TestClaudeHookOwnershipRequiresCompleteInvocation(t *testing.T) {
+	for _, command := range []string{"/opt/driga-dev hook codex Stop", "/opt/driga-dev hook claude Stop extra", "/opt/driga-dev hook claude Stop; echo retained", "/opt/driga-dev hook claude Stop && echo retained", "/opt/drigax hook claude Stop"} {
+		if isClaudeHook(map[string]any{"command": command}, "/opt/driga") {
+			t.Errorf("foreign command recognized: %s", command)
+		}
+	}
+	for _, command := range []string{"/opt/driga-dev hook claude Stop", "'/opt/old tools/driga-custom.exe' hook claude Stop"} {
+		if !isClaudeHook(map[string]any{"command": command}, "/opt/driga") {
+			t.Errorf("build not recognized: %s", command)
+		}
+	}
+}

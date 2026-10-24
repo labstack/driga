@@ -30,7 +30,8 @@ func RunJump(ctx context.Context, r Runner, j *model.InboxJump, opts JumpOptions
 		return "", err
 	}
 	var notice, tty string
-	if len(commands) > 0 && j.Kind == "tmux" && opts.Tmux == "" {
+	server, _, _ := strings.Cut(opts.Tmux, ",")
+	if len(commands) > 0 && j.Kind == "tmux" && server != j.Server {
 		out, err := r.Run(ctx, "tmux", "-S", j.Server, "list-clients", "-F", "#{client_activity} #{client_name} #{client_tty}")
 		if err != nil {
 			return "", err

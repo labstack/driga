@@ -185,3 +185,10 @@ func TestPromptCollectedSessionEnd(t *testing.T) {
 		t.Fatal("collected session end did not retire prompt")
 	}
 }
+
+func TestPromptGenericDetailDecodesUnicode(t *testing.T) {
+	p := Prompt{Tool: "OtherTool", Input: json.RawMessage(`{"value":"\u754c \u003e"}`)}
+	if !strings.Contains(p.Detail(), "界 >") || !strings.Contains(p.InputText(), `\u003e`) {
+		t.Fatal(p.Detail(), p.InputText())
+	}
+}

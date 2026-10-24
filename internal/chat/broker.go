@@ -126,6 +126,7 @@ type Broker struct {
 	closeSocket         func()
 	prompts             map[string]*pendingPrompt
 	promptTTL           time.Duration
+	promptWake          chan struct{}
 	closed              bool
 }
 
@@ -139,7 +140,7 @@ func New(ctx context.Context, st *store.Store, a Agent, o Options) (*Broker, err
 		}
 	}
 	ctx, cancel := context.WithCancel(ctx)
-	b := &Broker{ctx: ctx, cancel: cancel, st: st, agent: a, opts: o, conversations: map[string]*conversation{}}
+	b := &Broker{ctx: ctx, cancel: cancel, st: st, agent: a, opts: o, conversations: map[string]*conversation{}, promptWake: make(chan struct{}, 1)}
 	b.wg.Add(1)
 	go b.watchPrompts()
 	return b, nil
@@ -579,11 +580,23 @@ func (b *Broker) Read(ctx context.Context, id string, after uint64) (State, erro
 	s.Reset = after == 0 || after > c.seq || len(c.events) == 0 || after < c.events[0].Seq-1
 	if s.Reset {
 		for _, a := range c.actions {
-			s.Actions = append(s.Actions, a.Action)
+			copy := a.Action
+			copy.Input = append(json.RawMessage(nil), a.Input...)
+			s.Actions = append(s.Actions, copy)
 		}
 	} else {
 		for _, e := range c.events {
 			if e.Seq > after {
+				// Local clients own their snapshot just as remote clients own decoded JSON.
+				if e.Action != nil {
+					copy := *e.Action
+					copy.Input = append(json.RawMessage(nil), copy.Input...)
+					e.Action = &copy
+				}
+				if e.Message != nil {
+					copy := *e.Message
+					e.Message = &copy
+				}
 				s.Events = append(s.Events, e)
 			}
 		}

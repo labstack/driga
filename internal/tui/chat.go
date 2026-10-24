@@ -35,6 +35,9 @@ type chatTickMsg struct{ generation uint64 }
 
 func newChatInput() textarea.Model {
 	m := textarea.New()
+	styles := m.Styles()
+	styles.Cursor.Blink = false
+	m.SetStyles(styles)
 	m.Placeholder = "Ask driga anything…"
 	m.Prompt = "│ "
 	m.CharLimit = chat.MaxText
@@ -227,6 +230,8 @@ func (m *app) chatView() string {
 	if m.chatFullAsk {
 		header += "\n" + wrapText(fullAutoWarning, m.width)
 	}
+	previousBodies := m.chatBodies
+	m.chatBodies = make(map[string]chatBodyRender, len(m.chatMessages))
 	var lines []string
 	tools := 0
 	for _, row := range m.chatTranscript() {
@@ -266,12 +271,19 @@ func (m *app) chatView() string {
 				text = "Message body not retained by capture policy."
 			}
 		}
-		var body string
-		if row.Role == "assistant" {
-			body = chatMarkdown(text, max(1, m.width-4), m.opts.NoColor)
-		} else {
-			body = wrapText(text, max(1, m.width-4))
+		cached := previousBodies[row.ID]
+		width := max(1, m.width-4)
+		dark := view.HasDarkBackground()
+		if cached.text != text || cached.role != row.Role || cached.width != width || cached.noColor != m.opts.NoColor || cached.dark != dark || cached.body == "" {
+			cached = chatBodyRender{text: text, role: row.Role, width: width, noColor: m.opts.NoColor, dark: dark}
+			if row.Role == "assistant" {
+				cached.body = chatMarkdown(text, width, m.opts.NoColor)
+			} else {
+				cached.body = wrapText(text, width)
+			}
 		}
+		m.chatBodies[row.ID] = cached
+		body := cached.body
 		header := style.Render(name)
 		if row.Role == "assistant" && row.Status == "streaming" {
 			// Activity is shown once, on the status line above the composer.
@@ -755,4 +767,12 @@ func (m *app) scrollChat(delta int, page bool) {
 		delta *= max(1, m.chatPageHeight-1)
 	}
 	m.chatOffset = min(max(0, m.chatOffset+delta), m.chatMaxOffset)
+}
+
+// Only bodies are cached: elapsed time, streaming cursors and decisions stay live.
+// Rebuilding the map each frame retires messages that left the bounded transcript.
+type chatBodyRender struct {
+	text, role, body string
+	width            int
+	noColor, dark    bool
 }

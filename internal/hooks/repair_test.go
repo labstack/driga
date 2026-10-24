@@ -104,7 +104,7 @@ func TestHookStatusSameFile(t *testing.T) {
 	}
 	for _, link := range []string{"symlink", "hardlink"} {
 		dir := t.TempDir()
-		alias := filepath.Join(dir, "driga")
+		alias := filepath.Join(dir, "renamed-build")
 		if link == "symlink" {
 			err = os.Symlink(exe, alias)
 		} else {
@@ -166,5 +166,49 @@ func TestCodexRepairRetainsUninstallRoundTrip(t *testing.T) {
 	diff, err := hooks.CodexUninstall(path, true)
 	if err != nil || diff.After != before {
 		t.Fatalf("round trip: %q %v", diff.After, err)
+	}
+}
+
+func TestRenamedBuildHookOwnership(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix shell fixture")
+	}
+	for _, name := range []string{"driga-dev", "driga-custom.exe", "driga.exe"} {
+		for _, agent := range []string{"claude", "codex", "copilot"} {
+			t.Run(agent+"/"+name, func(t *testing.T) {
+				dir := t.TempDir()
+				path := filepath.Join(dir, "settings")
+				old := filepath.Join(dir, name)
+				current := filepath.Join(dir, "driga")
+				install := hooks.ClaudeInstall
+				uninstall := hooks.ClaudeUninstall
+				switch agent {
+				case "codex":
+					install = hooks.CodexInstall
+					uninstall = hooks.CodexUninstall
+				case "copilot":
+					install = hooks.CopilotInstall
+					uninstall = hooks.CopilotUninstall
+				}
+				if _, err := install(path, old, false, testNow); err != nil {
+					t.Fatal(err)
+				}
+				removal, err := uninstall(path, true)
+				if err != nil || !removal.Changed || strings.Contains(removal.After, old) {
+					t.Fatalf("old build not removable: %+v %v", removal, err)
+				}
+				repair, err := install(path, current, false, testNow)
+				if err != nil || strings.Contains(repair.After, old) {
+					t.Fatalf("old build not replaced: %+v %v", repair, err)
+				}
+				again, err := install(path, current, true, testNow)
+				if err != nil || again.Changed {
+					t.Fatal("not idempotent", err)
+				}
+				if _, err := uninstall(path, false); err != nil {
+					t.Fatal(err)
+				}
+			})
+		}
 	}
 }

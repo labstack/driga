@@ -458,7 +458,7 @@ func TestStoreSource(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if snap.Mode != "daemon" || snap.Hostname != "fixture-host" || len(snap.Agents.Rows) != 1 || len(snap.ProjectDetails) != 1 || len(snap.Inbox.Rows) != 1 {
+	if snap.Mode != "daemon" || snap.Hostname != "fixture-host" || len(snap.Agents.Rows) != 1 || len(snap.ProjectDetails) != 0 || len(snap.Inbox.Rows) != 1 {
 		t.Fatalf("incomplete snapshot: %+v", snap)
 	}
 	if len(snap.Activity.Machines) != 1 || len(snap.Activity.Machines[0].Buckets) != 60 || snap.Activity.Machines[0].Buckets[59].Sample == nil || snap.Activity.Machines[0].Buckets[59].Sample.Cores != 4 {

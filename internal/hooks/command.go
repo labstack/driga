@@ -47,3 +47,20 @@ func hookProgram(command string) (program, rest string, ok bool) {
 	}
 	return shellProgram(command)
 }
+
+// Match the complete invocation, never a shell wrapper or trailing command.
+func hookArguments(rest, adapter string) bool {
+	args := strings.Fields(rest)
+	return len(args) == 3 && args[0] == "hook" && args[1] == adapter && validHookEvent(args[2])
+}
+func validHookEvent(event string) bool {
+	if event == "" {
+		return false
+	}
+	for _, r := range event {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_') {
+			return false
+		}
+	}
+	return true
+}
