@@ -1,0 +1,163 @@
+---
+/* The landing page's opening: status line, headline, tagline, install and the
+ * film. Rendered in place of Starlight's title on the one page with `hero`
+ * frontmatter. */
+import InstallCommand from "./InstallCommand.astro";
+import Film from "./Film.astro";
+import cut from "../../../footage/film/cut.json";
+
+// The film's chapters come from the same cut list the film is rendered from.
+const { tui, web } = cut.takes;
+const browser = tui.answered - tui.typed;
+const ending = browser + web.selected - web.prompt;
+const chapters = [
+  { label: "Terminal", start: 0 },
+  { label: "Browser", start: browser },
+  { label: "Install", start: ending },
+];
+
+const { data } = Astro.locals.starlightRoute.entry;
+const { title = data.title, tagline, actions = [] } = data.hero ?? {};
+const docs = actions.find((a) => !a.link.startsWith("#")) ?? actions[0];
+---
+
+<div class="dg-hero">
+  <p class="dg-hero-status"><span aria-hidden="true"></span>alpha · macOS, Linux · Windows experimental</p>
+  <h1 id="_top">{title}</h1>
+  {tagline && <p class="dg-hero-tagline" set:html={tagline} />}
+  <div class="dg-hero-actions">
+    <InstallCommand command="brew install --cask labstack/tap/driga" label="" />
+    {
+      docs && (
+        <a href={docs.link} class="dg-action" data-analytics-event="cta_click" data-analytics-location="hero" {...docs.attrs}>
+          {docs.text} <span aria-hidden="true">→</span>
+        </a>
+      )
+    }
+  </div>
+  <Film name="hero" phone="needs" eager chapters={chapters} length={ending + cut.hero.end} label="A real-time screen recording of driga on demo sessions. In a terminal, driga is typed and opens; workers start under a session; that session asks permission to run pnpm prisma migrate deploy, and it is allowed with y. Then the same prompt is allowed in the browser dashboard, and a session that shares a file with another is opened. It ends on the install command." />
+  <p class="dg-hero-agents">
+    <span>Works with</span>
+    <span>Claude Code</span><span>Codex</span><span>GitHub Copilot CLI</span><span>Gemini CLI</span><span>Antigravity (process level)</span>
+  </p>
+</div>
+
+<style>
+  .dg-hero {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.6rem;
+    padding: 3.5rem 0 0;
+    text-align: center;
+  }
+
+  .dg-hero-status {
+    display: inline-flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+    gap: 0.6rem;
+    margin: 0;
+    padding: 0.35rem 0.9rem;
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: 999px;
+    font-family: var(--dg-font-mono);
+    font-size: 0.8rem;
+    color: var(--sl-color-gray-2);
+  }
+
+  .dg-hero-status span {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background: var(--catppuccin-green, #a6e3a1);
+  }
+
+  .dg-hero h1#_top {
+    max-width: 15em;
+    margin: 0;
+    font-family: var(--dg-font-display);
+    font-size: clamp(2.4rem, 5.6vw, 4.25rem);
+    font-weight: 650;
+    line-height: 1.04;
+    letter-spacing: -0.035em;
+    color: var(--sl-color-white);
+    text-wrap: balance;
+  }
+
+  .dg-hero-tagline {
+    max-width: 40rem;
+    margin: 0;
+    font-family: var(--dg-font-body);
+    font-size: 1.2rem;
+    line-height: 1.6;
+    color: var(--sl-color-gray-2);
+    text-wrap: pretty;
+  }
+
+  .dg-hero-actions {
+    max-width: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: stretch;
+    gap: 0.75rem;
+  }
+
+  .dg-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-height: 3.1rem;
+    padding: 0 1.3rem;
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: 12px;
+    font-family: var(--dg-font-display);
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: var(--sl-color-white);
+    text-decoration: none;
+  }
+
+  .dg-action:hover {
+    border-color: var(--sl-color-gray-4);
+    background: var(--sl-color-gray-6);
+  }
+
+  .dg-action:focus-visible {
+    outline: 2px solid var(--sl-color-accent);
+    outline-offset: 2px;
+  }
+
+  .dg-hero-agents {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.5rem 1.6rem;
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--sl-color-gray-3);
+  }
+
+  .dg-hero-agents span + span {
+    color: var(--sl-color-gray-1);
+  }
+
+  @media (max-width: 39.999rem) {
+    .dg-hero-actions,
+    .dg-hero-actions > :global(*) {
+      width: 100%;
+    }
+
+    .dg-action {
+      justify-content: center;
+    }
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .dg-action {
+      transition: border-color 0.15s ease, background-color 0.15s ease;
+    }
+  }
+</style>

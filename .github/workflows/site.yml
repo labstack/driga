@@ -1,0 +1,91 @@
+# Publishing the documentation site at https://driga.dev.
+#
+# The reference under site/src/content/docs/reference is generated from the
+# code by cmd/driga-docgen and committed, and `just check` fails a change that
+# edits the code without regenerating. Publication deploys from main, where the
+# documentation and the code it describes agree.
+name: Site
+
+on:
+  push:
+    branches: [main]
+    # Every source the generator reads is listed: the command tree in
+    # internal/cli, settings in internal/config, MCP tools in internal/mcp and
+    # internal/chat, hook installers in internal/hooks, and the TUI golden
+    # frames the site renders from internal/tui/testdata.
+    paths:
+      - "site/**"
+      - "cmd/driga-docgen/**"
+      - "internal/cli/**"
+      - "internal/config/**"
+      - "internal/mcp/**"
+      - "internal/chat/**"
+      - "internal/hooks/**"
+      - "internal/tui/testdata/**"
+      - "internal/web/static/brand/**"
+      - "go.mod"
+      - "go.sum"
+      - ".github/workflows/site.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # One publication at a time; a newer build supersedes an older one.
+  group: site
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24.19.0
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      # Publishing a reference that is behind the code would document flags
+      # and settings the binary no longer accepts.
+      - name: Refuse a reference that is behind the code
+        env:
+          CGO_ENABLED: "0"
+        run: go run ./cmd/driga-docgen --check
+
+      - name: Install dependencies
+        working-directory: site
+        run: npm ci
+
+      # astro check, the build, and the table, social-card, canonical and link
+      # checks.
+      - name: Build
+        working-directory: site
+        env:
+          SITE_URL: https://driga.dev
+          # A GA4 measurement id is public in the delivered page, so this is a
+          # repository variable rather than a secret. When absent, the build
+          # emits no analytics script or request.
+          PUBLIC_GA_MEASUREMENT_ID: ${{ vars.PUBLIC_GA_MEASUREMENT_ID }}
+        run: npm run build
+
+      # main is the production branch of the Cloudflare Pages project.
+      - name: Publish
+        working-directory: site
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: e6379d37f788129207ab5f566abfb4ff
+        run: |
+          npx --yes wrangler@4.123.0 pages deploy dist \
+            --project-name driga \
+            --branch main \
+            --commit-hash "${GITHUB_SHA}"

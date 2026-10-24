@@ -1,0 +1,93 @@
+---
+title: Install
+description: Install Driga with Homebrew on macOS, packages on Linux, Scoop on Windows, or build it from source.
+summary: Homebrew cask on macOS, .deb/.rpm and archives on Linux, Scoop on Windows (experimental), and source builds.
+read_when:
+  - You are installing Driga for the first time.
+  - You are upgrading from a bare-binary release on macOS.
+---
+
+import { Tabs, TabItem } from "@astrojs/starlight/components";
+
+<Tabs syncKey="os">
+<TabItem label="macOS">
+
+Install the signed and notarized release with Homebrew:
+
+```sh
+brew install --cask labstack/tap/driga
+```
+
+Homebrew keeps the background-only `Driga.app` in Caskroom and links `driga`
+to the CLI inside it. The app has no Dock icon; it gives the collector its name
+and icon in System Settings and is required for
+[desktop notifications](/guides/notifications).
+
+Upgrading from a bare-binary release: if you use the collector, run
+`driga service install` once to repair the service path. After that,
+`brew upgrade` keeps the path stable; run `driga service restart` to pick up
+the new version. `driga doctor` warns about a stale service path.
+
+</TabItem>
+<TabItem label="Linux">
+
+Debian `.deb` and RPM `.rpm` packages, plus `tar.gz` archives for amd64 and
+arm64, are on [GitHub Releases](https://github.com/labstack/driga/releases).
+Verify each download against `driga_<version>_checksums.txt` before
+installing.
+
+The collector runs as a systemd user service. On a VM or server, allow it to
+run after logout:
+
+```sh
+loginctl enable-linger "$USER"
+```
+
+Without systemd, run `driga collect` under tmux or nohup instead.
+
+</TabItem>
+<TabItem label="Windows">
+
+Windows support is [experimental](/guides/windows). Install with Scoop:
+
+```powershell
+scoop bucket add labstack https://github.com/labstack/scoop-bucket
+scoop install labstack/driga
+```
+
+Archives containing `driga.exe` are also on
+[GitHub Releases](https://github.com/labstack/driga/releases). Keep
+`driga.exe` at a stable path without shell metacharacters before installing
+hooks or the service.
+
+</TabItem>
+<TabItem label="From source">
+
+Use the Go version in `go.mod` or newer:
+
+```sh
+CGO_ENABLED=0 go build ./cmd/driga
+./driga version
+```
+
+`go install ...@<tag>` does not work: CalVer tags use the year as their major
+version, which Go module rules reject for this module path. Use a package, an
+archive or a checkout.
+
+</TabItem>
+</Tabs>
+
+## Before hooks or the service
+
+Keep Git on `PATH` and the installed binary at a stable absolute path. Hooks
+and the collector service record that path; moving the binary afterwards breaks
+them until you reinstall them.
+
+Check the install:
+
+```sh
+driga version
+driga doctor
+```
+
+Next: [First run](/start/first-run).

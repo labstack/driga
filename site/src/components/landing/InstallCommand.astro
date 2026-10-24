@@ -1,0 +1,128 @@
+---
+/* The one install command, with a copy button. The command is the text of
+ * the <code> element, so the Markdown alternate and llms-full.txt keep it. */
+interface Props {
+  command: string;
+  label?: string;
+  id?: string;
+}
+
+const { command, label = "Install on macOS", id = "dg-install-command" } = Astro.props;
+---
+
+<div class="dg-install">
+  {label && <p class="dg-install-label">{label}</p>}
+  <div class="dg-install-row">
+    <code id={id} data-analytics-copy="install">{command}</code>
+    <button type="button" class="dg-install-copy" data-copy-target={id}>
+      <span data-copy-label aria-live="polite">Copy</span>
+    </button>
+  </div>
+  <slot />
+</div>
+
+<style>
+  .dg-install {
+    min-width: 0;
+    max-width: min(44rem, 100%);
+  }
+
+  .dg-install-label {
+    margin: 0 0 0.5rem;
+    font-family: var(--dg-font-display);
+    font-size: 0.75rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--sl-color-gray-3);
+  }
+
+  .dg-install-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: stretch;
+  }
+
+  .dg-install-row code {
+    flex: 1;
+    min-width: 0;
+    overflow-x: auto;
+    white-space: nowrap;
+    padding: 0.8rem 1rem;
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: var(--dg-frame-radius);
+    background: var(--sl-color-gray-6);
+    font-family: var(--dg-font-mono);
+    font-size: 0.95rem;
+    color: var(--sl-color-white);
+  }
+
+  .dg-install-row code::before {
+    content: "$ ";
+    color: var(--sl-color-accent-high);
+  }
+
+  .dg-install-copy {
+    flex: 0 0 auto;
+    min-height: 44px;
+    padding: 0 0.9rem;
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: var(--dg-frame-radius);
+    background: transparent;
+    font-family: var(--dg-font-display);
+    font-size: 0.875rem;
+    color: var(--sl-color-white);
+    cursor: pointer;
+  }
+
+  .dg-install-copy:hover {
+    border-color: var(--sl-color-gray-4);
+    color: var(--sl-color-white);
+  }
+
+  .dg-install-copy:focus-visible {
+    outline: 2px solid var(--sl-color-accent);
+    outline-offset: 2px;
+  }
+
+  /* The command is the line people copy: on a phone it wraps rather than
+     hiding its end behind a scroll. */
+  @media (max-width: 39.999rem) {
+    .dg-install-row code {
+      white-space: normal;
+      overflow-wrap: anywhere;
+      font-size: 0.85rem;
+    }
+  }
+
+  .dg-install-copy span {
+    display: inline-block;
+    min-width: 6ch;
+  }
+</style>
+
+<script>
+  document.querySelectorAll<HTMLButtonElement>("[data-copy-target]").forEach((button) => {
+    const target = document.getElementById(button.dataset.copyTarget!);
+    // Without the Clipboard API the button cannot do its job, so it goes.
+    if (!target || !navigator.clipboard) {
+      button.remove();
+      return;
+    }
+    const label = button.querySelector<HTMLElement>("[data-copy-label]")!;
+    let revert: number | undefined;
+    button.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText((target.textContent ?? "").trim());
+      } catch {
+        return;
+      }
+      label.textContent = "Copied";
+      // The Clipboard API raises no copy event; announce it for analytics.
+      document.dispatchEvent(new CustomEvent("driga:copy", { detail: "install" }));
+      window.clearTimeout(revert);
+      revert = window.setTimeout(() => {
+        label.textContent = "Copy";
+      }, 2000);
+    });
+  });
+</script>

@@ -1,0 +1,92 @@
+---
+title: See what your coding agents are doing, and what needs you.
+description: Driga watches Claude Code, Codex, Gemini CLI and Copilot sessions across your projects and machines, in a CLI, a terminal UI and a local web dashboard.
+summary: What Driga is, how to install it on macOS, and what it shows.
+template: splash
+head:
+  - tag: title
+    content: "Driga · See what your coding agents are doing, and what needs you."
+  - tag: link
+    attrs:
+      rel: canonical
+      href: "https://driga.dev/"
+  - tag: meta
+    attrs:
+      property: og:title
+      content: "Driga · See what your coding agents are doing, and what needs you."
+  - tag: meta
+    attrs:
+      property: og:url
+      content: "https://driga.dev/"
+hero:
+  title: See what your coding agents are doing, and what needs you.
+  tagline: Every Claude Code, Codex, Copilot and Gemini session across your projects and machines, live. Answer a waiting agent from the terminal or the browser.
+  actions:
+    - text: Read the docs
+      link: /start/what-driga-is
+      attrs:
+        data-analytics-action: docs
+---
+
+import Feature from "../../components/landing/Feature.astro";
+import Section from "../../components/landing/Section.astro";
+import Way from "../../components/landing/Way.astro";
+import InstallCommand from "../../components/landing/InstallCommand.astro";
+
+<Feature eyebrow="◆ NEEDS YOU" tone="yellow" title="Stop checking tabs. The waiting agent comes to you." href="/guides/needs-you" more="How Needs you works" media="needs" label="The web dashboard's Needs you panel: a permission prompt for pnpm prisma migrate deploy, with Allow and Deny; Allow is pressed and the wait clears.">
+
+Permission prompts, questions and finished turns land in one list, oldest first, with the full command. Allow or deny without finding the window.
+
+</Feature>
+
+<Feature eyebrow="▶ FLOW" tone="green" title="Who is doing what, at a glance." href="/guides/flow" more="Read about Flow" media="flow" label="The web dashboard's Flow map in light mode: sessions grouped by project, workers under the session that started them, and a selected session showing a file also touched by another session." flip>
+
+Sessions grouped by project, workers under the agent that started them, and a red tag when two agents edit the same file. As a map, a timeline or a plain list.
+
+</Feature>
+
+<Feature eyebrow="▣ MACHINES" tone="mauve" title="Know which agent is using your machine." href="/guides/projects-and-machines" more="Projects and machines" media="machines" label="The terminal UI's Machines tab: memory and CPU for each agent session, other apps, and machine vitals.">
+
+Memory and CPU by session, helpers left running after an agent ends, and old worktrees you can remove, each with its evidence and a confirm step.
+
+</Feature>
+
+<Section title="One collector, three ways in.">
+
+<Way command="driga" title="Terminal UI">
+
+Keyboard first. Flow, Projects and Machines, with Chat one key away. [Flow](/guides/flow)
+
+</Way>
+
+<Way command="driga web" title="Web dashboard">
+
+The same views in your browser, on loopback only. Light and dark follow your system. [First run](/start/first-run)
+
+</Way>
+
+<Way command="driga mcp" title="For scripts and agents">
+
+Read-only MCP tools and versioned `--json` on every read command. [MCP](/guides/mcp)
+
+</Way>
+
+</Section>
+
+<Section title="Local by default." layout="panel">
+
+No account and no API key. Driga reads session files, the process table and Git on your machine. Driga is alpha: formats and behaviour can still change.
+
+- Full transcripts are never stored.
+- Nothing leaves the machine unless you pair machines, over pinned mutual TLS, or use Chat and summaries, which go through your own `claude` CLI.
+- Open source, Apache 2.0. [Privacy and data](/explanation/privacy-and-data)
+
+</Section>
+
+<Section title="Run it next to your agents." layout="closing">
+
+<InstallCommand command="brew install --cask labstack/tap/driga" label="" id="dg-install-closing" />
+
+Then run `driga`. Linux packages and Windows (experimental) are on the [install page](/start/install).
+
+</Section>

@@ -1,0 +1,13 @@
+{
+  "fps": 30,
+  "takes": {
+    "tui": { "typed": 1.4, "answered": 11.8 },
+    "machines": { "start": 14.1, "length": 3.2 },
+    "web": { "prompt": 8, "allowed": 13.5, "overlap": 15, "selected": 18.5 }
+  },
+  "hero": { "end": 3, "poster": 8 },
+  "crops": {
+    "needs": { "x": 1290, "y": 220, "width": 620, "height": 465 },
+    "flow": { "x": 0, "y": 112, "width": 1290, "height": 968 }
+  }
+}

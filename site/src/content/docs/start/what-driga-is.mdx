@@ -1,0 +1,69 @@
+---
+title: What Driga is
+description: A CLI, terminal UI and local web dashboard that shows what your AI coding agents are doing across projects and machines, and what needs you.
+summary: The problem Driga solves, the agents it reads, its three views and its alpha status.
+read_when:
+  - You are deciding whether Driga fits how you run coding agents.
+  - You want the vocabulary (session, family, Needs you, Flow) before the guides.
+---
+
+Driga watches AI coding agent sessions on your machine, and optionally on
+machines you pair with it, and puts them in one place: what is running, what is
+waiting for you, what finished, and what was left behind.
+
+It is one binary with several faces:
+
+- **Terminal UI** — `driga` (or `driga top`), with Flow, Projects and Machines tabs.
+- **Web dashboard** — `driga web` serves the same views on loopback.
+- **For scripts and agents** — `driga agents`, `driga inbox` and the other read
+  commands print one snapshot as a table or versioned JSON, actions confirm
+  before they change anything, and `driga mcp` serves read-only MCP tools.
+
+## What it reads
+
+| Agent | Evidence |
+| --- | --- |
+| Claude Code | Session history, optional hooks, optional OTLP telemetry |
+| Codex | Session history and catalog (opened read-only), optional permission hook |
+| Gemini CLI | Chat transcripts |
+| GitHub Copilot CLI | Hooks and process observations |
+| Antigravity (`agy`) | Process observations only |
+
+Driga also reads the process table, machine health (memory, CPU, pressure,
+disk) and local Git state. Local Git commands never fetch. See
+[How Driga observes sessions](/explanation/how-driga-observes).
+
+## The views
+
+**Flow** shows sessions as a map, a timeline or a list, grouped by project. A
+*family* is a set of related sessions, such as a lead and the workers it
+spawned. **Needs you** is the shelf of sessions waiting on you, oldest first,
+including Claude permission prompts you can answer from Driga.
+
+**Projects** owns repository context: branches, worktrees, dirty state and file
+overlaps between agents. **Machines** owns health and reclamation: memory and
+CPU by session, orphaned helper processes, and disk that agents left behind.
+
+## Session labels
+
+| Label | Meaning |
+| --- | --- |
+| `working` | The agent is in a turn. |
+| `waiting` | The agent needs you: an attention request or permission prompt. |
+| `idle` | Alive, between turns. |
+| `stalled?` | A busy session has been quiet longer than `stalled_after`; suspected, not proven. |
+| `finished` | A completed turn you have not read, in a continuing session. |
+| `ended` | The process exited with no open turn, a session-end hook arrived, or the conversation was replaced. |
+| `dead` | An interrupted open turn or crash evidence. |
+| `unknown` | The evidence cannot establish a state. |
+
+Evidence for each label is in the session detail (`driga agents show <id>`).
+
+## Status
+
+Driga is **alpha**. Agent formats and behaviour can change, and unknown or
+incomplete evidence is shown explicitly rather than guessed. macOS and Linux are
+supported; Windows is [experimental](/guides/windows). Pre-release databases may
+need a reset; `driga doctor` prints the command.
+
+Next: [Install](/start/install).

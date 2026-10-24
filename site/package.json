@@ -1,0 +1,36 @@
+{
+  "name": "driga-website",
+  "type": "module",
+  "private": true,
+  "version": "0.0.0",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "astro dev",
+    "start": "astro dev",
+    "build": "astro check && astro build && node scripts/check-tables.mjs && node scripts/check-social-card.mjs && node scripts/check-canonical.mjs && node scripts/check-links.mjs",
+    "preview": "astro preview",
+    "astro": "astro"
+  },
+  "dependencies": {
+    "@astrojs/markdown-remark": "7.3.4",
+    "@astrojs/starlight": "0.42.7",
+    "@catppuccin/starlight": "2.1.0",
+    "@fontsource/geist-mono": "5.3.0",
+    "@fontsource/geist-sans": "5.3.0",
+    "@fontsource/ibm-plex-mono": "5.3.0",
+    "@fontsource/ibm-plex-sans": "5.3.0",
+    "astro": "7.4.2",
+    "sharp": "0.35.5"
+  },
+  "devDependencies": {
+    "@astrojs/check": "0.9.12",
+    "typescript": "6.0.3"
+  },
+  "overrides": {
+    "@catppuccin/starlight": {
+      "@astrojs/starlight": "$@astrojs/starlight"
+    }
+  }
+}

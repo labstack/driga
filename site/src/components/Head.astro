@@ -1,0 +1,50 @@
+---
+import Default from "@astrojs/starlight/components/Head.astro";
+import { getCollection } from "astro:content";
+import Analytics from "./Analytics.astro";
+import { siteAssetURL } from "../lib/site-assets";
+
+// Every documentation page advertises its Markdown alternate in the head, so an
+// agent that reads the head never has to parse the rendered body.
+//
+// Only pages that are actually in the collection get the link. Starlight's 404
+// is rendered by the same layout but has no entry, so without this check it
+// advertises a `/404.md` that nothing generates — a dead link in the one place
+// an agent looks when it is already lost.
+const docs = await getCollection("docs");
+const ids = new Set(docs.map((entry) => entry.id));
+
+const id = Astro.locals.starlightRoute.entry.id;
+const markdownHref = ids.has(id)
+  ? siteAssetURL(Astro.site, `/${id}.md`)
+  : null;
+
+// Starlight emits `twitter:card: summary_large_image` but never an image to go
+// with it, so every link to the site unfurled as an empty large card. One image
+// for the whole site rather than a card per page: a per-page render would make
+// the build depend on a font the site only loads in the browser, and the card
+// is the same one GitHub shows for the repository.
+//
+// Absolute URLs are required here: Open Graph consumers do not resolve relative
+// hrefs. The configured site is the canonical origin.
+const socialCardHref = siteAssetURL(Astro.site, "/social-card.png");
+---
+
+<Default><slot /></Default>
+<Analytics />
+<meta property="og:image" content={socialCardHref} />
+<meta property="og:image:width" content="1280" />
+<meta property="og:image:height" content="640" />
+<meta
+  property="og:image:alt"
+  content="Driga: see what your coding agents are doing, and what needs you."
+/>
+<meta name="twitter:image" content={socialCardHref} />
+{
+  markdownHref && (
+    <>
+      <link rel="alternate" type="text/markdown" href={markdownHref} />
+      <meta name="dg:markdown" content={markdownHref} />
+    </>
+  )
+}

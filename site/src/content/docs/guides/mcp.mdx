@@ -1,0 +1,69 @@
+---
+title: Connect an agent over MCP
+description: Register driga mcp with Claude Code or Codex so your agent can read sessions, projects, inbox and machine health through read-only tools.
+summary: Registering driga's read-only MCP server with Claude Code and Codex, what the tools return, and scoping requests.
+read_when:
+  - You want your coding agent to ask Driga what other agents are doing.
+  - You are deciding whether giving an agent Driga's MCP tools is safe.
+---
+
+import { Tabs, TabItem } from "@astrojs/starlight/components";
+
+`driga mcp` serves read-only tools over stdio. Every response is the same
+schema-2 envelope as `--json`, and reading never acknowledges inbox items. The
+server cannot answer prompts, kill processes or remove anything; those actions
+exist only inside Driga's own [Chat](/guides/chat), behind approval cards.
+
+Keep the installed `driga` binary on the client's `PATH`, and run the
+collector for history and merged fleet data. Without one, tools answer from a
+labelled one-shot snapshot.
+
+<Tabs syncKey="agent">
+<TabItem label="Claude Code">
+
+```sh
+claude mcp add --scope user driga -- driga mcp
+```
+
+</TabItem>
+<TabItem label="Codex">
+
+In `~/.codex/config.toml` (or `$CODEX_HOME/config.toml`):
+
+```toml
+[mcp_servers.driga]
+command = "driga"
+args = ["mcp"]
+```
+
+</TabItem>
+</Tabs>
+
+## Scope
+
+Machine, project and time scopes are tool arguments, not server flags. Pass
+`machine: "local"` to read only this machine. `driga mcp --snapshot` forces
+one-shot reads without history.
+
+Every tool takes `limit` (1–500, default 100), which bounds the total entries
+in a response including nested lists; `truncated: true` means some were left
+out.
+
+## Tools
+
+| Tool | CLI equivalent |
+| --- | --- |
+| `get_summary` | `driga summary` |
+| `list_agents`, `get_agent` | `driga agents`, `driga agents show` |
+| `get_flow` | `driga flow` |
+| `list_projects`, `inspect_project` | `driga projects`, `driga projects show` |
+| `list_inbox` | `driga inbox` |
+| `list_conflicts` | Overlaps in Flow and Projects |
+| `list_orphans` | `driga orphans` |
+| `get_machine`, `list_machines` | `driga machines show`, `driga machines` |
+| `get_activity` | The web Activity page |
+| `inspect_setup` | `driga doctor` |
+| `list_cleanup_candidates` | `driga cleanup list` |
+
+Inputs and descriptions for every tool are in the
+[MCP tools reference](/reference/mcp-tools), generated from the server itself.

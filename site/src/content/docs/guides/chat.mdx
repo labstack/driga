@@ -1,0 +1,98 @@
+---
+title: Chat and actions
+description: Ask Driga about your sessions through your installed Claude Code CLI, and approve the actions it proposes with trust modes and action cards.
+summary: Chat in the TUI and web, driga ask, what Chat can do, the Confirm, Auto and Full auto trust modes, action cards and what is retained.
+read_when:
+  - You want to ask questions about your sessions in plain language.
+  - You want to know what Chat may run without asking.
+---
+
+import TerminalFrame from "../../../components/TerminalFrame.astro";
+
+Chat answers questions about your sessions using your installed `claude` CLI
+and its existing login. Driga has no API key and never calls a model in the
+background: Chat and [summaries](#summaries) run only when you ask. Codex and
+Copilot are listed as coming.
+
+<TerminalFrame name="chat-80" title="driga top · Chat" caption="An action card waiting for approval. Rendered from the TUI's synthetic test fixture." />
+
+## Open it
+
+- **Terminal UI:** press `c` anywhere for Chat with the current selection.
+  Enter sends; Shift+Enter (or Alt+Enter) adds a line; Esc closes the panel and
+  keeps the draft. Alt+0, Alt+1 and Alt+2 switch tabs while typing.
+- **Web:** press `c` on any page, or open the Chat page, to dock Chat on the
+  right. Context chips describe the current page, selection and machine; remove
+  a chip to leave it out.
+- **One shot:** `driga ask "which agents are waiting on me?"`. `driga ask` is
+  read-only and has no action cards.
+
+Session references in answers select the session. Tool calls appear in a
+collapsed **Tools used** list, and replies are marked **answered by Claude
+Code**.
+
+## What Chat can do
+
+Chat reads through Driga's read-only tools. With approval it can also
+acknowledge inbox items, jump to a session terminal, kill an agent or orphan,
+clean up a candidate, refresh project summaries and answer Claude permission
+prompts. It also has Claude's built-in shell and file tools. Actions are
+local-only and keep the CLI's process, cleanup and jump safety checks. Chat
+never types into a live agent terminal.
+
+## Trust modes
+
+Each conversation starts in **Confirm**. Change mode with the web header
+buttons or `m` in the TUI's navigate mode.
+
+| Mode | Runs without asking | Asks |
+| --- | --- | --- |
+| Confirm | Driga read tools; reads inside the working directory | Reads elsewhere and every other call |
+| Auto | Confirm's list, plus inbox acknowledgments, jumps and summaries; Edit/Write only inside a git project working directory that is not your home, the Driga data directory or an ancestor of either, and never on hidden paths or agent instruction files | Everything else |
+| Full auto | Everything | Nothing |
+
+Answering a permission prompt always asks in Auto.
+
+**Full auto** needs confirmation, is shown in red with its remaining time, and
+lasts at most 30 minutes. It ends when you switch it off, close the
+conversation or restart the broker, and is never persisted. Only you, through a
+client, can change modes or decide cards; model text, files and tool output
+cannot.
+
+## Action cards
+
+A card shows the tool, its exact input, the working directory, status, who
+decided and the result.
+
+- **Web:** click **Allow** or **Deny**.
+- **TUI:** in navigate mode `y` allows and `n` denies the oldest pending card;
+  while typing use Alt+y and Alt+n. The status line says **action waiting**.
+
+Stop denies pending cards before stopping the turn. Unanswered cards expire
+after ten minutes.
+
+## Where conversations live
+
+The collector owns the Chat broker. Without the service, the client you open
+runs a private broker and labels it **conversations end with it**. With the
+service, conversation IDs and capture-filtered messages persist for 30 days;
+interrupted work is marked interrupted after a restart and never replayed to
+the agent.
+
+Your question is scrubbed and sent to Claude. Context and tool results pass the
+capture policy first. Under the default `capture_text = "titles"` Driga keeps
+no chat message bodies; `snippets` keeps scrubbed 200-character snippets.
+Claude's own session history is managed by Claude and is not controlled by
+Driga's capture policy.
+
+## Summaries
+
+```sh
+driga projects summarize <project>...   # or --all
+```
+
+Summaries need `summaries.enabled = true`. They send the project name,
+branches, dirty/ahead/behind counts, the last five commit subjects, recent
+session titles and, only with `capture_text = "snippets"`, handoff text. They
+never send transcript lines, file contents or paths, and run with a $0.05
+budget cap.

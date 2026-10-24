@@ -1,0 +1,270 @@
+---
+/* A real-time recording of the real driga, in the site's theme.
+ *
+ * `just site-footage` records the takes, renders each film in dark and light,
+ * writes its posters to src/assets/media and, with --upload, publishes the
+ * videos to R2 and their URLs to src/data/media.json. Posters are committed;
+ * videos are not. Without a manifest entry a film shows its poster only,
+ * except in `astro dev`, which plays the local renders from public/media-local.
+ *
+ * Videos load only once on screen and in motion-friendly settings, play muted
+ * and loop, and carry a pause control (WCAG 2.2.2). Reduced motion keeps the
+ * poster. On phones a film may name a tighter crop to play instead.
+ */
+import type { ImageMetadata } from "astro";
+import { mediaSources, type Media } from "./media";
+
+interface Chapter {
+  label: string;
+  start: number;
+}
+
+interface Props {
+  name: string;
+  label: string;
+  phone?: string;
+  chapters?: Chapter[];
+  length?: number;
+  eager?: boolean;
+}
+
+const { name, label, phone, chapters = [], length = 0, eager = false } = Astro.props;
+const posters = import.meta.glob<ImageMetadata>("../../assets/media/*.jpg", { eager: true, import: "default" });
+const manifests = import.meta.glob<Media>("../../data/media.json", { eager: true, import: "default" });
+const manifest = manifests["../../data/media.json"] ?? {};
+const poster = (film: string, theme: string) => posters[`../../assets/media/${film}-${theme}.jpg`];
+const slots = (["dark", "light"] as const).map((theme) => ({
+  theme,
+  poster: poster(name, theme),
+  wide: mediaSources(manifest, `${name}-${theme}`, import.meta.env.DEV),
+  narrow: phone ? mediaSources(manifest, `${phone}-${theme}`, import.meta.env.DEV) : undefined,
+  narrowPoster: phone ? poster(phone, theme) : undefined,
+}));
+const id = `film-${name}`;
+---
+
+<figure class="dg-film" data-film aria-labelledby={`${id}-label`}>
+  <p id={`${id}-label`} class="dg-film-sr">{label}</p>
+  <div class="dg-film-frame">
+    {
+      slots.map(({ theme, poster, wide, narrow, narrowPoster }) => (
+        <div class={`dg-film-theme dg-film-${theme}`} data-film-theme={theme}>
+          <picture>
+            {narrowPoster && <source media="(max-width: 39.999rem)" srcset={narrowPoster.src} />}
+            {poster && <img src={poster.src} width="1920" height="1080" alt="" loading={eager ? "eager" : "lazy"} fetchpriority={eager ? "high" : "auto"} />}
+          </picture>
+          {wide && (
+            <template data-film-template data-size="wide">
+              <video muted loop playsinline preload="auto" poster={poster?.src} aria-labelledby={`${id}-label`}>
+                <source src={wide.webm} type='video/webm; codecs="vp9"' />
+                <source src={wide.mp4} type="video/mp4" />
+              </video>
+            </template>
+          )}
+          {narrow && (
+            <template data-film-template data-size="narrow">
+              <video muted loop playsinline preload="auto" poster={narrowPoster?.src} aria-labelledby={`${id}-label`}>
+                <source src={narrow.webm} type='video/webm; codecs="vp9"' />
+                <source src={narrow.mp4} type="video/mp4" />
+              </video>
+            </template>
+          )}
+        </div>
+      ))
+    }
+  </div>
+  {
+    (slots.some((s) => s.wide) || chapters.length > 0) && (
+      <div class="dg-film-controls">
+        {chapters.length > 0 && (
+          <ol class="dg-film-chapters" aria-label="Chapters" style={`--length:${length}`}>
+            {chapters.map((chapter, i) => (
+              <li style={`--start:${chapter.start};--end:${chapters[i + 1]?.start ?? "var(--length)"}`}>
+                <button type="button" data-film-seek={chapter.start}>
+                  <span class="dg-film-progress" aria-hidden="true" />
+                  {chapter.label}
+                </button>
+              </li>
+            ))}
+          </ol>
+        )}
+        <button type="button" class="dg-film-toggle" data-film-toggle hidden aria-label="Pause video">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path data-pause d="M4 3h3v10H4zM9 3h3v10H9z" /><path data-play d="M5 3l8 5-8 5z" /></svg>
+        </button>
+      </div>
+    )
+  }
+</figure>
+
+<script>
+  import { mountFilm } from "./film";
+  document.querySelectorAll<HTMLElement>("[data-film]").forEach((root) => {
+    const cleanup = mountFilm(root);
+    document.addEventListener("astro:before-swap", cleanup, { once: true });
+  });
+</script>
+
+<style>
+  .dg-film {
+    width: 100%;
+    min-width: 0;
+    margin: 0;
+  }
+
+  .dg-film-frame {
+    border-radius: 14px;
+    overflow: hidden;
+    border: 1px solid var(--sl-color-gray-5);
+  }
+
+  .dg-film-theme {
+    position: relative;
+  }
+
+  .dg-film-theme img,
+  .dg-film-theme video {
+    display: block;
+    width: 100%;
+    height: auto;
+    margin: 0;
+  }
+
+  .dg-film-theme video {
+    position: absolute;
+    inset: 0;
+    height: 100%;
+    visibility: hidden;
+  }
+
+  .dg-film-theme[data-playing] video {
+    visibility: visible;
+  }
+
+  .dg-film-light {
+    display: none;
+  }
+
+  :global(:root[data-theme="light"]) .dg-film-dark {
+    display: none;
+  }
+
+  :global(:root[data-theme="light"]) .dg-film-light {
+    display: block;
+  }
+
+  .dg-film-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 0.75rem;
+  }
+
+  .dg-film-chapters {
+    flex: 1;
+    display: flex;
+    gap: 0.5rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .dg-film-chapters li {
+    flex: calc(var(--end) - var(--start)) 1 0;
+    margin: 0;
+  }
+
+  .dg-film-chapters button {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+    width: 100%;
+    min-height: 2.75rem;
+    padding: 0.4rem 0 0;
+    border: 0;
+    background: none;
+    font-family: var(--dg-font-mono);
+    font-size: 0.8rem;
+    text-align: left;
+    color: var(--sl-color-gray-3);
+    cursor: pointer;
+  }
+
+  .dg-film-chapters button[aria-current="true"] {
+    color: var(--sl-color-white);
+  }
+
+  .dg-film-chapters button:focus-visible {
+    outline: 2px solid var(--sl-color-accent);
+    outline-offset: 2px;
+  }
+
+  .dg-film-progress {
+    position: relative;
+    display: block;
+    width: 100%;
+    height: 3px;
+    border-radius: 2px;
+    overflow: hidden;
+    background: var(--sl-color-gray-5);
+  }
+
+  .dg-film-progress::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform-origin: left;
+    transform: scaleX(var(--progress, 0));
+    background: var(--sl-color-accent);
+  }
+
+  .dg-film-toggle {
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    width: 2.75rem;
+    height: 2.75rem;
+    margin-left: auto;
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: 50%;
+    background: transparent;
+    color: var(--sl-color-white);
+    cursor: pointer;
+  }
+
+  .dg-film-toggle:focus-visible {
+    outline: 2px solid var(--sl-color-accent);
+    outline-offset: 2px;
+  }
+
+  .dg-film-toggle svg {
+    width: 1rem;
+    height: 1rem;
+    fill: currentColor;
+  }
+
+  .dg-film-toggle [data-play],
+  .dg-film-toggle.paused [data-pause] {
+    display: none;
+  }
+
+  .dg-film-toggle.paused [data-play] {
+    display: inline;
+  }
+
+  .dg-film-sr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  @media (prefers-reduced-motion: reduce), print {
+    .dg-film-theme video,
+    .dg-film-toggle,
+    .dg-film-chapters {
+      display: none;
+    }
+  }
+</style>

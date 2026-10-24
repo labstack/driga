@@ -34,7 +34,7 @@ clean:
 # ---------- Verification ----------
 
 # Local pre-commit gate.
-check: _fmt-check tidy-check vet generate-check test
+check: _fmt-check tidy-check vet generate-check docs-check test
     @echo "All checks passed"
 
 # Adds race, vulnerability, workflow and release-snapshot checks.
@@ -75,6 +75,37 @@ vet:
 generate-check:
     go generate ./internal/config
     git diff --exit-code -- .env.example
+
+# Rewrite the generated reference pages under site/ from the code.
+docs:
+    go run ./cmd/driga-docgen
+
+# Fail when a committed reference page is behind the code it documents.
+docs-check:
+    go run ./cmd/driga-docgen --check
+
+# ---------- Documentation site ----------
+
+# Install the site's dependencies from the lockfile.
+site-deps:
+    cd site && npm ci --no-audit --no-fund
+
+# Serve the site locally with live reload on http://localhost:7431.
+site: docs site-deps
+    cd site && npm run dev
+
+# Re-record site footage of the real TUI and web on demo data (needs vhs, ffmpeg).
+site-footage:
+    site/footage/record.sh
+
+# Publish the rendered footage to R2 (assets.driga.dev) and update the manifest.
+site-footage-publish:
+    cd site/footage && node upload.mjs
+
+# Build the site into site/dist: astro check, build, then the output checks.
+# Depends on the checking recipe, not the writing one, so it cannot hide a stale page.
+site-build: docs-check site-deps
+    cd site && npm run build
 
 # Run tests with a disposable home and Driga data (scripts/isolated.sh).
 test *args:

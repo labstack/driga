@@ -1,0 +1,111 @@
+---
+/* A titled landing band. `grid` lays its children out in three columns;
+ * `panel` sets the band in a bordered box. */
+interface Props {
+  title: string;
+  layout?: "grid" | "panel" | "closing";
+}
+
+const { title, layout = "grid" } = Astro.props;
+---
+
+<section class:list={["dg-section", layout]}>
+  <h2>{title}</h2>
+  <div class="dg-section-body"><slot /></div>
+</section>
+
+<style>
+  .dg-section {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+  }
+
+  .dg-section h2 {
+    margin: 0;
+    font-size: clamp(1.6rem, 2.6vw, 2.1rem);
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    text-align: center;
+    color: var(--sl-color-white);
+  }
+
+  /* Starlight spaces markdown siblings with a top margin; grid gaps do it here. */
+  .dg-section-body > :global(*) {
+    margin: 0;
+  }
+
+  .grid .dg-section-body {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1.25rem;
+  }
+
+  .panel {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 1.5rem 3rem;
+    padding: 2.5rem;
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: 20px;
+    background: var(--sl-color-gray-6);
+  }
+
+  .panel h2 {
+    flex: 1 1 16rem;
+    text-align: left;
+  }
+
+  .panel .dg-section-body {
+    flex: 2 1 22rem;
+  }
+
+  .panel .dg-section-body :global(p) {
+    margin: 0 0 1rem;
+    font-size: 1.05rem;
+    color: var(--sl-color-gray-2);
+  }
+
+  .panel .dg-section-body :global(ul) {
+    margin: 0;
+    padding-left: 1.1rem;
+  }
+
+  .closing {
+    align-items: center;
+    text-align: center;
+  }
+
+  .closing h2 {
+    font-size: clamp(2rem, 4vw, 3rem);
+    letter-spacing: -0.03em;
+  }
+
+  .closing .dg-section-body {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .closing .dg-section-body > :global(*) {
+    max-width: 100%;
+  }
+
+  .closing .dg-section-body :global(p) {
+    margin: 0;
+    color: var(--sl-color-gray-3);
+  }
+
+  @media (max-width: 54rem) {
+    .grid .dg-section-body {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .panel {
+      padding: 1.5rem;
+    }
+  }
+</style>

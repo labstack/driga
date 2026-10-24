@@ -1,0 +1,6 @@
+dist/
+node_modules/
+.astro/
+
+# Local renders of the footage, for astro dev only; published media lives in R2.
+public/media-local/

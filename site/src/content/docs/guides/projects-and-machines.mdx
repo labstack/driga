@@ -1,0 +1,107 @@
+---
+title: Projects and machines
+description: Use the Projects and Machines tabs and commands to see repository state, file overlaps, machine health, agent memory and CPU, and orphaned processes.
+summary: Project status and overlaps, machine health with agent attribution, orphan candidates and how to stop them safely, and low-disk and memory-pressure warnings.
+read_when:
+  - Your machine is slow and you want to know which agent sessions are responsible.
+  - You want to find orphaned agent helper processes or file overlaps between agents.
+---
+
+import TerminalFrame from "../../../components/TerminalFrame.astro";
+
+## Projects
+
+The Projects tab (`1`) owns repository and worktree context: local Git branches,
+worktrees, dirty state, the sessions working in each, and file overlaps between
+agents.
+
+```sh
+driga projects                 # project status
+driga projects --at-risk       # only projects with risk flags
+driga projects show <project>  # status, worktrees and sessions
+```
+
+Repositories are discovered from session working directories. Add scanning
+roots only if you want more:
+
+```toml
+roots = ["~/code"]
+root_depth = 3
+```
+
+Local Git commands never fetch.
+
+## Machines
+
+The Machines tab (`2`) owns health and reclamation: `h` health, `p` process
+review, `d` [disk candidates](/guides/cleanup).
+
+<TerminalFrame name="machine-80-expanded-false" title="driga top · Machines" caption="Rendered from the TUI's synthetic test fixture." />
+
+```sh
+driga machines show            # local machine, compact, with 24h trends
+driga machines show --full     # all retained trends and process detail
+driga machines                 # local and paired machine connection health
+```
+
+Every sampled process is placed exactly once:
+
+1. **Session** — proven to belong to a live agent session, by its parent chain
+   or a unique project working directory.
+2. **Agent without a session** — the process or an ancestor matches an agent
+   signature.
+3. **Likely agent work** — MCP servers below a non-agent app such as an editor,
+   shown as **shared with editor**.
+4. **Other apps** — everything else, as one total.
+
+The summary leads with proven agent memory against machine memory, then CPU,
+process and MCP server counts, pressure, swap and free disk, followed by
+sessions by cost, MCP server roll-ups and pile-ups with observed growth, and
+machine vitals. Likely memory is never folded into the proven amount. Machine
+session memory is labelled separately from Flow's monetary cost.
+
+## Orphans
+
+An orphan is an agent helper process tree whose agent is gone. Driga shows the
+evidence and never acts without confirmation.
+
+```sh
+driga orphans                  # candidates and evidence
+driga orphans kill <id>        # previews the tree and asks
+driga orphans kill <id> --force
+```
+
+Termination rechecks identity and descendants before acting, and young
+candidates (`orphan_min_age`, default 10m) are refused. `--force` escalates
+survivors after a second confirmation, unless `--yes` was given. Processes on a
+paired machine must be handled on that machine.
+
+Process signatures can be extended with `orphans.extra_signatures`:
+
+```toml
+[orphans]
+extra_signatures = ["~/extra-agent-signatures.toml"]
+```
+
+```toml
+[[signature]]
+name = "example-helper"
+agent = "codex"
+role = "helper"
+match = ['^example-agent-helper([[:space:]]|$)']
+```
+
+Extra files are read before the built-in signatures and the first match wins.
+Roles are `interactive`, `headless`, `host`, `helper` and `app`.
+
+## Warnings
+
+- **Low disk:** below `machine.disk_free_min`. The default `"0"` is automatic:
+  the smaller of 10% of the volume or 20 GB. Set a byte value such as `"5GiB"`
+  to override.
+- **Memory pressure:** after two consecutive critical OS samples. The text
+  leads with the agents' proven share of memory in use and names the largest
+  MCP pile-up.
+
+Each condition notifies once until it recovers; see
+[Notifications](/guides/notifications).

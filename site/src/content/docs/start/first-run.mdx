@@ -1,0 +1,96 @@
+---
+title: First run
+description: Run Driga without setup, then add the collector service and agent hooks for history, alerts and prompt answering.
+summary: Snapshot mode with no setup, guided setup with driga init, the collector service, and installing agent hooks.
+read_when:
+  - You just installed Driga and want to see your sessions.
+  - You want history, desktop alerts or permission prompt answering.
+---
+
+import { Steps } from "@astrojs/starlight/components";
+
+## Look first, configure nothing
+
+```sh
+driga            # the terminal UI: Flow, Projects and Machines
+driga web        # the same views in your browser
+driga summary    # one-screen text summary
+```
+
+Without a collector, Driga takes a disposable snapshot and say
+`snapshot · no history`. Nothing is written to a database. One agent in one
+repository works without configuring roots or a service: session working
+directories are enough to discover repositories.
+
+## Set it up properly
+
+<Steps>
+
+1. **Run guided setup** (optional). Each step previews its change and asks:
+
+   ```sh
+   driga init
+   ```
+
+   It covers repository roots, text capture, hooks and the service. You can do
+   each one by hand instead, as below.
+
+2. **Install the collector service** for history, the inbox and alerts:
+
+   ```sh
+   driga service install
+   driga doctor
+   ```
+
+   The service is a per-user LaunchAgent on macOS, a systemd user service on
+   Linux and a Task Scheduler task on Windows. The first import marks older
+   events as already seen.
+
+3. **Install agent hooks** for attention events, Claude permission prompts and
+   Copilot sessions. Preview the diff first:
+
+   ```sh
+   driga hooks install --dry-run
+   driga hooks install
+   driga hooks status
+   ```
+
+   Pass an adapter to limit the change: `claude`, `codex`, `copilot` or `all`
+   (the default). Restart running agent sessions afterwards. The exact events
+   are in the [hooks reference](/reference/hooks).
+
+4. **Open a view.**
+
+   ```sh
+   driga top              # terminal UI
+   driga web --open       # browser dashboard on loopback
+   driga inbox --since yesterday
+   ```
+
+</Steps>
+
+Reading an inbox item never acknowledges it. Acknowledge with
+`driga inbox ack <item-id>` or from the Activity section in Flow.
+
+## Service commands
+
+```sh
+driga service status
+driga service logs -f
+driga service stop
+driga service start
+driga service restart
+driga service uninstall
+```
+
+On macOS the label is `run.driga.collector` and logs are at
+`~/Library/Logs/driga/collector.log`. On Linux, `driga service logs -f` wraps
+`journalctl --user -u run.driga.collector`.
+
+## Undo
+
+`driga hooks uninstall` removes only Driga's entries, and
+`driga service uninstall` removes the service. Your agent configuration is
+changed only by these explicit commands.
+
+Next: [Flow](/guides/flow).

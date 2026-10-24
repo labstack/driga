@@ -1,0 +1,13 @@
+---
+import SocialIcons from "@astrojs/starlight/components/SocialIcons.astro";
+---
+
+<a class="dg-link dg-header-docs" href="/start/what-driga-is">Docs</a>
+<SocialIcons />
+
+<style>
+  a { display: inline-flex; align-items: center; min-height: 2rem; padding: 0 0.25rem; font-family: var(--dg-font-display); font-size: 0.875rem; white-space: nowrap; }
+  @media (max-width: 39.999rem) {
+    .dg-header-docs { display: none; }
+  }
+</style>

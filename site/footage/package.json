@@ -1,0 +1,22 @@
+{
+  "name": "driga-footage",
+  "private": true,
+  "type": "module",
+  "description": "Records the real driga TUI and web dashboard on driga-demo data and cuts the website film with Remotion.",
+  "scripts": {
+    "web": "node web.mjs",
+    "studio": "remotion studio film/index.ts",
+    "render": "node render.mjs"
+  },
+  "devDependencies": {
+    "@remotion/cli": "4.0.538",
+    "@remotion/google-fonts": "4.0.538",
+    "@remotion/media": "4.0.538",
+    "@types/react": "19.2.2",
+    "playwright": "1.64.1",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "remotion": "4.0.538",
+    "typescript": "6.0.3"
+  }
+}

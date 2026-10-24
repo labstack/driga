@@ -1,0 +1,211 @@
+@import "@fontsource/geist-sans/400.css";
+@import "@fontsource/geist-sans/500.css";
+@import "@fontsource/geist-sans/600.css";
+@import "@fontsource/geist-sans/700.css";
+@import "@fontsource/geist-mono/latin-400.css";
+@import "@fontsource/geist-mono/latin-500.css";
+
+/* Driga docs theme.
+ *
+ * Colours come from @catppuccin/starlight: Mocha in the dark, Latte in the
+ * light, the same two palettes the terminal UI and web console ship (`ui.theme`).
+ * The theme's tokens live in a `catppuccin` cascade layer, so nothing here
+ * redefines them. The state hues below are the app's own glyph colours
+ * (working ▶ green, needs you ◆ yellow, overlap ┄ red); in Latte they are
+ * darkened to 4.5:1 on the page, as the app's readable() does.
+ *
+ * Geist carries headings and prose; Geist Mono carries commands, keys and the
+ * terminal-flavoured labels.
+ */
+
+:root {
+  --dg-font-display: "Geist Sans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --dg-font-body: var(--dg-font-display);
+  --dg-font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --dg-frame-radius: 10px;
+  --sl-font: var(--dg-font-display);
+  --sl-font-mono: var(--dg-font-mono);
+  --catppuccin-yellow: #f9e2af;
+  --catppuccin-green: #a6e3a1;
+  --catppuccin-blue: #89b4fa;
+  --catppuccin-mauve: #cba6f7;
+  --catppuccin-red: #f38ba8;
+}
+
+:root[data-theme="light"] {
+  --catppuccin-yellow: #976013;
+  --catppuccin-green: #317c21;
+  --catppuccin-blue: #1d62ed;
+  --catppuccin-mauve: #7c32e0;
+  --catppuccin-red: #d20f39;
+}
+
+/* Latte's gray-2 and gray-3 fall under 4.5:1 for the landing page's prose and
+   labels (4.37:1 and 3.49:1 on the page); gray-1 passes on page and cards. */
+:root[data-theme="light"] body:has(.dg-hero) {
+  --sl-color-gray-2: var(--sl-color-gray-1);
+  --sl-color-gray-3: var(--sl-color-gray-1);
+}
+
+.dg-link {
+  color: var(--sl-color-accent-high);
+  text-decoration: none;
+  text-underline-offset: 0.25em;
+}
+.dg-link:hover { color: var(--sl-color-accent); text-decoration: underline; }
+.dg-link:focus-visible { outline: 2px solid var(--sl-color-accent); outline-offset: 3px; }
+
+.site-title img {
+  height: 2rem;
+  width: auto;
+}
+
+@media (max-width: 49.999rem) {
+  header.header .right-group { display: flex; flex-shrink: 0; }
+  header.header .header { gap: 0.5rem; }
+  header.header :is(.right-group, .social-icons) { gap: 0.75rem; }
+  header.header .social-icons::after { display: none; }
+}
+
+@media (max-width: 39.999rem) {
+  header.header starlight-theme-select select { width: 2rem; padding-inline: 0; color: transparent; }
+  header.header starlight-theme-select .caret { display: none; }
+}
+
+/* The landing page. */
+body:has(.dg-hero) header.header .sl-flex {
+  justify-content: space-between;
+}
+
+body:has(.dg-hero) {
+  --dg-section-gap: 8rem;
+  --sl-content-pad-x: 2rem;
+  --sl-content-width: 75rem;
+}
+
+body:has(.dg-hero) .sl-container {
+  min-width: 0;
+  margin-inline: auto;
+}
+
+body:has(.dg-hero) :is(.main-frame, .main-pane) {
+  min-width: 0;
+}
+
+body:has(.dg-hero) .sl-container > .sl-markdown-content {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+  gap: var(--dg-section-gap);
+  margin: 6rem 0 4rem;
+}
+
+body:has(.dg-hero) .sl-markdown-content > * {
+  min-width: 0;
+  margin: 0;
+}
+
+@media (max-width: 39.999rem) {
+  body:has(.dg-hero) {
+    --dg-section-gap: 4.5rem;
+    --sl-content-pad-x: 1rem;
+  }
+}
+
+/* Prose uses the proportional member of the family. */
+.sl-markdown-content p,
+.sl-markdown-content li {
+  font-family: var(--dg-font-body);
+  line-height: 1.7;
+}
+
+.card > .title {
+  font-family: var(--dg-font-display);
+  font-weight: 500;
+  letter-spacing: -0.015em;
+}
+
+.sl-markdown-content td {
+  font-family: var(--dg-font-body);
+  line-height: 1.5;
+}
+
+/* One heading scale for docs and landing: semibold, slightly tight. */
+.sl-markdown-content h1,
+.sl-markdown-content h2,
+.sl-markdown-content h3,
+.content-panel h1,
+h1#_top {
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+/* One focus ring everywhere, including Starlight's header controls. */
+:focus-visible {
+  outline: 2px solid var(--sl-color-accent);
+  outline-offset: 2px;
+}
+
+.sl-markdown-content table {
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.sl-markdown-content th {
+  font-size: 0.72rem;
+  line-height: 1.45;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--sl-color-gray-3);
+  font-weight: 600;
+}
+
+/* A flag, key or variable is one token: never break it across lines. */
+.sl-markdown-content td:first-child code {
+  white-space: nowrap;
+}
+
+/* Wide reference tables scroll inside their own box; the page never does. The
+   wrapper is focusable so the overflow is reachable by keyboard. */
+.sl-markdown-content .table-wrap {
+  overflow-x: auto;
+  max-width: 100%;
+  margin: 1rem 0;
+}
+
+.sl-markdown-content .table-wrap:focus-visible {
+  outline: 2px solid var(--sl-color-accent);
+  outline-offset: 2px;
+}
+
+/* Starlight makes tables scroll on their own; inside the wrapper that is two
+   nested scrollers. The wrapper scrolls and the table stops. Both axes are
+   named because a single-axis `visible` computes back to `auto`. */
+.sl-markdown-content .table-wrap > table {
+  min-width: 34rem;
+  overflow: visible;
+}
+
+.sl-markdown-content :is(h1, h2, h3, h4, h5, h6) code {
+  font-size: 0.78em;
+}
+
+.pagination-links a > span {
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--sl-color-gray-3);
+}
+
+.pagination-links a .link-title {
+  font-size: 1rem;
+  line-height: 1.5;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--sl-color-white);
+}
+
+.pagination-links a svg {
+  width: 1rem;
+  height: 1rem;
+}

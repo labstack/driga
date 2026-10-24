@@ -1,0 +1,54 @@
+---
+/* One of the three ways in: its command, a name, and the text as children. */
+interface Props {
+  command: string;
+  title: string;
+}
+
+const { command, title } = Astro.props;
+---
+
+<article class="dg-way">
+  <code>{command}</code>
+  <h3>{title}</h3>
+  <slot />
+</article>
+
+<style>
+  .dg-way {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    padding: 1.6rem;
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: 16px;
+    background: var(--sl-color-gray-6);
+  }
+
+  .dg-way code {
+    align-self: flex-start;
+    padding: 0;
+    border: 0;
+    background: none;
+    font-family: var(--dg-font-mono);
+    font-size: 0.95rem;
+    color: var(--catppuccin-mauve);
+  }
+
+  .dg-way h3 {
+    margin: 0;
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: var(--sl-color-white);
+  }
+
+  .dg-way :global(p a) {
+    white-space: nowrap;
+  }
+
+  .dg-way :global(p) {
+    margin: 0;
+    font-size: 0.95rem;
+    color: var(--sl-color-gray-2);
+  }
+</style>

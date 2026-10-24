@@ -149,13 +149,10 @@ func run(args []string, version string, stdin io.Reader, stdout, stderr io.Write
 		}
 	}
 	exit := -1
-	parser, err := kong.New(&root,
-		kong.Name("driga"),
+	parser, err := NewParser(&root,
 		kong.Vars{"version": "driga " + version},
-		kong.Description("Watch AI coding agent sessions across your machines and projects."),
 		kong.Writers(stdout, stderr),
 		kong.Exit(func(code int) { exit = code; panic(exitPanic{}) }),
-		kong.Bind(&root.Globals),
 	)
 	if err != nil {
 		report(err, 2)
@@ -201,6 +198,17 @@ func run(args []string, version string, stdin io.Reader, stdout, stderr io.Write
 		return 0
 	}()
 	return code
+}
+
+// NewParser builds the kong parser for the full command tree. The CLI and the
+// documentation generator (cmd/driga-docgen) share it, so `driga --help` and
+// the published command reference come from one model.
+func NewParser(root *Root, options ...kong.Option) (*kong.Kong, error) {
+	return kong.New(root, append([]kong.Option{
+		kong.Name("driga"),
+		kong.Description("Watch AI coding agent sessions across your machines and projects."),
+		kong.Bind(&root.Globals),
+	}, options...)...)
 }
 
 type exitPanic struct{}

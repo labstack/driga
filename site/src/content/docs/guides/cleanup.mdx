@@ -1,0 +1,53 @@
+---
+title: Cleanup
+description: Find disk that coding agents left behind, such as idle worktrees and scratch directories, and remove it only after re-verification and confirmation.
+summary: Cleanup candidates (worktrees, scratch, history), the checks each must pass, dry runs, bulk removal and the audit log.
+read_when:
+  - Agents have left worktrees and temporary directories behind and you want the disk back.
+  - A cleanup was refused and you want to know why.
+---
+
+`driga cleanup` lists disk that agents left behind. Nothing is removed
+automatically, and nothing is removed on another machine.
+
+```sh
+driga cleanup list                         # candidates with evidence
+driga cleanup list --sizes                 # walk sizes on demand (30 s cap per walk)
+driga cleanup list --why                   # include worktrees that don't qualify, and why
+driga cleanup remove <id> --dry-run        # print the exact commands
+driga cleanup remove <id>                  # re-verify, then ask
+driga cleanup remove --kind worktree --all # every ready worktree; skips anything changed
+```
+
+In the terminal UI, cleanup lives under Machines → `d`.
+
+## Candidates
+
+**Worktrees.** A linked worktree (never the main or a locked one) with no live
+session or process inside, no tracked or untracked changes, commits merged into
+the default branch or pushed, and idle for `cleanup.worktree_idle` (default
+`168h`). The action is `git worktree remove`, `git worktree prune`, then
+`git branch -d` only when merged, never `-D`. Ignored build output listed in
+`cleanup.regenerable` (such as `node_modules/` and `target/`) goes with the
+worktree; any other ignored file, such as `.env` or a local database, makes the
+candidate `needs-review`, and removing it needs `--include-ignored`.
+
+**Scratch.** A Claude Code per-session temporary directory whose session ended
+at least 24 hours ago and that has no open files. It is moved to the trash
+(macOS Trash or the freedesktop trash on Linux), never deleted.
+
+**History.** Agent history sizes by age. Report only: use the agent's own
+retention setting, such as Claude Code's `cleanupPeriodDays`.
+
+## Safety
+
+Every check runs again just before acting; if anything changed, the action is
+refused with the reason. Each attempt is appended to `cleanup.log` in the data
+directory. Bulk removal reports completed, skipped and failed counts and exits
+`1` if any item fails.
+
+On Windows (experimental), verified worktrees go to the Recycle Bin and Claude
+scratch cleanup is refused; see [Windows](/guides/windows).
+
+The MCP tool `list_cleanup_candidates` reads the same candidates and never
+removes anything.

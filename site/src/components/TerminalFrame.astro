@@ -1,0 +1,142 @@
+---
+/* A terminal UI frame, rendered as styled text.
+ *
+ * The frames are the TUI's own golden test output (internal/tui/testdata),
+ * imported raw at build time. They are rendered from synthetic fixtures by
+ * `go test ./internal/tui`, which fails when the UI and its golden frame
+ * disagree, so the page shows what the app currently draws and never a
+ * hand-made mock-up. Updating a golden (UPDATE_FLOW_GOLDEN=1) updates the site.
+ *
+ * Colour is applied here, by glyph, using the Catppuccin tokens of the active
+ * theme: the goldens are captured with colour off so their geometry can be
+ * compared, and the glyphs carry the state the app would colour.
+ */
+interface Props {
+  /** A golden file name in internal/tui/testdata, without `.golden`. */
+  name: string;
+  title: string;
+  caption?: string;
+}
+
+const { name, title, caption } = Astro.props;
+
+const goldens = import.meta.glob<string>("../../../internal/tui/testdata/*.golden", {
+  query: "?raw",
+  import: "default",
+  eager: true,
+});
+const frame = goldens[`../../../internal/tui/testdata/${name}.golden`];
+if (frame === undefined) {
+  // A renamed or deleted golden fails the build rather than shipping an empty frame.
+  throw new Error(`TerminalFrame: internal/tui/testdata/${name}.golden does not exist`);
+}
+
+const escape = (s: string) =>
+  s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+// Trim trailing spaces and collapse the padding a fixed-height frame carries.
+const lines = frame
+  .replace(/\r\n/g, "\n")
+  .split("\n")
+  .map((line) => line.replace(/\s+$/, ""));
+const compact: string[] = [];
+for (const line of lines) {
+  if (line === "" && compact.at(-1) === "") continue;
+  compact.push(line);
+}
+while (compact.at(-1) === "") compact.pop();
+
+const classes: [RegExp, string][] = [
+  [/◆+/g, "dg-t-wait"],
+  [/[▶╼]/g, "dg-t-work"],
+  [/‖/g, "dg-t-stall"],
+  [/✓/g, "dg-t-done"],
+  [/━+/g, "dg-t-busy"],
+  [/[░█]+/g, "dg-t-dim"],
+  [/[─│├└╭╮╰╯┄]+/g, "dg-t-rule"],
+];
+
+const html = compact
+  .map((line) => {
+    let out = escape(line);
+    for (const [pattern, cls] of classes) {
+      out = out.replace(pattern, (m) => `<span class="${cls}">${m}</span>`);
+    }
+    return out;
+  })
+  .join("\n");
+---
+
+<figure class="dg-terminal">
+  <div class="dg-terminal-bar" aria-hidden="true">
+    <span></span><span></span><span></span>
+    <p>{title}</p>
+  </div>
+  <pre aria-label={title} tabindex="0" set:html={html} />
+  {caption && <figcaption>{caption}</figcaption>}
+</figure>
+
+<style>
+  .dg-terminal {
+    margin: 1.5rem 0;
+    min-width: 0;
+  }
+
+  .dg-terminal-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.55rem 0.8rem;
+    border: 1px solid var(--sl-color-gray-5);
+    border-bottom: none;
+    border-radius: var(--dg-frame-radius) var(--dg-frame-radius) 0 0;
+    background: var(--sl-color-gray-6);
+  }
+
+  .dg-terminal-bar span {
+    width: 0.65rem;
+    height: 0.65rem;
+    border-radius: 50%;
+    background: var(--sl-color-gray-4);
+  }
+
+  .dg-terminal-bar p {
+    margin: 0 0 0 0.5rem;
+    font-family: var(--dg-font-mono);
+    font-size: 0.75rem;
+    color: var(--sl-color-gray-3);
+  }
+
+  .dg-terminal pre {
+    margin: 0;
+    padding: 1rem 1.1rem;
+    overflow-x: auto;
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: 0 0 var(--dg-frame-radius) var(--dg-frame-radius);
+    background: var(--sl-color-black);
+    color: var(--sl-color-gray-1);
+    font-family: var(--dg-font-mono);
+    font-size: 0.78rem;
+    line-height: 1.45;
+  }
+
+  .dg-terminal pre:focus-visible {
+    outline: 2px solid var(--sl-color-accent);
+    outline-offset: 2px;
+  }
+
+  .dg-terminal figcaption {
+    margin-top: 0.6rem;
+    font-family: var(--dg-font-mono);
+    font-size: 0.75rem;
+    color: var(--sl-color-gray-3);
+  }
+
+  .dg-terminal :global(.dg-t-wait) { color: var(--sl-color-red); }
+  .dg-terminal :global(.dg-t-work) { color: var(--sl-color-green); }
+  .dg-terminal :global(.dg-t-stall) { color: var(--sl-color-orange); }
+  .dg-terminal :global(.dg-t-done) { color: var(--sl-color-blue); }
+  .dg-terminal :global(.dg-t-busy) { color: var(--sl-color-accent-high); }
+  .dg-terminal :global(.dg-t-dim) { color: var(--sl-color-gray-4); }
+  .dg-terminal :global(.dg-t-rule) { color: var(--sl-color-gray-4); }
+</style>
