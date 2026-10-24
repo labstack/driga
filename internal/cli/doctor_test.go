@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/labstack/driga/internal/attention"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -82,7 +83,7 @@ func TestDoctorMacNotifier(t *testing.T) {
 		}
 		status, detail, fix := "ok", "native UserNotifications (Driga)", ""
 		if !available {
-			status, detail, fix = "info", "notifications unavailable: install Driga.app for native macOS notifications (unbundled builds cannot send them)", "install Driga.app (brew install --cask driga); allow Driga in System Settings > Notifications"
+			status, detail, fix = "info", "notifications unavailable: install Driga.app for native macOS notifications (unbundled builds cannot send them)", "install Driga.app (brew install --cask driga)"
 		}
 		c := requireCheck(t, Doctor(context.Background(), d), "notifications", status, fix)
 		if c.Detail != detail || c.Fix != fix {
@@ -95,6 +96,16 @@ func TestDoctorMacNotifier(t *testing.T) {
 				t.Fatal(c)
 			}
 		}
+	}
+}
+
+func TestDoctorMacNotificationsDenied(t *testing.T) {
+	d, _ := doctorFixture(t)
+	d.OS = "darwin"
+	d.NotificationStatus = func() (string, error) { return "", attention.ErrNotificationsDenied }
+	c := requireCheck(t, Doctor(context.Background(), d), "notifications", "warn", "System Settings > Notifications > Driga > Allow notifications")
+	if c.Detail != attention.ErrNotificationsDenied.Error() {
+		t.Fatal(c)
 	}
 }
 

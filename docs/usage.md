@@ -101,7 +101,9 @@ your capture policy. macOS notifications require the installed **Driga.app**
 UserNotifications API. Allow alerts and sounds for Driga when macOS asks, or in
 System Settings → Notifications → Driga. Unbundled builds (`go run`, checkout
 binaries) cannot send macOS notifications; `driga doctor` explains how to install
-the app. No notification helpers are needed.
+the app. No notification helpers are needed. `driga doctor` warns when
+notifications are turned off for Driga; turning them back on takes effect from
+the next notification, without restarting the collector.
 
 Clicking a local item's notification runs `driga inbox jump <item-id>` without
 acknowledging it. Jumps select a proven tmux pane, focus a proven Terminal/iTerm

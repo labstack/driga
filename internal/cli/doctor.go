@@ -433,7 +433,11 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 		}
 		detail, err := status()
 		if err != nil {
-			add("notifications", "info", "notifications unavailable: "+err.Error(), "install Driga.app (brew install --cask driga); allow Driga in System Settings > Notifications")
+			if errors.Is(err, attention.ErrNotificationsDenied) {
+				add("notifications", "warn", err.Error(), "System Settings > Notifications > Driga > Allow notifications")
+			} else {
+				add("notifications", "info", "notifications unavailable: "+err.Error(), "install Driga.app (brew install --cask driga)")
+			}
 		} else {
 			add("notifications", "ok", detail, "")
 		}

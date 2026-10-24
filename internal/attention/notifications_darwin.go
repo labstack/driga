@@ -55,7 +55,37 @@ func MacNotificationStatus() (string, error) {
 	if goString(bundle.Send(objc.RegisterName("bundleIdentifier"))) != "run.driga" {
 		return "", fmt.Errorf("Driga.app must have the run.driga bundle identity; reinstall the app")
 	}
-	return "native UserNotifications (Driga); delivery depends on macOS notification settings", nil
+	switch macAuthorizationStatus() {
+	case 1:
+		return "", ErrNotificationsDenied
+	case 0:
+		return "native, not asked yet: macOS asks when Driga first notifies", nil
+	case -1:
+		return "native UserNotifications (Driga); permission unknown", nil
+	}
+	return "native UserNotifications (Driga), allowed", nil
+}
+
+// macAuthorizationStatus reads UNAuthorizationStatus without prompting:
+// 0 not determined, 1 denied, 2+ allowed. -1 when macOS does not answer.
+func macAuthorizationStatus() int64 {
+	if _, err := purego.Dlopen("/System/Library/Frameworks/UserNotifications.framework/UserNotifications", purego.RTLD_GLOBAL|purego.RTLD_NOW); err != nil {
+		return -1
+	}
+	defer autoreleasePool()()
+	result := make(chan int64, 1)
+	block := objc.NewBlock(func(_ objc.Block, settings objc.ID) {
+		result <- objc.Send[int64](settings, objc.RegisterName("authorizationStatus"))
+	})
+	defer block.Release()
+	center := nsClass("UNUserNotificationCenter").Send(objc.RegisterName("currentNotificationCenter"))
+	center.Send(objc.RegisterName("getNotificationSettingsWithCompletionHandler:"), block)
+	select {
+	case status := <-result:
+		return status
+	case <-time.After(2 * time.Second):
+		return -1
+	}
 }
 
 // RunNotificationMain is called only by the executable's locked initial thread.

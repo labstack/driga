@@ -3,11 +3,15 @@ package attention
 import (
 	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"sync"
 	"time"
 )
+
+// ErrNotificationsDenied means macOS has Driga's notifications turned off.
+var ErrNotificationsDenied = errors.New("Driga is not allowed to send notifications")
 
 // NativeNotificationRequest is the value-only boundary to UserNotifications.
 // No Objective-C objects escape the Darwin implementation.
@@ -22,11 +26,13 @@ type NativeNotificationCenter interface {
 	Add(context.Context, NativeNotificationRequest) error
 }
 
-// MacNotifier requests permission once per process. macOS remembers the user's
-// decision between launches. Authorization can outlive a cancelled Notify call.
+// MacNotifier asks macOS for permission before posting. After a refusal it asks
+// again on the next notification; macOS answers from the saved setting without
+// prompting, so allowing Driga in System Settings takes effect without a restart.
+// Authorization can outlive a cancelled Notify call.
 type MacNotifier struct {
 	Center     NativeNotificationCenter
-	once       sync.Once
+	mu         sync.Mutex
 	authorized chan struct{}
 	authErr    error
 }
@@ -38,15 +44,26 @@ func (m *MacNotifier) Notify(ctx context.Context, n Notification) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	m.once.Do(func() {
-		m.authorized = make(chan struct{})
+	m.mu.Lock()
+	ch, start := m.authorized, m.authorized == nil
+	if start {
+		ch = make(chan struct{})
+		m.authorized = ch
+	}
+	m.mu.Unlock()
+	if start { // outside the lock: the callback may run synchronously
 		m.Center.Authorize(func(err error) {
+			m.mu.Lock()
 			m.authErr = err
-			close(m.authorized)
+			if err != nil {
+				m.authorized = nil // re-ask on the next notification
+			}
+			m.mu.Unlock()
+			close(ch)
 		})
-	})
+	}
 	select {
-	case <-m.authorized:
+	case <-ch:
 		return m.post(ctx, n)
 	default:
 		// Keep the first alert queued while the user considers permission,
@@ -54,7 +71,7 @@ func (m *MacNotifier) Notify(ctx context.Context, n Notification) error {
 		go func() {
 			select {
 			case <-ctx.Done():
-			case <-m.authorized:
+			case <-ch:
 				_ = m.post(ctx, n)
 			}
 		}()
@@ -62,12 +79,18 @@ func (m *MacNotifier) Notify(ctx context.Context, n Notification) error {
 	}
 }
 
+func (m *MacNotifier) err() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.authErr
+}
+
 func (m *MacNotifier) post(ctx context.Context, n Notification) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if m.authErr != nil {
-		return m.authErr
+	if err := m.err(); err != nil {
+		return err
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()

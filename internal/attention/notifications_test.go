@@ -98,8 +98,14 @@ func TestMacAuthorizationFailureAndCancellation(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if f.authorizations != 1 || len(f.requests) != 0 {
+	// A refusal is re-checked on the next notification, so allowing Driga in
+	// System Settings works without restarting the collector.
+	if f.authorizations != 2 || len(f.requests) != 0 {
 		t.Fatal(f)
+	}
+	f.authErr = nil
+	if err := m.Notify(t.Context(), Notification{}); err != nil || len(f.requests) != 1 {
+		t.Fatal("allowing later did not deliver", err, f)
 	}
 	gate := make(chan struct{})
 	f = &fakeNotificationCenter{gate: gate}
