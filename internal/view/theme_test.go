@@ -80,14 +80,15 @@ func TestThemeFollowsCatppuccinAndStaysReadable(t *testing.T) {
 		if tok.Dark != strings.ToUpper(want[1].Hex) {
 			t.Errorf("%s dark %s, official Mocha %s", tok.Name, tok.Dark, want[1].Hex)
 		}
-		if c := Contrast(rgb(tok.Light), catppuccin.Latte.Base().RGB); c < 4.5 {
+		// Light text sits on Latte's base and on its darker mantle panels.
+		if c := Contrast(rgb(tok.Light), catppuccin.Latte.Mantle().RGB); c < 4.5 {
 			t.Errorf("%s light %s contrast %.2f", tok.Name, tok.Light, c)
 		}
 		if c := Contrast(rgb(tok.Dark), catppuccin.Mocha.Base().RGB); c < 4.5 {
 			t.Errorf("%s dark %s contrast %.2f", tok.Name, tok.Dark, c)
 		}
 		// Passing official colors are used unchanged.
-		if Contrast(want[0].RGB, catppuccin.Latte.Base().RGB) >= 4.5 && tok.Light != strings.ToUpper(want[0].Hex) {
+		if Contrast(want[0].RGB, catppuccin.Latte.Mantle().RGB) >= 4.5 && tok.Light != strings.ToUpper(want[0].Hex) {
 			t.Errorf("%s light %s should be official %s", tok.Name, tok.Light, want[0].Hex)
 		}
 	}

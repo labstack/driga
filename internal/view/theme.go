@@ -16,12 +16,15 @@ type ThemeToken struct{ Name, Light, Dark string }
 
 // Palette roles come from the official Catppuccin palettes (MIT): Latte for
 // light, Mocha for dark. Where an official Latte color falls below 4.5:1 for
-// text on Latte's base, text roles use readable(), the same hue darkened just
-// enough. Tinted backgrounds are tint() mixes of the state color into base.
+// text on Latte's mantle, the panel surface and darker than base, text roles
+// use readable(), the same hue darkened just enough, so they pass on page and
+// panels alike. Tinted backgrounds are tint() mixes of the state color into base.
 var (
 	lb, mb = catppuccin.Latte.Base(), catppuccin.Mocha.Base()
 	pair   = func(l, d catppuccin.Color) [2]string { return [2]string{hex(l), hex(d)} }
-	text   = func(l, d catppuccin.Color) [2]string { return [2]string{readable(l, lb), hex(d)} }
+	text   = func(l, d catppuccin.Color) [2]string {
+		return [2]string{readable(l, catppuccin.Latte.Mantle()), hex(d)}
+	}
 )
 
 func tok(name string, v [2]string) ThemeToken { return ThemeToken{name, v[0], v[1]} }
