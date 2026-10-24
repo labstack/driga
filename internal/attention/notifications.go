@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"log/slog"
 	"path/filepath"
 	"sync"
 	"time"
@@ -54,6 +55,9 @@ func (m *MacNotifier) Notify(ctx context.Context, n Notification) error {
 	m.mu.Unlock()
 	if start { // outside the lock: the callback may run synchronously
 		m.Center.Authorize(func(err error) {
+			if err != nil {
+				slog.Warn("macOS notification permission refused", "event", "notifications_refused", "err", err.Error())
+			}
 			m.mu.Lock()
 			m.authErr = err
 			if err != nil {
@@ -109,7 +113,11 @@ func (m *MacNotifier) post(ctx context.Context, n Notification) error {
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	return m.Center.Add(ctx, nativeNotificationRequest(n))
+	if err := m.Center.Add(ctx, nativeNotificationRequest(n)); err != nil {
+		slog.Warn("macOS notification not delivered", "event", "notification_failed", "err", err.Error())
+		return err
+	}
+	return nil
 }
 
 func nativeNotificationRequest(n Notification) NativeNotificationRequest {
