@@ -107,8 +107,11 @@ show `ack pending` and retry on reconnect.
 Desktop alerts show the session title or project and why it needs you, within
 your capture policy. macOS notifications require the installed **Driga.app**
 (`brew install --cask labstack/tap/driga`); they use Driga's name and icon through the native
-UserNotifications API. Allow alerts and sounds for Driga when macOS asks, or in
-System Settings → Notifications → Driga. Unbundled builds (`go run`, checkout
+UserNotifications API. The collector asks for permission when it starts, so
+answer the macOS prompt after `driga service install`. macOS asks only once:
+if the prompt was declined, or withdrawn because the collector restarted before
+you answered, turn on Allow notifications in System Settings → Notifications →
+Driga (`driga doctor` prints the command that opens that page). Unbundled builds (`go run`, checkout
 binaries) cannot send macOS notifications; `driga doctor` explains how to install
 the app. No notification helpers are needed. `driga doctor` warns when
 notifications are turned off for Driga; turning them back on takes effect from
@@ -123,7 +126,8 @@ window with `inbox.jump_terminal = true`, or print a resume command. Machine
 warnings open Terminal on `driga top --tab machines`. Batch summaries and remote
 alerts have no click action. The collector keeps the native notification delegate
 and main run loop alive while it runs. Re-sending an item replaces its existing
-notification. Linux uses notify-send; Windows uses native WinRT toasts.
+notification. Linux uses notify-send; Windows uses native WinRT toasts. Click
+to jump works on macOS only; Linux and Windows alerts have no click action.
 
 Health warnings notify once per condition, until it clears. Concurrent health
 warnings from one machine form one summary. Details and cleanup commands remain

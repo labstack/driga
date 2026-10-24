@@ -103,7 +103,7 @@ func TestDoctorMacNotificationsDenied(t *testing.T) {
 	d, _ := doctorFixture(t)
 	d.OS = "darwin"
 	d.NotificationStatus = func() (string, error) { return "", attention.ErrNotificationsDenied }
-	c := requireCheck(t, Doctor(context.Background(), d), "notifications", "warn", "System Settings > Notifications > Driga > Allow notifications")
+	c := requireCheck(t, Doctor(context.Background(), d), "notifications", "warn", `open "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=run.driga"`)
 	if c.Detail != attention.ErrNotificationsDenied.Error() {
 		t.Fatal(c)
 	}

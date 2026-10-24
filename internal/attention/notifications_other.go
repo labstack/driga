@@ -11,3 +11,5 @@ func MacNotificationStatus() (string, error) {
 func MacDesktopNotifier() Notifier { return &MacNotifier{} }
 
 func DesktopNotificationsReady() bool { return true }
+
+func RequestNotificationPermission() {}

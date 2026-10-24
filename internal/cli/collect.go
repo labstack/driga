@@ -78,6 +78,7 @@ func (c CollectCmd) Run(g *Globals) error {
 		} else {
 			slog.Info("macOS notifications", "event", "notifications_status", "status", status)
 		}
+		attention.RequestNotificationPermission()
 	}
 	ctx, stop := notifyContext(context.Background())
 	defer stop()

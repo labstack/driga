@@ -223,3 +223,29 @@ func TestMacPendingAuthorizationQueuesFirstAlert(t *testing.T) {
 		t.Fatal(f.requests)
 	}
 }
+
+func TestMacRequestPermissionAsksOnceBeforeAnyAlert(t *testing.T) {
+	(&MacNotifier{}).RequestPermission() // no native center: nothing to ask
+	f := &fakeNotificationCenter{}
+	m := &MacNotifier{Center: f}
+	m.RequestPermission()
+	m.RequestPermission()
+	if f.authorizations != 1 {
+		t.Fatalf("authorizations = %d, want 1", f.authorizations)
+	}
+	if err := m.Notify(t.Context(), Notification{Kind: "waiting", Title: "Needs you", ItemID: "a", MachineID: "local"}); err != nil {
+		t.Fatal(err)
+	}
+	if f.authorizations != 1 || f.count() != 1 {
+		t.Fatalf("authorizations = %d, posts = %d; the startup answer must cover the first alert", f.authorizations, f.count())
+	}
+	f.authErr = ErrNotificationsDenied
+	m = &MacNotifier{Center: f}
+	m.RequestPermission()
+	if err := m.Notify(t.Context(), Notification{Kind: "waiting", Title: "Needs you", ItemID: "b", MachineID: "local"}); !errors.Is(err, ErrNotificationsDenied) {
+		t.Fatalf("Notify after refusal = %v", err)
+	}
+	if f.authorizations != 3 {
+		t.Fatalf("authorizations = %d; a refusal must be re-checked on the next alert", f.authorizations)
+	}
+}
