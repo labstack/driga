@@ -31,9 +31,14 @@ func TestCommandTree(t *testing.T) {
 			}
 		})
 	}
-	for _, tab := range []string{"home", "agents", "projects", "inbox", "orphans", "machine", "cleanup", "flow", "chat"} {
+	for _, tab := range []string{"flow", "projects", "machines"} {
 		if _, _, err := parseCommand(t, "top", "--tab", tab); err != nil {
 			t.Fatal(tab, err)
+		}
+	}
+	for _, tab := range []string{"home", "agents", "inbox", "machine", "chat"} {
+		if _, _, err := parseCommand(t, "top", "--tab", tab); err == nil {
+			t.Fatal("removed tab accepted:", tab)
 		}
 	}
 }

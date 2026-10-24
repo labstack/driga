@@ -9,7 +9,7 @@ const html=fs.readFileSync(path.join(root,'internal/web/templates/chat.html'),'u
 let css=fs.readFileSync(path.join(root,'internal/web/static/app.css'),'utf8')+'\n'+fs.readFileSync(path.join(root,'internal/web/static/chat.css'),'utf8');
 css=css.replace(/url\("\/static\/([^"\)]+)"\)/g,(_,file)=>`url("data:font/woff2;base64,${fs.readFileSync(path.join(root,'internal/web/static',file)).toString('base64')}")`);
 const tokens=[...fs.readFileSync(path.join(root,'internal/view/theme.go'),'utf8').matchAll(/\{"([^" ]+)", "(#[A-Fa-f0-9]+)", "(#[A-Fa-f0-9]+)"\}/g)];
-const palette=theme=>':root{'+tokens.map(([,name,light,dark])=>`--${name}:${theme==='latte'?light:dark};`).join('')+'}';
+const palette=theme=>':root{'+tokens.map(([,name,light,dark])=>`--${name}:${theme==='light'?light:dark};`).join('')+'}';
 const chatJS=fs.readFileSync(path.join(root,'internal/web/static/chat.js'),'utf8');
 (async()=>{
  let browser;
@@ -17,7 +17,7 @@ const chatJS=fs.readFileSync(path.join(root,'internal/web/static/chat.js'),'utf8
   browser=await chromium.launch({headless:true,executablePath:process.env.DRIGA_CHROMIUM_PATH||undefined,env:{...process.env,HOME:scratch,XDG_CONFIG_HOME:scratch,TMPDIR:scratch},args:['--disable-background-networking','--disable-component-update','--disable-sync','--no-first-run']});
   const page=await browser.newPage();await page.route('**/*',route=>route.abort());
   const errors=[];page.on('pageerror',error=>errors.push(error.message));
-  for(const theme of ['latte','mocha'])for(const [width,height]of [[375,600],[375,667],[768,700],[1280,900]]){
+  for(const theme of ['light','dark'])for(const [width,height]of [[375,600],[375,667],[768,700],[1280,900]]){
    await page.setViewportSize({width,height});
    await page.setContent(`<style>${palette(theme)}${css}</style><div class="c chat-page chat-open">${html}</div>`);
    await page.evaluate(()=>{

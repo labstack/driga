@@ -19,7 +19,7 @@ func TestMCPRollupRowAndDetails(t *testing.T) {
 	ps := []model.Proc{{PID: 1, Cmdline: "claude", Argv: []string{"claude"}}, {PID: 2, PPID: 1, Cmdline: "node exec firecrawl-mcp", Argv: []string{"node", "exec", "firecrawl-mcp"}, RSS: 10 << 20}, {PID: 3, PPID: 2, Cmdline: "node /cache/node_modules/.bin/firecrawl-mcp", Argv: []string{"node", "/cache/node_modules/.bin/firecrawl-mcp"}, RSS: 20 << 20}}
 	src.snap.Machine = view.MachineView{MCPServers: derive.MCPServers(ps, nil, src.snap.ObservedAt)}
 	for _, width := range []int{80, 140} {
-		m := setup(t, src, Options{InitialTab: "machine"}).(*app)
+		m := setup(t, src, Options{InitialTab: "machines"}).(*app)
 		m.width, m.height = width, 50
 		m.rebuild()
 		if !strings.Contains(m.View().Content, "firecrawl-mcp  1 servers · 30.0M · 1 hosts · 0 duplicates") {
@@ -50,7 +50,7 @@ func TestMachineMCPServersReadOnlyDetails(t *testing.T) {
 	servers := derive.MCPServers([]model.Proc{{PID: 10, Cmdline: "codex app-server", Argv: []string{"codex", "app-server"}, StartTime: at.Add(-31 * time.Hour)}, {PID: 11, PPID: 10, Cmdline: "node /opt/codegraph/dist/index.js", Argv: []string{"node", "/opt/codegraph/dist/index.js"}, RSS: 100, StartTime: at.Add(-time.Hour)}, {PID: 12, PPID: 10, Cmdline: "node /opt/codegraph/dist/index.js", Argv: []string{"node", "/opt/codegraph/dist/index.js"}, RSS: 100, StartTime: at}}, sigs, at)
 	src.snap.Machine = view.MachineView{MCPServers: servers}
 	for _, width := range []int{80, 140} {
-		m := setup(t, src, Options{InitialTab: "machine", Exec: func([]string) error { t.Fatal("executed command"); return nil }, Kill: func(context.Context, model.Orphan, []int32, bool) (kill.Result, error) {
+		m := setup(t, src, Options{InitialTab: "machines", Exec: func([]string) error { t.Fatal("executed command"); return nil }, Kill: func(context.Context, model.Orphan, []int32, bool) (kill.Result, error) {
 			t.Fatal("attempted to signal pile-up")
 			return kill.Result{}, nil
 		}}).(*app)

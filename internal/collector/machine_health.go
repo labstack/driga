@@ -13,7 +13,7 @@ import (
 )
 
 func machineJump() *model.InboxJump {
-	return &model.InboxJump{Kind: "machine", Command: "driga top --tab machine"}
+	return &model.InboxJump{Kind: "machine", Command: "driga top --tab machines"}
 }
 
 // Only successful, distinct OS readings count. Unknown readings and source

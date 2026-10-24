@@ -78,7 +78,7 @@ func TestChatMarkdownElements(t *testing.T) {
 		t.Fatal(err)
 	}
 	input = bytes.ReplaceAll(input, []byte("\r\n"), []byte("\n"))
-	defer view.SetTheme("auto")
+	defer view.SetTheme("system")
 	for _, width := range []int{120, 60, 24} {
 		t.Run(fmt.Sprint(width), func(t *testing.T) {
 			plain := chatMarkdown(string(input), width, true)
@@ -97,7 +97,7 @@ func TestChatMarkdownElements(t *testing.T) {
 				t.Fatalf("Markdown layout differs from %s:\n%s", path, plain)
 			}
 			var mocha string
-			for _, theme := range []string{"mocha", "latte"} {
+			for _, theme := range []string{"dark", "light"} {
 				_ = view.SetTheme(theme)
 				colored := chatMarkdown(string(input), width, false)
 				if ansi.Strip(colored) != plain {
@@ -108,7 +108,7 @@ func TestChatMarkdownElements(t *testing.T) {
 						t.Fatalf("overflow: %q", line)
 					}
 				}
-				if theme == "mocha" {
+				if theme == "dark" {
 					mocha = colored
 				} else if colored == mocha {
 					t.Fatal("theme colors did not switch")

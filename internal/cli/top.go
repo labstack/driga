@@ -18,7 +18,7 @@ import (
 // TopCmd opens the interactive viewer using daemon data or live snapshots.
 type TopCmd struct {
 	TopOptions
-	Tab string `enum:"home,agents,projects,inbox,orphans,machine,cleanup,flow,chat" default:"home" help:"Initial tab: home, agents, projects, inbox, orphans, machine, cleanup, flow, or chat."`
+	Tab string `enum:"flow,projects,machines" default:"flow" help:"Initial tab: flow, projects or machines."`
 }
 
 // Run keeps the viewer and its optional collector within the same lifetime.

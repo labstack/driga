@@ -11,7 +11,7 @@ import (
 func TestThemeControlAndStylesheet(t *testing.T) {
 	s, _, _, _ := fixture(t)
 	body := request(s, "GET", "/", s.token).Body.String()
-	for _, want := range []string{`/static/theme.css`, `id="theme"`, `value="system"`, `value="mocha"`, `value="latte"`, `system`, `mocha`, `latte`} {
+	for _, want := range []string{`/static/theme.css`, `id="theme"`, `value="system"`, `value="light"`, `value="dark"`, `system`, `light`, `dark`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("missing %s", want)
 		}

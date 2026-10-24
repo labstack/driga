@@ -1,6 +1,8 @@
 package view
 
 import (
+	"fmt"
+	catppuccin "github.com/catppuccin/go"
 	"math"
 	"os"
 	"path/filepath"
@@ -44,20 +46,49 @@ func TestThemeTerminalParity(t *testing.T) {
 	}
 }
 
-func TestConsoleThemeTokenParity(t *testing.T) {
+func TestConsoleThemeSelectors(t *testing.T) {
 	css := ThemeCSS()
-	// Catppuccin Mocha (official) and Latte (text roles darkened for 4.5:1).
-	for _, set := range []string{
-		`--bg:#1E1E2E;--pane:#181825;--raise:#313244;--line:#45475A;--fg:#CDD6F4;--mid:#BAC2DE;--dim:#A6ADC8;--accent:#CBA6F7;--on-accent:#1E1E2E;--working:#A6E3A1;--waiting:#F9E2AF;--stalled:#F38BA8;--idle:#89B4FA;--finished:#A6ADC8;--crit:#F38BA8;--warn:#FAB387;`,
-		`--bg:#EFF1F5;--pane:#E6E9EF;--raise:#CCD0DA;--line:#BCC0CC;--fg:#4C4F69;--mid:#5C5F77;--dim:#5C5F77;--accent:#7629D6;--on-accent:#EFF1F5;--working:#256817;--waiting:#7A4C07;--stalled:#B50C30;--idle:#1A5AD8;--finished:#5C5F77;--crit:#B50C30;--warn:#963F06;`,
-	} {
-		if !strings.Contains(css, set) {
-			t.Errorf("missing exact console token set %s", set)
-		}
-	}
-	for _, selector := range []string{`[data-theme="mocha"]`, `[data-theme="latte"]`, `prefers-color-scheme: light`} {
+	for _, selector := range []string{`[data-theme="dark"]`, `[data-theme="light"]`, `prefers-color-scheme: light`} {
 		if !strings.Contains(css, selector) {
 			t.Errorf("missing %s", selector)
+		}
+	}
+}
+
+// Dark uses the official Mocha colors for every state; light text roles keep
+// the official Latte hue and are only as much darker as 4.5:1 requires.
+func TestThemeFollowsCatppuccinAndStaysReadable(t *testing.T) {
+	rgb := func(h string) [3]uint8 {
+		var c [3]uint8
+		fmt.Sscanf(h, "#%02X%02X%02X", &c[0], &c[1], &c[2])
+		return c
+	}
+	official := map[string][2]catppuccin.Color{
+		"working": {catppuccin.Latte.Green(), catppuccin.Mocha.Green()},
+		"waiting": {catppuccin.Latte.Yellow(), catppuccin.Mocha.Yellow()},
+		"stalled": {catppuccin.Latte.Red(), catppuccin.Mocha.Red()},
+		"idle":    {catppuccin.Latte.Blue(), catppuccin.Mocha.Blue()},
+		"warn":    {catppuccin.Latte.Peach(), catppuccin.Mocha.Peach()},
+		"accent":  {catppuccin.Latte.Mauve(), catppuccin.Mocha.Mauve()},
+		"tool":    {catppuccin.Latte.Sky(), catppuccin.Mocha.Sky()},
+	}
+	for _, tok := range consoleTokens {
+		want, ok := official[tok.Name]
+		if !ok {
+			continue
+		}
+		if tok.Dark != strings.ToUpper(want[1].Hex) {
+			t.Errorf("%s dark %s, official Mocha %s", tok.Name, tok.Dark, want[1].Hex)
+		}
+		if c := Contrast(rgb(tok.Light), catppuccin.Latte.Base().RGB); c < 4.5 {
+			t.Errorf("%s light %s contrast %.2f", tok.Name, tok.Light, c)
+		}
+		if c := Contrast(rgb(tok.Dark), catppuccin.Mocha.Base().RGB); c < 4.5 {
+			t.Errorf("%s dark %s contrast %.2f", tok.Name, tok.Dark, c)
+		}
+		// Passing official colors are used unchanged.
+		if Contrast(want[0].RGB, catppuccin.Latte.Base().RGB) >= 4.5 && tok.Light != strings.ToUpper(want[0].Hex) {
+			t.Errorf("%s light %s should be official %s", tok.Name, tok.Light, want[0].Hex)
 		}
 	}
 }
@@ -79,26 +110,6 @@ func TestTUITokensExist(t *testing.T) {
 		}
 		if !found {
 			t.Errorf("token %q missing", name)
-		}
-	}
-}
-
-func TestFlowMockTokens(t *testing.T) {
-	for _, want := range []ThemeToken{
-		{"waiting-bar", "#DF8E1D", "#F9E2AF"}, {"waiting-bg", "#F3E7D3", "#3A3530"},
-		{"tool", "#04778A", "#89DCEB"}, {"rail", "#A9AEBC", "#585B70"},
-	} {
-		found := false
-		for _, got := range consoleTokens {
-			if got.Name == want.Name {
-				found = true
-				if got != want {
-					t.Errorf("%s: %+v", want.Name, got)
-				}
-			}
-		}
-		if !found {
-			t.Error("missing console token", want.Name)
 		}
 	}
 }

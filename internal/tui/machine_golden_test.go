@@ -49,7 +49,7 @@ func TestMachineGoldenFrames(t *testing.T) {
 				src.snap.Machine.MCPServers = derive.MCPServers(ps, nil, at)
 				derive.ApplyMCPTrends(&src.snap.Machine.MCPServers, trends.Trends())
 				src.snap.Summary.Sample = src.snap.Machine.Sample
-				m := setup(t, src, Options{InitialTab: "machine"}).(*app)
+				m := setup(t, src, Options{InitialTab: "machines"}).(*app)
 				if m.tab != 4 {
 					t.Fatal("initial tab ignored")
 				}
@@ -109,7 +109,7 @@ func TestMachineGoldenFrames(t *testing.T) {
 func TestMachineWarningJumpStaysInCurrentTUI(t *testing.T) {
 	m := setup(t, fixture(), Options{Exec: func([]string) error { t.Fatal("launched terminal"); return nil }}).(*app)
 	m.tab = 2
-	item := model.InboxItem{ID: "low_disk:1", Kind: "low_disk", Jump: &model.InboxJump{Kind: "machine", Command: "driga top --tab machine"}}
+	item := model.InboxItem{ID: "low_disk:1", Kind: "low_disk", Jump: &model.InboxJump{Kind: "machine", Command: "driga top --tab machines"}}
 	if cmd := m.jumpInbox(tabRow{inbox: &item}); cmd != nil {
 		t.Fatal("external command for internal jump")
 	}
@@ -121,7 +121,7 @@ func TestMachineWarningJumpStaysInCurrentTUI(t *testing.T) {
 func TestMachineViewOlderPeerFields(t *testing.T) {
 	src := fixture()
 	src.snap.Machine = view.MachineView{Machines: []view.MachineView{{MachineID: "peer", TopMemory: []view.MachineApp{{ID: "legacy", Name: "Legacy", Memory: 2 << 30}}}}}
-	m := setup(t, src, Options{InitialTab: "machine"}).(*app)
+	m := setup(t, src, Options{InitialTab: "machines"}).(*app)
 	m.rebuild()
 	var text strings.Builder
 	otherKey := ""

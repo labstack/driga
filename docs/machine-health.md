@@ -16,7 +16,7 @@ for retained history and uncapped evidence lists. MCP additionally retains its
 standard envelope `limit`/`truncated` contract. These are observed processes, not an exhaustive
 accounting of kernel memory or unreadable tasks.
 
-The TUI Machine tab (`5`, or `driga top --tab machine`) expands an app with
+The TUI Machines tab (`2`, or `driga top --tab machines`) expands an app with
 Right and collapses it with Left. Enter shows process details, including memory
 measures and attribution proofs. The web `/machines` page uses keyboard-accessible
 native disclosure controls. Both preserve the existing compact table/pane styles.
@@ -276,7 +276,7 @@ On macOS, Driga.app sends native UserNotifications with Driga's name and icon.
 A local single-item notification click runs `driga inbox jump <id>` through its
 delegate while the collector is running. Unbundled builds have no macOS alerts.
 The stored destination is `machine`. On macOS, the click opens Terminal and runs
-the installed executable's `top --tab machine`; on Linux, a manual jump uses
+the installed executable's `top --tab machines`; on Linux, a manual jump uses
 `x-terminal-emulator -e`. This avoids requiring a running web server. As with
 existing Linux alerts, notify-send itself has no click action. A click does not
 acknowledge the item. No notification is sent by tests; their runners/notifiers

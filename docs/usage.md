@@ -28,7 +28,7 @@ with activity within the last 24 hours, alongside recently ended sessions.
 Collection views merge paired machines by default; `machines show` defaults to local. `--machine all|local|<name|id>`
 selects a scope; `--project .` resolves against local repositories only.
 View flags are scoped to commands that consume them; see the [command reference](#command-reference).
-`--theme=auto|mocha|latte` belongs to `top`; `NO_COLOR` is also honored. View JSON has schema 2,
+`--theme=system|light|dark` belongs to `top`; `NO_COLOR` is also honored. View JSON has schema 2,
 an observation time, collection mode, source freshness, coverage gaps, and data.
 `doctor --json` returns diagnostic checks rather than a view envelope.
 Use `driga <command> --help` for command-specific flags.
@@ -120,7 +120,7 @@ background collector posts notifications on macOS, so run the service
 Clicking a local item's notification runs `driga inbox jump <item-id>` without
 acknowledging it. Jumps select a proven tmux pane, focus a proven Terminal/iTerm
 window with `inbox.jump_terminal = true`, or print a resume command. Machine
-warnings open Terminal on `driga top --tab machine`. Batch summaries and remote
+warnings open Terminal on `driga top --tab machines`. Batch summaries and remote
 alerts have no click action. The collector keeps the native notification delegate
 and main run loop alive while it runs. Re-sending an item replaces its existing
 notification. Linux uses notify-send; Windows uses native WinRT toasts.
@@ -155,7 +155,7 @@ Defaults and their purpose:
 
 | Setting | Default | Purpose |
 | --- | --- | --- |
-| `ui.theme` | `auto` | Whole TUI palette: `auto`, `mocha`, `latte`; override with `--theme`. |
+| `ui.theme` | `system` | Whole TUI palette: `system`, `light`, `dark`; override with `--theme`. |
 | `roots` | none | Discover from sessions; add scanning roots only when wanted. |
 | `root_depth` | `3` | Bound discovery below configured roots. |
 | `exclude` | `**/node_modules`, `**/.tmp/**` | Avoid dependency and temporary directories. |
@@ -839,18 +839,24 @@ process ancestry, reparenting, activity, and running app ownership also matter.
 
 ### Themes
 
-Set `[ui] theme = 'auto'` (the default), `'mocha'`, or `'latte'` in TOML.
-For example:
+Themes are **light**, **dark** and **system** (the default), set with
+`[ui] theme` in TOML:
 
 ```toml
 [ui]
-theme = 'latte'
+theme = 'light'
 ```
 
-`driga top --theme mocha` overrides the config for the whole TUI. Auto follows
-terminal background detection; `--no-color` keeps the layout without ANSI styling.
-The web console's Mocha, Latte, and System choices use the same Catppuccin tokens,
-including assistant Markdown. Web System follows the browser's color preference.
+`driga top --theme dark` overrides the config for the whole TUI. System follows
+the terminal's background in the TUI and the browser's colour preference on the
+web; `--no-color` keeps the layout without ANSI styling.
+
+Light and dark are the [Catppuccin](https://catppuccin.com/palette/) Latte and
+Mocha palettes, taken from the official `github.com/catppuccin/go` package and
+shared by the TUI, the web console and assistant Markdown. Dark uses the
+official colours unchanged. In light, text in Latte's yellow, green, blue,
+peach, teal and sky is darkened, keeping the hue, just enough to reach 4.5:1
+contrast on the background; fills and bars keep the official colours.
 
 ### Answer Claude permission prompts
 
@@ -912,7 +918,7 @@ contains related sessions; selecting a session never selects the whole family.
 | `cleanup list` | Local candidates; `--kind=worktree\|scratch\|history`, `--sizes`, `--why`, `--json`. History is report-only. |
 | `cleanup remove <candidate-id>` | Verify and remove one candidate; `--dry-run`, `--sizes`, `--include-ignored`, `--yes/-y`, `--json`. |
 | `cleanup remove --all --kind worktree` or `--kind scratch` | Remove ready candidates of the selected kind; report completed/skipped/failed counts. `--include-ignored` requires one explicit ID. |
-| `top` | Interactive terminal dashboard; `--tab=home\|agents\|projects\|inbox\|orphans\|machine\|cleanup\|flow\|chat`, `--theme=auto\|mocha\|latte`, `--machine`, `--project`, `--since`, `--snapshot`, `--no-color`. |
+| `top` | Interactive terminal dashboard; `--tab=flow\|projects\|machines`, `--theme=system\|light\|dark`, `--machine`, `--project`, `--since`, `--snapshot`, `--no-color`. |
 | `web` | Serve the interactive browser dashboard on loopback; `--listen`, `--open`, `--machine`, `--project`, `--since`, `--snapshot`. |
 | `ask <question>...` | One-shot Chat question; `--machine`, `--project`, `--json`. |
 | `mcp` | Serve read-only MCP tools over stdio; `--snapshot` forces one-shot collection for read tools without history. |

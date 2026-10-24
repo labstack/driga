@@ -174,7 +174,7 @@ func TestMachineNotificationClickUsesInstalledExecutable(t *testing.T) {
 	readEnv(t)
 	t.Setenv("PATH", t.TempDir())
 	st := readDB(t, func(tx *store.Tx) error {
-		return tx.UpsertInboxItem(model.InboxItem{ID: "low_disk:1", Kind: "low_disk", TS: time.Now(), Jump: &model.InboxJump{Kind: "machine", Command: "driga top --tab machine"}})
+		return tx.UpsertInboxItem(model.InboxItem{ID: "low_disk:1", Kind: "low_disk", TS: time.Now(), Jump: &model.InboxJump{Kind: "machine", Command: "driga top --tab machines"}})
 	})
 	bin, err := os.Executable()
 	if err != nil {
@@ -183,7 +183,7 @@ func TestMachineNotificationClickUsesInstalledExecutable(t *testing.T) {
 	var calls int
 	err = (JumpCmd{ID: "low_disk:1"}).run(&Globals{Stdout: &bytes.Buffer{}}, jumpRunner(func(_ context.Context, name string, args ...string) ([]byte, error) {
 		calls++
-		if name != "osascript" || len(args) != 3 || args[2] != attention.Quote(bin)+" top --tab machine" {
+		if name != "osascript" || len(args) != 3 || args[2] != attention.Quote(bin)+" top --tab machines" {
 			t.Fatalf("%s %q", name, args)
 		}
 		return nil, nil

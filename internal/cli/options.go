@@ -140,7 +140,7 @@ type TopOptions struct {
 	Since    string  `help:"Only show items since a duration ago or yesterday."`
 	Snapshot bool    `help:"Force one-shot snapshot collection without history."`
 	NoColor  bool    `name:"no-color" help:"Disable colors."`
-	Theme    *string `enum:"auto,mocha,latte" help:"TUI theme (overrides ui.theme)."`
+	Theme    *string `enum:"system,light,dark" help:"TUI theme: system, light or dark (overrides ui.theme)."`
 }
 
 func (o *TopOptions) AfterApply(g *Globals) error {

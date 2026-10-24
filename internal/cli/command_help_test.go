@@ -19,7 +19,7 @@ func TestHelpOnlyAdvertisesSupportedJSON(t *testing.T) {
 		if code != 0 || strings.Contains(out.String(), "--json") != tc.json {
 			t.Fatalf("%v: %d %s %s", tc.args, code, &out, &diagnostic)
 		}
-		if tc.args[0] == "top" && !strings.Contains(strings.Join(strings.Fields(out.String()), " "), "Initial tab: home, agents, projects, inbox, orphans, machine, cleanup, flow, or chat.") {
+		if tc.args[0] == "top" && !strings.Contains(strings.Join(strings.Fields(out.String()), " "), "Initial tab: flow, projects or machines.") {
 			t.Fatal(out.String())
 		}
 	}
