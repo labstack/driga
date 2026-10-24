@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/labstack/driga/internal/attention"
 	"github.com/labstack/driga/internal/derive"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/store"
@@ -33,6 +34,12 @@ func memoryPressureInbox(tx *store.Tx, s model.MachineSample, now time.Time, pro
 	if s.PressureLevel != "critical" {
 		if err := tx.SetMeta("machine:critical_count", "0"); err != nil {
 			return err
+		}
+		// Failed/unknown and warning readings break the sample streak, but only
+		// a return to normal clears an episode and re-arms its notification, so
+		// critical/warning flapping cannot alert repeatedly.
+		if s.PressureLevel != "normal" {
+			return nil
 		}
 		if err := tx.SetMeta("machine:pressure_active", "0"); err != nil {
 			return err
@@ -117,7 +124,7 @@ func memoryPressureSummaryWithMemory(samples [][]model.Proc, sessions []model.Se
 	}
 	summary := "Critical memory pressure for two samples. "
 	if memory == 0 {
-		summary += fmt.Sprintf("Agents hold none of the %.1f GiB in use; other apps are the cause.", float64(machineMemory)/(1<<30))
+		summary += fmt.Sprintf("Agents hold none of the %s in use; other apps are the cause.", attention.DecimalBytes(machineMemory))
 	} else {
 		count := 0
 		for _, c := range servers.Commands {
@@ -127,13 +134,13 @@ func memoryPressureSummaryWithMemory(samples [][]model.Proc, sessions []model.Se
 		if machineMemory > 0 {
 			pct = 100 * float64(memory) / float64(machineMemory)
 		}
-		summary += fmt.Sprintf("Agents hold %.1f GiB of %.1f GiB in use (%.0f%%), %d MCP servers.", float64(memory)/(1<<30), float64(machineMemory)/(1<<30), pct, count)
+		summary += fmt.Sprintf("Agents hold %s of %s in use (%.0f%%), %d MCP servers.", attention.DecimalBytes(memory), attention.DecimalBytes(machineMemory), pct, count)
 	}
 	if len(samples) > 0 {
 		derive.ApplyMCPTrends(&servers, trends)
 		if len(servers.Pileups) > 0 {
 			p := servers.Pileups[0]
-			summary += fmt.Sprintf(" MCP pile-ups: %d groups; largest %s (%d processes, %.1f GiB). %s", len(servers.Pileups), p.Name, p.Count, float64(p.Memory)/(1<<30), p.Advice)
+			summary += fmt.Sprintf(" MCP pile-ups: %d groups; largest %s (%d processes, %s). %s", len(servers.Pileups), p.Name, p.Count, attention.DecimalBytes(p.Memory), p.Advice)
 		}
 		var largest *derive.MCPTrend
 		for _, c := range servers.Commands {

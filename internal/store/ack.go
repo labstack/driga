@@ -41,7 +41,7 @@ func (tx *Tx) EndMachineWarning(kind string, at time.Time) error {
 }
 
 // RefreshMachineWarning upgrades an existing episode's text and click target,
-// preserving its identity, acknowledgement, and notification repeat history.
+// preserving its identity, acknowledgement, and notification delivery history.
 func (tx *Tx) RefreshMachineWarning(kind, summary string, jump *model.InboxJump) error {
 	if kind != "low_disk" && kind != "memory_pressure" {
 		return fmt.Errorf("invalid machine warning %q", kind)

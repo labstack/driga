@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/labstack/driga/internal/attention"
 	"github.com/labstack/driga/internal/config"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/store"
@@ -27,11 +28,16 @@ func lowDiskInbox(tx *store.Tx, cfg config.MachineConfig, s model.MachineSample,
 	if err != nil && !errors.Is(err, store.ErrNotFound) {
 		return err
 	}
-	if s.DiskFree >= threshold {
+	// An active episode ends only once free space is 10% above the limit, so
+	// hovering at the threshold cannot raise a new alert on every pass.
+	if s.DiskFree >= threshold && (active != "1" || s.DiskFree >= threshold+threshold/10) {
 		if err := tx.EndMachineWarning("low_disk", now); err != nil {
 			return err
 		}
 		return tx.SetMeta("cleanup:low_disk", "0")
+	}
+	if s.DiskFree >= threshold {
+		return nil // recovering, still inside the hysteresis band
 	}
 	worktrees, err := tx.Worktrees(0)
 	if err != nil {
@@ -42,7 +48,7 @@ func lowDiskInbox(tx *store.Tx, cfg config.MachineConfig, s model.MachineSample,
 	for _, w := range worktrees[:min(3, len(worktrees))] {
 		names = append(names, w.Path)
 	}
-	summary := fmt.Sprintf("Low disk: %d bytes free (threshold %d). Driga can show known cleanup candidates with driga cleanup --sizes; Machine shows the largest apps.", s.DiskFree, threshold)
+	summary := fmt.Sprintf("%s free, below %s. Inspect known cleanup candidates with driga cleanup list --sizes; driga top --tab machine shows the largest apps.", attention.DecimalBytesFloor(s.DiskFree), attention.DecimalBytes(threshold))
 	if len(names) > 0 {
 		summary += " Oldest stored worktrees to inspect: " + strings.Join(names, ", ")
 	}

@@ -8,5 +8,5 @@ import (
 )
 
 func main() {
-	os.Exit(cli.Main(os.Args[1:], version, commit, date))
+	notificationMain(func() { os.Exit(cli.Main(os.Args[1:], version, commit, date)) })
 }

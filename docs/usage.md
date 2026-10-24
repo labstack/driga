@@ -105,12 +105,30 @@ Remote inbox acknowledgments require the peer's `--allow-ack` grant; unreachable
 show `ack pending` and retry on reconnect.
 
 Desktop alerts show the session title or project and why it needs you, within
-your capture policy. On macOS, `brew install terminal-notifier` enables clickable
-alerts that run `driga inbox jump <item-id>` without acknowledging the item; otherwise
-alerts use Script Editor via osascript. Jumps select a proven tmux pane, focus a
-proven Terminal/iTerm window with `inbox.jump_terminal = true`, or print a resume
-command. Batch summaries and remote alerts have no click action. Notifier
-detection is cached until collector restart; `driga doctor` reports the backend.
+your capture policy. macOS notifications require the installed **Driga.app**
+(`brew install --cask labstack/tap/driga`); they use Driga's name and icon through the native
+UserNotifications API. Allow alerts and sounds for Driga when macOS asks, or in
+System Settings → Notifications → Driga. Unbundled builds (`go run`, checkout
+binaries) cannot send macOS notifications; `driga doctor` explains how to install
+the app. No notification helpers are needed. `driga doctor` warns when
+notifications are turned off for Driga; turning them back on takes effect from
+the next notification, without restarting the collector. Alerts raised while
+notifications are off are not replayed; they stay in the inbox. Only the
+background collector posts notifications on macOS, so run the service
+(`driga service install`) to receive them.
+
+Clicking a local item's notification runs `driga inbox jump <item-id>` without
+acknowledging it. Jumps select a proven tmux pane, focus a proven Terminal/iTerm
+window with `inbox.jump_terminal = true`, or print a resume command. Machine
+warnings open Terminal on `driga top --tab machine`. Batch summaries and remote
+alerts have no click action. The collector keeps the native notification delegate
+and main run loop alive while it runs. Re-sending an item replaces its existing
+notification. Linux uses notify-send; Windows uses native WinRT toasts.
+
+Health warnings notify once per condition, until it clears. Concurrent health
+warnings from one machine form one summary. Details and cleanup commands remain
+in the inbox; low-disk banners show decimal sizes such as “12.2 GB free, below
+20 GB”. `inbox.alert_repeat` throttles session alerts, not health episodes.
 
 ## Privacy and configuration
 
@@ -554,13 +572,13 @@ permissions and restart the collector to retry Chat.
 
 ## Cleanup
 
-`driga cleanup` lists disk that agents left behind. Nothing is removed
+`driga cleanup list` lists disk that agents left behind. Nothing is removed
 automatically, and nothing is removed on another machine.
 
 ```sh
-driga cleanup                       # candidates with evidence
-driga cleanup --sizes               # walk sizes on demand (30 s cap per walk)
-driga cleanup --why                 # also list worktrees that don't qualify, and why
+driga cleanup list                        # candidates with evidence
+driga cleanup list --sizes                # walk sizes on demand (30 s cap per walk)
+driga cleanup list --why                  # also list worktrees that don't qualify, and why
 driga cleanup remove <id> --dry-run        # print the exact commands
 driga cleanup remove <id>                  # re-verify, then ask y/N
 driga cleanup remove --kind worktree --all # every ready worktree; skips anything changed

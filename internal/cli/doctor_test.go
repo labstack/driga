@@ -3,6 +3,8 @@ package cli
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"github.com/labstack/driga/internal/attention"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -70,25 +72,40 @@ func TestDoctorNoDaemon(t *testing.T) {
 }
 
 func TestDoctorMacNotifier(t *testing.T) {
-	for _, path := range []string{"", "/opt/tool bin/terminal-notifier"} {
+	for _, available := range []bool{false, true} {
 		d, _ := doctorFixture(t)
 		d.OS = "darwin"
-		d.NotifierLookup = func() string { return path }
-		status, detail, fix := "ok", "terminal-notifier (clickable)", ""
-		if path == "" {
-			status, detail, fix = "info", "osascript (Script Editor)", "brew install terminal-notifier"
+		d.NotificationStatus = func() (string, error) {
+			if !available {
+				return "", fmt.Errorf("install Driga.app for native macOS notifications (unbundled builds cannot send them)")
+			}
+			return "native UserNotifications (Driga)", nil
+		}
+		status, detail, fix := "ok", "native UserNotifications (Driga)", ""
+		if !available {
+			status, detail, fix = "info", "install Driga.app for native macOS notifications (unbundled builds cannot send them)", "brew install --cask labstack/tap/driga"
 		}
 		c := requireCheck(t, Doctor(context.Background(), d), "notifications", status, fix)
 		if c.Detail != detail || c.Fix != fix {
 			t.Fatal(c)
 		}
 		d.OS = "linux"
-		d.NotifierLookup = func() string { t.Fatal("macOS lookup on Linux"); return "" }
+		d.NotificationStatus = func() (string, error) { t.Fatal("macOS status on Linux"); return "", nil }
 		for _, c := range Doctor(context.Background(), d) {
 			if c.Name == "notifications" {
 				t.Fatal(c)
 			}
 		}
+	}
+}
+
+func TestDoctorMacNotificationsDenied(t *testing.T) {
+	d, _ := doctorFixture(t)
+	d.OS = "darwin"
+	d.NotificationStatus = func() (string, error) { return "", attention.ErrNotificationsDenied }
+	c := requireCheck(t, Doctor(context.Background(), d), "notifications", "warn", "System Settings > Notifications > Driga > Allow notifications")
+	if c.Detail != attention.ErrNotificationsDenied.Error() {
+		t.Fatal(c)
 	}
 }
 
