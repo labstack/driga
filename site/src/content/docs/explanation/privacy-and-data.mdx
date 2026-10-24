@@ -1,0 +1,62 @@
+---
+title: Privacy and data
+description: What Driga reads and stores on your machine, what can leave it and when, the capture_text policy, and where files live.
+summary: What Driga collects and stores, the titles and snippets capture policies, what Chat, summaries and fleet sharing send, file locations and permissions.
+read_when:
+  - You need to know what Driga stores before installing it.
+  - You are deciding between capture_text titles and snippets.
+---
+
+Driga runs on your machine and has no account, server or API key. This page is
+about the app; the website is covered on [its own privacy page](/privacy).
+
+## What it reads
+
+Local agent session metadata and logs, the process table, machine health and
+local Git state. Agent configuration is changed only by explicit setup and hook
+commands, each previewed first.
+
+## What it stores
+
+The default `capture_text = "titles"` stores generated session titles, file
+paths, and session, process, Git and machine metadata.
+
+`capture_text = "snippets"` additionally stores prompt and handoff snippets,
+each scrubbed for secrets and capped at 200 characters.
+
+Full transcripts are never stored. Paths and titles can identify you, and
+secret scrubbing cannot guarantee privacy.
+
+## What can leave the machine
+
+Nothing, unless you turn one of these on:
+
+| Feature | What leaves | Where |
+| --- | --- | --- |
+| [Paired machines](/guides/fleet) | Metadata and titles by default; snippets only if both sides opt in | Viewers you paired with |
+| [Chat](/guides/chat) and `driga ask` | Your question, scrubbed, and context filtered by the capture policy | Claude, through your installed `claude` CLI and its login |
+| [Summaries](/guides/chat#summaries) | Project name, branches, counts, commit subjects, session titles; handoff text only with snippets | Same |
+
+Chat tools you approve may make network connections. Claude's own session
+history is managed by Claude, not by Driga's capture policy.
+
+OTLP intake listens on loopback, and drops prompt, response and tool content,
+`user.*` attributes and `organization.id` before storage. The web dashboard
+listens on loopback and requires a local access token.
+
+## Where files live
+
+| Data | macOS | Linux | Override |
+| --- | --- | --- | --- |
+| Database and collector state | `~/Library/Application Support/driga/` | `$XDG_DATA_HOME/driga` or `~/.local/share/driga/` | `DRIGA_DATA_DIR` |
+| Hook spool | `~/Library/Application Support/driga/events/` | `$XDG_STATE_HOME/driga/events` or `~/.local/state/driga/events/` | `DRIGA_SPOOL_DIR` |
+| Configuration | `$XDG_CONFIG_HOME/driga/config.toml` or `~/.config/driga/config.toml` | `$XDG_CONFIG_HOME/driga/config.toml` or `~/.config/driga/config.toml` | `DRIGA_CONFIG` |
+
+On Windows the data directory is `%LOCALAPPDATA%\driga\` and the configuration
+is `%APPDATA%\driga\config.toml`.
+
+Database and spool files are mode `0600` in `0700` directories. `driga doctor`
+warns when the database and its WAL exceed 500 MB.
+
+MCP server trend detail is kept at minute resolution for 24 hours, then as hourly
+endpoints for 30 days. Persisted Chat conversations are kept for 30 days.

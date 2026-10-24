@@ -1,0 +1,133 @@
+---
+title: Paired machines
+description: Pair Driga across machines over pinned mutual TLS so one viewer sees agents on several machines, with explicit control over what is shared.
+summary: How fleet pairing works, interactive and headless enrollment, SSH tunnels, what a serving machine shares, and how to remove or re-pair machines.
+read_when:
+  - You run agents on a VM, a server or a second laptop and want to see them in one place.
+  - A paired machine shows as untrusted or stale.
+---
+
+import { Steps } from "@astrojs/starlight/components";
+
+Each serving machine runs a collector; each viewer's collector pulls from its
+paired peers. Pairing is directional: repeat it the other way if both machines
+should see each other. Collection views merge paired machines by default; use
+`--machine local` or `--machine <name>` to narrow them.
+
+Use a private LAN or overlay address you choose, such as a VPN interface. No
+particular overlay is required.
+
+## Pair two machines
+
+<Steps>
+
+1. **On the peer**, serve the fleet. Stop any running collector first:
+
+   ```sh
+   driga service stop
+   driga collect --serve --listen <private-ip>:7411
+   ```
+
+   For persistent serving, configure it and restart the service instead:
+
+   ```toml
+   [fleet]
+   serve = true
+   listen = "<private-ip>:7411"
+   share_text = "titles"
+   ```
+
+2. **On the peer**, in another terminal, open enrollment:
+
+   ```sh
+   driga fleet enroll --allow-ack   # omit --allow-ack for read-only access
+   ```
+
+3. **On the viewer**, add the peer. Compare the six-digit code shown in both
+   terminals and answer `y` on each:
+
+   ```sh
+   driga fleet peers add <private-ip>:7411 --name vm-1
+   driga service install
+   driga machines
+   driga agents --machine vm-1
+   ```
+
+</Steps>
+
+`fleet peers add` reports the grant it received: `read ✓ · ack ✓` or
+`read ✓ · ack ✗`. Enrollment lasts at most ten minutes, allows three attempts
+and closes on success.
+
+### Headless pairing
+
+Exchange full device IDs over a trusted channel; then neither side prompts:
+
+```sh
+driga fleet id                                                        # on each machine
+driga fleet enroll --allow-viewer <viewer-device-id> --allow-ack      # peer
+driga fleet peers add <private-ip>:7411 --name vm-1 --device-id <peer-device-id>  # viewer
+```
+
+### Through an SSH tunnel
+
+For a bastion-only host, serve on the peer's loopback and tunnel from the viewer:
+
+```sh
+driga collect --serve --listen 127.0.0.1:7411     # peer
+ssh -N -L 7411:127.0.0.1:7411 <host>               # viewer, keep running
+driga fleet peers add 127.0.0.1:7411 --name vm-1   # viewer
+```
+
+The pinned certificate authenticates the peer through the tunnel, so no public
+port or inbound rule is needed.
+
+## Security
+
+Mutual TLS 1.3 pins each certificate. An identity change shows the peer as
+`untrusted` and requires removal and deliberate re-pairing; trust is never
+renewed automatically. Wildcard and public listeners are refused unless
+`fleet.allow_any_address = true`. Keep firewall ingress to TCP 7411 (or your
+port) restricted to viewers. Fleet trust files live under the data directory's
+`fleet/` with private permissions; never copy its identity key between
+machines.
+
+## What a serving machine shares
+
+The serving peer decides what leaves it:
+
+| Data | Shared by default? |
+| --- | --- |
+| Host, OS and resources; session labels, evidence, timestamps, working directories and touched file paths | Yes (metadata; paths can identify you) |
+| Session titles and Git commit subjects | Yes; `fleet.share_text = "none"` withholds them |
+| Prompts, handoffs, textual inbox summaries | No; needs `fleet.share_text = "snippets"` on the peer **and** `capture_text = "snippets"` locally |
+| Repository paths, branches, dirty counts, remote URLs | Yes, with URL credentials stripped |
+| Processes and orphan candidates | Agent processes only, command lines scrubbed and truncated |
+| Machine samples, source freshness, coverage gaps | Yes |
+| Full transcripts, API keys | No |
+
+A viewer stores what a peer shares even if its own capture setting is
+`titles`. Pair only with viewers you trust to keep that metadata.
+
+## Manage peers and viewers
+
+```sh
+driga fleet status                 # serving streams and enrollment
+driga fleet peers list
+driga fleet peers remove vm-1      # keep cached history
+driga fleet peers remove vm-1 --purge
+driga fleet viewers list
+driga fleet viewers revoke <viewer>
+```
+
+Unreachable peers become stale after 45 seconds; their last-known rows stay
+visible. Clock skew over 60 seconds warns in `driga machines`.
+
+## Cloned machines and rekeying
+
+Before enrolling a cloned VM, stop its collector and run
+`driga machines reset-id` **on the clone**, then restart and re-pair. This
+creates a new machine ID and certificate. `driga fleet rekey` rotates only the
+certificate; it also needs a stopped collector and re-pairing. On a viewer that
+then reports the peer as untrusted, remove the peer, reopen enrollment on the
+peer and add it again.

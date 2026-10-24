@@ -1,0 +1,71 @@
+---
+title: Notifications
+description: Get a desktop alert when a session needs you, allow Driga in macOS System Settings, and tune or turn off alerts.
+summary: Desktop alerts on macOS, Linux and Windows, the macOS notification permission, click actions, health warnings and alert settings.
+read_when:
+  - You expected a desktop alert and did not get one.
+  - You want fewer alerts, later alerts, or none.
+---
+
+Driga raises a desktop alert when a session needs you. The alert shows the
+session title or project and why it needs you, within your capture policy.
+
+Alerts come from the background collector, so run the service:
+
+```sh
+driga service install
+```
+
+## macOS
+
+Notifications need the installed **Driga.app**, which the Homebrew cask
+provides:
+
+```sh
+brew install --cask labstack/tap/driga
+```
+
+They use Driga's name and icon through the native notification API; no helper
+is needed. Builds run from a checkout or `go run` cannot send macOS
+notifications, and `driga doctor` explains how to install the app.
+
+The collector asks for permission when it starts, so answer the prompt that
+appears after `driga service install`. macOS asks only once: if the prompt was
+declined, or withdrawn because the collector restarted before you answered,
+turn on **Allow notifications** in **System Settings → Notifications → Driga**.
+`driga doctor` warns when notifications are off and prints the command that
+opens that page. Turning them back on takes effect from the next
+alert without restarting the collector; alerts raised while they were off are
+not replayed, and stay in the inbox.
+
+Clicking a local item's notification runs `driga inbox jump <item-id>`
+without acknowledging it. A jump selects a proven tmux pane, focuses a proven
+Terminal or iTerm window when `inbox.jump_terminal = true`, or prints a resume
+command. Machine warnings open Terminal on the Machines tab. Batch summaries
+and remote alerts have no click action.
+
+## Linux and Windows
+
+Linux uses `notify-send`. Windows uses native toasts with a per-user
+`LabStack.Driga` identity; toasts are plain, without click actions, and Focus
+Assist or notification policy can suppress them. `driga doctor` reports
+availability.
+
+## Health warnings
+
+Machine health warnings, such as low disk, notify once per condition until it
+clears. Concurrent warnings from one machine form one summary. Details and
+cleanup commands stay in the inbox.
+
+## Tune alerts
+
+```toml
+[inbox]
+alerts = "waiting"      # "all" adds completions, "off" disables alerts
+alert_after = "0s"      # only alert when a wait is still open this long
+alert_repeat = "5m"     # minimum interval between alerts for one session
+jump_terminal = false   # bring a proven macOS terminal window to front
+```
+
+`alert_repeat` throttles session alerts, not health warnings. Every key is in
+the [settings reference](/reference/settings#inbox-and-alerts).

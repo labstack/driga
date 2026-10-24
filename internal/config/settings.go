@@ -83,7 +83,7 @@ func (s Setting) Value(c Config) any {
 
 // runtimeSettings documents the explicit namespace extensions. No wildcard
 // exemptions are accepted. Internal names are inherited by helper/test processes.
-var runtimeSettings = []struct{ Name, Type, Default, Purpose string }{
+var runtimeSettings = []RuntimeSetting{
 	{"DRIGA_CONFIG", "path", "$XDG_CONFIG_HOME/driga/config.toml or ~/.config/driga/config.toml", "Configuration file override."},
 	{"DRIGA_DATA_DIR", "path", "Linux: $XDG_DATA_HOME/driga or ~/.local/share/driga; macOS: ~/Library/Application Support/driga", "Database and fleet data directory override."},
 	{"DRIGA_SPOOL_DIR", "path", "Linux: $XDG_STATE_HOME/driga/events or ~/.local/state/driga/events; macOS: ~/Library/Application Support/driga/events", "Hook/ack spool directory override."},
@@ -98,6 +98,16 @@ var runtimeSettings = []struct{ Name, Type, Default, Purpose string }{
 	{"DRIGA_OTLP_TRACES_ADDED", "marker", "unset", "1 records enhanced telemetry installed by Driga in Claude settings."},
 	{"DRIGA_JSON_WATCH_CHILD", "marker", "unset", "1 selects isolated NDJSON watch-test child."},
 	{"DRIGA_TEST_MCP_PROCESS", "marker", "unset", "1 selects isolated MCP-test child."},
+}
+
+// RuntimeSetting is an environment name outside the settings table: a path
+// override or an internal/test marker.
+type RuntimeSetting struct{ Name, Type, Default, Purpose string }
+
+// RuntimeSettings returns the explicit DRIGA_* namespace extensions, in stable
+// display order.
+func RuntimeSettings() []RuntimeSetting {
+	return append([]RuntimeSetting(nil), runtimeSettings...)
 }
 
 func Default() Config {

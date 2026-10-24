@@ -1,0 +1,79 @@
+---
+title: Flow
+description: Use Flow in the terminal UI and web dashboard to see every session as a map, a timeline or a list, and act on one.
+summary: Flow's Map, Timeline and Sessions views, keys, labels, the Needs you shelf, Activity history and session actions.
+read_when:
+  - You opened driga top and want to know what Flow shows and which keys drive it.
+  - You want to jump to, stop or inspect one session.
+---
+
+import TerminalFrame from "../../../components/TerminalFrame.astro";
+
+`driga top` opens on **Flow** (`0`). The other tabs are Projects (`1`) and
+Machines (`2`). `driga web` shows the same three tabs in a browser.
+
+<TerminalFrame name="board-busy-100" title="driga top · Flow · Map" caption="Rendered from the TUI's synthetic test fixture." />
+
+## Three views
+
+| Key | View | Shows |
+| --- | --- | --- |
+| `m` | Map (default) | A grouped project tree in the terminal; an SVG of projects, leads and workers on the web. More than four workers fold into a `+N` control. |
+| `t` | Timeline | Each session's activity over the window, grouped by project. |
+| `s` | Sessions | Every session as a sortable list (`S` sorts). |
+
+Timeline and Sessions always reach every session, including folded ones.
+
+Flow shows only stored evidence. Purple spawn links come from a session's
+recorded parent; red dashed same-file links need full paths on the same
+machine. Tool counts and ticks are labelled **telemetry** and appear only for
+real Claude or Copilot tool events. Cost is labelled **retained window**.
+Unknown history stays neutral rather than guessed.
+
+## Keys
+
+| Key | Action |
+| --- | --- |
+| Arrows, `j` / `k` | Select |
+| `/` | Find |
+| Enter | Open context; Enter again opens a scrollable inspector |
+| Esc | Back |
+| Tab | Focus the Needs you shelf |
+| `y` / `n` | Answer the selected permission prompt (after a short review delay) |
+| `J` | Open the session's terminal through its stored jump destination |
+| `K` | Stop a local session after you confirm (web: **Stop**) |
+| `C` | Copy the resume command |
+| `c` | Open [Chat](/guides/chat) with this context |
+| `h` | Activity history |
+| `M` | Change machine scope |
+| `?` | Help |
+| `q` | Quit |
+
+`K` rechecks that the target is the same idle process before stopping it.
+Sessions on a paired machine must be stopped on that machine.
+
+## Needs you and Activity
+
+The **Needs you** shelf sits above the tree, oldest first, with the same count
+as the waiting header. See [Needs you and prompts](/guides/needs-you).
+
+The expandable **Activity** section keeps notification and event history.
+Reading never acknowledges anything. Press `x` or Space on an eligible history
+item, or run `driga inbox ack`, to acknowledge it.
+
+## From the CLI
+
+```sh
+driga flow                 # newest live interactive session's family
+driga flow 12 --minutes 240
+driga agents --all         # include sessions ended in the last 24 hours
+driga agents show 12
+driga agents jump 12
+driga agents kill 12
+```
+
+Hosted sessions idle for more than an hour are hidden from default listings and
+counts; `--all` brings back those active in the last 24 hours. Read commands
+take scope and output flags such as `--json`, `--machine` and `--project`;
+the [CLI reference](/reference/cli) lists them per command. For a live view use
+`driga top` or `driga web`.

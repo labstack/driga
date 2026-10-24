@@ -1,0 +1,66 @@
+---
+title: Privacy
+description: What driga.dev measures, what it never collects, and how to turn analytics off.
+summary: Website analytics, consent controls, browser storage and hosting for driga.dev; separate from the Driga app.
+read_when:
+  - You want to know what this website records about your visit.
+  - You allowed or declined analytics and want to change that answer.
+---
+
+import AnalyticsPreference from "../../components/AnalyticsPreference.astro";
+
+This page describes the `driga.dev` website. The Driga app runs on your own
+machines and sends no usage reports to LabStack; what it reads and stores is
+described in [Privacy and data](/explanation/privacy-and-data).
+
+## Website analytics
+
+<AnalyticsPreference />
+
+### When it runs
+
+- **In the EEA, the UK, Guernsey, the Isle of Man and Jersey**, the analytics tag is
+  loaded and its identifier stored only after you allow analytics.
+- **Everywhere else**, analytics run and the control above turns them off.
+- **If your browser sends Global Privacy Control**, analytics do not run and
+  you are not asked. Choosing Allow above overrides that signal for this browser.
+
+Do Not Track is not consulted. Which rule applies is decided from the country
+Cloudflare reports for your connection; if that lookup fails, the site asks.
+
+### What is sent
+
+When analytics are running, each page view sends the page path, the page title,
+the site you arrived from, and the coarse device, browser and country
+information any web request carries. Query strings are removed from the
+recorded address, and the referrer is reduced to its site.
+
+Outbound clicks in the header, footer and landing page record the control,
+link text and destination URL. Copying the install command records that it was
+copied. Google Signals and ad personalisation are disabled and ad data
+redaction is enabled.
+
+### What is never sent
+
+The site does not send search terms or collect form input. It has no accounts,
+session recording or heatmaps.
+
+### Storage
+
+Your answer is kept in your browser's local storage under
+`driga.analytics-consent.v1`, which is read by this site and sent to nobody.
+Allowing lets Google Analytics set its `_ga` cookies; declining afterwards
+deletes them.
+
+## Hosting
+
+The site is static files served by Cloudflare Pages. Like any web server,
+Cloudflare receives the IP address and request headers needed to deliver a
+page. That processing is Cloudflare's, under their terms.
+
+## Contact
+
+Questions about this page belong in
+[an issue](https://github.com/labstack/driga/issues). The site's source,
+including the analytics code described here, is in
+[the repository](https://github.com/labstack/driga/tree/main/site).

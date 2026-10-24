@@ -1,0 +1,102 @@
+---
+/* One landing section: an eyebrow, a heading, the prose as children, a link,
+ * and a short recording. The prose stays in the page source, so the Markdown
+ * alternate and llms-full.txt keep it. */
+import Film from "./Film.astro";
+
+interface Props {
+  eyebrow: string;
+  tone: "yellow" | "green" | "blue" | "mauve" | "red";
+  title: string;
+  href: string;
+  more: string;
+  media: string;
+  label: string;
+  flip?: boolean;
+}
+
+const { eyebrow, tone, title, href, more, media, label, flip = false } = Astro.props;
+---
+
+<section class:list={["dg-feature", { flip }]}>
+  <div class="dg-feature-text">
+    <p class:list={["dg-eyebrow", tone]}>{eyebrow}</p>
+    <h2>{title}</h2>
+    <slot />
+    <a class="dg-link dg-feature-link" href={href}>{more} <span aria-hidden="true">→</span></a>
+  </div>
+  <div class="dg-feature-media">
+    <Film name={media} label={label} />
+  </div>
+</section>
+
+<style>
+  .dg-feature {
+    display: grid;
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    gap: 3.5rem;
+    align-items: center;
+  }
+
+  .dg-feature.flip {
+    grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  }
+
+  .dg-feature.flip .dg-feature-text {
+    order: 2;
+  }
+
+  .dg-feature-text {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .dg-feature-text :global(p) {
+    margin: 0;
+    font-size: 1.05rem;
+    color: var(--sl-color-gray-2);
+  }
+
+  .dg-feature h2 {
+    margin: 0;
+    font-family: var(--dg-font-display);
+    font-size: clamp(1.7rem, 3vw, 2.4rem);
+    font-weight: 600;
+    line-height: 1.12;
+    letter-spacing: -0.025em;
+    color: var(--sl-color-white);
+    text-wrap: balance;
+  }
+
+  .dg-feature-link {
+    align-self: flex-start;
+  }
+
+  .dg-eyebrow {
+    margin: 0;
+    font-family: var(--dg-font-mono);
+    font-size: 0.8rem;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+  }
+
+  .dg-eyebrow.yellow { color: var(--catppuccin-yellow); }
+  .dg-eyebrow.green { color: var(--catppuccin-green); }
+  .dg-eyebrow.blue { color: var(--catppuccin-blue); }
+  .dg-eyebrow.mauve { color: var(--catppuccin-mauve); }
+  .dg-eyebrow.red { color: var(--catppuccin-red); }
+
+
+  @media (max-width: 54rem) {
+    .dg-feature,
+    .dg-feature.flip {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 1.75rem;
+    }
+
+    .dg-feature.flip .dg-feature-text {
+      order: 0;
+    }
+  }
+</style>

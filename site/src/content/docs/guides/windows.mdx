@@ -1,0 +1,63 @@
+---
+title: Windows
+description: What Driga supports on Windows 10 and 11 today, how the collector, hooks, alerts and cleanup differ, and what is still unverified.
+summary: Experimental Windows support - Task Scheduler collector, hook forms, toasts, terminal jumps, orphan kill and Recycle Bin cleanup, and known limits.
+read_when:
+  - You run coding agents on Windows and want to know what works.
+  - A Windows hook, alert or cleanup behaves differently from macOS or Linux.
+---
+
+:::caution[Experimental]
+Windows support is feature-complete pending verification on real hardware.
+Real agent sessions, logon and restart, notifications, orphan shutdown and
+Recycle Bin restore still need that verification.
+:::
+
+Windows 10 1809+ and Windows 11 have native snapshots, foreground collection,
+the read commands, the terminal UI, the web dashboard, MCP, OTLP intake and
+fleet. Install with [Scoop](/start/install).
+
+## Collector
+
+`driga service install` registers a per-user Task Scheduler task,
+**Driga collector**, that runs at logon with least privilege. It needs no
+password, elevation or PowerShell. `start`, `stop`, `restart`, `status`,
+`logs [-f]` and `uninstall` work as on other platforms. Logs are at
+`%LOCALAPPDATA%\driga\logs\collector.log`, bounded to 10 MiB plus one rotated
+file.
+
+The task records the home, temporary-directory and Driga path overrides at
+installation; reinstall after changing them. Installation refuses an existing
+task, so uninstall before changing the binary path.
+
+## Hooks
+
+Hook installation previews the diff as on Unix. Claude and Copilot hooks use
+the executable-plus-arguments form with an absolute path, which avoids shell
+quoting entirely. The Codex hook uses
+`cmd.exe /d /c call "<absolute driga.exe>" hook codex PermissionRequest`, so
+the install path must not contain shell metacharacters such as `%`, `!`, `&`,
+parentheses, `$` or backticks. Spaces, apostrophes and Unicode are fine.
+`CLAUDE_CONFIG_DIR`, `CODEX_HOME` and `COPILOT_HOME` are respected.
+
+## Alerts and jumps
+
+Alerts are plain WinRT toasts without click actions; use `driga inbox` and
+`driga inbox jump <item>` to navigate. Focus Assist and notification policy can
+suppress them, and `driga doctor` reports availability.
+
+Jumps open Windows Terminal (`wt.exe -d <cwd>`) or, failing that, a new Command
+Prompt in the session's directory. Stored resume commands are shown for
+copying, never executed.
+
+## Orphans and cleanup
+
+`driga orphans kill` uses the same candidates and confirmations as Unix. Every
+process start time in a tree is pinned and checked again before acting. The
+graceful step posts `WM_CLOSE` to the process's own windows; after the grace
+period, `--force` terminates through an identity-checked handle. Headless
+processes may need `--force`.
+
+Verified linked worktrees are moved to the Recycle Bin, then Git worktree
+metadata is pruned. Claude scratch cleanup is refused because its Windows
+layout is not yet established, and `driga doctor` explains this.

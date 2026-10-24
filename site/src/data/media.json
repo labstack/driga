@@ -1,0 +1,34 @@
+{
+  "flow-dark": {
+    "mp4": "https://assets.driga.dev/media/flow-dark-0b00f8dfe207.mp4",
+    "webm": "https://assets.driga.dev/media/flow-dark-d24c69474d4a.webm"
+  },
+  "flow-light": {
+    "mp4": "https://assets.driga.dev/media/flow-light-086670b5d512.mp4",
+    "webm": "https://assets.driga.dev/media/flow-light-eaf66ba3616b.webm"
+  },
+  "hero-dark": {
+    "mp4": "https://assets.driga.dev/media/hero-dark-0a087e618361.mp4",
+    "webm": "https://assets.driga.dev/media/hero-dark-413ba2a34570.webm"
+  },
+  "hero-light": {
+    "mp4": "https://assets.driga.dev/media/hero-light-15b460ecc6b1.mp4",
+    "webm": "https://assets.driga.dev/media/hero-light-28447258c626.webm"
+  },
+  "machines-dark": {
+    "mp4": "https://assets.driga.dev/media/machines-dark-3237d4b552e6.mp4",
+    "webm": "https://assets.driga.dev/media/machines-dark-ea34fa9126af.webm"
+  },
+  "machines-light": {
+    "mp4": "https://assets.driga.dev/media/machines-light-4e11c88b5cb0.mp4",
+    "webm": "https://assets.driga.dev/media/machines-light-04154808997c.webm"
+  },
+  "needs-dark": {
+    "mp4": "https://assets.driga.dev/media/needs-dark-037392b51f3f.mp4",
+    "webm": "https://assets.driga.dev/media/needs-dark-c6dc70a97353.webm"
+  },
+  "needs-light": {
+    "mp4": "https://assets.driga.dev/media/needs-light-50fca1ee8d3c.mp4",
+    "webm": "https://assets.driga.dev/media/needs-light-e245faf869cc.webm"
+  }
+}

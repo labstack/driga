@@ -1,0 +1,70 @@
+---
+title: Needs you and prompts
+description: See which sessions are waiting on you, acknowledge inbox items, and answer Claude Code permission prompts from Driga.
+summary: The Needs you shelf, the inbox, acknowledgment, and answering Claude permission prompts from the TUI or web.
+read_when:
+  - You want to answer a Claude Code permission prompt without switching terminals.
+  - An inbox item will not go away and you want to know why.
+---
+
+import { Steps } from "@astrojs/starlight/components";
+
+**Needs you** collects every session waiting on you, oldest first. It is the
+shelf at the top of Flow and the `driga inbox` command.
+
+```sh
+driga inbox                   # current waits and recent completions
+driga inbox list --all        # full history, including acknowledged items
+driga inbox ack <item-id>     # explicit acknowledgment
+driga inbox ack --all
+driga inbox jump <item-id>    # go to the session; does not acknowledge
+```
+
+Reading an item never acknowledges it. Unresolved permission prompts need an
+answer, not an acknowledgment. When a session ends, unread completion items
+stay in the inbox and pending waits close.
+
+## Answer Claude permission prompts
+
+<Steps>
+
+1. Run the collector (`driga service install`).
+2. Install the Claude hooks, which include `PermissionRequest` with a
+   660-second timeout:
+
+   ```sh
+   driga hooks install claude
+   ```
+
+3. Restart running Claude sessions.
+
+</Steps>
+
+Pending local Claude prompts appear above the inbox waits with the session,
+tool and exact input.
+
+- **Terminal UI:** select the prompt and press `y` to allow or `n` to deny.
+  Enter opens the full input. In Flow, Tab focuses the shelf first.
+- **Web:** use **Allow** or **Deny**. Browser decisions require the
+  authenticated session, Origin and CSRF token.
+
+The first answer wins, whether it comes from Driga or the terminal. A prompt
+answered in the terminal retires from Driga within about a second; session end,
+hook exit and ten minutes also retire it. If the collector is absent, times out
+or errors, the hook exits successfully with no output and the terminal decides
+as usual.
+
+Denials say "Denied from driga". Driga never creates "always allow" rules.
+
+### Limits
+
+- Prompts live in memory only: never in the database, logs or fleet.
+  Notifications for a prompt keep only the tool and needs-you metadata, even
+  with snippets capture.
+- Only local Claude Code prompts can be answered. Codex, Copilot, Gemini and
+  paired-machine prompts are outside this feature.
+- Remote inbox acknowledgments need the peer's `--allow-ack` grant; an
+  unreachable peer shows `ack pending` and retries on reconnect.
+
+Chat can also answer prompts, through an approval card; see
+[Chat and actions](/guides/chat).
