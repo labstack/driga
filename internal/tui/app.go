@@ -101,7 +101,7 @@ type app struct {
 	boardOrder       []string
 	boardGroups      []string
 	boardCursor      int
-	boardStop        int64 // session awaiting y/n stop confirmation
+	boardStop        int64 // session awaiting Enter to confirm a stop
 	boardMachine     bool
 	boardFilter      int
 	boardIdle        bool
