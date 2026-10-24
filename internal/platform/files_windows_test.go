@@ -26,6 +26,9 @@ func TestRestartManagerOwnedFileHelper(t *testing.T) {
 }
 
 func TestWindowsOpenFilesOwnedChild(t *testing.T) {
+	limit := rmTimeLimit
+	rmTimeLimit = 25 * time.Second
+	t.Cleanup(func() { rmTimeLimit = limit })
 	dir := t.TempDir()
 	name := filepath.Join(dir, "owned 子.txt")
 	if err := os.WriteFile(name, []byte("owned"), 0600); err != nil {

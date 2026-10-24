@@ -12,8 +12,11 @@ import (
 const (
 	rmFileLimit = 10000
 	rmBatchSize = 100
-	rmTimeLimit = 5 * time.Second
 )
+
+// rmTimeLimit bounds one inspection. A variable so tests on slow CI runners,
+// where Restart Manager can take seconds to answer, can allow more time.
+var rmTimeLimit = 5 * time.Second
 
 // restartManager is deliberately independent of the Windows ABI so bounded
 // enumeration and fail-closed behavior can be tested on every platform.
