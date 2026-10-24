@@ -26,6 +26,22 @@ on:
       - "go.mod"
       - "go.sum"
       - ".github/workflows/site.yml"
+  # Pull requests build and check the site without publishing it, so a
+  # change that breaks the build fails before it reaches main.
+  pull_request:
+    paths:
+      - "site/**"
+      - "cmd/driga-docgen/**"
+      - "internal/cli/**"
+      - "internal/config/**"
+      - "internal/mcp/**"
+      - "internal/chat/**"
+      - "internal/hooks/**"
+      - "internal/tui/testdata/**"
+      - "internal/web/static/brand/**"
+      - "go.mod"
+      - "go.sum"
+      - ".github/workflows/site.yml"
   workflow_dispatch:
 
 permissions:
@@ -33,7 +49,7 @@ permissions:
 
 concurrency:
   # One publication at a time; a newer build supersedes an older one.
-  group: site
+  group: site-${{ github.event_name == 'pull_request' && github.ref || 'main' }}
   cancel-in-progress: true
 
 jobs:
@@ -80,6 +96,7 @@ jobs:
 
       # main is the production branch of the Cloudflare Pages project.
       - name: Publish
+        if: github.event_name != 'pull_request'
         working-directory: site
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
