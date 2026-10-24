@@ -152,9 +152,16 @@ func (m *app) boardSelected() *view.BoardRow {
 	return &r
 }
 func (m *app) boardKey(k string) (tea.Cmd, bool) {
-	if m.boardStop != 0 && k != "y" && k != "n" {
+	// A pending stop takes the next key: Enter stops, anything else cancels.
+	// y and n stay prompt answers only, so allowing a prompt can never stop a session.
+	if id := m.boardStop; id != 0 {
 		m.boardStop = 0
-		m.status = "Cancelled"
+		if k != "enter" {
+			m.status = "Stop cancelled"
+			return nil, true
+		}
+		ctx, run := m.opts.Context, m.opts.SessionAction
+		return func() tea.Msg { return actionMsg{status: "Session stopped", err: run(ctx, "kill", id)} }, true
 	}
 	m.syncBoard()
 	switch k {
@@ -218,19 +225,10 @@ func (m *app) boardKey(k string) (tea.Cmd, bool) {
 			m.status = fmt.Sprintf("driga agents kill %d · confirm in terminal", r.Node.ID)
 		default:
 			m.boardStop = r.Node.ID
-			m.status = fmt.Sprintf("Stop %q? y stop · n cancel", r.Title)
+			m.status = fmt.Sprintf("Stop %q? Enter stop · any other key cancels", r.Title)
 		}
 		return nil, true
 	case "y", "n":
-		if id := m.boardStop; id != 0 {
-			m.boardStop = 0
-			if k == "n" {
-				m.status = "Cancelled"
-				return nil, true
-			}
-			ctx, run := m.opts.Context, m.opts.SessionAction
-			return func() tea.Msg { return actionMsg{status: "Session stopped", err: run(ctx, "kill", id)} }, true
-		}
 		if r := m.boardSelected(); m.flowAttention && r != nil && r.PromptID != "" {
 			if m.boardPromptFocus != r.PromptID || m.opts.Now().Sub(m.boardPromptAt) < 600*time.Millisecond {
 				m.status = "Review prompt before answering"

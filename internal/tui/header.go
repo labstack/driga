@@ -370,7 +370,7 @@ func (m *app) emptyText() string {
 }
 
 func (m *app) helpText() string {
-	body := wrapText("0 Flow · 1 Projects · 2 Machines · c Chat panel · Esc closes panel\nFlow: m Map · t Timeline · s Sessions · h activity / return\nMap and Timeline use a project tree in the terminal. Tab focuses Needs you.\nj/k or arrows select · Enter opens · / find · Esc returns\ny/n answer explicitly focused prompt after review · J Terminal · K Stop\nMachines: h health · p reclaim processes · d reclaim disk\nSessions: S sort · right/left expand families\nChat: Enter sends · Shift+Enter new line · Ctrl+n new · Ctrl+h history\nChat: y/n allow/deny · Alt+y/Alt+n while typing · m trust mode\nAlt+0/1/2 switches tabs while typing · Ctrl+x clears Chat context\n? help · q / ctrl+c quit", m.width)
+	body := wrapText("0 Flow · 1 Projects · 2 Machines · c Chat panel · Esc closes panel\nFlow: m Map · t Timeline · s Sessions · h activity / return\nMap and Timeline use a project tree in the terminal. Tab focuses Needs you.\nj/k or arrows select · Enter opens · / find · Esc returns\ny/n answer explicitly focused prompt after review · J Terminal · K Stop, then Enter\nMachines: h health · p reclaim processes · d reclaim disk\nSessions: S sort · right/left expand families\nChat: Enter sends · Shift+Enter new line · Ctrl+n new · Ctrl+h history\nChat: y/n allow/deny · Alt+y/Alt+n while typing · m trust mode\nAlt+0/1/2 switches tabs while typing · Ctrl+x clears Chat context\n? help · q / ctrl+c quit", m.width)
 	if m.tmuxTarget() != "" {
 		body += "\na attach tmux"
 	}

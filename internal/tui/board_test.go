@@ -226,13 +226,18 @@ func TestBoardStopNeedsConfirmation(t *testing.T) {
 		t.Fatal("another key must cancel a pending stop")
 	}
 	m.Update(tea.KeyPressMsg{Code: 'k'})
-	m.Update(tea.KeyPressMsg{Code: 'K'})
-	m.Update(tea.KeyPressMsg{Code: 'n'})
-	if len(stopped) != 0 {
-		t.Fatal("n stopped the session")
+	// y and n answer prompts; they must never confirm a stop.
+	for _, key := range []rune{'n', 'y'} {
+		m.Update(tea.KeyPressMsg{Code: 'K'})
+		if _, cmd := m.Update(tea.KeyPressMsg{Code: key}); cmd != nil {
+			cmd()
+		}
+		if len(stopped) != 0 || m.boardStop != 0 {
+			t.Fatalf("%c confirmed a stop", key)
+		}
 	}
 	m.Update(tea.KeyPressMsg{Code: 'K'})
-	_, cmd := m.Update(tea.KeyPressMsg{Code: 'y'})
+	_, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	execute(t, m, cmd)
 	if len(stopped) != 1 || stopped[0] != id {
 		t.Fatal("confirmed stop not dispatched", stopped, id)
