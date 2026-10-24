@@ -11,7 +11,7 @@
  <div class="chat-bottom">
  <section id="chat-approval" class="chat-approval" aria-label="Pending approval" hidden></section>
  <form id="chat-form" class="chat-compose">
-  <div id="chat-context" class="chat-context" aria-label="Context"></div>
+  <div id="chat-context" class="chat-context" aria-label="Context" data-machine-names="{{machineNames .Snapshot.Machines.Rows .Snapshot.LocalMachineID}}"></div>
   <label class="sr-only" for="chat-input">Message to Driga</label><textarea id="chat-input" rows="3" maxlength="131072" placeholder="Ask driga anything…"></textarea>
   <div class="chat-row"><span id="chat-status" class="chat-note" role="status"></span><span class="chat-spacer"></span><button id="chat-send" class="chat-send" type="submit">Send</button></div>
   <div class="chat-note">Enter send · Shift+Enter new line · ↑ edit last · Esc blur / close · c toggle</div>

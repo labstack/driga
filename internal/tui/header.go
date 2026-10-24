@@ -92,10 +92,15 @@ func (m *app) header() string {
 		loadToken = "warn"
 	}
 	health := []string{headerGauge("mem", sample.MemUsed, sample.MemTotal, m.opts.NoColor), headerGauge("swap", sample.SwapUsed, sample.SwapTotal, m.opts.NoColor), "load " + view.TokenStyle(loadToken, m.opts.NoColor).Render(view.FormatLoad(sample.Load1, "%.1f")) + fmt.Sprintf("/%d", sample.Cores), "disk " + view.HumanBytes(sample.DiskFree)}
-	right := strings.Join(health, "   ")
 	identity = strings.Join(identityParts, " · ")
-	if lipgloss.Width(identity)+lipgloss.Width(right)+2 <= m.width {
-		return identity + strings.Repeat(" ", m.width-lipgloss.Width(identity)-lipgloss.Width(right)) + right
+	// One line at every width: drop health readings from the least important
+	// (disk, then load, then swap) before the header would wrap. Machines
+	// shows all of them.
+	for n := len(health); n > 0; n-- {
+		right := strings.Join(health[:n], "   ")
+		if lipgloss.Width(identity)+lipgloss.Width(right)+2 <= m.width {
+			return identity + strings.Repeat(" ", m.width-lipgloss.Width(identity)-lipgloss.Width(right)) + right
+		}
 	}
 	return styledPack(append(identityParts, health...), m.width, "   ")
 }

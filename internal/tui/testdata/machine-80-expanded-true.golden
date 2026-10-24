@@ -1,5 +1,4 @@
- driga   test-host · ● live · daemon   05:00:00   mem ███░░░ 50%
-swap ███░░░ 50%   load 0.0/4   disk 12.0G
+ driga   test-host · ● live · daemon · 05:00:00                   mem ███░░░ 50%
 0 Flow   1 Projects   [2 Machines]
 ────────────────────────────────────────────────────────────────────────────────
   METRIC / APP / PROCESS  CPU/#  MEASURE / HOST / ATTRIBUTION      MEM
@@ -26,6 +25,7 @@ swap ███░░░ 50%   load 0.0/4   disk 12.0G
   cores                          4
   disk free                      12.0G
   Agent memory by role
+
 
 
 

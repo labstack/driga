@@ -236,6 +236,14 @@ button:hover {
   letter-spacing:.06em;
   text-transform:uppercase;
 }
+/* Row grids are sized in ch: a smaller header font would shrink its columns
+   and misalign them with the rows, so only the header's cells are smaller. */
+.r.hdr {
+  font-size:inherit;
+}
+.r.hdr > * {
+  font-size:11.5px;
+}
 .m,.muted {
   color:var(--mid);
 }
@@ -805,3 +813,6 @@ meter::-moz-meter-bar {
 .app-notice{position:fixed;left:50%;bottom:24px;z-index:50;margin:0;padding:10px 16px;border:1px solid var(--line);border-radius:8px;background:var(--raise);color:var(--fg);box-shadow:0 8px 30px rgb(0 0 0 / .25);transform:translate(-50%,8px);opacity:0;pointer-events:none;transition:opacity .15s,transform .15s}
 .app-notice.show{opacity:1;transform:translate(-50%,0)}
 @media (prefers-reduced-motion:reduce){.app-notice{transition:none}}
+
+/* Prompt answers are the one decision on the page: at least 24 px targets. */
+.prompt-answer{min-height:32px;padding:4px 14px}

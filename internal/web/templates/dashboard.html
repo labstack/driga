@@ -180,7 +180,7 @@
 
 {{define "inbox"}}
 {{if or (eq .Scope "all") (eq .Scope .LocalMachineID)}}<section{{if .Prompts}} class="pane"{{end}} data-prompts aria-label="Permission prompts">
-{{range .Prompts}}<article class="item" data-prompt="{{.ID}}"><h3>{{.Tool}} · {{.Session}}</h3><p>{{.Cwd}}</p><pre>{{.Detail}}</pre><details><summary>Exact input</summary><pre>{{.InputText}}</pre></details><button type="button" data-prompt-answer="allow" data-prompt-id="{{.ID}}">Allow</button> <button type="button" data-prompt-answer="deny" data-prompt-id="{{.ID}}">Deny</button><span role="status"></span></article>{{end}}
+{{range .Prompts}}<article class="item" data-prompt="{{.ID}}"><h3>{{.Tool}} · {{.Session}}</h3><p>{{.Cwd}}</p><pre>{{.Detail}}</pre><details><summary>Exact input</summary><pre>{{.InputText}}</pre></details><button type="button" class="prompt-answer" data-prompt-answer="allow" data-prompt-id="{{.ID}}" aria-label="Allow {{.Tool}} for {{.Session}}">Allow</button> <button type="button" class="prompt-answer" data-prompt-answer="deny" data-prompt-id="{{.ID}}" aria-label="Deny {{.Tool}} for {{.Session}}">Deny</button><span role="status"></span></article>{{end}}
 </section>{{end}}
 <p>{{if .All}}history · <a href="{{link "/inbox" .Scope false}}">current inbox</a>{{else}}Current waits and up to 50 completions from 24h · <a href="{{link "/inbox" .Scope true}}">show all history</a>{{end}}{{if .InboxPrevious}} · <a href="{{.InboxPrevious}}">previous page</a>{{end}}{{if .InboxNext}} · <a href="{{.InboxNext}}">next page</a>{{end}}</p>
 {{if .AttentionOnly}}
@@ -258,8 +258,8 @@
 </p>
 <p>{{.Agents}} agents · {{.Inbox}} inbox · last seen {{duration .LastSeenAge}} ago
 </p>
-<p class="muted">{{.Addr}} · {{.DrigaVersion}}
-</p>{{if .LastError}}
+{{if or .Addr .DrigaVersion}}<p class="muted">{{.Addr}}{{if and .Addr .DrigaVersion}} · {{end}}{{.DrigaVersion}}
+</p>{{end}}{{if .LastError}}
 <p class="notice">{{.LastError}}
 </p>{{end}}{{if .SkewWarning}}
 <p class="notice">{{.SkewWarning}}
@@ -278,15 +278,16 @@
 {{range .Processes}}{{template "machine-process" .}}{{end}}</details>{{else}}<p class="empty">No live session costs.</p>{{end}}
 </section>
 <section data-machine-rank="agent" data-machine-id="{{.MachineID}}"><h4>Agent processes without a session</h4>
-{{range .AgentNoSession}}{{template "machine-app" .}}{{end}}
+{{range .AgentNoSession}}{{template "machine-app" .}}{{else}}<p class="empty">Every agent process belongs to a session.</p>{{end}}
+</section>
 <section aria-label="MCP servers"><h4>MCP servers and helper processes</h4>
-{{range .MCPServers.Commands}}<details><summary>{{mcpSummary .}}</summary><pre>{{mcpDetails .}}</pre></details>{{end}}
+{{range .MCPServers.Commands}}<details><summary>{{mcpSummary .}}</summary><pre>{{mcpDetails .}}</pre></details>{{else}}<p class="empty">No MCP servers running.</p>{{end}}
 {{range .MCPServers.Pileups}}<article class="item">
 <strong>{{.Name}} pile-up · {{.Count}} processes · {{bytes .Memory}} ({{.MemoryMeasure}}){{with mcpTrend .MCPCommand}} · {{.}}{{end}}</strong>
 <p>Host: {{.Host.Name}} · PID {{.Host.PID}} · age {{duration .Host.Age}} · {{.Host.Cwd}}</p>
 <p class="muted">Host started {{stamp .Host.StartedAt}} · oldest {{stamp .OldestStart}} · newest {{stamp .NewestStart}}</p>
 <pre>{{mcpDetails .MCPCommand}}</pre><p>{{.Advice}}</p>
-</article>{{else}}<p class="empty">No MCP pile-ups.</p>{{end}}</section></section>
+</article>{{else}}<p class="empty">No MCP pile-ups.</p>{{end}}</section>
 {{if .LikelyAgent}}<section data-machine-rank="likely" data-machine-id="{{.MachineID}}"><h4>Likely agent work (shared with editor)</h4>{{range .LikelyAgent}}{{template "machine-app" .}}{{end}}</section>{{end}}
 <div data-machine-rank="other" data-machine-id="{{.MachineID}}">{{$other := machineOtherApps .}}<details data-machine-app="other"><summary>Other apps · {{bytes $other.Memory}} ({{$other.MemoryMeasure}}) · {{printf "%.1f" $other.CPUPercent}}% CPU</summary>
 <div data-machine-rank="memory" data-machine-id="{{.MachineID}}"><h4>Top 10 apps by memory</h4>{{range .TopMemory}}{{template "machine-app" .}}{{else}}<p class="empty">No process readings.</p>{{end}}</div>

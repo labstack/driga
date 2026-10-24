@@ -658,6 +658,18 @@ func templateFuncs() template.FuncMap {
 		},
 		"duration":    func(d time.Duration) string { return d.Round(time.Second).String() },
 		"machineName": func(m view.MachineRow) string { return view.MachineName(m.Machine) },
+		// Chat's context chips show machine names, never raw machine IDs.
+		"machineNames": func(rows []view.MachineRow, local string) string {
+			names := map[string]string{}
+			for _, m := range rows {
+				names[m.MachineID] = view.MachineName(m.Machine)
+				if m.MachineID == local {
+					names["local"] = names[m.MachineID]
+				}
+			}
+			b, _ := json.Marshal(names)
+			return string(b)
+		},
 		"link":        pageLink,
 		"agentPath":   func(id int64) string { return fmt.Sprint("/agents/", id) },
 		"projectPath": func(id int64) string { return fmt.Sprint("/projects/", id) },
