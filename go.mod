@@ -10,6 +10,7 @@ require (
 	github.com/alecthomas/kong v1.16.1
 	github.com/aymanbagabas/go-udiff v0.4.1
 	github.com/bmatcuk/doublestar/v4 v4.10.3
+	github.com/catppuccin/go v0.3.0
 	github.com/charmbracelet/x/ansi v0.11.9
 	github.com/charmbracelet/x/term v0.2.2
 	github.com/ebitengine/purego v0.11.1

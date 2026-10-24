@@ -34,11 +34,11 @@ func TestMachineAlertRepeatAndBatch(t *testing.T) {
 func TestMachineJumpPlansSafeTerminal(t *testing.T) {
 	bin := "/opt/my app's/driga"
 	cmds, err := JumpCommands(&model.InboxJump{Kind: "machine"}, JumpOptions{OS: "darwin", DrigaPath: bin})
-	if err != nil || len(cmds) != 1 || cmds[0][0] != "osascript" || cmds[0][3] != Quote(bin)+" top --tab machine" {
+	if err != nil || len(cmds) != 1 || cmds[0][0] != "osascript" || cmds[0][3] != Quote(bin)+" top --tab machines" {
 		t.Fatalf("%q %v", cmds, err)
 	}
 	cmds, err = JumpCommands(&model.InboxJump{Kind: "machine"}, JumpOptions{OS: "linux", DrigaPath: bin})
-	if err != nil || !reflect.DeepEqual(cmds, [][]string{{"x-terminal-emulator", "-e", bin, "top", "--tab", "machine"}}) {
+	if err != nil || !reflect.DeepEqual(cmds, [][]string{{"x-terminal-emulator", "-e", bin, "top", "--tab", "machines"}}) {
 		t.Fatalf("%q %v", cmds, err)
 	}
 }

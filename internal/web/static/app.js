@@ -36,8 +36,8 @@
       if (tokens.length) query.id = tokens[0]; return url("/flow");
     }
     if (verb === "theme") {
-      if (tokens.length === 1 && ["mocha", "latte", "system"].includes(tokens[0])) return {theme: tokens[0]};
-      return error("Use theme mocha|latte|system");
+      if (tokens.length === 1 && ["light", "dark", "system"].includes(tokens[0])) return {theme: tokens[0]};
+      return error("Use theme light|dark|system");
     }
     if (["agents", "projects", "inbox", "orphans", "machines", "cleanup"].includes(verb) && tokens[0] === "list") tokens.shift();
     if (verb === "agents" && tokens[0] === "show") {
@@ -135,7 +135,7 @@
   let preference = "system", history = [], historyIndex = 0, draft = "";
   try {
     const saved = localStorage.getItem("driga-theme");
-    if (["mocha", "latte", "system"].includes(saved)) preference = saved;
+    if (["light", "dark", "system"].includes(saved)) preference = saved;
     const stored = JSON.parse(localStorage.getItem("driga-command-history") || "[]");
     if (Array.isArray(stored)) history = stored.filter(s => typeof s === "string" && s.length <= 500).slice(-100);
   } catch (_) { /* Storage is optional. */ }
@@ -262,7 +262,7 @@
 
   const input = document.getElementById("cmdline"), menu = document.getElementById("command-menu"), error = document.getElementById("command-error"), help = document.getElementById("help");
   let suggestions = [], choice = -1;
-  const commands = ["flow", "flow <id>", "agents", ...states.map(s => "agents --state " + s), "agents --all", "agents --project <name>", "projects show <project>", "projects", "inbox", "orphans", "machines", "cleanup", "cleanup --why", "activity", "theme mocha", "theme latte", "theme system", "agents show <session-id>", "agents jump <session-id>", "agents kill <session-id>", "inbox ack <item-id>", "inbox jump <item-id>", "orphans kill <orphan-id>", "cleanup remove <candidate-id>", "hooks install"];
+  const commands = ["flow", "flow <id>", "agents", ...states.map(s => "agents --state " + s), "agents --all", "agents --project <name>", "projects show <project>", "projects", "inbox", "orphans", "machines", "cleanup", "cleanup --why", "activity", "theme light", "theme dark", "theme system", "agents show <session-id>", "agents jump <session-id>", "agents kill <session-id>", "inbox ack <item-id>", "inbox jump <item-id>", "orphans kill <orphan-id>", "cleanup remove <candidate-id>", "hooks install"];
   const mutating = command => parseCommand(command).error === readOnly;
   function closeMenu() { menu.hidden = true; input.setAttribute("aria-expanded", "false"); input.removeAttribute("aria-activedescendant"); choice = -1; }
   function complete() {

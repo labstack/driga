@@ -3,83 +3,152 @@ package view
 import (
 	"fmt"
 	"image/color"
+	"math"
 	"strings"
 	"sync/atomic"
 
 	"charm.land/lipgloss/v2"
+	catppuccin "github.com/catppuccin/go"
 )
 
 // ThemeToken is one semantic color in the browser or terminal palette.
 type ThemeToken struct{ Name, Light, Dark string }
 
+// Palette roles come from the official Catppuccin palettes (MIT): Latte for
+// light, Mocha for dark. Where an official Latte color falls below 4.5:1 for
+// text on Latte's base, text roles use readable(), the same hue darkened just
+// enough. Tinted backgrounds are tint() mixes of the state color into base.
+var (
+	lb, mb = catppuccin.Latte.Base(), catppuccin.Mocha.Base()
+	pair   = func(l, d catppuccin.Color) [2]string { return [2]string{hex(l), hex(d)} }
+	text   = func(l, d catppuccin.Color) [2]string { return [2]string{readable(l, lb), hex(d)} }
+)
+
+func tok(name string, v [2]string) ThemeToken { return ThemeToken{name, v[0], v[1]} }
+
 // Markdown roles share names and colors across terminal and browser output.
 var markdownTokens = []ThemeToken{
-	{"md-heading", "#7629D6", "#CBA6F7"},
-	{"md-code", "#4C4F69", "#CDD6F4"},
-	{"md-code-bg", "#DCE0E8", "#11111B"},
-	{"md-link", "#1A5AD8", "#89B4FA"},
-	{"md-quote", "#5C5F77", "#A6ADC8"},
-	{"md-rule", "#5C5F77", "#A6ADC8"},
-	{"md-table-border", "#5C5F77", "#A6ADC8"},
-	{"md-strike", "#5C5F77", "#A6ADC8"},
-	{"md-task", "#256817", "#A6E3A1"},
+	tok("md-heading", text(catppuccin.Latte.Mauve(), catppuccin.Mocha.Mauve())),
+	tok("md-code", pair(catppuccin.Latte.Text(), catppuccin.Mocha.Text())),
+	tok("md-code-bg", pair(catppuccin.Latte.Crust(), catppuccin.Mocha.Crust())),
+	tok("md-link", text(catppuccin.Latte.Blue(), catppuccin.Mocha.Blue())),
+	tok("md-quote", pair(catppuccin.Latte.Subtext1(), catppuccin.Mocha.Subtext0())),
+	tok("md-rule", pair(catppuccin.Latte.Subtext1(), catppuccin.Mocha.Subtext0())),
+	tok("md-table-border", pair(catppuccin.Latte.Subtext1(), catppuccin.Mocha.Subtext0())),
+	tok("md-strike", pair(catppuccin.Latte.Subtext1(), catppuccin.Mocha.Subtext0())),
+	tok("md-task", text(catppuccin.Latte.Green(), catppuccin.Mocha.Green())),
 }
 
-// Catppuccin palettes (MIT): Latte for light, Mocha for dark. Mocha uses the
-// official colors. Latte's yellow, green, blue, peach and overlay grays fall
-// below 4.5:1 for text on its base, so those text roles use darker shades of
-// the same hue; bars and fills reuse them.
+// Semantic state roles, shared by the terminal and the browser.
+var (
+	ink      = pair(catppuccin.Latte.Text(), catppuccin.Mocha.Text())
+	muted    = pair(catppuccin.Latte.Subtext1(), catppuccin.Mocha.Subtext0())
+	working  = text(catppuccin.Latte.Green(), catppuccin.Mocha.Green())
+	waiting  = text(catppuccin.Latte.Yellow(), catppuccin.Mocha.Yellow())
+	stalled  = text(catppuccin.Latte.Red(), catppuccin.Mocha.Red())
+	idle     = text(catppuccin.Latte.Blue(), catppuccin.Mocha.Blue())
+	warn     = text(catppuccin.Latte.Peach(), catppuccin.Mocha.Peach())
+	accent   = text(catppuccin.Latte.Mauve(), catppuccin.Mocha.Mauve())
+	observed = text(catppuccin.Latte.Teal(), catppuccin.Mocha.Teal())
+	tool     = text(catppuccin.Latte.Sky(), catppuccin.Mocha.Sky())
+	onBase   = pair(catppuccin.Latte.Base(), catppuccin.Mocha.Base())
+)
+
 var themeTokens = append([]ThemeToken{
-	{"sunk", "#DCE0E8", "#11111B"},
-	{"ink", "#4C4F69", "#CDD6F4"},
-	{"muted", "#5C5F77", "#A6ADC8"},
-	{"faint", "#5C5F77", "#A6ADC8"},
-	{"line", "#CCD0DA", "#313244"},
-	{"strong", "#4C4F69", "#CDD6F4"},
-	{"on-strong", "#EFF1F5", "#1E1E2E"},
-	{"working", "#256817", "#A6E3A1"},
-	{"waiting", "#7A4C07", "#F9E2AF"},
-	{"stalled", "#B50C30", "#F38BA8"},
-	{"idle", "#1A5AD8", "#89B4FA"},
-	{"finished", "#5C5F77", "#A6ADC8"},
-	{"crit", "#B50C30", "#F38BA8"},
-	{"warn", "#963F06", "#FAB387"},
-	{"ok", "#1A5AD8", "#89B4FA"},
-	{"accent", "#7629D6", "#CBA6F7"},
-	{"observation", "#116762", "#94E2D5"},
-	{"tool", "#04778A", "#89DCEB"},
-	{"ended", "#5C5F77", "#A6ADC8"},
+	tok("sunk", pair(catppuccin.Latte.Crust(), catppuccin.Mocha.Crust())),
+	tok("ink", ink), tok("muted", muted), tok("faint", muted),
+	tok("line", pair(catppuccin.Latte.Surface0(), catppuccin.Mocha.Surface0())),
+	tok("strong", ink), tok("on-strong", onBase),
+	tok("working", working), tok("waiting", waiting), tok("stalled", stalled),
+	tok("idle", idle), tok("finished", muted), tok("crit", stalled),
+	tok("warn", warn), tok("ok", idle), tok("accent", accent),
+	tok("observation", observed), tok("tool", tool), tok("ended", muted),
 }, markdownTokens...)
 
-// consoleTokens maps the console's roles onto the same Catppuccin palettes.
+// consoleTokens maps the console's roles onto the same palettes. The Flow
+// canvas sits one step below Mocha's crust so the project cards stand out.
 var consoleTokens = append([]ThemeToken{
-	{"flow-canvas", "#EFF1F5", "#0E0E16"}, {"flow-panel", "#E6E9EF", "#10101A"}, {"flow-line", "#BCC0CC", "#262636"}, {"flow-muted", "#5C5F77", "#7F849C"},
-	{"bg", "#EFF1F5", "#1E1E2E"}, {"pane", "#E6E9EF", "#181825"},
-	{"raise", "#CCD0DA", "#313244"}, {"line", "#BCC0CC", "#45475A"},
-	{"fg", "#4C4F69", "#CDD6F4"}, {"mid", "#5C5F77", "#BAC2DE"},
-	{"dim", "#5C5F77", "#A6ADC8"}, {"accent", "#7629D6", "#CBA6F7"},
-	{"on-accent", "#EFF1F5", "#1E1E2E"}, {"working", "#256817", "#A6E3A1"},
-	{"waiting", "#7A4C07", "#F9E2AF"}, {"stalled", "#B50C30", "#F38BA8"},
-	{"idle", "#1A5AD8", "#89B4FA"}, {"finished", "#5C5F77", "#A6ADC8"},
-	{"crit", "#B50C30", "#F38BA8"}, {"warn", "#963F06", "#FAB387"},
-	{"observation", "#116762", "#94E2D5"},
-	{"waiting-bar", "#DF8E1D", "#F9E2AF"}, {"waiting-bg", "#F3E7D3", "#3A3530"},
-	{"tool", "#04778A", "#89DCEB"}, {"rail", "#A9AEBC", "#585B70"},
-	{"faint", "#5C5F77", "#A6ADC8"},
-	{"working-bg", "#D3E4D5", "#364143"}, {"stalled-bg", "#EACDD7", "#443244"},
-	{"idle-bg", "#CEDBF5", "#313953"}, {"finished-bg", "#DADCE3", "#333446"},
+	tok("flow-canvas", [2]string{hex(catppuccin.Latte.Base()), mix(catppuccin.Mocha.Crust().RGB, [3]uint8{}, 0.2)}),
+	tok("flow-panel", [2]string{hex(catppuccin.Latte.Mantle()), mix(catppuccin.Mocha.Crust().RGB, [3]uint8{}, 0.08)}),
+	tok("flow-line", [2]string{hex(catppuccin.Latte.Surface1()), mix(mb.RGB, catppuccin.Mocha.Surface0().RGB, 0.45)}),
+	tok("flow-muted", pair(catppuccin.Latte.Subtext1(), catppuccin.Mocha.Overlay1())),
+	tok("bg", onBase), tok("pane", pair(catppuccin.Latte.Mantle(), catppuccin.Mocha.Mantle())),
+	tok("raise", pair(catppuccin.Latte.Surface0(), catppuccin.Mocha.Surface0())),
+	tok("line", pair(catppuccin.Latte.Surface1(), catppuccin.Mocha.Surface1())),
+	tok("fg", ink), tok("mid", pair(catppuccin.Latte.Subtext1(), catppuccin.Mocha.Subtext1())),
+	tok("dim", muted), tok("accent", accent), tok("on-accent", onBase),
+	tok("working", working), tok("waiting", waiting), tok("stalled", stalled),
+	tok("idle", idle), tok("finished", muted), tok("crit", stalled), tok("warn", warn),
+	tok("observation", observed), tok("tool", tool), tok("faint", muted),
+	tok("waiting-bar", pair(catppuccin.Latte.Yellow(), catppuccin.Mocha.Yellow())),
+	tok("rail", pair(catppuccin.Latte.Surface2(), catppuccin.Mocha.Surface2())),
+	tok("waiting-bg", tint(catppuccin.Latte.Yellow(), catppuccin.Mocha.Yellow())),
+	tok("working-bg", tint(catppuccin.Latte.Green(), catppuccin.Mocha.Green())),
+	tok("stalled-bg", tint(catppuccin.Latte.Red(), catppuccin.Mocha.Red())),
+	tok("idle-bg", tint(catppuccin.Latte.Blue(), catppuccin.Mocha.Blue())),
+	tok("finished-bg", tint(catppuccin.Latte.Subtext1(), catppuccin.Mocha.Subtext0())),
 }, markdownTokens...)
+
+func hex(c catppuccin.Color) string { return strings.ToUpper(c.Hex) }
+
+// tint mixes a state color into each flavor's base for a soft background.
+func tint(l, d catppuccin.Color) [2]string {
+	return [2]string{mix(lb.RGB, l.RGB, 0.15), mix(mb.RGB, d.RGB, 0.15)}
+}
+
+func mix(a, b [3]uint8, t float64) string {
+	var out [3]uint8
+	for i := range out {
+		out[i] = uint8(math.Round(float64(a[i]) + (float64(b[i])-float64(a[i]))*t))
+	}
+	return fmt.Sprintf("#%02X%02X%02X", out[0], out[1], out[2])
+}
+
+// readable darkens c in small steps, keeping its hue, until text in it
+// reaches 4.5:1 (WCAG AA) on bg. Colors that already pass are unchanged.
+func readable(c, bg catppuccin.Color) string {
+	rgb := c.RGB
+	for k := 1.0; k > 0; k -= 0.01 {
+		var out [3]uint8
+		for i := range out {
+			out[i] = uint8(math.Round(float64(c.RGB[i]) * k))
+		}
+		rgb = out
+		if Contrast(rgb, bg.RGB) >= 4.5 {
+			break
+		}
+	}
+	return fmt.Sprintf("#%02X%02X%02X", rgb[0], rgb[1], rgb[2])
+}
+
+// Contrast is the WCAG contrast ratio of two sRGB colors.
+func Contrast(a, b [3]uint8) float64 {
+	lum := func(c [3]uint8) float64 {
+		var l [3]float64
+		for i, v := range c {
+			x := float64(v) / 255
+			if x <= 0.04045 {
+				l[i] = x / 12.92
+			} else {
+				l[i] = math.Pow((x+0.055)/1.055, 2.4)
+			}
+		}
+		return 0.2126*l[0] + 0.7152*l[1] + 0.0722*l[2]
+	}
+	x, y := lum(a), lum(b)
+	return (max(x, y) + 0.05) / (min(x, y) + 0.05)
+}
 
 // ThemeCSS supports named preferences and the system default without script.
 func ThemeCSS() string {
-	var latte, mocha strings.Builder
+	var light, dark strings.Builder
 	for _, t := range consoleTokens {
-		fmt.Fprintf(&latte, "--%s:%s;", t.Name, t.Light)
-		fmt.Fprintf(&mocha, "--%s:%s;", t.Name, t.Dark)
+		fmt.Fprintf(&light, "--%s:%s;", t.Name, t.Light)
+		fmt.Fprintf(&dark, "--%s:%s;", t.Name, t.Dark)
 	}
-	return `:root,[data-theme="mocha"]{` + mocha.String() + "color-scheme:dark;}\n" +
-		`[data-theme="latte"]{` + latte.String() + "color-scheme:light;}\n" +
-		`@media (prefers-color-scheme: light){:root:not([data-theme="mocha"]):not([data-theme="latte"]){` + latte.String() + "color-scheme:light;}}\n"
+	return `:root,[data-theme="dark"]{` + dark.String() + "color-scheme:dark;}\n" +
+		`[data-theme="light"]{` + light.String() + "color-scheme:light;}\n" +
+		`@media (prefers-color-scheme: light){:root:not([data-theme="dark"]):not([data-theme="light"]){` + light.String() + "color-scheme:light;}}\n"
 }
 
 // Background detection belongs to the interactive event loop. Import-time
@@ -87,17 +156,17 @@ func ThemeCSS() string {
 var lightBackground atomic.Bool
 var themePreference atomic.Int32
 
-// SetTheme selects a palette for the entire TUI. Auto follows background events.
+// SetTheme selects a palette for the entire TUI. System follows the terminal background.
 func SetTheme(theme string) error {
 	switch theme {
-	case "", "auto":
+	case "", "system":
 		themePreference.Store(0)
-	case "mocha":
+	case "dark":
 		themePreference.Store(1)
-	case "latte":
+	case "light":
 		themePreference.Store(2)
 	default:
-		return fmt.Errorf("theme must be auto, mocha or latte")
+		return fmt.Errorf("theme must be system, light or dark")
 	}
 	return nil
 }

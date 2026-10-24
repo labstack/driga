@@ -150,10 +150,10 @@ func JumpCommands(j *model.InboxJump, opts JumpOptions) ([][]string, error) {
 		}
 		if goos == "darwin" {
 			const script = "on run argv\ntell application \"Terminal\"\nactivate\ndo script (item 1 of argv)\nend tell\nend run"
-			return [][]string{{"osascript", "-e", script, Quote(bin) + " top --tab machine"}}, nil
+			return [][]string{{"osascript", "-e", script, Quote(bin) + " top --tab machines"}}, nil
 		}
 		if goos == "linux" {
-			return [][]string{{"x-terminal-emulator", "-e", bin, "top", "--tab", "machine"}}, nil
+			return [][]string{{"x-terminal-emulator", "-e", bin, "top", "--tab", "machines"}}, nil
 		}
 		return nil, fmt.Errorf("machine jump unsupported on %s", goos)
 	case "tmux":

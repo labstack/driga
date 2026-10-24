@@ -202,14 +202,11 @@ func New(src Source, opts Options) tea.Model {
 	input.Placeholder = "filter"
 	input.SetStyles(textinput.Styles{})
 	m := &app{chatInput: newChatInput(), chatSpinner: spinner.New(spinner.WithSpinner(spinner.MiniDot)), chatEphemeral: opts.ChatEphemeral, tab: flowTab, machineScope: opts.Machine, src: src, opts: opts, width: 80, height: 24, expanded: map[string]bool{}, filter: input, table: table.New(table.WithFocused(true)), viewport: viewport.New()}
-	for i, name := range []string{"agents", "projects", "inbox", "orphans", "machine", "cleanup", "home", "flow", "chat"} {
-		if opts.InitialTab == name {
-			m.tab = i
-			break
-		}
-	}
-	if m.tab == 6 {
-		m.tab = flowTab
+	switch opts.InitialTab {
+	case "projects":
+		m.tab = 1
+	case "machines":
+		m.tab = 4
 	}
 	m.rebuild()
 	return m

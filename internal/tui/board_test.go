@@ -155,12 +155,12 @@ func TestBoardGoldenFrames(t *testing.T) {
 }
 
 func TestBoardThemesAndMotionKeepGeometry(t *testing.T) {
-	defer func() { _ = view.SetTheme("auto") }()
+	defer func() { _ = view.SetTheme("system") }()
 	for _, width := range []int{80, 100, 140, 200} {
 		m := boardApp(t, "busy")
 		m.width = width
 		plain := m.flowView()
-		for _, theme := range []string{"latte", "mocha"} {
+		for _, theme := range []string{"light", "dark"} {
 			if err := view.SetTheme(theme); err != nil {
 				t.Fatal(err)
 			}
