@@ -51,7 +51,9 @@ func newChatInput() textarea.Model {
 }
 func (m *app) openChat() tea.Cmd {
 	if m.tab != chatTab {
-		m.chatContext = chat.Context{Page: map[int]string{homeTab: "home", 0: "agents", 1: "projects", 2: "inbox", 3: "orphans", 4: "machines", 5: "cleanup", flowTab: "flow", chatTab: "chat"}[m.tab], Machine: m.machineScope, Project: m.opts.Project}
+		m.chatOrigin = m.tab
+		m.chatOriginDetail = m.detail
+		m.chatContext = chat.Context{Page: map[int]string{0: "agents", 1: "projects", 2: "inbox", 3: "orphans", 4: "machines", 5: "cleanup", flowTab: "flow", chatTab: "chat"}[m.tab], Machine: m.machineScope, Project: m.opts.Project}
 		if m.tab == flowTab {
 			if n := m.flowSelected(); n != nil {
 				m.chatContext.SessionID = n.ID
@@ -368,10 +370,7 @@ func (m *app) chatContextLine() string {
 		}
 		find(m.snap.Agents.Rows)
 		if title == "" {
-			nodes := m.flow.Children
-			if m.flow.Lead != nil {
-				nodes = append([]view.FlowNode{*m.flow.Lead}, nodes...)
-			}
+			nodes := m.snap.BoardData.Nodes
 			for _, node := range nodes {
 				if node.ID == scope.SessionID && (scope.Machine == "" || node.MachineID == "" || scope.Machine == node.MachineID || scope.Machine == "local" && !m.remote(node.MachineID)) {
 					title = node.Title
@@ -405,15 +404,9 @@ func nextChatTick(generation uint64) tea.Cmd {
 
 // selectTab is shared by normal navigation and Alt+N, including focused inputs.
 func (m *app) selectTab(number byte) tea.Cmd {
-	if number == '8' {
-		return m.openChat()
-	}
-	tab := int(number - '1')
-	if number == '0' {
-		tab = homeTab
-	}
-	if number == '7' {
-		tab = flowTab
+	tab, ok := map[byte]int{'0': flowTab, '1': 1, '2': 4}[number]
+	if !ok {
+		return nil
 	}
 	if !m.tabVisible(tab) {
 		return nil
@@ -426,21 +419,10 @@ func (m *app) selectTab(number byte) tea.Cmd {
 	m.filtering = false
 	m.filter.Blur()
 	m.help = false
-	if tab == flowTab {
-		m.flowID = 0
-		m.flowExpanded = false
-		m.flowOffset = 0
-		m.cursors[flowTab] = 0
-		m.flowPulse, m.flowSeen = nil, nil
-	}
 	m.tab = tab
-	m.homeOffset = 0
 	m.detail = false
 	m.showAckPending()
 	m.rebuild()
-	if tab == flowTab {
-		return m.loadFlow()
-	}
 	if tab == 5 && m.opts.CleanupList != nil && !m.busy {
 		return m.loadCleanup()
 	}
@@ -775,4 +757,28 @@ type chatBodyRender struct {
 	text, role, body string
 	width            int
 	noColor, dark    bool
+}
+
+// chatPanelView keeps the current destination visible beside contextual Chat.
+// Narrow terminals devote the available reading width to the panel.
+func (m *app) chatPanelView() string {
+	if m.width < 120 {
+		return m.chatView()
+	}
+	width := m.width
+	panelWidth := min(80, max(48, width/2))
+	m.width = panelWidth
+	right := m.chatView()
+	m.width = width - panelWidth - 3
+	tab := m.tab
+	m.tab = m.chatOrigin
+	left := m.table.View()
+	if m.tab == flowTab {
+		left, _ = m.boardLayout()
+	} else if m.tab == 4 {
+		left = m.machineTable(left)
+	}
+	m.tab = tab
+	m.width = width
+	return lipgloss.JoinHorizontal(lipgloss.Top, lipgloss.NewStyle().Width(width-panelWidth-3).Render(left), " │ ", lipgloss.NewStyle().Width(panelWidth).Render(right))
 }

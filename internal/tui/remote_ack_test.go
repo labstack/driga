@@ -22,7 +22,7 @@ func TestTUIShowsAckPending(t *testing.T) {
 	}
 	var events []model.HookEvent
 	m := setup(t, s, Options{DataDir: dir, Spool: func(ev model.HookEvent) error { events = append(events, ev); return nil }})
-	m = key(m, '3')
+	m = key(key(m, '0'), 'h')
 	m, cmd := press(m, 'x')
 	if cmd == nil {
 		t.Fatalf("missing remote action: %s", m.View().Content)
@@ -35,7 +35,7 @@ func TestTUIShowsAckPending(t *testing.T) {
 	// Pending is visible after loading an existing request, too.
 	s.snap.Inbox.Rows[0].AckPendingAt = &s.snap.ObservedAt
 	m = setup(t, s, Options{DataDir: dir})
-	m = key(m, '3')
+	m = key(key(m, '0'), 'h')
 	if !strings.Contains(m.View().Content, "ack pending → vm-1") {
 		t.Fatal(m.View().Content)
 	}

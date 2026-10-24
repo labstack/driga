@@ -28,6 +28,7 @@ type machineReads interface {
 	LatestSample() (model.MachineSample, error)
 	Samples(time.Time) ([]model.MachineSample, error)
 	EventCounts(time.Time, time.Time) ([]EventCount, error)
+	BoardEvidence(time.Time, time.Time) ([]model.Event, map[int64][]ObservationMinute, error)
 	ObservationMinutes(int64, time.Time) ([]ObservationMinute, error)
 	ScanMCPHistory(time.Time, time.Time, func(model.MCPObservation) error) error
 	Sources() ([]model.SourceStatus, error)

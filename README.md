@@ -129,7 +129,7 @@ driga inbox --since yesterday
 
 Service installation starts a per-user collector. The first import marks older
 events as already seen. Reading an inbox item never acknowledges it; use
-`driga inbox ack <item-id>` or the Inbox controls in the TUI.
+`driga inbox ack <item-id>` or the Flow Activity controls in the TUI.
 
 Use `driga web` for the local browser dashboard, `driga top --project .` to focus
 on the current project, and `driga <command> --help` for command-specific flags.

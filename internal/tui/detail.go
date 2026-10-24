@@ -60,6 +60,15 @@ func (m *app) openDetail(r tabRow) {
 		if d, ok := m.snap.AgentDetails[r.agent]; ok {
 			render(d)
 		}
+		for _, n := range m.snap.BoardData.Nodes {
+			if n.ID == r.agent && (r.machine == "" || n.MachineID == r.machine) {
+				fmt.Fprintf(&buf, "\nState evidence\nverdict %s · %d of 4 agree\n%s\n", n.Mixer.Verdict, n.Mixer.Agreement, clean(n.Mixer.Evidence))
+				for _, signal := range n.Mixer.Rows {
+					fmt.Fprintf(&buf, "%s: %s\n", signal.Name, clean(signal.Reading))
+				}
+				break
+			}
+		}
 	case r.project != 0:
 		if d, ok := m.snap.ProjectDetails[r.project]; ok {
 			render(d)

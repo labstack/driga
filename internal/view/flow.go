@@ -19,6 +19,7 @@ import (
 
 // FlowNode contains a session and only usage measurements actually retained.
 type FlowNode struct {
+	Cwd            string                  `json:"cwd,omitempty"`
 	StartedFrom    string                  `json:"started_from,omitempty"`
 	StartedAt      time.Time               `json:"started_at"`
 	EndedAt        *time.Time              `json:"ended_at"`
@@ -169,7 +170,16 @@ func FlowJoin(parts ...string) string {
 
 func (n FlowNode) DisplayTitle() string {
 	if title := strings.TrimSpace(n.Title); title != "" {
-		return title + FromSuffix(n.StartedFrom)
+		suffix := FromSuffix(n.StartedFrom)
+		if suffix != "" {
+			for strings.HasSuffix(title, suffix) {
+				title = strings.TrimSuffix(title, suffix)
+			}
+		}
+		if strings.EqualFold(n.StartedFrom, n.Adapter) {
+			return title
+		}
+		return title + suffix
 	}
 	if n.Project != "" {
 		return FlowJoin(n.Project, n.Branch) + FromSuffix(n.StartedFrom)

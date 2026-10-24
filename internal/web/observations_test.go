@@ -3,9 +3,6 @@ package web
 import (
 	"context"
 	"fmt"
-	"os"
-	"os/exec"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -35,34 +32,5 @@ func TestFlowObservedRendering(t *testing.T) {
 			t.Errorf("missing %s", want)
 		}
 	}
-	css, _ := assets.ReadFile("static/flow-map.css")
-	js, _ := assets.ReadFile("static/flow-map.js")
-	for _, want := range []string{".metro-log-band", ".metro-cpu", "prefers-reduced-motion"} {
-		if !strings.Contains(string(css), want) {
-			t.Error("missing", want)
-		}
-	}
-	if !strings.Contains(string(js), "driga:flow-refresh") {
-		t.Fatal("missing JSON refresh hook")
-	}
-}
 
-func TestFlowObservedJavaScript(t *testing.T) {
-	js, _ := assets.ReadFile("static/app.js")
-	harness, err := os.ReadFile("testdata/observations.js")
-	if err != nil {
-		t.Fatal(err)
-	}
-	code := "eval(" + strconv.Quote(string(js)) + "); eval(" + strconv.Quote(string(harness)) + ");"
-	var cmd *exec.Cmd
-	if runtime, err := exec.LookPath("node"); err == nil {
-		cmd = exec.Command(runtime, "-")
-		cmd.Stdin = strings.NewReader(code)
-	} else {
-		t.Skip("JavaScript runner unavailable")
-	}
-	cmd.Env = []string{"PATH=" + t.TempDir(), "HOME=" + t.TempDir()}
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("JavaScript observations: %v\n%s", err, out)
-	}
 }

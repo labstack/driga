@@ -37,10 +37,11 @@ func (s *fakeSource) DataVersion(context.Context) (int64, error) { return s.vers
 
 func fixture() *fakeSource {
 	return &fakeSource{version: 1, snap: Snapshot{
-		Envelope: view.Envelope{Mode: "daemon", ObservedAt: time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)},
-		Hostname: "test-host", Summary: view.SummaryView{Agents: 1},
+		Envelope:  view.Envelope{Mode: "daemon", ObservedAt: time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)},
+		BoardData: view.BoardSnapshot{Nodes: []view.FlowNode{{ID: 1, Adapter: "claude", Label: "working", Title: "test title", Project: "repo", Cwd: "/tmp/repo with spaces"}}},
+		Hostname:  "test-host", Summary: view.SummaryView{Agents: 1},
 		Agents:       view.AgentsView{Rows: []view.AgentRow{{ID: 1, Adapter: "claude", Label: "working", Title: "test title", Project: "repo"}}},
-		Inbox:        view.InboxView{Rows: []view.InboxRow{{InboxItem: model.InboxItem{ID: "event-1", SessionID: 1, Kind: "waiting", Summary: "approve change"}}}},
+		Inbox:        view.InboxView{Rows: []view.InboxRow{{InboxItem: model.InboxItem{ID: "event-1", SessionID: 1, Kind: "finished", Summary: "approve change"}}}},
 		Orphans:      view.OrphansView{Rows: []view.OrphanRow{{Orphan: model.Orphan{ID: "100:1", RootPID: 100, PIDs: []int32{100, 101}, RSSTotal: 1024, Verified: true, Evidence: []string{"detached helper"}}}}},
 		AgentDetails: map[int64]view.AgentView{1: {Session: model.Session{ID: 1, SessionObs: model.SessionObs{Adapter: "claude", ExternalID: "external-1", PID: 30, Cwd: "/tmp/repo with spaces"}, Evidence: "hook notification"}, Resume: "claude --resume external-1"}},
 	}}
@@ -80,28 +81,37 @@ func execute(t *testing.T, m tea.Model, cmd tea.Cmd) tea.Model {
 }
 
 func TestTabSwitching(t *testing.T) {
-	m := setup(t, fixture(), Options{})
-	m = key(m, '3')
-	if m.(*app).tab != 2 || !strings.Contains(m.View().Content, "3 Inbox 1") {
-		t.Fatal(m.View().Content)
-	}
-	for _, c := range []rune{'1', '2', '4', '5'} {
-		m = key(m, c)
-		if m.(*app).tab != int(c-'1') || !strings.Contains(m.View().Content, string(c)+" ") {
+	m := setup(t, fixture(), Options{}).(*app)
+	for _, tc := range []struct {
+		key   rune
+		tab   int
+		label string
+	}{{'0', flowTab, "0 Flow"}, {'1', 1, "1 Projects"}, {'2', 4, "2 Machines"}} {
+		m.Update(tea.KeyPressMsg{Code: tc.key})
+		if m.tab != tc.tab || !strings.Contains(m.tabBar(), tc.label) {
 			t.Fatal(m.View().Content)
 		}
+	}
+	for _, key := range []rune{'3', '4', '5', '6', '7', '8'} {
+		m.Update(tea.KeyPressMsg{Code: key})
+		if m.tab != 4 {
+			t.Fatal("removed tab key navigated", key)
+		}
+	}
+	if strings.Contains(m.tabBar(), "Inbox") || strings.Contains(m.tabBar(), "Chat") {
+		t.Fatal(m.tabBar())
 	}
 }
 func TestDetailDoesNotAck(t *testing.T) {
 	calls := 0
 	m := setup(t, fixture(), Options{Spool: func(model.HookEvent) error { calls++; return nil }})
-	m = key(m, '3')
+	m = key(key(m, '0'), 'h')
 	m = key(m, tea.KeyEnter)
 	if calls != 0 || !strings.Contains(m.View().Content, "approve change") || !strings.Contains(m.View().Content, "hook notification") {
 		t.Fatal(m.View().Content, calls)
 	}
 	m = key(m, tea.KeyEscape)
-	if m.(*app).tab != 2 || !strings.Contains(m.View().Content, "3 Inbox 1") {
+	if m.(*app).tab != 2 || !strings.Contains(m.View().Content, "0 Flow") {
 		t.Fatal(m.View().Content)
 	}
 }
@@ -111,7 +121,7 @@ func TestAckWritesSpool(t *testing.T) {
 			dir := t.TempDir()
 			s := fixture()
 			m := setup(t, s, Options{Spool: func(e model.HookEvent) error { return spool.Append(dir, e) }})
-			m = key(m, '3')
+			m = key(key(m, '0'), 'h')
 			m, cmd := press(m, k)
 			before, _, _ := spool.Drain(dir, nil)
 			if len(before) != 0 {
@@ -140,7 +150,7 @@ func TestKillNeedsConfirmAndRefusesYoung(t *testing.T) {
 		return kill.Result{Signaled: []int32{o.RootPID}}, nil
 	}}
 	m := setup(t, fixture(), opts)
-	m = key(m, '4')
+	m = key(key(m, '2'), 'p')
 	m = key(m, 'k')
 	if calls != 0 || !strings.Contains(m.View().Content, "[y/N]") || !strings.Contains(m.View().Content, "101") {
 		t.Fatal(m.View().Content, calls)
@@ -162,7 +172,7 @@ func TestKillNeedsConfirmAndRefusesYoung(t *testing.T) {
 	s := fixture()
 	s.snap.Orphans.Rows[0].Young = true
 	m = setup(t, s, opts)
-	m = key(m, '4')
+	m = key(key(m, '2'), 'p')
 	m = key(m, 'k')
 	if !strings.Contains(m.View().Content, "too young to kill") || strings.Contains(m.View().Content, "[y/N]") {
 		t.Fatal(m.View().Content)
@@ -181,7 +191,7 @@ func TestKillRefusesUnverified(t *testing.T) {
 			t.Fatal("unverified candidate was killed")
 			return kill.Result{}, nil
 		}})
-		m = key(m, '4')
+		m = key(key(m, '2'), 'p')
 		m = key(m, action)
 		if !strings.Contains(m.View().Content, "unverified — run: driga orphans kill") || strings.Contains(m.View().Content, "[y/N]") {
 			t.Fatal(m.View().Content)
@@ -195,7 +205,7 @@ func TestKillRefusesUnverified(t *testing.T) {
 func TestReloadOnlyOnDataVersionChange(t *testing.T) {
 	s := fixture()
 	m := setup(t, s, Options{})
-	m = key(m, '1')
+	m = key(key(m, '0'), 's')
 	poll := func() { t.Helper(); var cmd tea.Cmd; m, cmd = m.Update(tickMsg{}); m = execute(t, m, cmd) }
 	poll()
 	if s.loads != 1 {
@@ -225,10 +235,10 @@ func TestProjectHidesEmptyTabs(t *testing.T) {
 	s.snap.Orphans.Rows = nil
 	m := setup(t, s, Options{Project: "/tmp/repo"})
 	text := m.(*app).tabBar()
-	if strings.Contains(text, "2 Projects") || strings.Contains(text, "4 Orphans") || !strings.Contains(text, "3 Inbox 1") {
+	if strings.Contains(text, "2 Projects") || strings.Contains(text, "4 Orphans") || !strings.Contains(text, "0 Flow") {
 		t.Fatal(text)
 	}
-	m = key(m, '4')
+	m = key(key(m, '2'), 'p')
 	if m.(*app).tab == 3 {
 		t.Fatal(m.View().Content)
 	}
@@ -344,7 +354,7 @@ func TestDetailActionKeepsDisplayedTargetAfterReload(t *testing.T) {
 	s := fixture()
 	var ack string
 	m := setup(t, s, Options{Spool: func(e model.HookEvent) error { ack = e.Message; return nil }})
-	m = key(m, '3')
+	m = key(key(m, '0'), 'h')
 	m = key(m, tea.KeyEnter)
 	s.version++
 	s.snap.Inbox.Rows = []view.InboxRow{{InboxItem: model.InboxItem{ID: "new-event", SessionID: 1, Summary: "different item"}}}
@@ -362,7 +372,7 @@ func TestFamiliesFilterSortAndCursors(t *testing.T) {
 	s.snap.Agents.Rows[0].Children = []view.AgentRow{{ID: 2, Adapter: "codex", Label: "working", Title: "worker title"}}
 	s.snap.Agents.Rows = append(s.snap.Agents.Rows, view.AgentRow{ID: 3, Adapter: "codex", Label: "waiting", Title: "other title", Mem: 100})
 	m := setup(t, s, Options{})
-	m = key(m, '1')
+	m = key(key(m, '0'), 's')
 	if strings.Contains(m.View().Content, "worker title") {
 		t.Fatal("family starts expanded")
 	}
@@ -373,8 +383,8 @@ func TestFamiliesFilterSortAndCursors(t *testing.T) {
 		t.Fatal(m.View().Content)
 	}
 	cursor := m.(*app).cursors[0]
-	m = key(m, '3')
-	m = key(m, '1')
+	m = key(key(m, '0'), 'h')
+	m = key(key(m, '0'), 's')
 	if m.(*app).cursors[0] != cursor {
 		t.Fatal("lost cursor")
 	}
@@ -608,7 +618,7 @@ func TestForceRequiresSecondConfirmation(t *testing.T) {
 		calls++
 		return kill.Result{}, nil
 	}})
-	m = key(m, '4')
+	m = key(key(m, '2'), 'p')
 	m = key(m, 'K')
 	m, cmd := press(m, 'y')
 	if cmd != nil || calls != 0 || !strings.Contains(m.View().Content, "Really SIGKILL") {

@@ -59,37 +59,6 @@
     if (!tokens.length && ["home", "projects", "inbox", "orphans", "machines", "cleanup", "activity"].includes(verb)) return url(verb === "home" ? "/" : "/" + verb);
     return error("Unknown command · ? for help");
   }
-  function familyEvent(event, machine, sessions, seen) {
-    return event.machine_id === machine && sessions.includes(event.adapter + ":" + event.external_id) && !seen.has(event.key);
-  }
-  // Coordinates are relative to the stage. One shared trunk, short branches.
-  function flowWireGeometry(lead, mixer, workers) {
-    const branches=[],routes={};
-    const x=workers.length ? (mixer.right+Math.min(...workers.map(w=>w.left)))/2 : mixer.right;
-    const ys=[mixer.y,...workers.map(w=>w.y)];
-    for(const w of workers) {
-      branches.push({key:w.key,d:`M ${x} ${w.y} H ${w.left}`});
-      routes[w.key]=`M ${mixer.right} ${mixer.y} H ${x} V ${w.y} H ${w.left}`;
-    }
-    return {lead:`M ${lead.right} ${lead.y} L ${mixer.left} ${mixer.y}`,trunk:workers.length ? `M ${mixer.right} ${mixer.y} H ${x} M ${x} ${Math.min(...ys)} V ${Math.max(...ys)}` : "",branches,routes};
-  }
-  function transcriptSize(bytes) {
-    const units=["B","KB","MB","GB","TB"]; let i=0,n=Math.max(0,Number(bytes)||0);
-    while(n>=1024 && i<units.length-1){n/=1024;i++;}
-    return (i ? Number(n.toFixed(1)) : n)+" "+units[i];
-  }
-  // The same detector drives refreshed DOM snapshots and the JS regression
-  // harness. Keep a high-water mark so delayed swaps cannot replay a pulse.
-  function observationPulses(seen, nodes) {
-    const pulses=[];
-    for(const node of nodes) {
-      const at=Date.parse(node.last_growth_at)||0, previous=seen.get(node.key);
-      seen.set(node.key,Math.max(previous||0,at));
-      if(previous!==undefined && at>previous && Number(node.last_growth_bytes)>0)
-        pulses.push({...node,label:"+"+transcriptSize(node.last_growth_bytes)+" transcript"});
-    }
-    return pulses;
-  }
   function createMachineController(doc) {
     let expanded = new Set();
     const rows = () => Array.from(doc.querySelectorAll("[data-machine-app]"));
@@ -154,7 +123,7 @@
     };
   }
   function connectionText(connected,closed) { return connected?"● live":closed?"○ disconnected · authenticate the new web URL, then reload":"○ reconnecting…"; }
-  globalThis.DrigaConsole = Object.freeze({answerPrompt,connectionText,parseCommand, familyEvent, flowWireGeometry, observationPulses, transcriptSize, createInboxController, createMachineController});
+  globalThis.DrigaConsole = Object.freeze({answerPrompt,connectionText,parseCommand, createInboxController, createMachineController});
   if (typeof document === "undefined") return;
 
   const root = document.documentElement;
@@ -246,7 +215,6 @@
     all.forEach(el => el.classList.toggle("sel", el === row));
     selected = row.getAttribute("href") || row.dataset.session || String(all.indexOf(row));
     if (scroll) row.scrollIntoView({block: "nearest"});
-     if (row.matches("[data-worker]")) inspectWorker(row);
   }
   function filterPane(pane, focus = true) {
     const paneIndex = panes().indexOf(pane);
@@ -275,11 +243,7 @@
     if (display.length) { tail.replaceChildren(...display); if (!paused) tail.scrollTop = tail.scrollHeight; }
   }
   function ingestTail(events) {
-    const flow = document.querySelector("[data-flow]");
-    const members = flow ? Array.from(flow.querySelectorAll("[data-session]")).map(el => el.dataset.session) : [];
     for (const e of events) {
-      if (flow && !familyEvent(e, flow.dataset.machine, members, new Set())) continue;
-      if (flow && tailStarted && !tailNodes.has(e.key)) pulseFlow(e.adapter + ":" + e.external_id);
       if (tailNodes.has(e.key)) continue;
       const row = document.createElement("div"); row.dataset.row = ""; row.dataset.eventKey = e.key;
       row.title = [e.machine, e.adapter, e.kind, e.summary].join(" · ");
@@ -367,8 +331,8 @@
     if (event.target.closest("[data-inbox-older]")) { inboxUI.showOlder(); return; }
     if (!event.target.closest(".cmd")) closeMenu();
     if (event.target.closest("[data-pause-tail]")) pauseTail();
-    const flowNav = event.target.closest('[data-window="7"]');
-    if (flowNav && !document.querySelector("[data-flow]")) flowNav.href = selectedFlowURL(flowNav.href);
+    const flowNav = event.target.closest('[data-window="0"]');
+    if (flowNav) flowNav.href = selectedFlowURL(flowNav.href);
     const pane = event.target.closest("[data-pane]");
     if (pane) { focusPane(panes().indexOf(pane), false); const row = event.target.closest("[data-row]"); if (row) selectRow(pane, rows(pane).indexOf(row), !row.matches("[data-inbox-key]")); }
   });
@@ -378,8 +342,6 @@
   document.addEventListener("change", event => { if (event.target.id === "theme") setTheme(event.target.value); });
   document.addEventListener("driga:select-session", event => {
     const id=String(event.detail.id);
-    const worker=Array.from(document.querySelectorAll("[data-worker]")).find(n=>n.dataset.session===id);
-    if(worker){document.querySelectorAll("[data-worker]").forEach(n=>n.classList.toggle("sel",n===worker));selected=id;inspectWorker(worker);worker.scrollIntoView({block:"nearest"});return;}
     const row=Array.from(document.querySelectorAll("[data-row]")).find(n=>(n.getAttribute("href")||"").split("?")[0]==="/agents/"+id);
     if(row){const pane=row.closest("[data-pane]");if(pane){focusPane(panes().indexOf(pane),false);selectRow(pane,rows(pane).indexOf(row),false);}row.scrollIntoView({block:"nearest"});}
   });
@@ -390,33 +352,9 @@
       if (event.key === "Escape" && event.target.closest(".filter")) { event.preventDefault(); filters.delete(focused); const pane = panes()[focused]; pane.querySelectorAll("[data-row]").forEach(el => { el.hidden = false; }); event.target.closest(".filter").remove(); inboxUI.render(); focusPane(focused); }
       return;
     }
-    const flow = document.querySelector("[data-flow]");
-    if (flow && ["[", "]", "j", "k", "ArrowDown", "ArrowUp", "Enter"].includes(event.key)) {
-      event.preventDefault();
-      if (["[", "]"].includes(event.key)) {
-        const link = flow.querySelector(event.key === "[" ? "[data-flow-prev]" : "[data-flow-next]");
-        if (link && link.getAttribute("href")) link.click();
-      } else {
-        const workers = Array.from(flow.querySelectorAll("[data-worker]"));
-        let index = workers.findIndex(worker => worker.classList.contains("sel"));
-        if (event.key === "Enter") {
-          const worker = event.target.closest("[data-worker]") || workers[index], lead = flow.querySelector("[data-flow-open]");
-          if (worker) window.location.assign(worker.dataset.open);
-          else if (lead) lead.click();
-        } else if (workers.length) {
-          index = (index + (["k", "ArrowUp"].includes(event.key) ? -1 : 1) + workers.length) % workers.length;
-          workers.forEach((worker, i) => {
-            worker.classList.toggle("sel", i === index);
-            worker.setAttribute("aria-pressed", String(i === index));
-          });
-          selected = workers[index].dataset.session;
-          inspectWorker(workers[index]); workers[index].scrollIntoView({block: "nearest"});
-        }
-      }
-      return;
-    }
+    if(document.querySelector("[data-flow-board]")&&!event.target.closest(".fb-activity")&&["j","k","ArrowDown","ArrowUp","ArrowLeft","ArrowRight","Home","End","Enter"," ","/"].includes(event.key))return;
     const pane = panes()[focused];
-    if (/^[0-8]$/.test(event.key)) { event.preventDefault(); document.querySelector('[data-window="' + event.key + '"]').click(); }
+    if (/^[0-2]$/.test(event.key)) { event.preventDefault(); document.querySelector('[data-window="' + event.key + '"]').click(); }
     else if (event.key === ":") { event.preventDefault(); input.focus(); }
     else if (event.key === "?") { event.preventDefault(); help.showModal(); }
     else if (event.key === "p") { event.preventDefault(); pauseTail(); }
@@ -426,69 +364,9 @@
     } else if (pane && event.key === "Enter" && event.target === pane) {
       event.preventDefault(); const row = pane.querySelector("[data-row].sel") || rows(pane)[0]; const link = row && (row.matches("a") ? row : row.querySelector(row.matches("[data-inbox-key]") ? "summary" : "a")); if (link) link.click();
     } else if (pane && event.key === "/") { event.preventDefault(); filterPane(pane); }
-    else if (event.key === "Tab" && pane && !pane.matches(".inbox-pane") && (event.target.matches("[data-pane]") || event.target.closest("[data-row]"))) { event.preventDefault(); focusPane(focused + (event.shiftKey ? -1 : 1)); }
+    else if (event.key === "Tab" && panes().length > 1 && pane && !pane.matches(".inbox-pane") && (event.target.matches("[data-pane]") || event.target.closest("[data-row]"))) { event.preventDefault(); focusPane(focused + (event.shiftKey ? -1 : 1)); }
     else if (event.key === "Escape") { closeMenu(); if (pane) { pane.querySelectorAll(".sel").forEach(el => el.classList.remove("sel")); focusPane(focused); } }
   });
-  function inspectWorker(worker) {
-    const title=document.querySelector("[data-worker-title]:not([data-worker])"),detail=document.querySelector("[data-worker-detail]:not([data-worker])");
-    if(title) title.textContent=worker.dataset.workerTitle;
-    if(detail) detail.textContent=worker.dataset.workerDetail;
-  }
-  function drawFlowWires() {
-    const stage=document.querySelector(".flow-stage"), svg=stage && stage.querySelector(".flow-wires"); if(!svg) return;
-    const bounds=stage.getBoundingClientRect();
-    const rect=el=>{const r=el.getBoundingClientRect();return {left:r.left-bounds.left,right:r.right-bounds.left,y:r.top-bounds.top+r.height/2};};
-    const workers=Array.from(stage.querySelectorAll("[data-worker]")).map(w=>({...rect(w),key:w.dataset.session||"quiet"}));
-    const g=flowWireGeometry(rect(stage.querySelector(".flow-lead")),rect(stage.querySelector(".flow-mixer")),workers);
-    svg.querySelector("[data-wire-lead]").setAttribute("d",g.lead);
-    svg.querySelector("[data-wire-trunk]").setAttribute("d",g.trunk);
-    for(const b of g.branches) {
-      const path=Array.from(svg.querySelectorAll("[data-wire], [data-wire-quiet]")).find(p=>(p.dataset.wire||"quiet")===b.key);
-      if(path) { path.setAttribute("d",b.d); path.setAttribute("data-pulse-route",g.routes[b.key]); }
-    }
-  }
-
-  function pulseFlow(session) {
-    if(matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const svg=document.querySelector(".flow-wires");if(!svg)return;
-    const worker=Array.from(svg.querySelectorAll("[data-wire]")).find(p=>p.dataset.wire===session),path=worker||(document.querySelector(".flow-lead").dataset.session===session ? svg.querySelector("[data-wire-lead]") : null);
-    if(!path || !path.getAttribute("d"))return;
-    const dot=document.createElementNS("http://www.w3.org/2000/svg","circle");dot.setAttribute("r","4");dot.setAttribute("class","flow-pulse");svg.append(dot);
-    const route=document.createElementNS("http://www.w3.org/2000/svg","path");
-    route.setAttribute("d",path.getAttribute("data-pulse-route")||path.getAttribute("d"));route.setAttribute("class","flow-pulse-route");svg.append(route);
-    const start=performance.now(),length=route.getTotalLength();
-    function frame(now){if(!dot.isConnected)return;const progress=(now-start)/1000;if(progress>=1){dot.remove();route.remove();return;}const p=route.getPointAtLength(length*progress);dot.setAttribute("cx",String(p.x));dot.setAttribute("cy",String(p.y));requestAnimationFrame(frame);}requestAnimationFrame(frame);
-  }
-  const growthSeen=new Map();
-  function refreshFlowObservations() {
-    const flow=document.querySelector("[data-flow]"); if(!flow)return;
-    const nodes=Array.from(flow.querySelectorAll("[data-growth-at]")).map(el=>({
-      key:flow.dataset.machine+"/"+el.dataset.session,session:el.dataset.session,
-      last_growth_at:el.dataset.growthAt,last_growth_bytes:el.dataset.growthBytes
-    }));
-    for(const pulse of observationPulses(growthSeen,nodes)) pulseTranscript(pulse);
-  }
-  function pulseTranscript(pulse) {
-    const node=Array.from(document.querySelectorAll("[data-flow-node]")).find(n=>n.dataset.session===pulse.session);
-    if(!node)return;
-    const label=document.createElement("span");label.className="flow-growth-label";label.textContent=pulse.label;node.append(label);
-    const reduced=matchMedia("(prefers-reduced-motion: reduce)").matches;
-    // Reduced motion retains the measurement label without moving or ringing.
-    if(!reduced) {
-      if(node.classList.contains("flow-lead")) node.classList.add("flow-growth-ring");
-      else {
-        const svg=document.querySelector(".flow-wires");
-        const path=svg && Array.from(svg.querySelectorAll("[data-wire]")).find(p=>p.dataset.wire===pulse.session);
-        if(path && path.getAttribute("d")) {
-          const dot=document.createElementNS("http://www.w3.org/2000/svg","circle");dot.setAttribute("r","4");dot.setAttribute("class","flow-observed-pulse");svg.append(dot);
-          const route=document.createElementNS("http://www.w3.org/2000/svg","path");route.setAttribute("d",path.getAttribute("data-pulse-route")||path.getAttribute("d"));route.setAttribute("class","flow-pulse-route");svg.append(route);
-          const start=performance.now(),length=route.getTotalLength();
-          function frame(now){if(!dot.isConnected){route.remove();return;}const progress=(now-start)/1000;if(progress>=1){dot.remove();route.remove();return;}const p=route.getPointAtLength(length*progress);dot.setAttribute("cx",String(p.x));dot.setAttribute("cy",String(p.y));requestAnimationFrame(frame);}requestAnimationFrame(frame);
-        }
-      }
-    }
-    setTimeout(()=>{label.remove();node.classList.remove("flow-growth-ring");},1200);
-  }
   function refreshUI() {
     applyTheme(); focusPane(focused, false);
     panes().forEach((pane, i) => {
@@ -496,21 +374,16 @@
         if (!row.title && !row.matches("[data-inbox-key]")) row.title = row.textContent.trim();
         row.querySelectorAll(".inbox-columns [role='cell']").forEach(el => { el.title = el.textContent; });
         row.querySelectorAll(".t,.l,.branch,.item p,dd").forEach(el => { if (!el.title) el.title = el.textContent; });
-        if (row.matches("[data-worker]") && selected) {
-          const match = row.dataset.session === selected;
-          row.classList.toggle("sel", match); row.setAttribute("aria-pressed", String(match));
-        } else if (row.getAttribute("href") === selected) row.classList.add("sel");
+        if (row.getAttribute("href") === selected) row.classList.add("sel");
       }
       if (filters.has(i)) { const value = filters.get(i); filterPane(pane, false); const field = pane.querySelector(".filter input"); field.value = value; pane.querySelectorAll("[data-row]").forEach(row => { row.hidden = !row.textContent.toLowerCase().includes(value.toLowerCase()); }); }
     });
     const tail = document.querySelector("[data-tail]");
     if (tail && !tailStarted) { tail.querySelectorAll("[data-event-key]").forEach(el => tailNodes.set(el.dataset.eventKey, el)); tailStarted = true; }
-    const worker=document.querySelector("[data-worker].sel") || document.querySelector("[data-worker]");
-    if(worker) { worker.classList.add("sel");worker.setAttribute("aria-pressed","true");inspectWorker(worker); }
-    renderTail(); charts.draw(); drawFlowWires(); refreshFlowObservations();
+    renderTail(); charts.draw();
   }
   let restorePane = false;
-  document.addEventListener("htmx:beforeSwap", () => { restorePane = !!document.activeElement.closest("[data-pane]"); inboxUI.capture(); machineUI.capture(); charts.dispose(); });
+  document.addEventListener("htmx:beforeSwap", () => { restorePane = !document.activeElement.closest("[data-flow-board]") && !!document.activeElement.closest("[data-pane]"); inboxUI.capture(); machineUI.capture(); charts.dispose(); });
   document.addEventListener("htmx:afterSwap", () => { refreshUI(); inboxUI.restore(); machineUI.restore(); if (restorePane) focusPane(focused); });
   refreshUI();
   inboxUI.restore();
@@ -520,7 +393,7 @@
   function connection(connected) { document.querySelectorAll(".connection").forEach(el => { el.textContent = connectionText(connected,stream.readyState===EventSource.CLOSED); el.classList.toggle("working", connected); el.classList.toggle("waiting", !connected); }); }
   const stream = new EventSource("/events" + window.location.search);
   stream.addEventListener("open", () => connection(true)); stream.addEventListener("error", () => connection(false));
-  const refresh = () => { if(document.querySelector("[data-flow-map]")){document.dispatchEvent(new Event("driga:flow-refresh"));return;} const main = document.getElementById("main"); if (window.htmx) htmx.trigger(main, "console:refresh"); };
+  const refresh = () => { const main = document.getElementById("main"); if (window.htmx) htmx.trigger(main, "console:refresh"); };
   let promptPolling=false;
   setInterval(async()=>{
     const container=document.querySelector("[data-prompts]");
@@ -534,10 +407,8 @@
       if(JSON.stringify(shown)!==JSON.stringify(prompts.map(prompt=>prompt.id).sort()))refresh();
     } catch(_) { /* The next poll retries. */ } finally {promptPolling=false;}
   },1000);
-  stream.addEventListener("refresh", () => {if(document.querySelector("[data-flow-map]")) document.dispatchEvent(new Event("driga:flow-refresh"));});
-  stream.addEventListener("ready", refresh); stream.addEventListener("change", () => {if(!document.querySelector("[data-flow-map]"))refresh();});
+  stream.addEventListener("ready", refresh); stream.addEventListener("change", refresh);
   stream.addEventListener("tail", event => { try { ingestTail(JSON.parse(event.data)); } catch (_) { /* A reconnect will refresh the tail. */ } });
-  const flowObserver = new ResizeObserver(drawFlowWires); flowObserver.observe(document.getElementById("main"));
   const clock = setInterval(() => { document.querySelectorAll("[data-clock]").forEach(el => { el.textContent = new Date().toLocaleTimeString([], {hour12: false}); }); }, 1000);
-  window.addEventListener("pagehide", () => { stream.close(); charts.dispose(); flowObserver.disconnect(); clearInterval(clock); });
+  window.addEventListener("pagehide", () => { stream.close(); charts.dispose(); clearInterval(clock); });
 })();

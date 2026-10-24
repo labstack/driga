@@ -18,21 +18,7 @@ func (m *app) mouseClick(msg tea.MouseClickMsg) tea.Cmd {
 	_, hits := m.tabLayout()
 	for _, h := range hits {
 		if msg.Y == lipgloss.Height(m.header())+h.y && msg.X >= h.x && msg.X < h.x+h.width {
-			// Leave the composer before routing a mouse tab to its navigation key.
-			if m.tab == chatTab {
-				if h.tab == chatTab {
-					return nil
-				}
-				m.tab = homeTab
-				m.chatInput.Blur()
-			}
-			// Keep tab switching, cleanup loading and cursor retention identical to keys.
-			code := rune('0' + mapTabNumber(h.tab))
-			if h.tab == homeTab {
-				code = '0'
-			}
-			_, cmd := m.Update(tea.KeyPressMsg{Code: code, Text: string(code)})
-			return cmd
+			return m.selectTab(byte('0' + mapTabNumber(h.tab)))
 		}
 	}
 	if m.tab == chatTab {
@@ -46,12 +32,14 @@ func (m *app) mouseClick(msg tea.MouseClickMsg) tea.Cmd {
 		y := msg.Y - base + min(m.flowOffset, max(0, lipgloss.Height(m.flowView())-m.bodyHeight()))
 		for _, h := range m.flowWorkerHits() {
 			if msg.X >= h.x && msg.X < h.x+h.width && y >= h.y && y < h.y+h.height {
-				m.cursors[flowTab] = h.index
-				window := m.flowWorkers()
-				if window.Quiet > 0 && h.index == len(window.Nodes) {
-					m.flowExpanded = true
+				if h.index < 0 {
+					m.flowAttention = true
+					m.flowAskCursor = -h.index - 1
+					m.armBoardPrompt()
+				} else {
+					m.flowAttention = false
+					m.boardCursor = h.index
 				}
-				m.rebuild()
 				return nil
 			}
 		}
@@ -74,27 +62,6 @@ func (m *app) mouseRow(x, y int) (int, bool) {
 	y -= base
 	if y < 0 || y >= m.bodyHeight() {
 		return 0, false
-	}
-	if m.tab == homeTab {
-		width := m.width
-		switch homeColumns(m.width) {
-		case 3:
-			width = m.width / 2
-		case 2:
-			width = (m.width - 1) * 3 / 5
-		}
-		if x < 2 || x >= width-2 {
-			return 0, false
-		}
-		lines := strings.Split(m.homeView(), "\n")
-		y += min(m.homeOffset, max(0, len(lines)-m.bodyHeight()))
-		stride := 1
-		if width < 76 {
-			stride = 2
-		}
-		start := m.homeNeedsTop
-		row := start + (y-1)/stride
-		return row, y >= 1 && y < 1+min(6, len(m.rows)-start)*stride && row < len(m.rows)
 	}
 	if m.splitDetail() && x >= m.width/2 {
 		return 0, false
@@ -142,13 +109,6 @@ func (m *app) mouseWheel(msg tea.MouseWheelMsg) tea.Cmd {
 	if m.tab == flowTab {
 		m.flowOffset = max(0, m.flowOffset+delta)
 		return nil
-	}
-	if m.tab == homeTab {
-		if _, ok := m.mouseRow(msg.X, msg.Y); !ok {
-			lines := lipgloss.Height(m.homeView())
-			m.homeOffset = min(max(0, m.homeOffset+delta), max(0, lines-m.bodyHeight()))
-			return nil
-		}
 	}
 	key := tea.KeyDown
 	if delta < 0 {

@@ -27,15 +27,15 @@ func TestAttentionOverflowDestination(t *testing.T) {
 		t.Fatal(err)
 	}
 	w := request(s, "GET", "/", s.token)
-	if !strings.Contains(w.Body.String(), "attention=1") {
+	if !strings.Contains(w.Body.String(), "data-show-needs") {
 		t.Fatal("overflow does not link to attention")
 	}
-	p, _, err := s.loadPage(httptest.NewRequest("GET", "http://"+s.opts.Host+"/inbox?attention=1", nil))
+	p, _, err := s.loadPage(httptest.NewRequest("GET", "http://"+s.opts.Host+"/flow?view=sessions", nil))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(p.Needs) != 11 {
-		t.Fatalf("destination has %d needs; want 11", len(p.Needs))
+	if len(p.Board.Needs) != 11 {
+		t.Fatalf("destination has %d needs; want 11", len(p.Board.Needs))
 	}
 }
 

@@ -53,6 +53,7 @@ var themeTokens = append([]ThemeToken{
 
 // consoleTokens maps the console's roles onto the same Catppuccin palettes.
 var consoleTokens = append([]ThemeToken{
+	{"flow-canvas", "#EFF1F5", "#0E0E16"}, {"flow-panel", "#E6E9EF", "#10101A"}, {"flow-line", "#BCC0CC", "#262636"}, {"flow-muted", "#5C5F77", "#7F849C"},
 	{"bg", "#EFF1F5", "#1E1E2E"}, {"pane", "#E6E9EF", "#181825"},
 	{"raise", "#CCD0DA", "#313244"}, {"line", "#BCC0CC", "#45475A"},
 	{"fg", "#4C4F69", "#CDD6F4"}, {"mid", "#5C5F77", "#BAC2DE"},

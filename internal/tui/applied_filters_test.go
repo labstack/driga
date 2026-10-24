@@ -9,7 +9,7 @@ import (
 
 func TestAppliedFilterVisibleAndEscapeClears(t *testing.T) {
 	m := setup(t, fixture(), Options{}).(*app)
-	key(m, '1')
+	key(key(m, '0'), 's')
 	key(m, '/')
 	m.filter.SetValue("qa-no-match-界🙂")
 	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})

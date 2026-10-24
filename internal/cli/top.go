@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"os"
 
@@ -56,7 +57,12 @@ func (c TopCmd) Run(g *Globals) error {
 		return err
 	}
 	defer closeChat()
-	opts := tui.Options{InitialTab: c.Tab, Theme: cfg.UI.Theme, Chat: chatClient, ChatEphemeral: ephemeral, Machine: g.Machine, Project: g.Project, NoColor: g.NoColor, OpenCmd: cfg.OpenCmd, DataDir: config.DataDir(), Context: ctx}
+	opts := tui.Options{SessionAction: func(ctx context.Context, action string, id int64) error {
+		raw, _ := json.Marshal(map[string]any{"session_id": id})
+		actionGlobals := *g
+		actionGlobals.Stdout = io.Discard
+		return runChatAction(ctx, &actionGlobals, action, raw)
+	}, InitialTab: c.Tab, Theme: cfg.UI.Theme, Chat: chatClient, ChatEphemeral: ephemeral, Machine: g.Machine, Project: g.Project, NoColor: g.NoColor, OpenCmd: cfg.OpenCmd, DataDir: config.DataDir(), Context: ctx}
 	opts.Tmux = os.Getenv("TMUX")
 	opts.JumpTerminal = cfg.Inbox.JumpTerminal
 	opts.MotionOff = cfg.Motion == "off"
