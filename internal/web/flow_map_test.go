@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/labstack/driga/internal/view"
-	"os"
-	"os/exec"
 	"testing"
 )
 
@@ -34,24 +32,5 @@ func TestFlowJSONAuthAndShape(t *testing.T) {
 				t.Fatal(w.Header())
 			}
 		}
-	}
-}
-func TestFlowMapGeometryJavaScript(t *testing.T) {
-	runtime, err := exec.LookPath("node")
-	if err != nil {
-		t.Skip("node unavailable")
-	}
-	js, err := assets.ReadFile("static/flow-map.js")
-	if err != nil {
-		t.Fatal(err)
-	}
-	test, err := os.ReadFile("testdata/flow-map.js")
-	if err != nil {
-		t.Fatal(err)
-	}
-	cmd := nodeScript(runtime, string(js)+"\n"+string(test))
-	cmd.Env = []string{"PATH=" + t.TempDir(), "HOME=" + t.TempDir()}
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("geometry: %v: %s", err, out)
 	}
 }

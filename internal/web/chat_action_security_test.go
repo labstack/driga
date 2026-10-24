@@ -10,7 +10,7 @@ import (
 
 func TestChatActionPOSTSecurity(t *testing.T) {
 	s, b, id := chatFixture(t)
-	for _, route := range []string{"mode", "decide"} {
+	for _, route := range []string{"mode", "decide", "flow-action"} {
 		body := fmt.Sprintf(`{"id":%q,"mode":"full auto","action":"missing","allow":true}`, id)
 		for _, tc := range []struct {
 			origin, csrf, token string

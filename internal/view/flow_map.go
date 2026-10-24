@@ -7,6 +7,7 @@ import (
 
 // FlowWait is an inbox span, including its original start and earliest closure.
 type FlowWait struct {
+	Tool      string     `json:"-"` // Board-only hint; the existing family/MCP wire contract stays unchanged.
 	ID        string     `json:"id"`
 	StartedAt time.Time  `json:"started_at"`
 	EndedAt   *time.Time `json:"ended_at"`
@@ -27,7 +28,7 @@ func flowWait(i model.InboxItem) FlowWait {
 	if i.AckedAt != nil && (end == nil || i.AckedAt.Before(*end)) {
 		end = i.AckedAt
 	}
-	return FlowWait{i.ID, start, end, i.Reason, i.Detail}
+	return FlowWait{ID: i.ID, StartedAt: start, EndedAt: end, Reason: i.Reason, Detail: i.Detail, Tool: i.Tool}
 }
 
 // Geometry uses minute-sized terminal cells. No state history is inferred.

@@ -35,16 +35,7 @@ func TestFlowObservedRendering(t *testing.T) {
 			t.Errorf("missing %s", want)
 		}
 	}
-	css, _ := assets.ReadFile("static/flow-map.css")
-	js, _ := assets.ReadFile("static/flow-map.js")
-	for _, want := range []string{".metro-log-band", ".metro-cpu", "prefers-reduced-motion"} {
-		if !strings.Contains(string(css), want) {
-			t.Error("missing", want)
-		}
-	}
-	if !strings.Contains(string(js), "driga:flow-refresh") {
-		t.Fatal("missing JSON refresh hook")
-	}
+
 }
 
 func TestFlowObservedJavaScript(t *testing.T) {

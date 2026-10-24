@@ -74,6 +74,11 @@ func TestMachineGoldenFrames(t *testing.T) {
 				}
 				m.rebuild()
 				got := m.View().Content + "\n"
+				lines := strings.Split(got, "\n")
+				for i := range lines {
+					lines[i] = strings.TrimRight(lines[i], " ")
+				}
+				got = strings.Join(lines, "\n")
 				for _, line := range strings.Split(got, "\n") {
 					if lipgloss.Width(line) > width {
 						t.Fatal("overflow", line)

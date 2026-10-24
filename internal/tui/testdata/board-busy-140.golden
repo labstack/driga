@@ -1,0 +1,34 @@
+Flow  [m Map] [t Timeline] [s Sessions] · Map · last 60m                                    │ ╭ Selected family ───────────────────────────╮
+◆ 7 needs you   ▶ 35   ‖ 7   ○ 14   ✓ 7                                                       │ Fix retry after reconnect · atlas · codex  │
+          ██ events/min · updated 0s ago                                                      │ · idle                                     │
+NEEDS YOU · 7 · oldest first                                                                  │ −60m                  now                  │
+  ◆ Ship the release pipeline safely · monk · 23m                                             │ └── ○ Fix retry after reconnect            │
+  Permission · Bash · go test ./...                                                           │     ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░─   │
+  Enter open · J Terminal                                                                     │ J Terminal · Enter Open · c Ask Chat · K   │
+  ◆ 流れを整える 🌊 · driga · 15m                                                             │ Stop                                       │
+  ◆ Add board view · from Editor · relay · 14m                                                ╰────────────────────────────────────────────╯
+  +4 more · Tab then j/k
+───────────────────────────────────────────────────────────────────────────────────────────
+atlas
+├── › ○ Fix retry after reconnect  codex   ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░─ 1h 50m
+├──   ▶ Fix retry after reconnect  codex   ░━━━━░░░━━━━━░░░━━━━━░░━━━━━━░░━━━━━ 1h 26m
+├──   ○ Investigate cache invalid… codex   ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░─ 1h 14m
+├──   ✓ Fix retry after reconnect  codex   ░░░░░░░░░░░━━░░░━━━━━░░✓━━━━━  ━━━━━ 1h 2m
+└──   ○ Investigate cache invalid… codex        ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░─ 50m
+    └──   ‖ Investigate cache inva… codex   ░░░░░░░░━━━━━░░░━━━━━░░━━━━━━░░━━━━░ 5m
+canon
+├──   ▶ Add board view · from Edi… claude  ░░░━━░░░━━━━━░░░━━━━━░░━━━━━━░░━━━┿━ 1h 49m
+├──   ◆ 流れを整える 🌊            claude  ░░░░░░░░━━━━━░░░━━━━━░░━━━━━◆◆◆◆◆◆◆◆ 13m
+├──   ▶ Add board view · from Edi… claude  ░━━━━░░░━━━━━░░░━━━━━░░━━━━━━░░━━━┿━ 1h 25m
+├──   ▶ 流れを整える 🌊            claude  ░░░░░░░░━━━━━░░░━━━━━░░━━━━━━░░━━━┿━ 1h 13m
+├──   ▶ Add board view · from Edi… claude  ░░░░░░░░░░━━━░░░━━━━━░░━━━━━━░░━━━┿━ 1h 1m
+└──   ▶ 流れを整える 🌊            claude     ━━ ░░━━━━━░░░━━━━━░░━━━━━━░░━━━┿━ 49m
+driga
+├──   ▶ 流れを整える 🌊            claude  ░━━━━░░░━━━━━░░░━━━━━░░━━━━━━░░━━━┿━ 1h 45m
+├──   ▶ 流れを整える 🌊            claude  ░░░░░░░░░░━━━░░░━━━━━░░━━━━━━░░━━━┿━ 1h 21m
+├──   ▶ Add board view · from Edi… claude  ░░░━━░░░━━━━━░░░━━━━━░░━━━━━━░░━━━┿━ 1h 9m
+├──   ◆ 流れを整える 🌊            claude   ░░░░░░░━━━━━░░░━━━━━░░━━━◆◆◆◆◆◆◆◆◆◆ 15m ┄ boar…
+└──   ▶ Add board view · from Edi… claude   ━━━━   ━━━━━░░░━━━━━░░━━━━━━░░━━━┿━ 45m ┄ boar…
+    └──   ▶ Add board view · from … claude  ░░░░░░░░━━━━━░░░━━━━━░░━━━━━━░░━━━┿━ 1h 33m
+echo-pro
+├──   ▶ Investigate cache invalid… codex   ░━━━━░░░━━━━━░░░━━━━━░░━━━━━━░░━━━━━ 1h 46m

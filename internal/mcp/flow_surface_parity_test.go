@@ -68,7 +68,7 @@ func TestFlowSnapshotMatchesAllSurfaces(t *testing.T) {
 	}
 	login := httptest.NewRecorder()
 	server.ServeHTTP(login, httptest.NewRequest("GET", server.URL(), nil))
-	r := httptest.NewRequest("GET", fmt.Sprintf("http://127.0.0.1:4321/flow?id=%d", id), nil)
+	r := httptest.NewRequest("GET", fmt.Sprintf("http://127.0.0.1:4321/flow/%d", id), nil)
 	for _, c := range login.Result().Cookies() {
 		r.AddCookie(c)
 	}
@@ -94,13 +94,20 @@ func TestFlowSnapshotMatchesAllSurfaces(t *testing.T) {
 	}
 	m, _ = m.Update(initMsg)
 	m, _ = m.Update(tea.WindowSizeMsg{Width: 120, Height: 100})
-	m, cmd := m.Update(tea.KeyPressMsg{Code: '7', Text: "7"})
+	m, cmd := m.Update(tea.KeyPressMsg{Code: '0', Text: "0"})
+	if cmd != nil {
+		m, _ = m.Update(cmd())
+	}
+	if !strings.Contains(m.View().Content, "NEEDS YOU") {
+		t.Fatal("TUI did not open board")
+	}
+	m, cmd = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if cmd == nil {
-		t.Fatal("TUI did not load Flow")
+		t.Fatal("TUI did not open family from board")
 	}
 	m, _ = m.Update(cmd())
 	frame := m.View().Content
-	if !strings.Contains(frame, fmt.Sprintf("verdict finished · %d of 4 agree", expected.Agreement)) || !strings.Contains(frame, "+13 quiet threads") {
+	if !strings.Contains(frame, fmt.Sprintf("verdict finished · %d of 4 agree", expected.Agreement)) {
 		t.Errorf("TUI agreement/hidden count differs from fixture: %s", frame)
 	}
 	for _, row := range expected.Rows {

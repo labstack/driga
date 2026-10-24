@@ -40,6 +40,7 @@ type Source interface {
 }
 
 type Options struct {
+	SessionAction func(context.Context, string, int64) error
 	Chat          chat.Client
 	ChatEphemeral bool
 	Host          string
@@ -232,7 +233,7 @@ func (s *Server) newRoutes() *http.ServeMux {
 	mux.HandleFunc("GET /static", s.page)
 	mux.HandleFunc("GET /chat/api", s.page)
 	mux.HandleFunc("GET /chat/api/", s.chatAPI)
-	for _, path := range []string{"/chat/api/prompt-answer", "/chat/api/new", "/chat/api/send", "/chat/api/stop", "/chat/api/mode", "/chat/api/decide"} {
+	for _, path := range []string{"/chat/api/flow-action", "/chat/api/prompt-answer", "/chat/api/new", "/chat/api/send", "/chat/api/stop", "/chat/api/mode", "/chat/api/decide"} {
 		mux.HandleFunc("POST "+path, s.chatAPI)
 	}
 	mux.HandleFunc("GET /static/theme.css", func(w http.ResponseWriter, r *http.Request) {
@@ -403,8 +404,18 @@ func (w *headerWriter) Write(b []byte) (int, error) {
 func (s *Server) flowJSON(w http.ResponseWriter, r *http.Request) {
 	clone := r.Clone(r.Context())
 	u := *r.URL
-	u.Path = "/flow"
+	if r.URL.Query().Get("view") == "board" {
+		u.Path = "/flow"
+	} else {
+		u.Path = "/flow.json"
+	}
 	clone.URL = &u
+	if u.Path == "/flow.json" {
+		u.Path = "/flow"
+		q := u.Query()
+		q.Set("view", "family")
+		u.RawQuery = q.Encode()
+	}
 	p, status, err := s.loadPage(clone)
 	if err != nil {
 		http.Error(w, err.Error(), status)
@@ -414,6 +425,10 @@ func (s *Server) flowJSON(w http.ResponseWriter, r *http.Request) {
 	e.Schema = 2
 	e.ObservedAt = p.Flow.ObservedAt
 	e.Data = p.Flow
+	if p.IsBoard {
+		e.ObservedAt = p.Board.ObservedAt
+		e.Data = p.Board
+	}
 	raw, err := json.Marshal(e)
 	if err != nil {
 		http.Error(w, "could not encode flow", 500)

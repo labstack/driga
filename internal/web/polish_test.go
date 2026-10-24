@@ -31,7 +31,7 @@ func TestDefaultVisibilityAndAll(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, path := range []string{"/", "/agents", "/projects"} {
+	for _, path := range []string{"/agents", "/projects"} {
 		for _, all := range []bool{false, true} {
 			query := "?machine=local"
 			if all {
@@ -109,21 +109,17 @@ func TestNeedsYouDedupeCapAndIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(p.Needs) != 8 {
-		t.Errorf("got %d attention items, want 8", len(p.Needs))
+	if len(p.Board.Needs) != 1 || p.Board.Pulse["waiting"] != 1 {
+		t.Fatal("completion events entered live Needs you", len(p.Board.Needs), p.Board.Pulse)
 	}
-	body := request(s, "GET", "/", s.token).Body.String()
-	if strings.Count(body, `class="strip finished"`)+strings.Count(body, `class="strip waiting"`) != 8 {
-		t.Error("attention cap missing")
+	body := request(s, "GET", "/flow", s.token).Body.String()
+	if !strings.Contains(body, "Activity · notifications") || !strings.Contains(body, "Session title 8") {
+		t.Fatal("history lost")
 	}
-	for _, text := range []string{"2 more needing you", "claude", "codex", "2m ago", "Fixture project", "&lt;script&gt;alert(1)&lt;/script&gt;"} {
-		if !strings.Contains(body, text) {
-			t.Errorf("missing %q", text)
-		}
+	if strings.Count(body, "data-need-key=") != 1 {
+		t.Fatal("live wait duplicated")
 	}
-	if strings.Contains(body, "Do not use event summary as title") {
-		t.Error("uses event summary instead of session title")
-	}
+
 }
 
 func TestProjectAggregatedStates(t *testing.T) {
@@ -168,7 +164,7 @@ func TestFreshnessCompactAndActivityEmpty(t *testing.T) {
 	p := pageData{Page: "/"}
 	p.prepare()
 	var out strings.Builder
-	if err := s.templates.ExecuteTemplate(&out, "home", p); err != nil {
+	if err := s.templates.ExecuteTemplate(&out, "activity", p); err != nil {
 		t.Fatal(err)
 	}
 	for _, note := range []string{"History builds while the collector runs", "Events need agent hooks: <code>driga hooks install</code>"} {

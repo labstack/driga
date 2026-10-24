@@ -71,16 +71,9 @@ func (m *app) header() string {
 	}
 	identity := badge.Render(" driga ") + "  " + clean(host) + m.fleetHeader() + " · " + status
 	identityParts := []string{identity}
-	if m.tab == homeTab || m.tab == flowTab {
-		var rows []view.InboxRow
-		for _, i := range m.snap.Inbox.Rows {
-			if m.machineVisible(i.MachineID) {
-				rows = append(rows, i)
-			}
-		}
-		var agents []view.AgentRow
-		m.eachAgent(func(a view.AgentRow) { a.Children = nil; agents = append(agents, a) })
-		identityParts = append(identityParts, view.AgentWaitingHeader(rows, agents, m.opts.Now()))
+	if m.tab == flowTab {
+		m.syncBoard()
+		identityParts = append(identityParts, fmt.Sprintf("%d waiting", len(m.board.Needs)))
 	}
 	if state, _ := m.intake(); state != "" {
 		identityParts = append(identityParts, "intake · "+view.TokenStyle(map[string]string{"receiving": "working", "waiting": "muted", "attention": "warn"}[state], m.opts.NoColor).Render(state))
@@ -110,17 +103,14 @@ func (m *app) footer() string {
 	if m.help {
 		return truncate("↑↓/pgup/pgdown/wheel scroll · ?/esc close", m.width)
 	}
-	hints := []string{"0 Home", "m machine", "enter detail", "/ filter", "s sort", "g group by project", "o open terminal"}
+	hints := []string{"0 Flow", "M machine", "enter detail", "/ filter", "s sort", "g group by project", "o open terminal"}
 	if m.tab == flowTab {
-		hints = []string{"7 flow", "j/k session", "enter jump", "[/] family", "-/+ zoom", "tab needs", "C resume", "c Chat"}
-	}
-	if m.tab == homeTab {
-		hints = []string{"0-8 tabs · c Chat", "↑↓ move", "enter open", "/ filter", "m machine"}
+		hints = []string{"m/t/s views", "j/k select", "enter open", "/ find", "tab needs", "J terminal", "c Chat"}
 	}
 	if m.tmuxTarget() != "" {
 		hints = append(hints, "a attach tmux")
 	}
-	if m.tab == 2 || m.tab == homeTab {
+	if m.tab == 2 {
 		hints = append(hints, "x/space ack")
 	}
 	if m.tab == 2 {
@@ -128,9 +118,6 @@ func (m *app) footer() string {
 			hints = append(hints, "y allow / n deny")
 		}
 		hints = append(hints, "X ack all")
-	}
-	if m.tab == homeTab {
-		hints = append(hints, "pgup/pgdown scroll")
 	}
 	if m.tab == 1 {
 		hints = append([]string{"S summarize"}, hints...)
@@ -144,13 +131,13 @@ func (m *app) footer() string {
 	if m.tab == chatTab {
 		// One line, most important first: hints that do not fit are dropped
 		// rather than wrapped, so the layout height never changes.
-		hints := []string{"c type", "m trust mode", "N tabs", "? help", "q quit"}
+		hints := []string{"c type", "m trust mode", "0-2 tabs", "? help", "q quit"}
 		if m.chatInput.Focused() {
 			escape := "esc navigate"
 			if m.chatActive || m.pendingChat() != nil {
 				escape = "esc stop"
 			}
-			hints = []string{escape, "enter send", "shift+enter new line", "alt+N tabs", "alt+↑ edit last", "ctrl+x clear context"}
+			hints = []string{escape, "enter send", "shift+enter new line", "alt+0/1/2 tabs", "alt+↑ edit last", "ctrl+x clear context"}
 		}
 		if m.pendingChat() != nil {
 			hint := "y/n allow/deny"
@@ -173,6 +160,12 @@ func (m *app) footer() string {
 		return view.TokenStyle("muted", m.opts.NoColor).Render(line)
 	}
 	hints = append(hints, "esc back", "? help", "q quit")
+	if m.tab == 4 || m.tab == 3 || m.tab == 5 {
+		hints = append([]string{"h health", "p reclaim processes", "d reclaim disk"}, hints...)
+	}
+	if m.tab == 0 || m.tab == 2 {
+		hints = append([]string{"m/t/s Flow views", "h activity"}, hints...)
+	}
 	if m.tab == 5 {
 		hints = append([]string{"x clean (confirm)", "r refresh candidates"}, hints...)
 	}
@@ -250,7 +243,18 @@ func (m *app) intake() (string, []string) {
 }
 
 func (m *app) bodyHeight() int {
-	overhead := lipgloss.Height(m.header()) + lipgloss.Height(m.tabBar()) + lipgloss.Height(m.footer()) + 3
+	measure := func() int {
+		return lipgloss.Height(m.header()) + lipgloss.Height(m.tabBar()) + lipgloss.Height(m.footer()) + 3
+	}
+	overhead := measure()
+	// Plain selection brackets and colored state counts can wrap chrome at
+	// different boundaries. Reserve the larger frame for identical board geometry.
+	if m.tab == flowTab {
+		original := m.opts.NoColor
+		m.opts.NoColor = !original
+		overhead = max(overhead, measure())
+		m.opts.NoColor = original
+	}
 	return max(2, m.height-overhead)
 }
 func (m *app) confirmationText() string {
@@ -291,11 +295,7 @@ func (m *app) View() tea.View {
 	if len(m.rows) == 0 {
 		body = m.emptyText()
 	}
-	if m.tab == homeTab {
-		lines := strings.Split(m.homeView(), "\n")
-		offset := min(m.homeOffset, max(0, len(lines)-m.bodyHeight()))
-		body = strings.Join(lines[offset:], "\n")
-	} else if m.tab == flowTab {
+	if m.tab == flowTab {
 		lines := strings.Split(m.flowView(), "\n")
 		offset := min(m.flowOffset, max(0, len(lines)-m.bodyHeight()))
 		body = strings.Join(lines[offset:], "\n")
@@ -309,7 +309,7 @@ func (m *app) View() tea.View {
 		}
 	}
 	if m.tab == chatTab {
-		body = m.chatView()
+		body = m.chatPanelView()
 	}
 	if m.detail {
 		body = m.viewport.View()
@@ -370,7 +370,7 @@ func (m *app) emptyText() string {
 }
 
 func (m *app) helpText() string {
-	body := wrapText("0 Home · 1–8 tabs · ↑/↓ or j/k move · enter detail · esc back\nChat: esc stops a reply; otherwise navigate · c/enter type · alt+0–8 tabs\nChat: y/n allow/deny · alt+y/alt+n while typing · m trust mode (navigate)\nenter send · shift+enter or alt+enter new line · ctrl+n new · ctrl+h history · ctrl+t tools · ctrl+x clear context\n7 Flow · 8 Chat · j/k session · enter jump · [/] family · -/+ zoom · tab needs · C resume · c Chat\nm cycle machine scope · / filter · enter apply · esc clear · s sort: state, age, mem, project · S summarize selected project\ng group by project · →/← expand/collapse families and worktrees\nx/space acknowledge Needs you / Inbox · X acknowledge all Inbox (confirm)\nclick select · click selected row to open · wheel scroll\npgup/pgdown scroll Home · k kill orphan (confirm) · K force (two confirmations)\no open terminal · ? close help · q / ctrl+c quit", m.width)
+	body := wrapText("0 Flow · 1 Projects · 2 Machines · c Chat panel · Esc closes panel\nFlow: m Map · t Timeline · s Sessions · h activity / return\nMap and Timeline use a project tree in the terminal. Tab focuses Needs you.\nj/k or arrows select · Enter opens · / find · Esc returns\ny/n answer explicitly focused prompt after review · J Terminal · K Stop\nMachines: h health · p reclaim processes · d reclaim disk\nSessions: S sort · right/left expand families\nChat: Enter sends · Shift+Enter new line · Ctrl+n new · Ctrl+h history\nChat: y/n allow/deny · Alt+y/Alt+n while typing · m trust mode\nAlt+0/1/2 switches tabs while typing · Ctrl+x clears Chat context\n? help · q / ctrl+c quit", m.width)
 	if m.tmuxTarget() != "" {
 		body += "\na attach tmux"
 	}

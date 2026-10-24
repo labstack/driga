@@ -12,7 +12,7 @@ func TestOrphansVerifiedColumnAndSnapshotFooter(t *testing.T) {
 	s.snap.Mode = "snapshot"
 	m := setup(t, s, Options{})
 	m, _ = m.Update(tea.WindowSizeMsg{Width: 180, Height: 45})
-	m = key(m, '4')
+	m = key(key(m, '2'), 'p')
 	text := m.View().Content
 	if !strings.Contains(text, "VERIFIED") || !strings.Contains(text, "unverified (snapshot)") {
 		t.Fatal(text)

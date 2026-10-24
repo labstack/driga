@@ -41,7 +41,7 @@ func (m *app) tabVisible(tab int) bool {
 		return true
 	}
 	switch tab {
-	case homeTab, flowTab, chatTab:
+	case flowTab, chatTab:
 		return true
 	case 0:
 		return len(m.snap.Agents.Rows) > 0
@@ -64,70 +64,30 @@ func (m *app) tabBar() string {
 }
 
 func (m *app) tabLayout() (string, []tabHit) {
-	s := m.visibleSummary()
-	projects, inbox, orphans := 0, 0, 0
-	for _, r := range m.snap.Projects.Rows {
-		if m.machineVisible(r.MachineID) {
-			projects++
-		}
+	selected := m.tab
+	if selected == chatTab {
+		selected = m.chatOrigin
 	}
-	for _, r := range m.snap.Inbox.Rows {
-		if m.machineVisible(r.MachineID) {
-			inbox++
-		}
+	if selected == 0 || selected == 2 {
+		selected = flowTab
 	}
-	for _, r := range m.snap.Orphans.Rows {
-		if m.machineVisible(r.MachineID) {
-			orphans++
-		}
+	if selected == 3 || selected == 5 {
+		selected = 4
 	}
-	if m.machineVisible(m.localMachine()) {
-		inbox += len(m.prompts)
-	}
-	cleanupCount := 0
-	if m.machineVisible(m.localMachine()) {
-		cleanupCount = len(m.snap.Cleanup)
-	}
-	names := []string{fmt.Sprintf("Agents %d", s.Agents), fmt.Sprintf("Projects %d", projects), "Inbox", fmt.Sprintf("Orphans %d", orphans), "Machine", fmt.Sprintf("Cleanup %d", cleanupCount), "Flow", "Chat"}
+	labels := []string{"0 Flow", "1 Projects", "2 Machines"}
+	indices := []int{flowTab, 1, 4}
 	tabs := []string{}
-	indices := []int{homeTab}
-	active := func(label string, selected bool) string {
-		style := view.TokenStyle("muted", m.opts.NoColor)
-		if selected && m.opts.NoColor {
-			return "[" + label + "]"
-		}
-		if selected {
-			style = view.TokenStyle("ink", m.opts.NoColor)
-			if !m.opts.NoColor {
-				style = style.Bold(true).Underline(true)
+	for i, label := range labels {
+		if selected == indices[i] {
+			if m.opts.NoColor {
+				label = "[" + label + "]"
+			} else {
+				label = view.TokenStyle("ink", false).Bold(true).Underline(true).Render(label)
 			}
-		}
-		return style.Render(label)
-	}
-	tabs = append(tabs, active("0 Home", m.tab == homeTab))
-	for i, name := range names {
-		if name == "Chat" {
-			i = chatTab
-		}
-		if name == "Flow" {
-			i = flowTab
-		}
-		if !m.tabVisible(i) {
-			continue
-		}
-		label := active(fmt.Sprintf("%d %s", mapTabNumber(i), name), m.tab == i)
-		if i == 2 && m.opts.NoColor {
-			label = active(fmt.Sprintf("%d %s %d", i+1, name, inbox), m.tab == i)
-		}
-		if i == 2 && !m.opts.NoColor {
-			token := "faint"
-			if inbox > 0 {
-				token = "waiting"
-			}
-			label += " " + view.TokenStyle(token, m.opts.NoColor).Render(fmt.Sprint(inbox))
+		} else {
+			label = view.TokenStyle("muted", m.opts.NoColor).Render(label)
 		}
 		tabs = append(tabs, label)
-		indices = append(indices, i)
 	}
 	hits := []tabHit{}
 	x, y := 0, 0
@@ -200,26 +160,13 @@ func (m *app) rebuild() {
 	}
 	switch m.tab {
 	case flowTab:
-		titles = []string{"", "STATE", "WORKER"}
+		m.syncBoard()
+		titles = []string{"", "STATE", "SESSION"}
 		weights = []int{2, 10, 40}
-		window := m.flowWorkers()
-		nodes := window.Nodes
-		if len(nodes) == 0 && window.Quiet == 0 && m.flow.Lead != nil {
-			nodes = []view.FlowNode{*m.flow.Lead}
-		}
-		for _, n := range nodes {
-			add(tabRow{machine: n.MachineID, key: fmt.Sprint(n.ID), agent: n.ID, cells: []string{"", n.Label, n.Title}})
-		}
-		if window.Quiet > 0 {
-			add(tabRow{key: "flow-quiet", cells: []string{"", "", fmt.Sprintf("+%d quiet threads", window.Quiet)}})
+		for _, r := range m.boardRows() {
+			add(tabRow{machine: r.Node.MachineID, key: r.Key, agent: r.Node.ID, cwd: r.Cwd, cells: []string{"", r.State, r.Title}})
 		}
 
-	case homeTab:
-		titles = []string{"", "STATE", "PROJECT", "SUMMARY"}
-		weights = []int{2, 10, 14, 40}
-		for _, row := range m.needsYou() {
-			add(row)
-		}
 	case 5:
 		titles = []string{"", "KIND", "STATUS", "PATH"}
 		weights = []int{2, 10, 18, 50}
@@ -303,17 +250,10 @@ func (m *app) rebuild() {
 	case 2:
 		titles = []string{"", "REASON", "TOOL", "WAIT / AGE", "PROJECT · BRANCH", "TITLE / DETAIL"}
 		weights = []int{2, 18, 8, 10, 18, 32}
-		for _, p := range m.prompts {
-			if m.opts.Project != "" && p.Cwd != m.opts.Project {
+		for _, r := range m.snap.Inbox.Rows {
+			if attention.Active(r.InboxItem) && !r.Historical {
 				continue
 			}
-			session := p.Session
-			if p.SessionID > 0 {
-				session = fmt.Sprintf("#%d", p.SessionID)
-			}
-			add(tabRow{machine: m.localMachine(), key: "prompt:" + p.ID, agent: p.SessionID, prompt: &p, cwd: p.Cwd, cells: []string{"", "permission " + session, p.Tool, duration(m.opts.Now().Sub(p.CreatedAt)), p.Cwd, p.Detail()}})
-		}
-		for _, r := range m.snap.Inbox.Rows {
 			item := r.InboxItem
 			reason := r.Reason
 			if reason == "" {
@@ -362,7 +302,7 @@ func (m *app) rebuild() {
 			ids[r.machine] = true
 		}
 	}
-	if len(ids) > 1 && m.tab != homeTab {
+	if len(ids) > 1 {
 		titles = append([]string{titles[0], "MACHINE"}, titles[1:]...)
 		weights = append([]int{weights[0], 14}, weights[1:]...)
 		for i := range rows {
@@ -371,10 +311,6 @@ func (m *app) rebuild() {
 	}
 	m.rows = rows
 	m.cursors[m.tab] = min(max(0, m.cursors[m.tab]), max(0, len(rows)-1))
-	if m.tab == homeTab {
-		m.homeNeedsTop = max(0, min(m.homeNeedsTop, m.cursors[homeTab]))
-		m.homeNeedsTop = max(m.homeNeedsTop, m.cursors[homeTab]-5)
-	}
 	columns := make([]table.Column, len(titles))
 	sum := 0
 	for _, w := range weights {
@@ -474,11 +410,13 @@ func agentAge(d time.Duration) string {
 }
 
 func mapTabNumber(tab int) int {
-	if tab == chatTab {
-		return 8
+	switch tab {
+	case flowTab:
+		return 0
+	case 1:
+		return 1
+	case 4:
+		return 2
 	}
-	if tab == flowTab {
-		return 7
-	}
-	return tab + 1
+	return -1
 }

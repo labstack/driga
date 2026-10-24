@@ -31,6 +31,7 @@ type Reader interface {
 	LatestSample() (model.MachineSample, error)
 	Samples(time.Time) ([]model.MachineSample, error)
 	EventCounts(time.Time, time.Time) ([]store.EventCount, error)
+	BoardEvidence(time.Time, time.Time) ([]model.Event, map[int64][]store.ObservationMinute, error)
 	ObservationMinutes(int64, time.Time) ([]store.ObservationMinute, error)
 	ScanMCPHistory(time.Time, time.Time, func(model.MCPObservation) error) error
 	Sources() ([]model.SourceStatus, error)

@@ -854,3 +854,5 @@ meter::-moz-meter-bar {
 
 .machine-app>summary:focus-visible { outline:1px solid var(--accent); outline-offset:3px; }
 .machine-app code { overflow-wrap:anywhere; }
+
+.reclaim-nav{display:flex;gap:18px;padding:10px 14px;border-bottom:1px solid var(--line)}

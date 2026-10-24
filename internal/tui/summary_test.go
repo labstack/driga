@@ -23,7 +23,7 @@ func TestSummaryKeyRunsOnlyOnDemand(t *testing.T) {
 		}
 		return nil
 	}})
-	m = key(m, '2')
+	m = key(m, '1')
 	m = key(m, 's')
 	if calls != 0 {
 		t.Fatal("background summary")

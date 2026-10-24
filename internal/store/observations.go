@@ -1,6 +1,9 @@
 package store
 
-import "time"
+import (
+	"github.com/labstack/driga/internal/model"
+	"time"
+)
 
 // ObservationMinute records positive collector measurements, never transcript content.
 // Samples counts passes with positive bytes or CPU, rather than idle polls.
@@ -43,4 +46,35 @@ func (q *querier) ObservationMinutes(sessionID int64, until time.Time) ([]Observ
 		}
 		return r, err
 	})
+}
+
+// BoardEvidence loads the selected machine window with two queries, independent
+// of session count. Event volume is bounded to the newest 12000 stored events.
+func (q *querier) BoardEvidence(since, until time.Time) ([]model.Event, map[int64][]ObservationMinute, error) {
+	events, err := readMany(q, `SELECT machine_id,adapter,external_id,ts,kind,summary,metadata FROM events WHERE machine_id=? AND ts>=? AND ts<=? ORDER BY ts DESC,id DESC LIMIT 12000`, []any{q.machineID, unix(since), unix(until)}, scanEvent)
+	if err != nil {
+		return nil, nil, err
+	}
+	type entry struct {
+		id  int64
+		row ObservationMinute
+	}
+	rows, err := readMany(q, `SELECT session_id,minute,log_bytes,cpu_ms,samples,last_growth_at,last_growth_bytes FROM observation_minutes WHERE machine_id=? AND minute>=? AND minute<=? ORDER BY minute`, []any{q.machineID, since.Truncate(time.Minute).UnixMilli(), until.Truncate(time.Minute).UnixMilli()}, func(s scanner) (entry, error) {
+		var e entry
+		var minute, at int64
+		err := s.Scan(&e.id, &minute, &e.row.LogBytes, &e.row.CPUMS, &e.row.Samples, &at, &e.row.LastGrowthBytes)
+		e.row.Minute = time.UnixMilli(minute).UTC()
+		if at != 0 {
+			e.row.LastGrowthAt = time.UnixMilli(at).UTC()
+		}
+		return e, err
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	observed := map[int64][]ObservationMinute{}
+	for _, e := range rows {
+		observed[e.id] = append(observed[e.id], e.row)
+	}
+	return events, observed, nil
 }

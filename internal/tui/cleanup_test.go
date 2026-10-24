@@ -17,8 +17,8 @@ func TestCleanupTab(t *testing.T) {
 		calls++
 		return cleanup.Result{}, nil
 	}})
-	m = key(m, '6')
-	if !strings.Contains(m.View().Content, "Cleanup") || !strings.Contains(m.View().Content, "ready") {
+	m = key(key(m, '2'), 'd')
+	if !strings.Contains(m.View().Content, "reclaim disk") || !strings.Contains(m.View().Content, "ready") {
 		t.Fatal(m.View().Content)
 	}
 	next, cmd := press(m, tea.KeyEnter)

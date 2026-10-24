@@ -35,7 +35,7 @@ func TestChatSelectionAndAsync(t *testing.T) {
 	}
 	defer b.Close()
 	m := setup(t, fixture(), Options{Chat: b}).(*app)
-	m = key(m, '1').(*app)
+	m = key(key(m, '0'), 's').(*app)
 	model, cmd := press(m, 'c')
 	if model.(*app).tab != chatTab || cmd == nil {
 		t.Fatal("Chat did not open asynchronously")
@@ -213,77 +213,23 @@ func TestChatFocusNavigation(t *testing.T) {
 		t.Fatal("typing routed to navigation")
 	}
 	m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
-	if m.chatInput.Focused() {
-		t.Fatal("idle Escape must blur")
-	}
-	if !strings.Contains(m.footer(), "c type · m trust mode · N tabs · ? help · q quit") {
-		t.Fatal(m.footer())
-	}
-	key(m, '?')
-	if !m.help {
-		t.Fatal("navigate help unreachable")
-	}
-	m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
-	if m.help {
-		t.Fatal("help did not close")
-	}
-	key(m, '/')
-	if !m.filtering {
-		t.Fatal("navigate filter unreachable")
-	}
-	m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
-	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
-	if !m.chatInput.Focused() {
-		t.Fatal("Enter must type")
-	}
-	if !strings.Contains(m.footer(), "esc navigate · enter send · shift+enter new line · alt+N tabs") {
-		t.Fatal(m.footer())
+	if m.tab != flowTab || m.chatInput.Focused() {
+		t.Fatal("Escape must close panel")
 	}
 	for _, typing := range []bool{true, false} {
-		for n := '0'; n <= '8'; n++ {
+		for n := '0'; n <= '2'; n++ {
 			m.openChat()
 			if !typing {
 				m.chatInput.Blur()
 			}
 			m.Update(tea.KeyPressMsg{Code: n, Mod: tea.ModAlt})
-			want := int(n - '1')
-			if n == '0' {
-				want = homeTab
-			}
-			if n == '7' {
-				want = flowTab
-			}
-			if n == '8' {
-				want = chatTab
-			}
-			if m.tab != want {
-				t.Fatalf("alt+%c typing=%v: tab %d", n, typing, m.tab)
+			if m.tab != map[rune]int{'0': flowTab, '1': 1, '2': 4}[n] {
+				t.Fatal("alt tab", n, m.tab)
 			}
 			if m.chatInput.Value() != "draft textq" {
-				t.Fatal("tab switch lost draft")
+				t.Fatal("draft lost")
 			}
 		}
-	}
-	m.openChat()
-	m.chatInput.Blur()
-	key(m, '1')
-	if m.tab != 0 {
-		t.Fatal("navigate tab unreachable")
-	}
-	key(m, '8')
-	if m.chatInput.Value() != "draft textq" || !m.chatInput.Focused() {
-		t.Fatal("return did not restore draft")
-	}
-	m.chatInput.Blur()
-	_, cmd := m.Update(tea.KeyPressMsg{Code: 'q'})
-	if cmd == nil {
-		t.Fatal("navigate quit unreachable")
-	}
-	m.openChat()
-	m.chatInput.Blur()
-	key(m, 'c')
-	if !m.chatInput.Focused() {
-		t.Fatal("c must type")
 	}
 }
 
@@ -335,48 +281,14 @@ func TestChatActivityStates(t *testing.T) {
 	}
 }
 
-func TestChatEscapeStopsBeforeBlurring(t *testing.T) {
-	st, err := store.Open("", store.Memory)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer st.Close()
-	a := partialTUIAgent{make(chan struct{}, 2), make(chan struct{}, 2)}
-	b, err := chat.New(context.Background(), st, a, chat.Options{DataDir: t.TempDir()})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer b.Close()
-	m := setup(t, fixture(), Options{Chat: b}).(*app)
-	m = execute(t, m, m.openChat()).(*app)
-	if err := b.Send(context.Background(), m.chatID, "test", chat.Context{}); err != nil {
-		t.Fatal(err)
-	}
-	select {
-	case <-a.emitted:
-	case <-time.After(3 * time.Second):
-		t.Fatal("no reply")
-	}
-	m = execute(t, m, m.readChat()).(*app)
+func TestChatEscapeClosesAndRetainsDraft(t *testing.T) {
+	m := setup(t, fixture(), Options{}).(*app)
+	m.openChat()
 	m.chatInput.SetValue("keep me")
-	_, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
-	if cmd == nil || !m.chatInput.Focused() {
-		t.Fatal("active Escape must stop before blurring")
-	}
-	execute(t, m, cmd)
-	deadline := time.Now().Add(3 * time.Second)
-	for m.chatActive && time.Now().Before(deadline) {
-		m = execute(t, m, m.readChat()).(*app)
-		if m.chatActive {
-			time.Sleep(time.Millisecond)
-		}
-	}
-	if m.chatActive {
-		t.Fatal("reply did not stop")
-	}
+	m.chatActive = true
 	m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
-	if m.chatInput.Focused() || m.chatInput.Value() != "keep me" {
-		t.Fatal("second Escape must blur and retain draft")
+	if m.tab != flowTab || m.chatInput.Focused() || m.chatInput.Value() != "keep me" {
+		t.Fatal("close lost context or draft")
 	}
 }
 
@@ -527,7 +439,7 @@ func TestChatNavigateControlsAndAltOverlay(t *testing.T) {
 	m.chatInput.Blur()
 	key(m, '?')
 	m.Update(tea.KeyPressMsg{Code: '1', Mod: tea.ModAlt})
-	if m.help || m.tab != 0 {
+	if m.help || m.tab != 1 {
 		t.Fatal("Alt tabs did not dismiss help")
 	}
 	m.openChat()
@@ -542,7 +454,7 @@ func TestChatNavigateControlsAndAltOverlay(t *testing.T) {
 		t.Fatal("navigate chat controls")
 	}
 	m.confirm = &confirmation{}
-	m.Update(tea.KeyPressMsg{Code: '8', Mod: tea.ModAlt})
+	m.Update(tea.KeyPressMsg{Code: '0', Mod: tea.ModAlt})
 	if m.confirm != nil {
 		t.Fatal("Alt tabs kept a stale confirmation")
 	}

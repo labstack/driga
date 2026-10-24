@@ -367,7 +367,7 @@
     if (event.target.closest("[data-inbox-older]")) { inboxUI.showOlder(); return; }
     if (!event.target.closest(".cmd")) closeMenu();
     if (event.target.closest("[data-pause-tail]")) pauseTail();
-    const flowNav = event.target.closest('[data-window="7"]');
+    const flowNav = event.target.closest('[data-window="0"]');
     if (flowNav && !document.querySelector("[data-flow]")) flowNav.href = selectedFlowURL(flowNav.href);
     const pane = event.target.closest("[data-pane]");
     if (pane) { focusPane(panes().indexOf(pane), false); const row = event.target.closest("[data-row]"); if (row) selectRow(pane, rows(pane).indexOf(row), !row.matches("[data-inbox-key]")); }
@@ -415,8 +415,9 @@
       }
       return;
     }
+    if(document.querySelector("[data-flow-board]")&&!event.target.closest(".fb-activity")&&["j","k","ArrowDown","ArrowUp","ArrowLeft","ArrowRight","Home","End","Enter"," ","/"].includes(event.key))return;
     const pane = panes()[focused];
-    if (/^[0-8]$/.test(event.key)) { event.preventDefault(); document.querySelector('[data-window="' + event.key + '"]').click(); }
+    if (/^[0-2]$/.test(event.key)) { event.preventDefault(); document.querySelector('[data-window="' + event.key + '"]').click(); }
     else if (event.key === ":") { event.preventDefault(); input.focus(); }
     else if (event.key === "?") { event.preventDefault(); help.showModal(); }
     else if (event.key === "p") { event.preventDefault(); pauseTail(); }
@@ -426,7 +427,7 @@
     } else if (pane && event.key === "Enter" && event.target === pane) {
       event.preventDefault(); const row = pane.querySelector("[data-row].sel") || rows(pane)[0]; const link = row && (row.matches("a") ? row : row.querySelector(row.matches("[data-inbox-key]") ? "summary" : "a")); if (link) link.click();
     } else if (pane && event.key === "/") { event.preventDefault(); filterPane(pane); }
-    else if (event.key === "Tab" && pane && !pane.matches(".inbox-pane") && (event.target.matches("[data-pane]") || event.target.closest("[data-row]"))) { event.preventDefault(); focusPane(focused + (event.shiftKey ? -1 : 1)); }
+    else if (event.key === "Tab" && panes().length > 1 && pane && !pane.matches(".inbox-pane") && (event.target.matches("[data-pane]") || event.target.closest("[data-row]"))) { event.preventDefault(); focusPane(focused + (event.shiftKey ? -1 : 1)); }
     else if (event.key === "Escape") { closeMenu(); if (pane) { pane.querySelectorAll(".sel").forEach(el => el.classList.remove("sel")); focusPane(focused); } }
   });
   function inspectWorker(worker) {
@@ -510,7 +511,7 @@
     renderTail(); charts.draw(); drawFlowWires(); refreshFlowObservations();
   }
   let restorePane = false;
-  document.addEventListener("htmx:beforeSwap", () => { restorePane = !!document.activeElement.closest("[data-pane]"); inboxUI.capture(); machineUI.capture(); charts.dispose(); });
+  document.addEventListener("htmx:beforeSwap", () => { restorePane = !document.activeElement.closest("[data-flow-board]") && !!document.activeElement.closest("[data-pane]"); inboxUI.capture(); machineUI.capture(); charts.dispose(); });
   document.addEventListener("htmx:afterSwap", () => { refreshUI(); inboxUI.restore(); machineUI.restore(); if (restorePane) focusPane(focused); });
   refreshUI();
   inboxUI.restore();

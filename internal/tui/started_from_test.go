@@ -28,9 +28,8 @@ func TestStartedFromAgentsDetailAndFlow(t *testing.T) {
 		if strings.Contains(agentDetail(d, 140), " · from Editor") != (surface != "") {
 			t.Fatal("detail missing surface")
 		}
-		m.flow = flowFixture()
-		m.flow.Lead.Title = "Task"
-		m.flow.Lead.StartedFrom = surface
+		m.snap.BoardData.Nodes[0].Title = "Task"
+		m.snap.BoardData.Nodes[0].StartedFrom = surface
 		if strings.Contains(m.flowView(), "Task · from Editor") != (surface != "") {
 			t.Fatal("Flow label/detail missing surface", m.flowView())
 		}

@@ -20,7 +20,7 @@ func fleetSource() *fakeSource {
 }
 func TestTUIHeaderAndMachineColumn(t *testing.T) {
 	m := setup(t, fleetSource(), Options{})
-	m = key(m, '1')
+	m = key(key(m, '0'), 's')
 	text := m.View().Content
 	for _, want := range []string{"+1", "vm-1 stale 12m", "MACHINE"} {
 		if !strings.Contains(text, want) {
@@ -32,11 +32,11 @@ func TestTUIHeaderAndMachineColumn(t *testing.T) {
 			t.Fatalf("wide: %q", line)
 		}
 	}
-	m = key(m, 'm')
+	m = key(m, 'M')
 	if strings.Contains(m.View().Content, "remote title") {
 		t.Fatal("local scope contains remote row")
 	}
-	m = key(m, 'm')
+	m = key(m, 'M')
 	if strings.Contains(m.View().Content, "test title") {
 		t.Fatal("remote scope contains local row")
 	}
@@ -44,7 +44,7 @@ func TestTUIHeaderAndMachineColumn(t *testing.T) {
 func TestStaleRowsDimmed(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 	m := setup(t, fleetSource(), Options{}).(*app)
-	key(m, '1')
+	key(key(m, '0'), 's')
 	m.opts.NoColor = false
 	m.rebuild()
 	text := m.View().Content
@@ -58,7 +58,7 @@ func TestTUIKillRefusesRemoteOrphan(t *testing.T) {
 	s.snap.Orphans.Rows[0].Orphan.MachineID = "remote"
 	calls := 0
 	m := setup(t, s, Options{Spool: func(model.HookEvent) error { calls++; return nil }})
-	m = key(m, '4')
+	m = key(key(m, '2'), 'p')
 	m = key(m, 'k')
 	if !strings.Contains(m.View().Content, "orphan is on vm-1; run driga orphans kill there") || m.(*app).confirm != nil || calls != 0 {
 		t.Fatal(m.View().Content)
@@ -70,12 +70,12 @@ func TestTUIMachineScopeCountsAndHealth(t *testing.T) {
 	s.snap.Summary.Agents = 2
 	s.snap.Machine = view.MachineView{MachineID: "local", Sample: model.MachineSample{MemUsed: 100 << 20, MemTotal: 200 << 20}, Machines: []view.MachineView{{MachineID: "local", Sample: model.MachineSample{MemUsed: 100 << 20, MemTotal: 200 << 20}}, {MachineID: "remote", Sample: model.MachineSample{MemUsed: 300 << 20, MemTotal: 400 << 20}}}}
 	m := setup(t, s, Options{})
-	m = key(m, 'm')
-	if !strings.Contains(m.View().Content, "1 Agents 1") {
+	m = key(m, 'M')
+	if !strings.Contains(m.View().Content, "0 Flow") {
 		t.Fatal(m.View().Content)
 	}
-	m = key(m, 'm')
-	m = key(m, '5')
+	m = key(m, 'M')
+	m = key(m, '2')
 	if !strings.Contains(m.View().Content, "300.0M/400.0M") || strings.Contains(m.View().Content, "100.0M/200.0M") {
 		t.Fatal(m.View().Content)
 	}

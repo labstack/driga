@@ -2,8 +2,10 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"time"
@@ -58,7 +60,12 @@ func (c WebCmd) run(ctx context.Context, g *Globals) error {
 	if ephemeral && g.Stderr != nil {
 		fmt.Fprintln(g.Stderr, "Chat runs in-process; conversations end with it.")
 	}
-	dashboard, err := web.New(source, web.Options{Chat: chatClient, ChatEphemeral: ephemeral, Host: listener.Addr().String(), Machine: g.Machine, Activity: webHeartbeat, CleanupList: func(ctx context.Context) ([]cleanup.Candidate, error) {
+	dashboard, err := web.New(source, web.Options{SessionAction: func(ctx context.Context, action string, id int64) error {
+		raw, _ := json.Marshal(map[string]any{"session_id": id})
+		actionGlobals := local
+		actionGlobals.Stdout = io.Discard
+		return runChatAction(ctx, &actionGlobals, action, raw)
+	}, Chat: chatClient, ChatEphemeral: ephemeral, Host: listener.Addr().String(), Machine: g.Machine, Activity: webHeartbeat, CleanupList: func(ctx context.Context) ([]cleanup.Candidate, error) {
 		envelope, err := cleanupRead(ctx, &local, "", false, true)
 		if err != nil {
 			return nil, err

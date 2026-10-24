@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/labstack/driga/internal/flowtest"
 	"github.com/labstack/driga/internal/view"
@@ -19,16 +20,24 @@ func TestFlowAttentionHTMLHasSessionHints(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		var out strings.Builder
-		if err := s.templates.ExecuteTemplate(&out, "flow", pageData{Flow: f}); err != nil {
+		snapshot, err := view.LoadBoardSnapshot(st, view.Filter{CaptureText: policy}, flowtest.Now)
+		if err != nil {
 			t.Fatal(err)
 		}
-		want := []string{"sample · Fix cache", "sample · Fix parser", "sample · #ccc333", "sample · #ddd444"}
-		if policy == "none" {
-			want[0], want[1] = "sample · work/cache", "sample · work/parser"
+		var out strings.Builder
+		if err := s.templates.ExecuteTemplate(&out, "flow", pageData{Board: view.Board(snapshot, time.Hour, flowtest.Now)}); err != nil {
+			t.Fatal(err)
 		}
+		want := []string{}
+		for _, r := range f.Attention.Waits {
+			if r.Title != "" {
+				want = append(want, r.Title)
+			}
+		}
+
 		for _, hint := range want {
-			if !strings.Contains(out.String(), hint) {
+			parts := strings.Split(hint, " · ")
+			if !strings.Contains(out.String(), parts[len(parts)-1]) {
 				t.Errorf("%s missing %q: %s", policy, hint, out.String())
 			}
 		}

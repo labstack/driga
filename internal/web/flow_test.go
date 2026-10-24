@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestFlowSharedDefault(t *testing.T) {
@@ -19,7 +20,7 @@ func TestFlowSharedDefault(t *testing.T) {
 	if err := st.Tx(context.Background(), func(tx *store.Tx) (err error) { want, err = flowtest.SeedDefault(tx); return err }); err != nil {
 		t.Fatal(err)
 	}
-	for _, scope := range []string{"", "?machine=all", "?machine=local"} {
+	for _, scope := range []string{"?view=family", "?view=family&machine=all", "?view=family&machine=local"} {
 		p, code, err := s.loadPage(httptest.NewRequest("GET", "/flow"+scope, nil))
 		if err != nil || code != 200 || p.Flow.Lead == nil || p.Flow.Lead.ID != want {
 			t.Errorf("scope %q: lead = %+v, code %d, %v; want %d", scope, p.Flow.Lead, code, err, want)
@@ -30,7 +31,7 @@ func TestFlowSharedDefault(t *testing.T) {
 func TestFlowMapLayoutParts(t *testing.T) {
 	s, _, id, _ := fixture(t)
 	body := request(s, "GET", fmt.Sprint("/flow?id=", id), s.token).Body.String()
-	for _, part := range []string{"Needs you", "Session map", "Session detail", "data-flow-svg", "data-flow-zoom", "metro-key", "/static/flow-map.js", "/static/flow-map.css"} {
+	for _, part := range []string{"Needs you", "Selected family", "data-flow-surface=\"map\"", "data-flow-surface=\"timeline\"", "fb-legend", "/static/flow-board.js", "/static/flow-board.css"} {
 		if !strings.Contains(body, part) {
 			t.Error("missing", part)
 		}
@@ -40,17 +41,14 @@ func TestFlowMapLayoutParts(t *testing.T) {
 	}
 }
 
-func TestFlowExpansionSurvivesRefresh(t *testing.T) {
+func TestFlowViewAndSelectionSurviveRefreshURL(t *testing.T) {
 	s, _, id, _ := fixture(t)
-	p, code, err := s.loadPage(httptest.NewRequest("GET", fmt.Sprintf("/flow?id=%d&quiet=1&machine=all", id), nil))
+	p, code, err := s.loadPage(httptest.NewRequest("GET", fmt.Sprintf("/flow?id=%d&view=timeline&machine=all", id), nil))
 	if err != nil || code != 200 {
 		t.Fatal(code, err)
 	}
-	if !p.FlowExpanded || !strings.Contains(p.RefreshURL, "quiet=1") {
-		t.Fatal("refresh collapses expanded threads", p.RefreshURL)
-	}
-	if strings.Contains(p.FlowToggle, "quiet=1") || !strings.Contains(p.FlowToggle, fmt.Sprint("id=", id)) {
-		t.Fatal("collapse link loses session", p.FlowToggle)
+	if !strings.Contains(p.RefreshURL, "view=timeline") || !strings.Contains(p.RefreshURL, fmt.Sprint("id=", id)) {
+		t.Fatal(p.RefreshURL)
 	}
 }
 
@@ -61,7 +59,7 @@ func TestFlowPageCSP(t *testing.T) {
 		t.Fatalf("%d %s", w.Code, w.Body.String())
 	}
 	body := w.Body.String()
-	for _, want := range []string{"signal mixer", "Session map", "data-flow-map", "data-window=\"7\"", "&lt;script&gt;alert(1)&lt;/script&gt;"} {
+	for _, want := range []string{"Selected family", "fb-map", "data-flow-board", "data-window=\"0\"", "&lt;script&gt;alert(1)&lt;/script&gt;"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("missing %s", want)
 		}
@@ -77,7 +75,7 @@ func TestFlowPageCSP(t *testing.T) {
 func TestFlowEmptyAndBadID(t *testing.T) {
 	s, _, _, _ := fixture(t)
 	body := request(s, "GET", "/flow", s.token).Body.String()
-	if !strings.Contains(body, "No live interactive session") {
+	if !strings.Contains(body, "data-flow-board") {
 		t.Fatal(body)
 	}
 	for _, id := range []string{"0", "-1", "wrong"} {
@@ -89,13 +87,13 @@ func TestFlowEmptyAndBadID(t *testing.T) {
 
 func TestFlowRenderingPolish(t *testing.T) {
 	s, _, _, _ := fixture(t)
-	p := pageData{Flow: view.FlowView{Lead: &view.FlowNode{Title: "<script>alert(1)</script>", Adapter: "claude", Mixer: model.StateMixer{Verdict: "finished", Evidence: "stored", Rows: []model.StateSignal{{Name: "hooks", Reading: "Notification"}}}}}}
+	p := pageData{Board: view.Board(view.BoardSnapshot{Nodes: []view.FlowNode{{ID: 1, Title: "<script>alert(1)</script>", Adapter: "claude", Label: "finished", Mixer: model.StateMixer{Evidence: "stored"}}}}, time.Hour, time.Now())}
 	var out strings.Builder
 	if err := s.templates.ExecuteTemplate(&out, "flow", p); err != nil {
 		t.Fatal(err)
 	}
 	body := out.String()
-	if !strings.Contains(body, `title="Notification"`) || strings.Contains(body, "<script>") {
+	if !strings.Contains(body, `&lt;script&gt;alert(1)&lt;/script&gt;`) || strings.Contains(body, "<script>") {
 		t.Fatal("unescaped title or missing signal tooltip", body)
 	}
 	if strings.Contains(body, "data-wire-return") {

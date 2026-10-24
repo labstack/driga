@@ -34,8 +34,9 @@ type ScopedSource interface {
 
 // Snapshot holds the shared views and the evidence needed by detail panes.
 type Snapshot struct {
-	Tail    []view.TailEvent
-	Cleanup []cleanup.Candidate
+	BoardData view.BoardSnapshot
+	Tail      []view.TailEvent
+	Cleanup   []cleanup.Candidate
 	view.Envelope
 	LocalMachineID string
 	Machines       view.MachinesView
@@ -129,6 +130,9 @@ func (s *StoreSource) load(ctx context.Context, mode string, scope store.Scope, 
 			return err
 		}
 		if snap.Summary, err = view.Summary(tx, f, now); err != nil {
+			return err
+		}
+		if snap.BoardData, err = view.LoadBoardSnapshot(tx, f, now); err != nil {
 			return err
 		}
 		if snap.Agents, err = view.Agents(tx, f, now); err != nil {

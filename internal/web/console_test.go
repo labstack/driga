@@ -41,7 +41,7 @@ func TestConsoleStructureAndCSP(t *testing.T) {
 		}
 	}
 	body := request(s, "GET", "/", s.token).Body.String()
-	for _, want := range []string{`tail -f events`, `aria-live="polite"`, `data-tail`, `data-window="6"`, `value="mocha"`, `value="latte"`} {
+	for _, want := range []string{`tail -f events`, `aria-live="polite"`, `data-tail`, `data-window="2"`, `value="mocha"`, `value="latte"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("missing %s", want)
 		}

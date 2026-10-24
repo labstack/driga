@@ -8,7 +8,7 @@ driga agents --json --project .
 driga agents show <id>                   # numeric ID from the agents table or --json
 driga projects show <project>
 driga inbox                       # current waits and recent completions; "inbox list" also works
-driga inbox --all                  # complete history, including acks and ended waits
+driga inbox list --all                # complete history, including acks and ended waits
 driga inbox ack <item-id>          # explicit acknowledgment
 driga conflicts
 driga orphans                     # "orphans list" also works
@@ -50,35 +50,44 @@ Hosted Codex threads use heuristic labels prefixed with `~`; a shared host proce
 does not establish individual thread liveness. Unknown agent versions are parsed
 tolerantly and reported by `driga doctor`.
 
-`driga top` opens on Home (`0`): what needs you, agent states, machine health, the last
-hour's activity, projects and leftovers. On terminals 140 columns or wider the Agents tab
-shows the selected agent beside the list. `driga activity` prints the same 60-minute
-history (machine samples and events per minute; minutes without a sample are gaps).
+`driga top` opens on **Flow (`0`)**. The three tabs are `0 Flow`, `1 Projects`
+and `2 Machines`. Flow offers Map (`m`, the default), Timeline (`t`) and Sessions
+(`s`). Map and Timeline use a grouped project tree in the terminal; the web Map is
+a deterministic SVG of projects, leads and workers. More than four Map workers
+fold into a `+N` control. Timeline and Sessions retain access to every session.
 
-In the TUI, use `0`–`8` for tabs (Home, Agents, Projects, Inbox, Orphans, Machine, Cleanup, Flow, Chat), Enter for detail, Esc to return, `?` for help,
-`m` to cycle machine scope, and `q` to quit. Viewing details and issuing JSON
-queries never acknowledge inbox items. Use `x`/Space in Inbox or `driga inbox ack`. Without a running collector,
-acknowledgments are queued for the next collection. Orphan kills recheck process
-identity and the descendant set immediately before signaling; young candidates
-are refused. `--force` escalates survivors to SIGKILL (TerminateProcess on Windows), with a second confirmation unless `--yes/-y` is supplied.
-The Machine tab and web Machine page lead with agents' memory and CPU, session
-costs, agent processes without a session, and likely work shared with an editor.
-Sessions expand into processes with attribution proofs and their launch app;
-Other apps starts collapsed around the existing top-ten memory and CPU lists.
-`driga machines show --json` and MCP `get_machine` add the same buckets to schema 2.
-Low-disk and sustained critical-memory-pressure warnings open Machine, with
-pressure text naming agents' share and observed growth. Open it directly with
-`driga top --tab machine`. See [machine health](machine-health.md) for rules,
-measurements, JSON fields, and deferred editor integrations.
+Use arrows or `j`/`k` to select, `/` to find, Enter to open context, Esc to return,
+`?` for help, `M` to change TUI machine scope, and `q` to quit. `S` sorts Sessions.
+Flow's Needs you shelf is oldest first and has the same count as the waiting header.
+Tab explicitly focuses it; `y`/`n` answer a pending permission after a short review
+delay. Commands wrap in full; Enter opens a scrollable inspector. `J` opens the
+selected session's terminal through its stored jump destination. `K` (web: Stop)
+stops a local session after you confirm; Driga first rechecks that it is the same
+idle process. Sessions on a paired machine must be stopped on that machine.
 
-The default inbox puts current waits first, followed by up to 50 unacknowledged
-completions from the last 24 hours. `--since` selects another completion window;
-`driga inbox --all` removes the default window/count bound and includes acknowledged
-and ended events. Waits for sessions that ended, moved on, or aged out of the
-visible agents are labelled **historical wait** in history. Reading or hiding
-history never acknowledges it. TUI waiting counts use the same visible session
-states as Agents, including waiting sessions without a captured inbox event.
-The web inbox has a **show all history** link and pages of at most 100 rows.
+`c` opens contextual Chat as a panel. Esc closes it, retaining the draft and current
+selection. Wide terminals show Chat beside the destination; narrow terminals give
+it the available reading width. Web Ask Chat prefills the selected session context.
+`Alt+0`/`Alt+1`/`Alt+2` switch TUI tabs while typing.
+
+Flow's expandable Activity section keeps notification and event history; TUI `h`
+opens history and returns to Flow. Reading never acknowledges events. Use `x`/Space
+on an eligible history item or `driga inbox ack`; unresolved permissions require an
+answer. `driga inbox list --all` includes acknowledged/ended history. The CLI commands,
+JSON schemas and collection/capture policies are unchanged.
+
+Projects owns repository and worktree context. Machines owns health and reclamation:
+`h` health, `p` process review, `d` disk candidates. Process termination rechecks
+identity and descendants; young candidates are refused. `--force` escalates
+survivors with a second confirmation unless `--yes/-y` is supplied. Remote processes
+must be handled on their machine. Machine session memory is labelled separately
+from Flow's monetary cost.
+
+Flow shows only stored evidence: purple spawn links use session ParentID; red dashed
+same-file links require full paths on the same machine. Tool counts/ticks are labelled
+**telemetry** and appear only for actual Claude/Copilot tool events. Cost is labelled
+**retained window**. Unknown history remains neutral. `driga activity` still prints
+machine samples and events per minute; missing samples are gaps.
 
 Machine text and JSON default to ten rows per evidence list and three nested
 process/command/install entries per row. MCP trends read only the last 24 hours;
@@ -573,7 +582,7 @@ driga cleanup remove --kind worktree --all # every ready worktree; skips anythin
 Every check runs again just before acting; if anything changed, the action is
 refused with the reason. Each attempt is appended to `cleanup.log` in the data
 directory; if that write fails after the action succeeded, the action reports a
-warning instead of an error. The TUI has a Cleanup tab, and `list_cleanup_candidates` is a
+warning instead of an error. Machines → Reclaim → Disk is the TUI home for cleanup, and `list_cleanup_candidates` is a
 read-only MCP tool.
 
 ## Summaries and Chat
@@ -611,19 +620,17 @@ and marked **answered by Claude Code**. A timed indicator shows thinking, writin
 or the current read tool. Streaming follows the bottom until you scroll up; reduced
 motion uses a static dot.
 
-In `driga top`, press **8** or **c** for Chat with the current selection. Enter
-sends; Shift+Enter adds a line, or Alt+Enter in terminals that cannot report
-Shift+Enter. Escape stops an active reply; otherwise
-it enters **navigate** mode and keeps the draft. In navigate mode, normal keys
-work: **0–8** switch tabs, **q** quits, **?** opens help and **/** filters. Press
-**c** or **Enter** to type again. **Alt+0–Alt+8** switch tabs from either mode;
-returning to Chat restores the draft. The footer shows the current mode.
+In `driga top`, press **c** for Chat with the current selection. Enter sends;
+Shift+Enter adds a line, or Alt+Enter in terminals without Shift+Enter reporting.
+Escape closes the panel and retains the draft. **Alt+0**, **Alt+1** and **Alt+2**
+switch to Flow, Projects and Machines while typing. Blur the composer to use
+Chat's navigation controls; **c** or **Enter** focuses the composer again.
 Help scrolls with arrows, PgUp/PgDown or the mouse wheel. Applied list filters
 stay visible in the status line; Escape clears the filter when no overlay is open.
 Session details load when selected, rather than for every overview row.
 PgUp/PgDown scroll the visible transcript with a one-line overlap and stop at its ends. Alt+Up recalls the last draft, Ctrl+H cycles history, Ctrl+N
 starts a conversation, Ctrl+T toggles tool details, Ctrl+X clears context and
-Ctrl+0 returns Home. Thinking/writing/tool status includes elapsed time and a
+Alt+0 returns to Flow. Thinking/writing/tool status includes elapsed time and a
 streaming cursor; NoColor uses a static indicator. Flow's copy-resume key is **C**.
 
 Chat can acknowledge inbox items, jump to a session terminal, kill an agent or
@@ -706,8 +713,9 @@ driga web --open     # also opens it
 It listens on loopback only (`--listen` refuses other addresses), runs as its own
 process so the collector's footprint is unchanged, and updates live as the collector
 writes. The token in the printed URL sets a cookie for that browser; restarting
-`driga web` issues a new token. Pages: Home, Agents, Projects, Inbox, Orphans,
-Machines, Cleanup (listing only), Flow and Chat. Chat provides local actions through approval cards.
+`driga web` issues a new token. The three tabs are Flow, Projects and Machines. Flow has Map, Timeline and Sessions views,
+with Needs you and retained Activity history. Chat opens as a contextual panel on `c`;
+Machines includes process and disk reclamation. Chat provides local actions through approval cards.
 
 ## MCP registration
 

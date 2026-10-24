@@ -24,7 +24,7 @@ import (
 
 type navItem struct{ Path, Name string }
 
-var navigation = []navItem{{"/", "Home"}, {"/agents", "Agents"}, {"/projects", "Projects"}, {"/inbox", "Inbox"}, {"/orphans", "Orphans"}, {"/machines", "Machines"}, {"/cleanup", "Cleanup"}, {"/flow", "Flow"}, {"/chat", "Chat"}}
+var navigation = []navItem{{"/flow", "Flow"}, {"/projects", "Projects"}, {"/machines", "Machines"}}
 
 type projectCard struct {
 	view.ProjectRow
@@ -32,10 +32,13 @@ type projectCard struct {
 	States        []view.StateCount
 }
 type pageData struct {
+	Reclaim                string
 	Prompts                []chat.Prompt
 	CSRF                   string
 	ChatEphemeral          bool
 	Flow                   view.FlowView
+	Board                  view.BoardView
+	IsBoard                bool
 	FlowPrevious, FlowNext string
 	FlowExpanded           bool
 	FlowToggle             string
@@ -61,18 +64,22 @@ type pageData struct {
 
 func (s *Server) loadPage(r *http.Request) (pageData, int, error) {
 	p := pageData{CSRF: s.csrf, ChatEphemeral: s.opts.ChatEphemeral, Nav: navigation, Page: r.URL.Path, Scope: r.URL.Query().Get("machine"), All: r.URL.Query().Get("all") == "1"}
+	if p.Page == "/" {
+		p.Page = "/flow"
+	}
 	switch p.Page {
 	case "/", "/activity", "/agents", "/projects", "/inbox", "/orphans", "/machines", "/cleanup", "/flow", "/chat":
 	default:
-		if !strings.HasPrefix(p.Page, "/agents/") && !strings.HasPrefix(p.Page, "/projects/") {
+		if !strings.HasPrefix(p.Page, "/agents/") && !strings.HasPrefix(p.Page, "/projects/") && !strings.HasPrefix(p.Page, "/flow/") {
 			return p, 404, fmt.Errorf("page not found")
 		}
 	}
-	if p.Page == "/inbox" {
+	if p.Page == "/inbox" || p.Page == "/flow" || strings.HasPrefix(p.Page, "/flow/") {
 		if client, ok := s.opts.Chat.(chat.PromptClient); ok {
 			p.Prompts, _ = client.Prompts(r.Context())
 		}
 	}
+	p.Reclaim = r.URL.Query().Get("reclaim")
 	p.AttentionOnly = r.URL.Query().Get("attention") == "1"
 	snap, err := s.cachedLoad(r.Context(), store.Scope{}, p.All)
 	if err != nil {
@@ -123,7 +130,7 @@ func (s *Server) loadPage(r *http.Request) (pageData, int, error) {
 	q := r.URL.Query()
 	refresh, _ := url.Parse(p.RefreshURL)
 	values := refresh.Query()
-	for _, key := range []string{"state", "project", "why", "id", "page"} {
+	for _, key := range []string{"view", "state", "project", "why", "id", "page", "reclaim"} {
 		if q.Has(key) {
 			values.Set(key, q.Get(key))
 		}
@@ -207,55 +214,122 @@ func (s *Server) loadPage(r *http.Request) (pageData, int, error) {
 			p.CleanupError = err.Error()
 		}
 	}
+	if strings.HasPrefix(p.Page, "/flow/") {
+		id, e := strconv.ParseInt(strings.TrimPrefix(p.Page, "/flow/"), 10, 64)
+		if e != nil || id <= 0 {
+			return p, 400, fmt.Errorf("invalid session id")
+		}
+		q.Set("id", fmt.Sprint(id))
+		p.Page = "/flow"
+	}
 	if p.Page == "/flow" {
-		p.FlowExpanded = r.URL.Query().Get("quiet") == "1"
-		q := r.URL.Query()
-		if p.FlowExpanded {
-			q.Del("quiet")
+		minutes := 60
+		if q.Has("minutes") {
+			minutes, err = strconv.Atoi(q.Get("minutes"))
+			if err != nil || minutes != 15 && minutes != 60 && minutes != 240 {
+				return p, 400, fmt.Errorf("minutes must be 15, 60 or 240")
+			}
+		}
+		p.IsBoard = q.Get("view") != "family"
+		if q.Get("view") == "board" {
+			p.IsBoard = true
+		}
+		if p.IsBoard {
+			data := snap.BoardData
+			data.Nodes = append([]view.FlowNode(nil), data.Nodes...)
+			for _, pr := range p.Prompts {
+				for i := range data.Nodes {
+					n := &data.Nodes[i]
+					if n.ID == pr.SessionID && n.MachineID == snap.LocalMachineID && n.EndedAt == nil {
+						n.Waits = append(append([]view.FlowWait(nil), n.Waits...), view.FlowWait{ID: pr.ID, StartedAt: pr.CreatedAt, Reason: "permission", Tool: pr.Tool, Detail: pr.Detail()})
+					}
+				}
+			}
+			observed := snap.ObservedAt
+			if observed.IsZero() {
+				observed = time.Now()
+			}
+			p.Board = view.Board(data, time.Hour, observed)
+			if q.Has("id") {
+				id, e := strconv.ParseInt(q.Get("id"), 10, 64)
+				if e != nil || id <= 0 {
+					return p, 400, fmt.Errorf("invalid session id")
+				}
+				found := false
+				for _, g := range p.Board.Groups {
+					for _, row := range g.Rows {
+						found = found || row.Node.ID == id
+					}
+				}
+				if !found {
+					return p, 404, fmt.Errorf("session not found")
+				}
+			}
+			prompts := map[string]string{}
+			for _, pr := range p.Prompts {
+				if pr.SessionID > 0 {
+					prompts[fmt.Sprintf("%s/%d", snap.LocalMachineID, pr.SessionID)] = pr.ID
+				}
+			}
+			p.Board.WithPrompts(prompts)
+			for _, pr := range p.Prompts {
+				for i := range p.Board.Needs {
+					if p.Board.Needs[i].PromptID == pr.ID {
+						p.Board.Needs[i].Command = pr.Detail()
+					}
+				}
+			}
+			p.Title = "Flow"
 		} else {
-			q.Set("quiet", "1")
-		}
-		p.FlowToggle = "/flow?" + q.Encode()
-		id := int64(0)
-		if q.Has("id") {
-			id, err = strconv.ParseInt(q.Get("id"), 10, 64)
-			if err != nil || id <= 0 {
-				return p, 400, fmt.Errorf("invalid session id")
-			}
-		}
-		if source, ok := s.source.(viewer.FlowSource); ok {
-			scope := store.Scope{}
-			if p.Scope != "all" {
-				scope.Machines = []string{p.Scope}
-			}
-			minutes := 60
-			if q.Has("minutes") {
-				minutes, err = strconv.Atoi(q.Get("minutes"))
-				if err != nil || minutes != 15 && minutes != 60 && minutes != 240 {
-					return p, 400, fmt.Errorf("minutes must be 15, 60 or 240")
-				}
-			}
-			if window, ok := s.source.(viewer.FlowWindowSource); ok {
-				p.Flow, err = window.LoadFlowWindow(r.Context(), scope, id, minutes)
+			p.FlowExpanded = r.URL.Query().Get("quiet") == "1"
+			// q also carries the canonical /flow/<id> drill-down.
+			if p.FlowExpanded {
+				q.Del("quiet")
 			} else {
-				p.Flow, err = source.LoadFlow(r.Context(), scope, id)
+				q.Set("quiet", "1")
 			}
-			if err != nil {
-				return p, 404, err
-			}
-		}
-		if p.Flow.Lead != nil {
-			p.Tail = p.Flow.Tail
-			choices := []view.AgentRow{}
-			for _, a := range snap.Agents.Rows {
-				if a.Origin != "hosted" {
-					choices = append(choices, a)
+			p.FlowToggle = "/flow?" + q.Encode()
+			id := int64(0)
+			if q.Has("id") {
+				id, err = strconv.ParseInt(q.Get("id"), 10, 64)
+				if err != nil || id <= 0 {
+					return p, 400, fmt.Errorf("invalid session id")
 				}
 			}
-			for i, a := range choices {
-				if a.ID == p.Flow.Lead.ID {
-					p.FlowPrevious = pageLink("/flow", p.Scope, p.All) + "&id=" + fmt.Sprint(choices[(i+len(choices)-1)%len(choices)].ID)
-					p.FlowNext = pageLink("/flow", p.Scope, p.All) + "&id=" + fmt.Sprint(choices[(i+1)%len(choices)].ID)
+			if source, ok := s.source.(viewer.FlowSource); ok {
+				scope := store.Scope{}
+				if p.Scope != "all" {
+					scope.Machines = []string{p.Scope}
+				}
+				minutes := 60
+				if q.Has("minutes") {
+					minutes, err = strconv.Atoi(q.Get("minutes"))
+					if err != nil || minutes != 15 && minutes != 60 && minutes != 240 {
+						return p, 400, fmt.Errorf("minutes must be 15, 60 or 240")
+					}
+				}
+				if window, ok := s.source.(viewer.FlowWindowSource); ok {
+					p.Flow, err = window.LoadFlowWindow(r.Context(), scope, id, minutes)
+				} else {
+					p.Flow, err = source.LoadFlow(r.Context(), scope, id)
+				}
+				if err != nil {
+					return p, 404, err
+				}
+			}
+			if p.Flow.Lead != nil {
+				p.Tail = p.Flow.Tail
+				choices := []view.AgentRow{}
+				for _, a := range snap.Agents.Rows {
+					if a.Origin != "hosted" {
+						choices = append(choices, a)
+					}
+				}
+				for i, a := range choices {
+					if a.ID == p.Flow.Lead.ID {
+						p.FlowPrevious = pageLink("/flow", p.Scope, p.All) + "&id=" + fmt.Sprint(choices[(i+len(choices)-1)%len(choices)].ID)
+						p.FlowNext = pageLink("/flow", p.Scope, p.All) + "&id=" + fmt.Sprint(choices[(i+1)%len(choices)].ID)
+					}
 				}
 			}
 		}
@@ -453,9 +527,23 @@ func templateFuncs() template.FuncMap {
 			}
 			return fmt.Sprintf("%.4f", *v)
 		},
-		"flowSpark":       view.FlowSpark,
-		"observationPath": view.ObservationPath,
-		"flowJoin":        view.FlowJoin,
+		"boardStates": func() []string { return []string{"waiting", "working", "stalled", "idle", "finished"} },
+		"boardMoney": func(n *float64) string {
+			if n == nil {
+				return ""
+			}
+			return fmt.Sprintf("%.2f", *n)
+		},
+		"boardSparkPoints": view.BoardSparkPoints,
+		"boardTools":       view.BoardTools,
+		"sub":              func(a, b int) int { return a - b },
+		"boardJSON":        func(b view.BoardView) string { raw, _ := json.Marshal(b); return string(raw) },
+		"boardSpark":       view.BoardSpark,
+		"boardStrip":       view.BoardStrip,
+		"boardGlyph":       view.BoardGlyph,
+		"flowSpark":        view.FlowSpark,
+		"observationPath":  view.ObservationPath,
+		"flowJoin":         view.FlowJoin,
 		"flowWorkers": func(v view.FlowView, expanded bool, now time.Time) view.FlowWorkers {
 			return v.Workers(5, expanded, now)
 		},

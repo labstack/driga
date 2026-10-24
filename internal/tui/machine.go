@@ -25,7 +25,7 @@ func (m *app) machineRows(add func(tabRow)) {
 		}
 		textRow(view.MachineSummary(host))
 		textRow("Memory measure: " + host.AgentShare.MemoryMeasure + " · " + view.FootprintNote)
-		textRow("Sessions by cost")
+		textRow("Sessions by memory")
 		for _, a := range view.MachineSessionApps(host) {
 			m.machineAppRows(add, host.MachineID, "session", a)
 			if _, surface, ok := strings.Cut(a.Name, " · started from "); ok {

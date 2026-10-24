@@ -1,0 +1,30 @@
+Flow  [m Map] [t Timeline] [s Sessions] · Map · last 60m
+◆ 7 needs you   ▶ 35   ‖ 7   ○ 14   ✓ 7
+          ██ events/min · updated 0s ago
+NEEDS YOU · 7 · oldest first
+  ◆ Ship the release pipeline safely · monk · 23m
+  Permission · Bash · go test ./...
+  Enter open · J Terminal
+  ◆ 流れを整える 🌊 · driga · 15m
+  ◆ Add board view · from Editor · relay · 14m
+  +4 more · Tab then j/k
+────────────────────────────────────────────────────────────────────────────────
+atlas
+├── › ○ Fix retry after recon… codex   ░░░░░░░░░░░░░░░░░░░░░░░░░░░░─ 1h 50m
+├──   ▶ Fix retry after recon… codex   ░━━━░░━━━━━░░━━━━░░━━━━░░━━━━ 1h 26m
+├──   ○ Investigate cache inv… codex   ░░░░░░░░░░░░░░░░░░░░░░░░░░░░─ 1h 14m
+├──   ✓ Fix retry after recon… codex   ░░░░░░░░░━━░░━━━━░✓━━━━  ━━━━ 1h 2m
+└──   ○ Investigate cache inv… codex       ░░░░░░░░░░░░░░░░░░░░░░░░─ 50m
+    └──   ‖ Investigate cache … codex   ░░░░░░░━━━━░░━━━━░░━━━━░░━━━░ 5m
+canon
+├──   ▶ Add board view · from… claude  ░░━━░░━━━━━░░━━━━░░━━━━░░━━━┿ 1h 49m
+├──   ◆ 流れを整える 🌊        claude  ░░░░░░━━━━━░░━━━━░░━━━◆◆◆◆◆◆◆ 13m
+├──   ▶ Add board view · from… claude  ━━━━░░━━━━━░░━━━━░░━━━━░░━━━┿ 1h 25m
+├──   ▶ 流れを整える 🌊        claude  ░░░░░░━━━━━░░━━━━░░━━━━░░━━━┿ 1h 13m
+├──   ▶ Add board view · from… claude  ░░░░░░░░━━━░░━━━━░░━━━━░░━━━┿ 1h 1m
+└──   ▶ 流れを整える 🌊        claude    ━━ ░━━━━━░░━━━━░░━━━━░░━━━┿ 49m
+driga
+├──   ▶ 流れを整える 🌊        claude  ━━━━░░━━━━━░░━━━━░░━━━━░░━━━┿ 1h 45m
+────────────────────────────────────────────────────────────────────────────────
+Fix retry after reconnect · codex · idle
+Enter Open session · J Terminal · K Stop · c Ask Chat · Tab Needs you · / Find

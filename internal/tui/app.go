@@ -35,6 +35,7 @@ import (
 
 // Options configures scope, appearance, and injectable action dependencies.
 type Options struct {
+	SessionAction func(context.Context, string, int64) error
 	Chat          chat.Client
 	ChatEphemeral bool
 	InitialTab    string
@@ -90,20 +91,23 @@ type app struct {
 	chatPageHeight int
 	chatMaxOffset  int
 
-	flow             view.FlowView
-	flowID           int64
-	flowMinutes      int
+	flowViewMode     string
+	boardPromptFocus string
+	boardPromptAt    time.Time
+	chatOrigin       int
+	chatOriginDetail bool
+	boardPinned      string
+	board            view.BoardView
+	boardOrder       []string
+	boardGroups      []string
+	boardCursor      int
+	boardStop        int64 // session awaiting y/n stop confirmation
+	boardMachine     bool
+	boardFilter      int
+	boardIdle        bool
 	flowAttention    bool
 	flowAskCursor    int
-	flowSelectID     int64
 	flowOffset       int
-	flowExpanded     bool
-	flowPulse        map[string]time.Time
-	flowBranchPulse  map[string]time.Time
-	flowSeen         map[string]bool
-	flowGrowthSeen   map[string]time.Time
-	flowGrowthPulse  map[string]flowGrowthPulse
-	flowAnimating    bool
 	machineScope     string
 	src              Source
 	opts             Options
@@ -113,8 +117,6 @@ type app struct {
 	version          int64
 	tab              int
 	cursors          [9]int
-	homeOffset       int
-	homeNeedsTop     int
 	cleanupRequested bool
 	expanded         map[string]bool
 	filter           textinput.Model
@@ -199,12 +201,15 @@ func New(src Source, opts Options) tea.Model {
 	input.Prompt = "/ "
 	input.Placeholder = "filter"
 	input.SetStyles(textinput.Styles{})
-	m := &app{chatInput: newChatInput(), chatSpinner: spinner.New(spinner.WithSpinner(spinner.MiniDot)), chatEphemeral: opts.ChatEphemeral, tab: homeTab, machineScope: opts.Machine, src: src, opts: opts, width: 80, height: 24, expanded: map[string]bool{}, filter: input, table: table.New(table.WithFocused(true)), viewport: viewport.New()}
+	m := &app{chatInput: newChatInput(), chatSpinner: spinner.New(spinner.WithSpinner(spinner.MiniDot)), chatEphemeral: opts.ChatEphemeral, tab: flowTab, machineScope: opts.Machine, src: src, opts: opts, width: 80, height: 24, expanded: map[string]bool{}, filter: input, table: table.New(table.WithFocused(true)), viewport: viewport.New()}
 	for i, name := range []string{"agents", "projects", "inbox", "orphans", "machine", "cleanup", "home", "flow", "chat"} {
 		if opts.InitialTab == name {
 			m.tab = i
 			break
 		}
+	}
+	if m.tab == 6 {
+		m.tab = flowTab
 	}
 	m.rebuild()
 	return m
@@ -395,67 +400,6 @@ func (m *app) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, m.readChat()
 
-	case flowObservationFrameMsg:
-		for key, pulse := range m.flowGrowthPulse {
-			if !m.opts.Now().Before(pulse.until) {
-				delete(m.flowGrowthPulse, key)
-			} else {
-				pulse.frame++
-				m.flowGrowthPulse[key] = pulse
-			}
-		}
-		m.flowAnimating = false
-		m.rebuild()
-		return m, m.flowAnimation()
-	case flowEventMsg:
-		m.recordFlowEvent(msg.event)
-	case flowMsg:
-		if msg.id != m.flowID || msg.scope != m.machineScope {
-			return m, nil
-		}
-		if msg.err != nil {
-			m.status = "flow: " + msg.err.Error()
-			return m, nil
-		}
-		var selectedID int64
-		if i := m.cursors[flowTab]; i >= 0 && i < len(m.flowWorkers().Nodes) {
-			selectedID = m.flowWorkers().Nodes[i].ID
-		}
-		if m.flowSelectID != 0 {
-			selectedID = m.flowSelectID
-			m.flowSelectID = 0
-		}
-		m.recordFlowObservations(msg.flow)
-		if m.flow.Lead != nil && msg.flow.Lead != nil && m.flow.Lead.ID == msg.flow.Lead.ID {
-			for _, n := range msg.flow.Children {
-				if n.ParentID != nil && n.StartedAt.After(m.flow.ObservedAt) && !n.StartedAt.After(m.opts.Now()) {
-					if m.flowBranchPulse == nil {
-						m.flowBranchPulse = map[string]time.Time{}
-					}
-					m.flowBranchPulse[growthKey(n)] = m.opts.Now().Add(time.Second)
-				}
-			}
-		}
-		m.flow = msg.flow
-		if m.flowSeen == nil {
-			m.flowSeen = map[string]bool{}
-		}
-		for _, e := range m.flow.Tail {
-			m.flowSeen[e.Key] = true
-		}
-		for i, n := range m.flowWorkers().Nodes {
-			if n.ID == selectedID {
-				m.cursors[flowTab] = i
-			}
-		}
-		if m.snap.AgentDetails == nil {
-			m.snap.AgentDetails = map[int64]view.AgentView{}
-		}
-		for id, d := range msg.details {
-			m.snap.AgentDetails[id] = d
-		}
-		m.rebuild()
-		return m, m.flowAnimation()
 	case tea.WindowSizeMsg:
 		m.width = max(1, msg.Width)
 		m.height = max(1, msg.Height)
@@ -505,17 +449,6 @@ func (m *app) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if msg.snap.Cleanup == nil {
 				msg.snap.Cleanup = m.snap.Cleanup
 			}
-			if m.loaded && m.tab == flowTab {
-				seen := map[string]bool{}
-				for _, e := range m.snap.Tail {
-					seen[e.Key] = true
-				}
-				for _, e := range msg.snap.Tail {
-					if !seen[e.Key] {
-						m.recordFlowEvent(e)
-					}
-				}
-			}
 			m.snap = msg.snap
 			m.version = msg.version
 			m.loaded = true
@@ -523,13 +456,6 @@ func (m *app) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.loaded {
 			m.showAckPending()
 			m.rebuild()
-		}
-		if msg.changed && m.tab == flowTab {
-			return m, m.loadFlow()
-		}
-		if m.loaded && m.tab == homeTab && !m.cleanupRequested && m.snap.Cleanup == nil && m.opts.CleanupList != nil && !m.busy {
-			m.cleanupRequested = true
-			return m, m.loadCleanup()
 		}
 		return m, nil
 	case cleanupMsg:
@@ -588,12 +514,19 @@ func (m *app) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 		// Modified tab keys bypass focused composers, filters and overlays.
-		if msg.Mod == tea.ModAlt && msg.Code >= '0' && msg.Code <= '8' {
+		if msg.Mod == tea.ModAlt && msg.Code >= '0' && msg.Code <= '2' {
 			return m, m.selectTab(byte(msg.Code))
 		}
 		if m.chatFullAsk && k != "m" {
 			m.chatFullAsk = false
 			m.chatStatus = "Full auto not enabled."
+		}
+		if m.tab == chatTab && k == "esc" && !m.help {
+			m.tab = m.chatOrigin
+			m.detail = m.chatOriginDetail
+			m.chatInput.Blur()
+			m.rebuild()
+			return m, nil
 		}
 		if m.tab == chatTab && !m.filtering && !m.help {
 			if k == "esc" || m.chatInput.Focused() {
@@ -607,7 +540,7 @@ func (m *app) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, m.chatKey(msg)
 			}
 		}
-		if (k == "c" || k == "8") && !m.filtering && m.confirm == nil {
+		if k == "c" && !m.filtering && m.confirm == nil {
 			return m, m.openChat()
 		}
 		if m.filtering {
@@ -664,104 +597,50 @@ func (m *app) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
-		if k >= "0" && k <= "7" {
+		if k >= "0" && k <= "2" {
 			return m, m.selectTab(k[0])
 		}
-		if m.tab == flowTab && !m.detail {
-			if k == "tab" && len(m.flow.Attention.Waits) > 0 {
-				m.flowAttention = !m.flowAttention
-				return m, nil
-			}
-			if m.flowAttention && len(m.flow.Attention.Waits) > 0 {
-				count := len(m.flow.Attention.Waits)
-				m.flowAskCursor = min(m.flowAskCursor, count-1)
-				w := m.flow.Attention.Waits[m.flowAskCursor]
-				switch k {
-				case "j", "down":
-					m.flowAskCursor = (m.flowAskCursor + 1) % count
-					return m, nil
-				case "k", "up":
-					m.flowAskCursor = (m.flowAskCursor + count - 1) % count
-					return m, nil
-				case "C":
-					m.status = attention.JumpCommand(w.Jump)
-					return m, nil
-				case "enter":
-					return m, m.jumpFlowAttention(w)
-				}
-			}
-			switch k {
-			case "[", "]":
-				delta := 1
-				if k == "[" {
-					delta = -1
-				}
-				m.flowSession(delta)
-				return m, m.loadFlow()
-			case "-", "+", "=":
-				zooms := []int{15, 60, 240}
-				i := 0
-				for j, z := range zooms {
-					if z == m.flowZoom() {
-						i = j
-					}
-				}
-				if k == "-" {
-					i = min(2, i+1)
+		if !m.detail {
+			if (m.tab == flowTab || m.tab == 0 || m.tab == 2) && k == "h" {
+				if m.tab == 2 {
+					m.tab = flowTab
 				} else {
-					i = max(0, i-1)
+					m.tab = 2
 				}
-				m.flowMinutes = zooms[i]
-				return m, m.loadFlow()
-			case "C":
-				if n := m.flowSelected(); n != nil {
-					m.status = attention.JumpCommand(n.Jump)
-				}
+				m.rebuild()
 				return m, nil
-			case "enter":
-				w := m.flowWorkers()
-				if w.Quiet > 0 && m.cursors[flowTab] == len(w.Nodes) {
-					m.flowExpanded = true
+			}
+			if m.tab == 0 && (k == "m" || k == "t") {
+				m.tab = flowTab
+				return m, m.selectFlowView(k)
+			}
+			if m.tab == 4 || m.tab == 3 || m.tab == 5 {
+				switch k {
+				case "p":
+					m.tab = 3
 					m.rebuild()
-					m.flowEnsureVisible()
+					return m, nil
+				case "d":
+					m.tab = 5
+					m.rebuild()
+					if m.opts.CleanupList != nil {
+						return m, m.loadCleanup()
+					}
+					return m, nil
+				case "h":
+					m.tab = 4
+					m.rebuild()
 					return m, nil
 				}
-				return m, m.jumpFlow()
-			case "j", "down", "k", "up":
-				w := m.flowWorkers()
-				count := len(w.Nodes)
-				if w.Quiet > 0 {
-					count++
-				}
-				if count > 0 {
-					delta := 1
-					if k == "k" || k == "up" {
-						delta = -1
-					}
-					m.cursors[flowTab] = (m.cursors[flowTab] + delta + count) % count
-					m.rebuild()
-					m.flowEnsureVisible()
-				}
-				return m, nil
-			case "pgdown", "pgup":
-				delta := m.bodyHeight()
-				if k == "pgup" {
-					delta = -delta
-				}
-				m.flowOffset = max(0, m.flowOffset+delta)
-				return m, nil
+			}
+		}
+		if m.tab == flowTab && !m.detail {
+			if cmd, handled := m.boardKey(k); handled {
+				return m, cmd
 			}
 		}
 		switch k {
 		case "pgdown", "pgup":
-			if m.tab == homeTab && !m.detail {
-				delta := m.bodyHeight()
-				if k == "pgup" {
-					delta = -delta
-				}
-				m.homeOffset = max(0, m.homeOffset+delta)
-				return m, nil
-			}
 			var cmd tea.Cmd
 			if m.detail {
 				m.viewport, cmd = m.viewport.Update(msg)
@@ -777,6 +656,11 @@ func (m *app) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, m.loadCleanup()
 			}
 		case "S":
+			if m.tab == 0 {
+				m.sort = (m.sort + 1) % 4
+				m.rebuild()
+				return m, nil
+			}
 			if m.tab == 1 && !m.busy {
 				if row, ok := m.selected(); ok {
 					if m.remote(row.machine) {
@@ -803,18 +687,8 @@ func (m *app) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				}
 			}
-		case "m":
+		case "M":
 			m.cycleMachine()
-			if m.tab == flowTab {
-				m.flowID = 0
-				m.flow = view.FlowView{}
-				m.flowExpanded = false
-				m.flowOffset = 0
-				m.flowPulse = nil
-				m.flowSeen = nil
-				m.rebuild()
-				return m, m.loadFlow()
-			}
 			m.detail = false
 			m.showAckPending()
 			m.rebuild()
@@ -848,12 +722,9 @@ func (m *app) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return m, nil
 			}
-			if (m.tab == 2 || m.tab == homeTab) && !m.busy {
+			if (m.tab == 2) && !m.busy {
 				if r, ok := m.selected(); ok && r.inbox != nil {
 					return m, m.ack([]model.InboxItem{*r.inbox})
-				}
-				if m.tab == homeTab {
-					m.status = "no inbox event to acknowledge"
 				}
 			}
 		case "X":
@@ -898,6 +769,10 @@ func (m *app) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "y", "n":
 			if m.tab == 2 && !m.busy {
 				if r, ok := m.selected(); ok && r.prompt != nil {
+					if m.tab == flowTab && (m.boardPromptFocus != r.prompt.ID || m.opts.Now().Sub(m.boardPromptAt) < 600*time.Millisecond) {
+						m.status = "Review prompt before answering"
+						return m, nil
+					}
 					return m, m.answerPrompt(*r.prompt, k == "y")
 				}
 			}
@@ -914,9 +789,6 @@ func (m *app) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			var cmd tea.Cmd
 			m.table, cmd = m.table.Update(msg)
 			m.cursors[m.tab] = max(0, m.table.Cursor())
-			if m.tab == homeTab {
-				m.homeOffset = 0
-			}
 			m.rebuild()
 			return m, cmd
 		}
@@ -1103,7 +975,7 @@ type selectedDetailMsg struct {
 
 func (m *app) loadSelection() tea.Cmd {
 	source, ok := m.src.(viewer.DetailSource)
-	if !ok || !m.loaded || m.tab == chatTab || m.tab == flowTab {
+	if !ok || !m.loaded || m.tab == chatTab || m.tab == flowTab && !m.detail {
 		return nil
 	}
 	row, ok := m.selected()
