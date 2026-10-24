@@ -23,13 +23,6 @@ import (
 // SummaryCmd prints the default one-screen summary.
 type SummaryCmd struct{ ReadOptions }
 
-// ActivityCmd shows machine-wide activity over the last hour.
-type ActivityCmd struct{ ActivityOptions }
-
-func (ActivityCmd) Run(g *Globals) error {
-	return runRead(g, view.Filter{}, "", func(r view.Reader, f view.Filter, now time.Time) (any, error) { return view.Activity(r, f, now) })
-}
-
 // AgentsCmd lists live sessions and their worker families.
 type AgentsCmd struct {
 	List AgentsListCmd `cmd:"" default:"withargs" help:"List agents grouped by family."`
@@ -78,9 +71,6 @@ type InboxListCmd struct {
 	ReadOptions
 	All bool `help:"Show all history, including acknowledged and ended events (default: current waits and up to 50 completions from 24h)."`
 }
-
-// ConflictsCmd shows current collisions separately from recent overlap.
-type ConflictsCmd struct{ ReadOptions }
 
 // OrphansCmd leaves room for explicit process actions alongside the read command.
 type OrphansCmd struct {
@@ -157,11 +147,6 @@ func (c InboxListCmd) Run(g *Globals) error {
 	return runRead(g, view.Filter{All: c.All}, "", func(r view.Reader, f view.Filter, now time.Time) (any, error) { return view.Inbox(r, f, now) })
 }
 
-// Run renders freshly derived conflicts.
-func (ConflictsCmd) Run(g *Globals) error {
-	return runRead(g, view.Filter{}, "", func(r view.Reader, f view.Filter, now time.Time) (any, error) { return view.Conflicts(r, f, now) })
-}
-
 // Run renders orphan candidates.
 func (OrphansListCmd) Run(g *Globals) error {
 	return runRead(g, view.Filter{}, "", func(r view.Reader, f view.Filter, now time.Time) (any, error) { return view.Orphans(r, f, now) })
@@ -183,38 +168,16 @@ func (c MachineShowCmd) Run(g *Globals) error {
 type readBuilder func(view.Reader, view.Filter, time.Time) (any, error)
 
 func runRead(g *Globals, base view.Filter, project string, build readBuilder) error {
-	if g.Watch < 0 {
-		return invalidUsage("--watch must be a positive duration")
-	}
 	if _, err := parseSince(g.Since, time.Now()); err != nil {
 		return err
 	}
 	ctx, stop := notifyContext(context.Background())
 	defer stop()
-	for {
-		if g.Watch > 0 {
-			if err := touchHeartbeat(); err != nil {
-				return err
-			}
-		}
-		err := readOnce(ctx, g, base, project, build)
-		if ctx.Err() != nil {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		if g.Watch == 0 {
-			return nil
-		}
-		timer := time.NewTimer(g.Watch)
-		select {
-		case <-ctx.Done():
-			timer.Stop()
-			return nil
-		case <-timer.C:
-		}
+	err := readOnce(ctx, g, base, project, build)
+	if ctx.Err() != nil {
+		return nil
 	}
+	return err
 }
 
 func readOnce(ctx context.Context, g *Globals, base view.Filter, project string, build readBuilder) error {
@@ -269,11 +232,6 @@ func readOnce(ctx context.Context, g *Globals, base view.Filter, project string,
 	})
 	if err != nil {
 		return err
-	}
-	if g.Watch > 0 && !g.JSON && view.IsTerminal(g.Stdout) {
-		if _, err := fmt.Fprint(g.Stdout, "\x1b[H\x1b[2J"); err != nil {
-			return err
-		}
 	}
 	return view.Render(g.Stdout, data, view.RenderOpts{JSON: g.JSON, NoColor: g.NoColor, Envelope: envelope})
 }

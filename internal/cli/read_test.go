@@ -193,7 +193,7 @@ func TestReadCommands(t *testing.T) {
 		_, err := tx.UpsertRepo(model.Repo{Path: "/fixture", Name: "fixture"})
 		return err
 	})
-	for _, args := range [][]string{{}, {"summary"}, {"agents", "--all"}, {"projects", "--active"}, {"projects", "--at-risk"}, {"projects", "show", "fixture"}, {"inbox"}, {"inbox", "--all"}, {"inbox", "list", "--all"}, {"conflicts"}, {"orphans"}, {"orphans", "list"}, {"machines", "show"}} {
+	for _, args := range [][]string{{}, {"summary"}, {"agents", "--all"}, {"projects", "--active"}, {"projects", "--at-risk"}, {"projects", "show", "fixture"}, {"inbox"}, {"inbox", "--all"}, {"inbox", "list", "--all"}, {"orphans"}, {"orphans", "list"}, {"machines", "show"}} {
 		readRun(t, args...)
 		readRun(t, append(append([]string{}, args...), "--json")...)
 	}

@@ -72,7 +72,7 @@ func newMCPServer(g *Globals, actions bool, capture ...string) *sdk.Server {
 	base.Stderr = stderr
 	read := func(ctx context.Context, q drigamcp.Query, build drigamcp.Builder) (view.Envelope, error) {
 		copy := base
-		copy.JSON, copy.Watch = true, 0
+		copy.JSON = true
 		copy.cachedMachines = q.CachedMachines
 		if q.Machine != "" {
 			copy.Machine = q.Machine

@@ -62,7 +62,6 @@ func chatAction(base *Globals) func(context.Context, string, json.RawMessage) (s
 		g.Stdout = &out
 		g.Stdin = nil
 		g.JSON = false
-		g.Watch = 0
 		err = runChatAction(ctx, &g, name, raw)
 		result := strings.TrimSpace(out.String())
 		if err != nil {

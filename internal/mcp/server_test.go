@@ -32,14 +32,14 @@ type toolCase struct {
 func toolCases(id int64) []toolCase {
 	return []toolCase{
 		{"get_summary", nil, []string{"summary"}},
-		{"get_activity", map[string]any{"machine": "local"}, []string{"activity", "--machine", "local"}},
+		{"get_activity", map[string]any{"machine": "local"}, nil}, // MCP only: the TUI and web show activity
 		{"get_flow", map[string]any{"id": id, "machine": "local"}, []string{"flow", fmt.Sprint(id), "--machine", "local"}},
 		{"list_agents", map[string]any{"all": true, "machine": "local", "project": "api"}, []string{"agents", "--all", "--machine", "local", "--project", "api"}},
 		{"get_agent", map[string]any{"id": id, "machine": "local"}, []string{"agents", "show", fmt.Sprint(id), "--machine", "local"}},
 		{"list_projects", map[string]any{"active": true, "at_risk": true}, []string{"projects", "--active", "--at-risk"}},
 		{"inspect_project", map[string]any{"project": "api"}, []string{"projects", "show", "api"}},
 		{"list_inbox", map[string]any{"since": "yesterday", "all": true, "project": "api", "machine": "local"}, []string{"inbox", "--since", "yesterday", "--all", "--project", "api", "--machine", "local"}},
-		{"list_conflicts", map[string]any{"project": "api", "machine": "local"}, []string{"conflicts", "--project", "api", "--machine", "local"}},
+		{"list_conflicts", map[string]any{"project": "api", "machine": "local"}, nil}, // MCP only: Flow and Projects show overlaps
 		{"list_orphans", map[string]any{"machine": "local"}, []string{"orphans", "--machine", "local"}},
 		{"get_machine", map[string]any{"machine": "local"}, []string{"machines", "show", "local"}},
 		{"list_machines", nil, []string{"machines"}},
@@ -226,6 +226,9 @@ func TestEveryToolMatchesCLIJSON(t *testing.T) {
 				// The existing doctor CLI emits a bare array; §10 requires
 				// MCP diagnostics to carry the shared schema-2 envelope.
 				got = got.(map[string]any)["data"]
+			}
+			if tc.cli == nil {
+				return
 			}
 			want := canonical(t, json.RawMessage(cliJSON(t, tc.cli)))
 			if actual := canonical(t, got); !bytes.Equal(actual, want) {
