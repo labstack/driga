@@ -1,6 +1,7 @@
 package view_test
 
 import (
+	"fmt"
 	"reflect"
 	"testing"
 	"time"
@@ -82,6 +83,17 @@ func TestBoardOverlapRequiresSameMachineAndFullPath(t *testing.T) {
 			overlaps++
 			if e.File != "file.go" {
 				t.Fatal(e)
+			}
+			// The link stays in the region's left margin, clear of every node
+			// and title: x never reaches past the nodes' left edge.
+			var x0, y0, x1, y1, x2 int
+			if _, err := fmt.Sscanf(e.Path, "M %d %d H %d V %d H %d", &x0, &y0, &x1, &y1, &x2); err != nil {
+				t.Fatal(e.Path, err)
+			}
+			for _, n := range b.Map.Nodes {
+				if n.Region == e.Region && max(x0, x1, x2) >= n.X-14 {
+					t.Fatalf("overlap link %q crosses node %q at x=%d", e.Path, n.Key, n.X)
+				}
 			}
 		}
 	}

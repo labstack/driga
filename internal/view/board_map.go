@@ -28,7 +28,7 @@ type BoardMapNode struct {
 type BoardEdge struct {
 	Path, Kind, File string
 	A, B             string // overlap endpoints, shown while either is selected
-	Region, X, Y, W  int
+	Region           int
 }
 type BoardBadge struct {
 	Region, X, Y, TX, TY int
@@ -214,7 +214,11 @@ func (b *BoardView) buildMap(remote map[string]bool) {
 			if !ok || c.Region != a.Region {
 				continue // across projects the "┄ file" tag on each session says it
 			}
-			b.Map.Edges = append(b.Map.Edges, BoardEdge{Region: a.Region, Kind: "overlap", File: name, A: keys[centre], B: k, W: len([]rune(name))*7 + 16, X: (a.X+c.X)/2 - (len([]rune(name))*7+16)/2, Y: min(a.Y, c.Y) - boardMapRow/2 - 10 + abs(a.Y-c.Y)/4, Path: fmt.Sprintf("M %d %d Q %d %d %d %d", a.X, a.Y, (a.X+c.X)/2, min(a.Y, c.Y)-boardMapRow, c.X, c.Y)})
+			// Sessions in a region share one column, so a link drawn between
+			// them crosses nodes and titles. A bracket in the region's left
+			// margin joins them instead; each node's meta already names the file.
+			b.Map.Edges = append(b.Map.Edges, BoardEdge{Region: a.Region, Kind: "overlap", File: name, A: keys[centre], B: k,
+				Path: fmt.Sprintf("M %d %d H %d V %d H %d", a.X-boardMapRadius-3, a.Y, boardMapGutter, c.Y, c.X-boardMapRadius-3)})
 		}
 	}
 	for i := range b.Needs {
@@ -225,6 +229,7 @@ func (b *BoardView) buildMap(remote map[string]bool) {
 const (
 	boardMapBlock   = 250 // region content width: families stack in one column
 	boardMapPad     = 20  // inside a region
+	boardMapGutter  = 7   // overlap brackets run down the region's left margin
 	boardMapHead    = 44  // region title band
 	boardMapRow     = 48  // one session row
 	boardMapRadius  = 14

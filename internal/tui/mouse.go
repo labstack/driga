@@ -39,6 +39,7 @@ func (m *app) mouseClick(msg tea.MouseClickMsg) tea.Cmd {
 				} else {
 					m.flowAttention = false
 					m.boardCursor = h.index
+					m.boardTouched = true
 				}
 				return nil
 			}

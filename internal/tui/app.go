@@ -101,6 +101,7 @@ type app struct {
 	boardOrder       []string
 	boardGroups      []string
 	boardCursor      int
+	boardTouched     bool  // the user moved the Flow selection
 	boardStop        int64 // session awaiting Enter to confirm a stop
 	boardMachine     bool
 	boardFilter      int
