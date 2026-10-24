@@ -2,7 +2,6 @@ package view
 
 import (
 	"fmt"
-	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -11,30 +10,29 @@ import (
 // BoardMap is a deterministic, server-rendered slot layout. Coordinates depend
 // exclusively on session membership, project, parent identity and start time.
 type BoardMap struct {
-	Width, Height int
-	Regions       []BoardRegion
-	Nodes         []BoardMapNode
-	Edges         []BoardEdge
-	Badges        []BoardBadge
+	Regions []BoardRegion
+	Nodes   []BoardMapNode
+	Edges   []BoardEdge
+	Badges  []BoardBadge
 }
 type BoardRegion struct {
-	X, Y, W, H, LX, LY, RX int
-	Label, Sub, Dash       string
+	W, H, LX, LY, RX int
+	Label, Sub, Dash string
 }
 type BoardMapNode struct {
 	BoardRow
-	X, Y, GY, LX, LY, MY    int
-	Fill, Opacity           float64
-	Dash, Label, Meta, Aria string
+	Region, X, Y, GY, LX, LY, MY int
+	Fill, Opacity                float64
+	Dash, Label, Meta, Aria      string
 }
 type BoardEdge struct {
 	Path, Kind, File string
 	A, B             string // overlap endpoints, shown while either is selected
-	X, Y, W          int
+	Region, X, Y, W  int
 }
 type BoardBadge struct {
-	X, Y, TX, TY int
-	Text, Key    string
+	Region, X, Y, TX, TY int
+	Text, Key            string
 }
 
 func BoardGlyph(state string) string {
@@ -71,7 +69,7 @@ func boardFileName(path string) string {
 	return parts[len(parts)-1]
 }
 func (b *BoardView) buildMap(remote map[string]bool) {
-	b.Map = BoardMap{Width: 1000, Height: 240}
+	b.Map = BoardMap{}
 	positions := map[string]BoardMapNode{}
 	// Shared paths are evidence only within the same machine. Basenames never
 	// establish overlap. Ended sessions do not imply a current file conflict.
@@ -105,8 +103,7 @@ func (b *BoardView) buildMap(remote map[string]bool) {
 		}
 	}
 	// Each family is a compact block: the lead on top, its workers indented
-	// below it, one row each. Blocks fill a region in rows of up to three, and
-	// regions are packed into lanes (see below).
+	// below it, one row each.
 	type block struct {
 		rows []BoardRow
 		fold int
@@ -114,7 +111,6 @@ func (b *BoardView) buildMap(remote map[string]bool) {
 	type pending struct {
 		region BoardRegion
 		blocks []block
-		cols   int
 	}
 	var layout []pending
 	for gi := range b.Groups {
@@ -139,7 +135,7 @@ func (b *BoardView) buildMap(remote map[string]bool) {
 				}
 				families[r.Root] = append(families[r.Root], r)
 			}
-			p := pending{region: BoardRegion{Label: g.Name, Sub: strings.Join(g.Branches, ", ")}, cols: min(boardMapLanes-1, len(roots))}
+			p := pending{region: BoardRegion{Label: g.Name, Sub: strings.Join(g.Branches, ", ")}}
 			if remote[machine] {
 				p.region.Dash = "6 6"
 				p.region.Sub = "⇄ " + machine
@@ -160,65 +156,37 @@ func (b *BoardView) buildMap(remote map[string]bool) {
 		}
 		return n * boardMapRow
 	}
-	// Regions take whole lanes and drop into the lowest gap that fits them,
-	// leftmost first, so small regions fill space beside large ones.
-	sky := make([]int, boardMapLanes)
-	for i := range sky {
-		sky[i] = boardMapGap
-	}
-	width := 0
-	for _, p := range layout {
-		lane, y := 0, -1
-		for s := 0; s+p.cols <= boardMapLanes; s++ {
-			top := 0
-			for _, t := range sky[s : s+p.cols] {
-				top = max(top, t)
-			}
-			if y < 0 || top < y {
-				lane, y = s, top
-			}
-		}
-		x := boardMapGap + lane*boardMapLane
-		w := p.cols*boardMapLane - boardMapGap
-		block := (w - 2*boardMapPad) / p.cols
+	// Each region is its own SVG in local coordinates, one family under the
+	// next. The page flows regions into columns, so the map fits any width.
+	for ri, p := range layout {
+		w := boardMapBlock + 2*boardMapPad
 		h := boardMapHead
-		for i := 0; i < len(p.blocks); i += p.cols {
-			rowH := 0
-			for _, blk := range p.blocks[i:min(len(p.blocks), i+p.cols)] {
-				rowH = max(rowH, blockHeight(blk))
-			}
-			for c, blk := range p.blocks[i:min(len(p.blocks), i+p.cols)] {
-				bx, by := x+boardMapPad+c*block, y+h
-				for j, r := range blk.rows {
-					nx, ny := bx+boardMapRadius+4, by+j*boardMapRow+boardMapRow/2
-					if j > 0 {
-						nx += boardMapIndent
-					}
-					n := boardMapNode(r, nx, ny)
-					b.Map.Nodes = append(b.Map.Nodes, n)
-					positions[r.Key] = n
+		for _, blk := range p.blocks {
+			for j, r := range blk.rows {
+				nx, ny := boardMapPad+boardMapRadius+4, h+j*boardMapRow+boardMapRow/2
+				if j > 0 {
+					nx += boardMapIndent
 				}
-				if blk.fold > 0 {
-					fy := by + len(blk.rows)*boardMapRow + boardMapRow/2
-					fx := bx + boardMapRadius + 4 + boardMapIndent
-					b.Map.Badges = append(b.Map.Badges, BoardBadge{X: fx - boardMapRadius, Y: fy - 10, TX: fx - boardMapRadius + 20, TY: fy + 4, Text: fmt.Sprintf("+%d", blk.fold), Key: blk.rows[0].Root})
-				}
+				n := boardMapNode(r, nx, ny)
+				n.Region = ri
+				b.Map.Nodes = append(b.Map.Nodes, n)
+				positions[r.Key] = n
 			}
-			h += rowH
+			if blk.fold > 0 {
+				fy := h + len(blk.rows)*boardMapRow + boardMapRow/2
+				fx := boardMapPad + boardMapRadius + 4 + boardMapIndent
+				b.Map.Badges = append(b.Map.Badges, BoardBadge{Region: ri, X: fx - boardMapRadius, Y: fy - 10, TX: fx - boardMapRadius + 20, TY: fy + 4, Text: fmt.Sprintf("+%d", blk.fold), Key: blk.rows[0].Root})
+			}
+			h += blockHeight(blk)
 		}
 		h += boardMapPad / 2
-		p.region.X, p.region.Y, p.region.W, p.region.H = x, y, w, h
-		p.region.LX, p.region.LY, p.region.RX = x+boardMapPad, y+28, x+w-boardMapPad
+		p.region.W, p.region.H = w, h
+		p.region.LX, p.region.LY, p.region.RX = boardMapPad, 28, w-boardMapPad
 		b.Map.Regions = append(b.Map.Regions, p.region)
-		for i := lane; i < lane+p.cols; i++ {
-			sky[i] = y + h + boardMapGap
-		}
-		width = max(width, x+w+boardMapGap)
 	}
-	b.Map.Width, b.Map.Height = max(320, width), max(160, slices.Max(sky))
 	for _, n := range b.Map.Nodes {
 		if p, ok := positions[n.Parent]; ok {
-			b.Map.Edges = append(b.Map.Edges, BoardEdge{Kind: "spawn", Path: fmt.Sprintf("M %d %d V %d H %d", p.X, p.Y+boardMapRadius, n.Y, n.X-boardMapRadius)})
+			b.Map.Edges = append(b.Map.Edges, BoardEdge{Region: n.Region, Kind: "spawn", Path: fmt.Sprintf("M %d %d V %d H %d", p.X, p.Y+boardMapRadius, n.Y, n.X-boardMapRadius)})
 		}
 	}
 	for _, path := range paths {
@@ -229,16 +197,24 @@ func (b *BoardView) buildMap(remote map[string]bool) {
 		name := boardFileName(strings.SplitN(path, "\x00", 2)[1])
 		sort.Strings(keys)
 		// A star per shared file avoids quadratic edges at high session counts.
-		a, ok := positions[keys[0]]
-		if !ok {
+		// Centre on the first visible session; folded ones have no position.
+		centre := -1
+		for i, k := range keys {
+			if _, ok := positions[k]; ok {
+				centre = i
+				break
+			}
+		}
+		if centre < 0 {
 			continue
 		}
-		for _, k := range keys[1:] {
+		a := positions[keys[centre]]
+		for _, k := range keys[centre+1:] {
 			c, ok := positions[k]
-			if !ok {
-				continue
+			if !ok || c.Region != a.Region {
+				continue // across projects the "┄ file" tag on each session says it
 			}
-			b.Map.Edges = append(b.Map.Edges, BoardEdge{Kind: "overlap", File: name, A: keys[0], B: k, W: len([]rune(name))*7 + 16, X: (a.X+c.X)/2 - (len([]rune(name))*7+16)/2, Y: min(a.Y, c.Y) - boardMapRow/2 - 10 + abs(a.Y-c.Y)/4, Path: fmt.Sprintf("M %d %d Q %d %d %d %d", a.X, a.Y, (a.X+c.X)/2, min(a.Y, c.Y)-boardMapRow, c.X, c.Y)})
+			b.Map.Edges = append(b.Map.Edges, BoardEdge{Region: a.Region, Kind: "overlap", File: name, A: keys[centre], B: k, W: len([]rune(name))*7 + 16, X: (a.X+c.X)/2 - (len([]rune(name))*7+16)/2, Y: min(a.Y, c.Y) - boardMapRow/2 - 10 + abs(a.Y-c.Y)/4, Path: fmt.Sprintf("M %d %d Q %d %d %d %d", a.X, a.Y, (a.X+c.X)/2, min(a.Y, c.Y)-boardMapRow, c.X, c.Y)})
 		}
 	}
 	for i := range b.Needs {
@@ -247,9 +223,7 @@ func (b *BoardView) buildMap(remote map[string]bool) {
 }
 
 const (
-	boardMapLanes   = 4   // map columns; a region spans one to three
-	boardMapLane    = 260 // lane width including the gap
-	boardMapGap     = 20  // between regions
+	boardMapBlock   = 250 // region content width: families stack in one column
 	boardMapPad     = 20  // inside a region
 	boardMapHead    = 44  // region title band
 	boardMapRow     = 48  // one session row
@@ -294,11 +268,16 @@ func abs(n int) int {
 	return n
 }
 
-// BoardTools counts only agent tool telemetry, never transcript or CPU activity.
+// BoardTools counts reported tool events (OTLP telemetry or agent hooks) in the
+// row's window, never transcript or CPU activity.
 func BoardTools(r BoardRow) string {
+	var from time.Time
+	if len(r.Slices) > 0 {
+		from = r.Slices[0].At
+	}
 	counts := map[string]int{}
 	for _, e := range r.Node.Events {
-		if FlowEventMark(r.Node.Adapter, e.Kind) != "tool" {
+		if e.TS.Before(from) || FlowEventMark(r.Node.Adapter, e.Kind) != "tool" {
 			continue
 		}
 		name := "tool"

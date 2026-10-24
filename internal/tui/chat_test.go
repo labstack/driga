@@ -286,6 +286,12 @@ func TestChatEscapeClosesAndRetainsDraft(t *testing.T) {
 	m.openChat()
 	m.chatInput.SetValue("keep me")
 	m.chatActive = true
+	// Esc first stops a running reply, as the footer says; it does not close.
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if m.tab != chatTab {
+		t.Fatal("Esc closed Chat while a reply was running")
+	}
+	m.chatActive = false
 	m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	if m.tab != flowTab || m.chatInput.Focused() || m.chatInput.Value() != "keep me" {
 		t.Fatal("close lost context or draft")

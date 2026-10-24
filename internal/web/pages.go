@@ -39,6 +39,7 @@ type pageData struct {
 	Flow                   view.FlowView
 	Board                  view.BoardView
 	IsBoard                bool
+	FlowMissing            int64
 	FlowPrevious, FlowNext string
 	FlowExpanded           bool
 	FlowToggle             string
@@ -223,13 +224,6 @@ func (s *Server) loadPage(r *http.Request) (pageData, int, error) {
 		p.Page = "/flow"
 	}
 	if p.Page == "/flow" {
-		minutes := 60
-		if q.Has("minutes") {
-			minutes, err = strconv.Atoi(q.Get("minutes"))
-			if err != nil || minutes != 15 && minutes != 60 && minutes != 240 {
-				return p, 400, fmt.Errorf("minutes must be 15, 60 or 240")
-			}
-		}
 		p.IsBoard = q.Get("view") != "family"
 		if q.Get("view") == "board" {
 			p.IsBoard = true
@@ -262,7 +256,7 @@ func (s *Server) loadPage(r *http.Request) (pageData, int, error) {
 					}
 				}
 				if !found {
-					return p, 404, fmt.Errorf("session not found")
+					p.FlowMissing = id // ended over an hour ago: say so, keep the board
 				}
 			}
 			prompts := map[string]string{}
@@ -537,7 +531,6 @@ func templateFuncs() template.FuncMap {
 		"boardSparkPoints": view.BoardSparkPoints,
 		"boardTools":       view.BoardTools,
 		"sub":              func(a, b int) int { return a - b },
-		"boardJSON":        func(b view.BoardView) string { raw, _ := json.Marshal(b); return string(raw) },
 		"boardSpark":       view.BoardSpark,
 		"boardStrip":       view.BoardStrip,
 		"boardGlyph":       view.BoardGlyph,

@@ -521,7 +521,7 @@ func (m *app) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.chatFullAsk = false
 			m.chatStatus = "Full auto not enabled."
 		}
-		if m.tab == chatTab && k == "esc" && !m.help {
+		if m.tab == chatTab && k == "esc" && !m.help && !m.chatActive {
 			m.tab = m.chatOrigin
 			m.detail = m.chatOriginDetail
 			m.chatInput.Blur()
@@ -769,10 +769,6 @@ func (m *app) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "y", "n":
 			if m.tab == 2 && !m.busy {
 				if r, ok := m.selected(); ok && r.prompt != nil {
-					if m.tab == flowTab && (m.boardPromptFocus != r.prompt.ID || m.opts.Now().Sub(m.boardPromptAt) < 600*time.Millisecond) {
-						m.status = "Review prompt before answering"
-						return m, nil
-					}
 					return m, m.answerPrompt(*r.prompt, k == "y")
 				}
 			}

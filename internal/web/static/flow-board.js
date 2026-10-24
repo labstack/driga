@@ -7,14 +7,14 @@
  const nextIndex=(index,key,length)=>key==="Home"?0:key==="End"?length-1:Math.max(0,Math.min(length-1,index+(["ArrowUp","k"].includes(key)?-1:1)));
  globalThis.DrigaBoard=Object.freeze({duration,nextIndex});
  if(typeof document==="undefined")return;
- const armed=new Map(),inFlight=new Set();let scroll=[],focusId="",caret=null;
+ const armed=new Map(),inFlight=new Set();let scroll=[],focusId="",caret=null,opened=[],promptOrder="";
  const root=()=>document.querySelector("[data-flow-board]");
  const nodes=()=>Array.from(root()?.querySelectorAll('[data-flow-surface="'+state.view+'"] [data-board-key]')||[]).filter(n=>!n.hidden);
  const row=key=>root()?.querySelector('[data-board-key="'+CSS.escape(key)+'"]');
  function select(key){const r=row(key);if(!r)return;state.key=key;const host=root();host.dataset.selectedMachine=r.dataset.machine;
   for(const n of host.querySelectorAll("[data-board-key]")){const on=n.dataset.boardKey===key;n.classList.toggle("selected",on);if(n.getAttribute("role")==="treeitem")n.tabIndex=on?0:-1;n.setAttribute(n.getAttribute("role")==="button"?"aria-pressed":"aria-selected",String(on));}for(const e of host.querySelectorAll("[data-overlap-a]"))e.classList.toggle("on",e.dataset.overlapA===key||e.dataset.overlapB===key);
   for(const n of host.querySelectorAll("[data-detail]"))n.hidden=n.dataset.detail!==key;
-  for(const n of host.querySelectorAll("[data-family-root]")){n.hidden=n.dataset.familyRoot!==r.dataset.root;n.querySelector("button")?.classList.toggle("selected",n.dataset.familyRow===key);}
+  for(const n of host.querySelectorAll("[data-family-root]")){n.hidden=n.dataset.familyRoot!==r.dataset.root;n.querySelector("button")?.classList.toggle("selected",n.dataset.familyRow===key);const slot=n.querySelector("[data-strip-of]");if(!n.hidden&&slot&&!slot.firstChild){const strip=host.querySelector('#timeline-'+CSS.escape(n.dataset.familyRow)+' .fb-strip');if(strip)slot.append(strip.cloneNode(true));}}
   document.dispatchEvent(new CustomEvent("driga:session-selected",{detail:{id:Number(r.dataset.session)}}));
  }
  function show(view){state.view=view;const host=root();if(!host)return;for(const n of host.querySelectorAll("[data-flow-surface]"))n.hidden=n.dataset.flowSurface!==view;for(const b of host.querySelectorAll("[data-flow-view]")){const on=b.dataset.flowView===view;b.setAttribute("aria-selected",String(on));b.tabIndex=on?0:-1;}filter();select(state.key);}
@@ -25,6 +25,9 @@
   show(state.view);for(const n of root().querySelectorAll("[data-need-overflow]"))n.hidden=!state.needsExpanded;order();tick();
  }
  function tick(){const host=root();if(!host)return;const at=Date.parse(host.dataset.observed);host.querySelector("[data-board-updated]").textContent="updated "+duration(Date.now()-at)+" ago";
+  // Any change in which prompt sits where re-arms every button, so a second
+  // click can never land on the prompt that moved into place.
+  const order=Array.from(host.querySelectorAll("[data-prompt]"),n=>n.dataset.prompt).join(" ");if(order!==promptOrder){promptOrder=order;armed.clear();}
   for(const n of host.querySelectorAll("[data-prompt]")){const id=n.dataset.prompt;if(!armed.has(id))armed.set(id,Date.now()+600);for(const b of n.querySelectorAll("button"))b.disabled=Date.now()<armed.get(id)||inFlight.has(id);}
  }
  async function post(path,body){const response=await fetch(path,{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json","X-CSRF-Token":document.querySelector('meta[name="chat-csrf"]').content},body:JSON.stringify(body)});if(!response.ok)throw Error(await response.text());return response;}
@@ -49,8 +52,8 @@
   if(["Enter"," "].includes(event.key)&&target){event.preventDefault();select(target.dataset.boardKey);if(state.view==="sessions"&&event.key==="Enter")window.location.assign("/agents/"+target.dataset.session+"?machine="+encodeURIComponent(target.dataset.machine));return;}
   const fold=event.target.closest("[data-fold]");if(fold&&["Enter"," "].includes(event.key)){event.preventDefault();fold.dispatchEvent(new MouseEvent("click",{bubbles:true}));}
  });
- document.addEventListener("htmx:beforeSwap",()=>{const active=document.activeElement;focusId=root()?.contains(active)?active.id:"";caret=active?.matches("input")?[active.selectionStart,active.selectionEnd]:null;scroll=Array.from(root()?.querySelectorAll(".fb-canvas,.fb-timeline,.fb-sessions,.fb-panel")||[]).map(n=>[n.className,n.scrollTop,n.scrollLeft]);});
- document.addEventListener("htmx:afterSwap",()=>{hydrate();for(const [cls,top,left]of scroll){const n=root()?.querySelector("."+cls);if(n){n.scrollTop=top;n.scrollLeft=left;}}if(focusId){const n=document.getElementById(focusId);if(n){n.focus({preventScroll:true});if(caret&&typeof n.setSelectionRange==="function"){try{n.setSelectionRange(...caret);}catch(_){}}}}});
+ document.addEventListener("htmx:beforeSwap",()=>{const active=document.activeElement;focusId=root()?.contains(active)?active.id:"";caret=active?.matches("input")?[active.selectionStart,active.selectionEnd]:null;scroll=Array.from(root()?.querySelectorAll(".fb-canvas,.fb-timeline,.fb-sessions,.fb-panel")||[]).map(n=>[n.className,n.scrollTop,n.scrollLeft]);opened=Array.from(root()?.querySelectorAll("details[open][id]")||[],n=>n.id);});
+ document.addEventListener("htmx:afterSwap",()=>{for(const id of opened)document.getElementById(id)?.setAttribute("open","");hydrate();for(const [cls,top,left]of scroll){const n=root()?.querySelector("."+cls);if(n){n.scrollTop=top;n.scrollLeft=left;}}if(focusId){const n=document.getElementById(focusId);if(n){n.focus({preventScroll:true});if(caret&&typeof n.setSelectionRange==="function"){try{n.setSelectionRange(...caret);}catch(_){}}}}});
  document.addEventListener("driga:select-session",e=>{const n=Array.from(root()?.querySelectorAll("[data-board-key]")||[]).find(n=>Number(n.dataset.session)===Number(e.detail.id));if(n)select(n.dataset.boardKey);});
  hydrate();setInterval(tick,1000);
 })();

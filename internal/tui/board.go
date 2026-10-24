@@ -457,7 +457,7 @@ func (m *app) boardLayout() (string, []flowHit) {
 			}
 		}
 		if tools := view.BoardTools(*r); tools != "" {
-			detail = append(detail, "tools "+tools+" · telemetry")
+			detail = append(detail, "tools "+tools+" · last hour")
 		}
 		if r.Cost != nil {
 			detail = append(detail, "cost "+boardMoney(r.Cost)+" · retained window")
@@ -482,7 +482,7 @@ func (m *app) boardLayout() (string, []flowHit) {
 			add("now " + r.Node.LastTool)
 		}
 		if tools := view.BoardTools(*r); tools != "" {
-			add(tools + " · telemetry")
+			add(tools + " · last hour")
 		}
 		if r.Cost != nil {
 			add("cost " + boardMoney(r.Cost) + " · retained window")

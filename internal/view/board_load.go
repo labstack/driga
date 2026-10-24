@@ -33,7 +33,7 @@ func loadBoardMachine(mr Reader, f Filter, now time.Time, b *BoardSnapshot) erro
 	if err != nil {
 		return err
 	}
-	events, observed, err := mr.BoardEvidence(now.Add(-4*time.Hour), now)
+	events, observed, err := mr.BoardEvidence(now.Add(-time.Hour), now)
 	if err != nil {
 		return err
 	}
@@ -65,7 +65,7 @@ func loadBoardMachine(mr Reader, f Filter, now time.Time, b *BoardSnapshot) erro
 		b.Files[BoardKey(FlowNode{MachineID: mr.MachineID(), ID: id})] = touches
 	}
 	for _, s := range sessions {
-		if s.EndedAt != nil && s.EndedAt.Before(now.Add(-4*time.Hour)) {
+		if s.EndedAt != nil && s.EndedAt.Before(now.Add(-time.Hour)) {
 			continue
 		}
 		title := s.Title

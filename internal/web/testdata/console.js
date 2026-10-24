@@ -30,15 +30,6 @@
 if (DrigaConsole.parseCommand("flow 42").url !== "/flow?id=42&machine=all") throw Error("flow command");
 if (DrigaConsole.parseCommand("flow").url !== "/flow?machine=all") throw Error("default flow command");
 
-var flowEvent={machine_id:"local",adapter:"claude",external_id:"lead",key:"event-1"};
-if (!DrigaConsole.familyEvent(flowEvent,"local",["claude:lead"],new Set())) throw Error("family pulse missing");
-if (DrigaConsole.familyEvent(flowEvent,"peer",["claude:lead"],new Set()) || DrigaConsole.familyEvent(flowEvent,"local",["claude:other"],new Set()) || DrigaConsole.familyEvent(flowEvent,"local",["claude:lead"],new Set(["event-1"]))) throw Error("spurious family pulse");
-
-var geometry=DrigaConsole.flowWireGeometry({right:100,y:30},{left:140,right:240,y:30},[{key:"one",left:300,y:20},{key:"two",left:300,y:80}]);
-if (geometry.trunk !== "M 240 30 H 270 M 270 20 V 80") throw Error("shared trunk geometry: "+geometry.trunk);
-if (geometry.branches[0].d !== "M 270 20 H 300" || geometry.branches[1].d !== "M 270 80 H 300") throw Error("short horizontal branches");
-if (geometry.routes["two"] !== "M 240 30 H 270 V 80 H 300") throw Error("pulse must travel trunk then matching branch");
-
 (() => {
  const text=globalThis.DrigaConsole.connectionText;
  if(text(false,false)!=="○ reconnecting…")throw new Error("retry status");
