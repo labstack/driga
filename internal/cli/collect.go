@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"github.com/labstack/driga/internal/attention"
 	"io"
 	"log/slog"
 	"os"
@@ -69,6 +70,14 @@ func (c CollectCmd) Run(g *Globals) error {
 	d, err := NewDeps(cfg)
 	if err != nil {
 		return err
+	}
+	if runtime.GOOS == "darwin" {
+		// Record what macOS reports, so a silent notification problem shows in the log.
+		if status, err := attention.MacNotificationStatus(); err != nil {
+			slog.Warn("macOS notifications unavailable", "event", "notifications_unavailable", "err", err.Error())
+		} else {
+			slog.Info("macOS notifications", "event", "notifications_status", "status", status)
+		}
 	}
 	ctx, stop := notifyContext(context.Background())
 	defer stop()
