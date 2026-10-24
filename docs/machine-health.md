@@ -251,7 +251,8 @@ does not claim a reclaim size it has not measured. No new cleanup kinds are
 implemented.
 
 `memory_pressure` starts after two consecutive, distinct critical OS samples.
-Normal, warning, unknown, and failed collection break the streak. State survives
+Normal, warning, unknown, and failed collection break the streak. Unknown or failed
+readings do not clear an existing episode. State survives
 collector restarts. Recovery ends the item while retaining its inbox history.
 Acknowledging an item suppresses further notifications for that episode.
 Pressure text leads with the agents' proven share of OS memory in use and MCP
@@ -259,17 +260,21 @@ count. With no proven agent memory it says agents hold none and other apps are
 the cause. Likely memory is never silently included in the proven amount.
 When MCP pile-ups exist, the pressure text includes a short count and the
 largest group with its host and restart advice. Active unacknowledged episodes
-refresh this evidence without changing their identity, timestamp, or throttle.
+refresh this evidence without changing their identity or timestamp.
 Growth evidence is labelled `Largest observed growth:`; no new growth alert is added.
 
-Both kinds follow `inbox.alerts` (`off` disables them), `alert_repeat`, and the
-existing three-second batching window. Repeat throttles are independent per
-machine and kind. Unacknowledged active machine warnings can repeat after the
-interval; delayed viewer/event passes cannot create extra samples. Health text
-survives the titles-only policy, since it contains operational readings rather
-than agent transcript text.
+Both kinds follow `inbox.alerts` (`off` disables them). Each condition notifies
+once per episode, including across collector restarts and metadata pruning;
+only a confirmed recovery re-arms it. `alert_repeat` applies to session alerts.
+Health items arriving in one committed batch coalesce per machine, even when
+their original timestamps differ. Summaries have no single click destination.
+Health text survives the titles-only policy, since it contains operational
+readings rather than agent transcript text. Banner text is short; the inbox
+keeps the detailed explanation and uses decimal GB/MB for sizes.
 
-Notification clicks use the existing terminal-notifier `driga inbox jump <id>` path.
+On macOS, Driga.app sends native UserNotifications with Driga's name and icon.
+A local single-item notification click runs `driga inbox jump <id>` through its
+delegate while the collector is running. Unbundled builds have no macOS alerts.
 The stored destination is `machine`. On macOS, the click opens Terminal and runs
 the installed executable's `top --tab machine`; on Linux, a manual jump uses
 `x-terminal-emulator -e`. This avoids requiring a running web server. As with

@@ -13,7 +13,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/labstack/driga/internal/config"
@@ -275,27 +274,10 @@ type Notifier interface {
 	Notify(context.Context, Notification) error
 }
 type DesktopNotifier struct {
-	Toast     func(context.Context, string) error // Native Windows backend; fixtures inject a recorder.
-	Runner    Runner
-	OS        string
-	DrigaPath string
-	Lookup    func() string // Optional cached lookup override for fixtures.
-}
-
-// TerminalNotifierPath uses the inherited PATH, including the service's saved
-// installing-shell PATH. Cache both presence and absence for the process lifetime.
-func TerminalNotifierPath() string { return terminalNotifierPath() }
-
-var terminalNotifierPath = cachedNotifierLookup(exec.LookPath)
-
-func cachedNotifierLookup(lookup func(string) (string, error)) func() string {
-	return sync.OnceValue(func() string {
-		path, err := lookup("terminal-notifier")
-		if err != nil {
-			return ""
-		}
-		return path
-	})
+	Toast  func(context.Context, string) error // Native Windows backend; fixtures inject a recorder.
+	Mac    Notifier                            // Native macOS backend; fixtures inject a fake.
+	Runner Runner
+	OS     string
 }
 
 func (d DesktopNotifier) Notify(ctx context.Context, n Notification) error {
@@ -309,36 +291,23 @@ func (d DesktopNotifier) Notify(ctx context.Context, n Notification) error {
 		}
 		return d.Toast(ctx, payload)
 	}
-	if d.Runner == nil {
-		return nil
-	}
 	goos := d.OS
 	if goos == "" {
 		goos = runtime.GOOS
+	}
+	if goos == "darwin" {
+		if d.Mac == nil {
+			return fmt.Errorf("notifications unavailable: install Driga.app for native macOS notifications")
+		}
+		return d.Mac.Notify(ctx, n)
+	}
+	if d.Runner == nil {
+		return nil
 	}
 	ctx, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
 	var err error
 	switch goos {
-	case "darwin":
-		lookup := d.Lookup
-		if lookup == nil {
-			lookup = TerminalNotifierPath
-		}
-		if path := lookup(); path != "" {
-			group := n.Kind
-			if n.ItemID != "" {
-				group = n.ItemID
-			}
-			args := []string{"-title", "driga", "-subtitle", n.Title, "-message", n.Body, "-group", "driga-" + group, "-sound", n.Sound}
-			// Summaries have no single destination. Remote items also omit ItemID.
-			if n.ItemID != "" && d.DrigaPath != "" {
-				args = append(args, "-execute", Quote(d.DrigaPath)+" inbox jump "+Quote(n.ItemID))
-			}
-			_, err = d.Runner.Run(ctx, path, args...)
-			break
-		}
-		_, err = d.Runner.Run(ctx, "osascript", "-e", "on run argv\ndisplay notification (item 1 of argv) with title (item 2 of argv) sound name (item 3 of argv)\nend run", n.Body, n.Title, n.Sound)
 	case "linux":
 		sound := "message-new-instant"
 		if n.Kind == "finished" {
@@ -350,7 +319,8 @@ func (d DesktopNotifier) Notify(ctx context.Context, n Notification) error {
 }
 
 // PlanAlerts marks suppressed items too: changing detail must not re-alert a wait.
-// Consecutive starts within three seconds in a committed batch form one summary.
+// Waiting starts within three seconds form a summary. Health items in a committed
+// batch coalesce per machine, regardless of the original episode timestamps.
 func PlanAlerts(items []model.InboxItem, sessions []model.Session, c config.InboxConfig, policy string, now time.Time, seen, last map[string]time.Time) []Notification {
 	type sessionKey struct {
 		machine string
@@ -398,19 +368,30 @@ func PlanAlerts(items []model.InboxItem, sessions []model.Session, c config.Inbo
 	sort.SliceStable(items, func(i, j int) bool { return items[i].TS.Before(items[j].TS) })
 	var waiting []model.InboxItem
 	var notes []Notification
-	var health []model.InboxItem
-	flushHealth := func() {
+	healthByMachine := map[string][]model.InboxItem{}
+	var healthOrder []string
+	flushHealth := func(health []model.InboxItem) {
 		if len(health) == 0 {
 			return
 		}
 		n := Notification{Kind: health[0].Kind, Title: "Machine needs attention", Sound: "Glass", ItemID: health[0].ID, MachineID: health[0].MachineID}
 		bodies := []string{}
 		for _, i := range health {
-			bodies = append(bodies, scrub.Scrub(i.Summary))
+			bodies = append(bodies, healthNotificationBody(i))
+		}
+		if len(health) == 1 {
+			if health[0].Kind == "low_disk" {
+				n.Title = "Low disk space"
+			} else {
+				n.Title = "Critical memory pressure"
+			}
+		} else {
+			// A summary has no single destination.
+			n.Kind = "machine_health"
+			n.ItemID = ""
 		}
 		n.Body = strings.Join(bodies, " · ")
 		notes = append(notes, n)
-		health = nil
 	}
 	flush := func() {
 		if len(waiting) == 0 {
@@ -440,7 +421,7 @@ func PlanAlerts(items []model.InboxItem, sessions []model.Session, c config.Inbo
 	}
 	for _, i := range items {
 		key := i.MachineID + ":" + i.ID
-		if _, ok := seen[key]; ok && !MachineWarning(i.Kind) {
+		if _, ok := seen[key]; ok {
 			continue
 		}
 		// alert_after delays a wait's alert until it has lasted that long, so a
@@ -457,15 +438,15 @@ func PlanAlerts(items []model.InboxItem, sessions []model.Session, c config.Inbo
 			continue
 		}
 		sk := AlertRepeatKey(i)
-		if prev, ok := last[sk]; ok && now.Sub(prev) < c.AlertRepeat {
+		if prev, ok := last[sk]; ok && !MachineWarning(i.Kind) && now.Sub(prev) < c.AlertRepeat {
 			continue
 		}
 		last[sk] = now
 		if MachineWarning(i.Kind) {
-			if len(health) > 0 && (i.MachineID != health[0].MachineID || i.TS.Sub(health[0].TS) > 3*time.Second) {
-				flushHealth()
+			if _, ok := healthByMachine[i.MachineID]; !ok {
+				healthOrder = append(healthOrder, i.MachineID)
 			}
-			health = append(health, i)
+			healthByMachine[i.MachineID] = append(healthByMachine[i.MachineID], i)
 			continue
 		}
 		if i.Kind == "finished" {
@@ -478,7 +459,9 @@ func PlanAlerts(items []model.InboxItem, sessions []model.Session, c config.Inbo
 		waiting = append(waiting, i)
 	}
 	flush()
-	flushHealth()
+	for _, machine := range healthOrder {
+		flushHealth(healthByMachine[machine])
+	}
 	return notes
 }
 
@@ -491,4 +474,16 @@ func AlertRepeatKey(i model.InboxItem) string {
 		return i.MachineID + ":health:" + i.Kind
 	}
 	return i.MachineID + ":" + strconv.FormatInt(i.SessionID, 10)
+}
+
+// The inbox keeps the explanation and commands; a banner gets only the condition.
+func healthNotificationBody(i model.InboxItem) string {
+	text := strings.Join(strings.Fields(scrub.Scrub(i.Summary)), " ")
+	if i.Kind == "memory_pressure" {
+		return "Critical memory pressure; open Machine to inspect apps"
+	}
+	if first, _, ok := strings.Cut(text, ". "); ok {
+		text = first
+	}
+	return strings.TrimSuffix(text, ".")
 }

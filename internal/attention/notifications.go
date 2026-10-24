@@ -1,0 +1,109 @@
+package attention
+
+import (
+	"context"
+	"crypto/sha256"
+	"fmt"
+	"path/filepath"
+	"sync"
+	"time"
+)
+
+// NativeNotificationRequest is the value-only boundary to UserNotifications.
+// No Objective-C objects escape the Darwin implementation.
+type NativeNotificationRequest struct {
+	Identifier, ThreadIdentifier string
+	Title, Body, Sound           string
+	ItemID, MachineID            string
+}
+
+type NativeNotificationCenter interface {
+	Authorize(func(error))
+	Add(context.Context, NativeNotificationRequest) error
+}
+
+// MacNotifier requests permission once per process. macOS remembers the user's
+// decision between launches. Authorization can outlive a cancelled Notify call.
+type MacNotifier struct {
+	Center     NativeNotificationCenter
+	once       sync.Once
+	authorized chan struct{}
+	authErr    error
+}
+
+func (m *MacNotifier) Notify(ctx context.Context, n Notification) error {
+	if m.Center == nil {
+		return fmt.Errorf("notifications unavailable: install Driga.app for native macOS notifications")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	m.once.Do(func() {
+		m.authorized = make(chan struct{})
+		m.Center.Authorize(func(err error) {
+			m.authErr = err
+			close(m.authorized)
+		})
+	})
+	select {
+	case <-m.authorized:
+		return m.post(ctx, n)
+	default:
+		// Keep the first alert queued while the user considers permission,
+		// without stalling collection or imposing a timeout on their answer.
+		go func() {
+			select {
+			case <-ctx.Done():
+			case <-m.authorized:
+				_ = m.post(ctx, n)
+			}
+		}()
+		return nil
+	}
+}
+
+func (m *MacNotifier) post(ctx context.Context, n Notification) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if m.authErr != nil {
+		return m.authErr
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	return m.Center.Add(ctx, nativeNotificationRequest(n))
+}
+
+func nativeNotificationRequest(n Notification) NativeNotificationRequest {
+	key := "item:" + n.ItemID
+	if n.ItemID == "" {
+		key = "summary:" + n.Kind
+	}
+	// Machine identity prevents local/remote ID collisions; hashing also avoids
+	// ambiguous delimiters and puts no private item text in the identifier.
+	id := fmt.Sprintf("driga-%x", sha256.Sum256([]byte(n.MachineID+"\x00"+key)))
+	return NativeNotificationRequest{Identifier: id, ThreadIdentifier: id,
+		Title: n.Title, Body: n.Body, Sound: n.Sound, ItemID: n.ItemID, MachineID: n.MachineID}
+}
+
+const notificationDefaultAction = "com.apple.UNNotificationDefaultActionIdentifier"
+
+// Notification clicks use argv, never a shell. Remote items and summaries have
+// no ItemID, as enforced by the collector before handing them to the backend.
+func notificationResponse(ctx context.Context, r Runner, path, action, itemID string) error {
+	if action != notificationDefaultAction || itemID == "" || path == "" || r == nil {
+		return nil
+	}
+	_, err := r.Run(ctx, path, "inbox", "jump", itemID)
+	return err
+}
+
+func drigaAppExecutable(path string) bool {
+	resolved, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return false
+	}
+	return filepath.Base(resolved) == "driga" && filepath.Base(filepath.Dir(resolved)) == "MacOS" &&
+		filepath.Base(filepath.Dir(filepath.Dir(resolved))) == "Contents" &&
+		filepath.Base(filepath.Dir(filepath.Dir(filepath.Dir(resolved)))) == "Driga.app"
+}

@@ -68,10 +68,9 @@ type DoctorDeps struct {
 	Now                time.Time
 	ProcessAlive       func(int32, time.Time) bool // Optional PID/start validation for fixtures.
 	LockProbe          func(dataDir string) (held bool, err error)
-	NotifierLookup     func() string          // Optional cached notifier lookup for fixtures.
 	ServicePlistStale  func() (bool, error)   // macOS plist path, read-only.
 	ServiceState       func() (string, error) // Windows Task Scheduler, read-only.
-	NotificationStatus func() (string, error) // Windows Runtime, no registration/display.
+	NotificationStatus func() (string, error) // Native API status, no authorization/registration/display.
 }
 
 // Doctor checks stored evidence without collecting, writing, or controlling launchd.
@@ -428,14 +427,15 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 				add("service", "warn", "collector plist points at a stale binary", "driga service install")
 			}
 		}
-		lookup := d.NotifierLookup
-		if lookup == nil {
-			lookup = attention.TerminalNotifierPath
+		status := d.NotificationStatus
+		if status == nil {
+			status = attention.MacNotificationStatus
 		}
-		if lookup() != "" {
-			add("notifications", "ok", "terminal-notifier (clickable)", "")
+		detail, err := status()
+		if err != nil {
+			add("notifications", "info", "notifications unavailable: "+err.Error(), "install Driga.app (brew install --cask driga); allow Driga in System Settings > Notifications")
 		} else {
-			add("notifications", "info", "osascript (Script Editor)", "brew install terminal-notifier")
+			add("notifications", "ok", detail, "")
 		}
 	}
 	add("fleet socket", "info", fleet.ControlSocketPath(d.DataDir), "")

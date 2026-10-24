@@ -2,11 +2,7 @@ package attention
 
 import (
 	"context"
-	"os"
-	"os/exec"
-	"path/filepath"
 	"reflect"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -14,78 +10,6 @@ import (
 	"github.com/labstack/driga/internal/config"
 	"github.com/labstack/driga/internal/model"
 )
-
-func TestClickableNotifierArguments(t *testing.T) {
-	for _, found := range []bool{false, true} {
-		t.Run(map[bool]string{false: "fallback", true: "clickable"}[found], func(t *testing.T) {
-			var calls [][]string
-			r := runnerFunc(func(_ context.Context, name string, args ...string) ([]byte, error) {
-				calls = append(calls, append([]string{name}, args...))
-				return nil, nil
-			})
-			lookups := 0
-			lookup := cachedNotifierLookup(func(name string) (string, error) {
-				lookups++
-				if name != "terminal-notifier" {
-					t.Fatal(name)
-				}
-				if !found {
-					return "", exec.ErrNotFound
-				}
-				return "/opt/tool bin/terminal-notifier", nil
-			})
-			d := DesktopNotifier{Runner: r, OS: "darwin", DrigaPath: "/opt/Driga's bin/driga", Lookup: lookup}
-			n := Notification{Kind: "waiting", ItemID: "item '$(bad) with spaces", Title: "Needs you", Body: `driga · permission (Bash) "quoted"`, Sound: "Glass"}
-			if err := d.Notify(context.Background(), n); err != nil {
-				t.Fatal(err)
-			}
-			want := []string{"osascript", "-e", "on run argv\ndisplay notification (item 1 of argv) with title (item 2 of argv) sound name (item 3 of argv)\nend run", n.Body, n.Title, n.Sound}
-			if found {
-				want = []string{"/opt/tool bin/terminal-notifier", "-title", "driga", "-subtitle", n.Title, "-message", n.Body, "-group", "driga-" + n.ItemID, "-sound", "Glass", "-execute", `'/opt/Driga'"'"'s bin/driga' inbox jump 'item '"'"'$(bad) with spaces'`}
-			}
-			if !reflect.DeepEqual(calls, [][]string{want}) {
-				t.Fatalf("got %#v; want %#v", calls, want)
-			}
-			n.ItemID, n.Body = "", "3 sessions waiting"
-			if err := d.Notify(context.Background(), n); err != nil {
-				t.Fatal(err)
-			}
-			if lookups != 1 {
-				t.Fatalf("lookups = %d", lookups)
-			}
-			if found {
-				want = []string{"/opt/tool bin/terminal-notifier", "-title", "driga", "-subtitle", n.Title, "-message", n.Body, "-group", "driga-waiting", "-sound", "Glass"}
-				if !reflect.DeepEqual(calls[1], want) {
-					t.Fatal(calls[1])
-				}
-			}
-		})
-	}
-}
-
-func TestNotifierLookupUsesInheritedPATH(t *testing.T) {
-	dir := t.TempDir()
-	name := "terminal-notifier"
-	if runtime.GOOS == "windows" {
-		name += ".exe"
-		t.Setenv("PATHEXT", ".EXE")
-	}
-	path := filepath.Join(dir, name)
-	if err := os.WriteFile(path, []byte("unused fixture"), 0700); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", dir)
-	lookup := cachedNotifierLookup(exec.LookPath)
-	if got := lookup(); got != path {
-		t.Fatalf("lookup = %q", got)
-	}
-	if err := os.Remove(path); err != nil {
-		t.Fatal(err)
-	}
-	if got := lookup(); got != path {
-		t.Fatalf("lookup not cached: %q", got)
-	}
-}
 
 func TestLinuxNotifierExactArguments(t *testing.T) {
 	for _, kind := range []string{"waiting", "finished"} {
@@ -100,7 +24,7 @@ func TestLinuxNotifierExactArguments(t *testing.T) {
 			}
 			return nil, nil
 		})
-		d := DesktopNotifier{Runner: r, OS: "linux", Lookup: func() string { t.Fatal("Linux lookup"); return "" }}
+		d := DesktopNotifier{Runner: r, OS: "linux"}
 		if err := d.Notify(context.Background(), Notification{Kind: kind, Title: "title", Body: "body"}); err != nil {
 			t.Fatal(err)
 		}

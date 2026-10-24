@@ -204,14 +204,14 @@ func TestMachineViewReusesCollectorProcessSample(t *testing.T) {
 func TestPressureSummaryLeadsWithAgents(t *testing.T) {
 	ps := []model.Proc{{PID: 1, Cmdline: "claude", Argv: []string{"claude"}, RSS: 4 << 30}, {PID: 2, Exe: "/bin/browser", RSS: 12 << 30}}
 	text := memoryPressureSummary([][]model.Proc{ps}, nil, time.Now(), nil)
-	if !strings.HasPrefix(text, "Critical memory pressure for two samples. Agents hold 4.0 GiB of 16.0 GiB in use (25%)") {
+	if !strings.HasPrefix(text, "Critical memory pressure for two samples. Agents hold 4.3 GB of 17.2 GB in use (25%)") {
 		t.Fatal(text)
 	}
 }
 func TestPressureSummaryAgentsSmallShare(t *testing.T) {
 	ps := []model.Proc{{PID: 1, Exe: "/bin/editor", RSS: 16 << 30}}
 	text := memoryPressureSummary([][]model.Proc{ps}, nil, time.Now(), nil)
-	if !strings.Contains(text, "Agents hold none of the 16.0 GiB in use; other apps are the cause.") {
+	if !strings.Contains(text, "Agents hold none of the 17.2 GB in use; other apps are the cause.") {
 		t.Fatal(text)
 	}
 }

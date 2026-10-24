@@ -852,9 +852,10 @@ func (tx *Tx) Prune(now time.Time) error {
  AND NOT EXISTS(SELECT 1 FROM inbox_items i WHERE i.machine_id=? AND i.id=meta.value)`, tx.machineID, tx.machineID); err != nil {
 			return err
 		}
-		// Expiring the source seen metadata must also expire its candidate
-		// projection, including a peer wait still open after a month.
-		if err := tx.exec(`UPDATE inbox_items SET alerted=0 WHERE alerted=1 AND EXISTS (
+		// Session metadata expiry also expires its candidate projection,
+		// including a peer wait still open after a month. Health delivery stays
+		// consumed until recovery creates a new episode.
+		if err := tx.exec(`UPDATE inbox_items SET alerted=0 WHERE alerted=1 AND kind NOT IN ('low_disk','memory_pressure') AND EXISTS (
  SELECT 1 FROM meta WHERE meta.machine_id=? AND key='inbox_alert:'||inbox_items.machine_id||':'||inbox_items.id AND value<?
 )`, tx.machineID, now.Add(-30*24*time.Hour).UTC().Format(time.RFC3339Nano)); err != nil {
 			return err
@@ -1070,9 +1071,9 @@ func nullableString(s string) any {
 }
 
 // alertCandidateWhere matches the partial index, so consumed unacked history
-// costs neither a table scan nor Go allocations. Health episodes remain eligible
-// for PlanAlerts' repeat policy; delayed waits remain unseen until it consumes them.
-const alertCandidateWhere = "acked_at IS NULL AND ended_at IS NULL AND (alerted=0 OR kind IN ('low_disk','memory_pressure'))"
+// costs neither a table scan nor Go allocations. Each health episode is consumed
+// once; delayed waits remain unseen until PlanAlerts consumes them.
+const alertCandidateWhere = "acked_at IS NULL AND ended_at IS NULL AND alerted=0"
 
 func (q *querier) InboxAlertCandidates(scope Scope) ([]model.InboxItem, error) {
 	where, args := scope.where("machine_id")

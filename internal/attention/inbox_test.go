@@ -81,31 +81,6 @@ func TestTerminalJumpNeedsProof(t *testing.T) {
 	}
 }
 
-func TestNotifierUsesArgvAndDistinctLinuxSounds(t *testing.T) {
-	for _, goos := range []string{"darwin", "linux"} {
-		var calls [][]string
-		r := runnerFunc(func(_ context.Context, n string, a ...string) ([]byte, error) {
-			calls = append(calls, append([]string{n}, a...))
-			return nil, nil
-		})
-		d := DesktopNotifier{Runner: r, OS: goos, Lookup: func() string { return "" }}
-		for _, n := range []Notification{{Kind: "waiting", Title: "Needs input", Body: `quoted " message`, Sound: "Glass"}, {Kind: "finished", Title: "Done", Body: "done", Sound: "Pop"}} {
-			if err := d.Notify(context.Background(), n); err != nil {
-				t.Fatal(err)
-			}
-		}
-		if len(calls) != 2 {
-			t.Fatal(calls)
-		}
-		if goos == "linux" && (!strings.Contains(strings.Join(calls[0], " "), "sound-name:") || strings.Join(calls[0], " ") == strings.Join(calls[1], " ")) {
-			t.Fatal("missing distinct sound hints", calls)
-		}
-		if goos == "darwin" && strings.Contains(calls[0][2], `quoted " message`) {
-			t.Fatal("body interpolated into AppleScript")
-		}
-	}
-}
-
 func TestAlertPolicyThrottleSummaryAndKinds(t *testing.T) {
 	at := time.Unix(100, 0).UTC()
 	cfg := config.Default()

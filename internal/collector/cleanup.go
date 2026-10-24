@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/labstack/driga/internal/attention"
 	"github.com/labstack/driga/internal/config"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/store"
@@ -42,7 +43,7 @@ func lowDiskInbox(tx *store.Tx, cfg config.MachineConfig, s model.MachineSample,
 	for _, w := range worktrees[:min(3, len(worktrees))] {
 		names = append(names, w.Path)
 	}
-	summary := fmt.Sprintf("Low disk: %d bytes free (threshold %d). Driga can show known cleanup candidates with driga cleanup --sizes; Machine shows the largest apps.", s.DiskFree, threshold)
+	summary := fmt.Sprintf("%s free, below %s. Inspect known cleanup candidates with driga cleanup list --sizes; driga top --tab machine shows the largest apps.", attention.DecimalBytes(s.DiskFree), attention.DecimalBytes(threshold))
 	if len(names) > 0 {
 		summary += " Oldest stored worktrees to inspect: " + strings.Join(names, ", ")
 	}
