@@ -3,12 +3,16 @@ package cli
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
+	"log/slog"
 	"os"
 
 	"github.com/labstack/driga/internal/cleanup"
 	"github.com/labstack/driga/internal/config"
 	"github.com/labstack/driga/internal/desktop"
+	"github.com/labstack/driga/internal/logfile"
+	"github.com/labstack/driga/internal/service"
 	"github.com/labstack/driga/internal/view"
 	"github.com/labstack/driga/internal/web"
 )
@@ -64,9 +68,14 @@ func (AppCmd) Run(g *Globals) error {
 	if handed, err := handOffApp(systemLaunch); handed || err != nil {
 		return err
 	}
+	restore := appLogging()
+	defer restore()
+	// Opened from Finder or at login, an error here would reach no one: the
+	// app starts with the default settings and says what is wrong instead.
 	cfg, err := config.Load(config.Path())
+	var configErr error
 	if err != nil {
-		return err
+		cfg, configErr = config.Default(), fmt.Errorf("read %s: %w", config.Path(), err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -93,8 +102,19 @@ func (AppCmd) Run(g *Globals) error {
 		}},
 		Supervisor: &desktop.Supervisor{Executable: collectorExecutable},
 		Config:     cfg,
+		ConfigErr:  configErr,
 		Version:    g.Version,
 	})
+}
+
+// appLogging writes the app's log, and its collector's output, to the
+// collector log, which driga service logs shows. A launch from Finder or at
+// login has nowhere else to write; stderr keeps a terminal run readable.
+func appLogging() func() {
+	sink := io.MultiWriter(&logfile.Writer{Path: service.LogPath()}, os.Stderr)
+	previous := slog.Default()
+	slog.SetDefault(slog.New(logfile.TextHandler(sink)).With("process", "app"))
+	return func() { slog.SetDefault(previous) }
 }
 
 // pageActivity keeps the collector's viewer heartbeat fresh while the page is used.

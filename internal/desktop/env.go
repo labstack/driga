@@ -192,3 +192,17 @@ func childEnvironment(login map[string]string) []string {
 	slices.Sort(out)
 	return out
 }
+
+// shadowedKeys returns, sorted, the DRIGA_* variables the login environment
+// sets to another value than the app's own. The collector uses the app's, so
+// a data directory exported in a shell profile is not the one the app shows.
+func shadowedKeys(login map[string]string, getenv func(string) string) []string {
+	var keys []string
+	for key, value := range login {
+		if strings.HasPrefix(key, "DRIGA_") && getenv(key) != value {
+			keys = append(keys, key)
+		}
+	}
+	slices.Sort(keys)
+	return keys
+}

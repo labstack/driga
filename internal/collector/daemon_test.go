@@ -39,7 +39,9 @@ func TestRunExclusiveLock(t *testing.T) {
 	if err != nil || !held || owner.Kind != "service" || owner.Version != "test" || owner.PID != os.Getpid() {
 		t.Fatalf("run owner: %+v, %v, %v", owner, held, err)
 	}
-	err = Run(context.Background(), d, dir)
+	manual := d
+	manual.Owner = Owner{Kind: "manual"}
+	err = Run(context.Background(), manual, dir)
 	if !errors.Is(err, ErrAlreadyRunning) || !strings.Contains(err.Error(), "another driga collector is running (service, pid ") {
 		t.Fatalf("lock: %v", err)
 	}
@@ -62,6 +64,45 @@ func TestRunExclusiveLock(t *testing.T) {
 		t.Fatal(err)
 	}
 	lock.Close()
+}
+
+// A service waits for a lock another collector holds, rather than exiting
+// for the service manager to restart it, and collects once it is free.
+func TestRunServiceWaitsForLock(t *testing.T) {
+	d, _, _, a := setup(t)
+	lockWait = 10 * time.Millisecond
+	t.Cleanup(func() { lockWait = 5 * time.Second })
+	d.Owner = Owner{Kind: "service"}
+	dir := config.DataDir()
+	app, err := Lock(dir, Owner{Kind: "app"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ready := make(chan struct{})
+	a.collect = func(ctx context.Context) { close(ready); <-ctx.Done() }
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- Run(ctx, d, dir) }()
+	select {
+	case err := <-done:
+		t.Fatalf("service exited while the lock was held: %v", err)
+	case <-ready:
+		t.Fatal("service collected while the lock was held")
+	case <-time.After(200 * time.Millisecond):
+	}
+	if err := app.Close(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-ready:
+	case <-time.After(5 * time.Second):
+		t.Fatal("service never took the freed lock")
+	}
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestCadenceFastWithHeartbeat(t *testing.T) {

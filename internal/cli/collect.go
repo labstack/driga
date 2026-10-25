@@ -135,7 +135,7 @@ func (c CollectCmd) Run(g *Globals) error {
 	}
 	dir := config.DataDir()
 	if !c.Once {
-		restore, err := collectorLogging()
+		restore, err := collectorLogging(c.Owner)
 		if err != nil {
 			return err
 		}
@@ -173,13 +173,15 @@ func watchParent(r io.Reader, cancel context.CancelFunc) {
 	cancel()
 }
 
-func collectorLogging() (func(), error) {
+// collectorLogging writes the collector's log. On Linux a service's journal
+// shows it too; the app logs a child's output itself, so that copy is left out.
+func collectorLogging(owner string) (func(), error) {
 	w := &logfile.Writer{Path: service.LogPath()}
 	if _, err := w.Write(nil); err != nil {
 		return nil, err
 	}
 	var sink io.Writer = w
-	if runtime.GOOS == "linux" {
+	if runtime.GOOS == "linux" && owner != "app" {
 		sink = io.MultiWriter(sink, os.Stderr)
 	}
 	previous := slog.Default()

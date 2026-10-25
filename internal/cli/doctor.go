@@ -138,18 +138,19 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 		probe = collector.ReadOwner
 	}
 	owner, held, err := probe(d.DataDir)
+	restart := restartHint(goos, owner, held)
 	switch {
 	case err != nil:
 		add("collector", "fail", err.Error(), "check access to "+d.DataDir+"/driga.lock")
 	case !held:
 		add("collector", "warn", "not running; snapshot mode has no history", collectorHint(goos))
 	case d.Store == nil:
-		add("collector", "warn", "lock held but database unavailable", "driga service restart")
+		add("collector", "warn", "lock held but database unavailable", restart)
 	default:
 		raw, err := d.Store.Meta("last_pass_at")
 		last, parseErr := time.Parse(time.RFC3339Nano, raw)
 		if err != nil || parseErr != nil || last.After(d.Now) || d.Now.Sub(last) > 3*intervals.Procs {
-			add("collector", "warn", "lock held but last pass is missing or stale", "driga service restart")
+			add("collector", "warn", "lock held but last pass is missing or stale", restart)
 		} else {
 			add("collector", "ok", fmt.Sprintf("running (%s, pid %d); last pass %s ago", owner.Kind, owner.PID, d.Now.Sub(last).Round(time.Second)), "")
 		}
@@ -157,7 +158,7 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 	if d.Store != nil {
 		sources, err := d.Store.Sources()
 		if err != nil {
-			add("sources", "fail", err.Error(), "check database access; run driga service restart")
+			add("sources", "fail", err.Error(), "check database access; "+restart)
 		}
 		for _, source := range sources {
 			if source.Name == "otlp" || source.Name == "chat" {
@@ -177,7 +178,7 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 				detail = "not yet receiving events"
 			}
 			if fresh.Stale || fresh.Status == "" && (source.LastOKAt.After(d.Now) || source.LastErrorAt.After(source.LastOKAt)) {
-				status, fix = "warn", "driga service restart"
+				status, fix = "warn", restart
 			}
 			if source.LastError != "" {
 				detail += "; last error: " + source.LastError
@@ -187,7 +188,7 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 		}
 		procs, err := d.Store.Procs()
 		if err != nil {
-			add("collector_rss", "fail", err.Error(), "check database access; run driga service restart")
+			add("collector_rss", "fail", err.Error(), "check database access; "+restart)
 		} else {
 			sigs, _ := signatures.Load(nil)
 			for _, p := range procs {
@@ -240,9 +241,9 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 				detail = fmt.Sprintf("%.1f MB footprint (RSS %.1f MB)", float64(footprint)/1e6, float64(rss)/1e6)
 			}
 			if !found {
-				status, detail, fix = "warn", "collector absent from process snapshot", "driga service start"
+				status, detail, fix = "warn", "collector absent from process snapshot", restart
 			} else if budget > 50_000_000 {
-				status, fix = "warn", "driga service restart; inspect driga service logs"
+				status, fix = "warn", restart+"; inspect driga service logs"
 			}
 			add("collector_rss", status, detail, fix)
 		}

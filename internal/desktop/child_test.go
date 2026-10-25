@@ -20,8 +20,14 @@ const helperEnv = "DESKTOP_TEST_COLLECTOR"
 // arguments and environment as a notification, then runs until its parent
 // closes the lifeline.
 func TestMain(m *testing.M) {
-	if os.Getenv(helperEnv) == "" {
+	switch os.Getenv(helperEnv) {
+	case "":
 		os.Exit(m.Run())
+	case "fail":
+		// A collector that cannot start says why on stderr, as cli.Main does.
+		_, _ = os.Stdout.WriteString("starting\n")
+		_, _ = os.Stderr.WriteString("driga: open store: file is not a database (26)")
+		os.Exit(1)
 	}
 	args := os.Args[1:]
 	fs := flag.NewFlagSet("collect", flag.ExitOnError)
@@ -91,5 +97,36 @@ func TestStartCollectorRunsUntilStopped(t *testing.T) {
 		}
 	case <-time.After(10 * time.Second):
 		t.Fatal("notification stream did not end with the child")
+	}
+}
+
+// Why a collector could not start ends the error the app reports.
+func TestStartCollectorReportsWhyItExited(t *testing.T) {
+	child, err := StartCollector(context.Background(), os.Args[0], map[string]string{helperEnv: "fail"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = io.Copy(io.Discard, child.Notifications())
+	err = child.Wait()
+	if err == nil || !strings.HasSuffix(err.Error(), ": open store: file is not a database (26)") {
+		t.Fatalf("Wait = %v, want the collector's last line", err)
+	}
+}
+
+func TestOutputLogKeepsLastLine(t *testing.T) {
+	var o outputLog
+	_, _ = o.Write([]byte("first\nsec"))
+	_, _ = o.Write([]byte("ond\n\n  \n"))
+	if got := o.last(); got != "second" {
+		t.Fatalf("last = %q, want second", got)
+	}
+	_, _ = o.Write([]byte("driga: no newline"))
+	o.flush()
+	if got := o.last(); got != "no newline" {
+		t.Fatalf("last = %q, want the unterminated line without the CLI prefix", got)
+	}
+	_, _ = o.Write([]byte(strings.Repeat("x", maxOutputLine+1)))
+	if got := len(o.last()); got != maxOutputLine+1 {
+		t.Fatalf("long line held back: last has %d bytes", got)
 	}
 }

@@ -3,6 +3,8 @@ package desktop
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -356,5 +358,53 @@ func TestClickTargetFromStore(t *testing.T) {
 	}
 	if id, ok := ClickTarget(n, inbox.Rows); !ok || id != local {
 		t.Fatalf("ClickTarget = %d %v; want local session %d", id, ok, local)
+	}
+}
+
+// A bundle's version is read from its Info.plist, never by running the
+// executable, which can wait on Gatekeeper after an upgrade.
+func TestInstalledVersionReadsBundle(t *testing.T) {
+	contents := filepath.Join(t.TempDir(), "Driga.app", "Contents")
+	if err := os.MkdirAll(filepath.Join(contents, "MacOS"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	plist := `<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict>
+	<key>LSEnvironment</key><dict><key>DrigaReleaseVersion</key><string>nested</string></dict>
+	<key>CFBundleVersion</key><string>2026.10.17</string>
+	<key>DrigaReleaseVersion</key><string>2026.10.17-alpha</string>
+</dict></plist>`
+	if err := os.WriteFile(filepath.Join(contents, "Info.plist"), []byte(plist), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// No executable exists: running it would fail.
+	got, err := installedVersion(context.Background(), filepath.Join(contents, "MacOS", "driga"))
+	if err != nil || got != "2026.10.17-alpha" {
+		t.Fatalf("installedVersion = %q, %v", got, err)
+	}
+	if _, err := plistString(strings.NewReader(plist), "Missing"); err == nil {
+		t.Fatal("a missing key was found")
+	}
+}
+
+// Collector restarts wait while the executable changed and its version is
+// not read yet.
+func TestUpgradeWatchPending(t *testing.T) {
+	stamp := time.Unix(100, 0)
+	w := &upgradeWatch{
+		exe: "/app/driga", version: "v1",
+		stat: func(string) (time.Time, error) { return stamp, nil },
+		read: func(context.Context, string) (string, error) { return "v1", nil },
+	}
+	w.start()
+	if w.pending() {
+		t.Fatal("unchanged executable pending")
+	}
+	stamp = time.Unix(200, 0)
+	if !w.pending() {
+		t.Fatal("replaced executable not pending")
+	}
+	if w.changed(context.Background()) || w.pending() {
+		t.Fatal("same version still pending after it was read")
 	}
 }

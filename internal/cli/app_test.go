@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"context"
 	"os"
+	"path/filepath"
+	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/labstack/driga/internal/config"
@@ -119,5 +122,31 @@ func TestAppCommandRunsDesktop(t *testing.T) {
 	closeSource()
 	if got.Web.SessionAction == nil || got.Web.CleanupList == nil || got.Web.Activity == nil || got.Web.Machine != "all" {
 		t.Fatalf("page handlers: %+v", got.Web)
+	}
+}
+
+// Opened from Finder or at login, an unreadable settings file reaches no
+// terminal: the app starts with the defaults and is told why.
+func TestAppCommandStartsWithBadConfig(t *testing.T) {
+	readEnv(t)
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte("[app]\ntray = \"no\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("DRIGA_CONFIG", path)
+	defer func(prev func(desktop.Options) error) { runDesktop = prev }(runDesktop)
+	var got desktop.Options
+	runDesktop = func(opts desktop.Options) error { got = opts; return nil }
+	defer func(prev bool) { systemLaunch = prev }(systemLaunch)
+	systemLaunch = true
+	var out, errout bytes.Buffer
+	if code := run([]string{"app"}, "test-version", nil, &out, &errout); code != 0 {
+		t.Fatalf("driga app: %d %s", code, errout.String())
+	}
+	if got.ConfigErr == nil || !strings.Contains(got.ConfigErr.Error(), path) {
+		t.Fatalf("config error = %v, want one naming %s", got.ConfigErr, path)
+	}
+	if !reflect.DeepEqual(got.Config, config.Default()) {
+		t.Fatal("the app did not start with the default settings")
 	}
 }

@@ -212,6 +212,34 @@ func (s *schedule) wait(_ time.Time, _ Intervals) time.Duration {
 	return time.Second
 }
 
+// lockWait is how often a service collector asks again for a lock another
+// collector holds; tests shorten it.
+var lockWait = 5 * time.Second
+
+// lockFor takes the collector lock. A service waits while another collector,
+// such as the desktop app's, holds it: the service manager would otherwise
+// restart it every few seconds for as long as the other one runs.
+func lockFor(ctx context.Context, clock daemonClock, dataDir string, owner Owner) (*os.File, error) {
+	logged := false
+	for {
+		lock, err := Lock(dataDir, owner)
+		if owner.Kind != "service" || !errors.Is(err, ErrAlreadyRunning) {
+			return lock, err
+		}
+		if !logged {
+			slog.Info("another collector holds the lock; waiting for it to stop", "event", "lock_wait", "err", err.Error())
+			logged = true
+		}
+		timer := clock.NewTimer(lockWait)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil, ctx.Err()
+		case <-timer.Chan():
+		}
+	}
+}
+
 // Run collects until cancellation while holding the exclusive writer lock.
 // Cancellation, by a signal or the parent going away, is a clean stop at
 // whatever step it lands, startup included: whatever a step returned then
@@ -232,7 +260,7 @@ func run(ctx context.Context, d Deps, dataDir string) error {
 	if clock == nil {
 		clock = realDaemonClock{}
 	}
-	lock, err := Lock(dataDir, d.Owner)
+	lock, err := lockFor(ctx, clock, dataDir, d.Owner)
 	if err != nil {
 		return err
 	}

@@ -23,5 +23,5 @@ func TestDoctorQuietEventSources(t *testing.T) {
 	if err := st.Tx(context.Background(), func(tx *store.Tx) error { return tx.SetSourceError("sockets", "probe failed", d.Now) }); err != nil {
 		t.Fatal(err)
 	}
-	requireCheck(t, Doctor(context.Background(), d), "source:sockets", "warn", "driga service restart")
+	requireCheck(t, Doctor(context.Background(), d), "source:sockets", "warn", "stop and rerun driga collect")
 }
