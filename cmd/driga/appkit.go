@@ -14,6 +14,12 @@ func usesAppKit(args []string) bool {
 	return true
 }
 
+// appMode reports whether args run the desktop app, which must keep the
+// main thread.
+func appMode(args []string) bool {
+	return len(args) == 1 && args[0] == "app"
+}
+
 func command(args []string) string {
 	for _, a := range args {
 		if !strings.HasPrefix(a, "-") {

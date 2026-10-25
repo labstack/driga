@@ -10,10 +10,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"net"
-	"net/http"
-	"net/http/cookiejar"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -143,53 +139,6 @@ func TestWindowsEndToEnd(t *testing.T) {
 			t.Fatalf("task survived uninstall: %s", out)
 		}
 		// Cleanup is now idempotent through status, rather than uninstalling a missing task.
-	})
-	t.Run("Web", func(t *testing.T) {
-		f := s.isolate(t)
-		listener, err := net.Listen("tcp", "127.0.0.1:0")
-		must(t, err)
-		address := listener.Addr().String()
-		must(t, listener.Close())
-		web := f.start(t, f.bin, "web", "--listen", address)
-		jar, err := cookiejar.New(nil)
-		must(t, err)
-		client := &http.Client{Timeout: 2 * time.Second, Jar: jar}
-		var dashboardURL string
-		eventually(t, "dashboard prints authenticated loopback URL", func() bool {
-			log, err := os.ReadFile(web.log)
-			if err != nil {
-				return false
-			}
-			for _, word := range strings.Fields(string(log)) {
-				if strings.HasPrefix(word, "http://"+address+"/") {
-					dashboardURL = word
-					return true
-				}
-			}
-			return false
-		})
-		eventually(t, "loopback dashboard ready", func() bool {
-			r, err := client.Get(dashboardURL)
-			if err != nil {
-				return false
-			}
-			defer r.Body.Close()
-			return r.StatusCode == http.StatusOK
-		})
-		for _, path := range []string{"/", "/static/brand/favicon.svg"} {
-			r, err := client.Get("http://" + address + path)
-			must(t, err)
-			body, err := io.ReadAll(r.Body)
-			r.Body.Close()
-			must(t, err)
-			if r.StatusCode != 200 || len(body) == 0 {
-				t.Fatalf("GET %s: status=%d bytes=%d", path, r.StatusCode, len(body))
-			}
-			if csp := r.Header.Get("Content-Security-Policy"); !strings.Contains(csp, "default-src 'self'") {
-				t.Fatalf("GET %s: missing restrictive CSP: %q", path, csp)
-			}
-		}
-		f.stopConsole(t, web)
 	})
 	t.Run("Hooks", func(t *testing.T) {
 		f := s.isolate(t)

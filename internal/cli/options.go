@@ -120,21 +120,6 @@ func (o *TopOptions) AfterApply(g *Globals) error {
 	return nil
 }
 
-type WebOptions struct {
-	Machine  string `default:"all" help:"Scope to a machine name, ID, device-ID prefix, local, or all."`
-	Project  string `help:"Scope to one project (path, name, or dot)."`
-	Since    string `help:"Only show items since a duration ago or yesterday."`
-	Snapshot bool   `help:"Force one-shot snapshot collection without history."`
-}
-
-func (o *WebOptions) AfterApply(g *Globals) error {
-	g.Machine = o.Machine
-	g.Project = o.Project
-	g.Since = o.Since
-	g.Snapshot = o.Snapshot
-	return nil
-}
-
 type AskOptions struct {
 	Machine string `default:"all" help:"Scope to a machine name, ID, device-ID prefix, local, or all."`
 	Project string `help:"Scope to one project (path, name, or dot)."`

@@ -226,7 +226,6 @@ func TestSmoke(t *testing.T) {
 			t.Fatalf("summary lacks %q: %s", part, summary)
 		}
 	}
-	local.webSmoke()
 
 	// Fleet: the local node serves on loopback; a viewer with an empty HOME
 	// pairs and must see the served session through the stream.
@@ -271,17 +270,6 @@ func TestSmoke(t *testing.T) {
 	}, func() string { return "serve:\n" + serveLog.String() + "\nviewer:\n" + viewerLog.String() })
 	if machines := viewer.data("machines"); !field(machines, "name", "smoke-peer") {
 		t.Fatalf("peer missing from machines: %s", machines)
-	}
-}
-
-// webSmoke checks that the retired browser server refuses before listening.
-func (n node) webSmoke() {
-	n.t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	out, err := n.cmd(ctx, "web", "--listen", "127.0.0.1:0").CombinedOutput()
-	if err == nil || !strings.Contains(string(out), "driga web was replaced by the desktop app; run driga app") || strings.Contains(string(out), "http://") {
-		n.t.Fatalf("web: %v %s", err, out)
 	}
 }
 
