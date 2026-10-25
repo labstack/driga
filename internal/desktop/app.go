@@ -140,10 +140,6 @@ func Run(opts Options) error {
 	return err
 }
 
-// OpenedAtLogin reports whether the system started this process at login.
-// Call it on the main goroutine, before Run.
-func OpenedAtLogin() bool { return mygo.App.WasOpenedAtLogin() }
-
 // prepareSupervisor fills the supervisor's production defaults and wires its
 // reports to the shell. It returns the collector executable.
 func (s *shell) prepareSupervisor(dataDir string) (string, error) {
