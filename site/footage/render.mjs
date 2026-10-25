@@ -14,8 +14,8 @@ copyFileSync("../src/assets/lockup.svg", "out/lockup.svg");
 const remotion = (...args) => execFileSync("npx", ["remotion", ...args, "--public-dir", "out", "--log", "error"], { stdio: "inherit" });
 
 // The hero's poster is the permission prompt, the film's main point.
-const posterFrame = { hero: cut.hero.poster * cut.fps, needs: 2.5 * cut.fps, flow: 2.5 * cut.fps, machines: 1.5 * cut.fps };
-for (const id of ["hero", "needs", "flow", "machines"]) {
+const posterFrame = { hero: cut.hero.poster * cut.fps, machines: 1.5 * cut.fps };
+for (const id of ["hero", "machines"]) {
   for (const theme of ["dark", "light"]) {
     const name = `${id}-${theme}`;
     remotion("render", "film/index.ts", name, `${media}/${name}.mp4`, "--codec", "h264", "--crf", "23", "--pixel-format", "yuv420p");

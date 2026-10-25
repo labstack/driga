@@ -94,7 +94,7 @@ site-deps:
 site: docs site-deps
     cd site && npm run dev
 
-# Re-record site footage of the real TUI and web on demo data (needs vhs, ffmpeg).
+# Re-record site footage of the real TUI on demo data (needs vhs, ffmpeg).
 site-footage:
     site/footage/record.sh
 

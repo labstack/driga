@@ -1,6 +1,6 @@
 ---
 title: Flow
-description: Use Flow in the terminal UI and web dashboard to see every session as a map, a timeline or a list, and act on one.
+description: Use Flow in the terminal UI and the desktop app to see every session as a map, a timeline or a list, and act on one.
 summary: Flow's Map, Timeline and Sessions views, keys, labels, the Needs you shelf, Activity history and session actions.
 read_when:
   - You opened driga top and want to know what Flow shows and which keys drive it.
@@ -10,7 +10,7 @@ read_when:
 import TerminalFrame from "../../../components/TerminalFrame.astro";
 
 `driga top` opens on **Flow** (`0`). The other tabs are Projects (`1`) and
-Machines (`2`). `driga web` shows the same three tabs in a browser.
+Machines (`2`). The Driga app (`driga app`) shows the same three views in its window.
 
 <TerminalFrame name="board-busy-100" title="driga top · Flow · Map" caption="Rendered from the TUI's synthetic test fixture." />
 
@@ -18,7 +18,7 @@ Machines (`2`). `driga web` shows the same three tabs in a browser.
 
 | Key | View | Shows |
 | --- | --- | --- |
-| `m` | Map (default) | A grouped project tree in the terminal; an SVG of projects, leads and workers on the web. More than four workers fold into a `+N` control. |
+| `m` | Map (default) | A grouped project tree in the terminal; an SVG of projects, leads and workers in the app. More than four workers fold into a `+N` control. |
 | `t` | Timeline | Each session's activity over the window, grouped by project. |
 | `s` | Sessions | Every session as a sortable list (`S` sorts). |
 
@@ -41,7 +41,7 @@ Unknown history stays neutral rather than guessed.
 | Tab | Focus the Needs you shelf |
 | `y` / `n` | Answer the selected permission prompt (after a short review delay) |
 | `J` | Open the session's terminal through its stored jump destination |
-| `K` | Stop a local session after you confirm (web: **Stop**) |
+| `K` | Stop a local session after you confirm (app: **Stop**) |
 | `C` | Copy the resume command |
 | `c` | Open [Chat](/guides/chat) with this context |
 | `h` | Activity history |
@@ -76,4 +76,4 @@ Hosted sessions idle for more than an hour are hidden from default listings and
 counts; `--all` brings back those active in the last 24 hours. Read commands
 take scope and output flags such as `--json`, `--machine` and `--project`;
 the [CLI reference](/reference/cli) lists them per command. For a live view use
-`driga top` or `driga web`.
+`driga top` or the Driga app.

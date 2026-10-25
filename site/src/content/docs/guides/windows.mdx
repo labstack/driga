@@ -14,15 +14,21 @@ Recycle Bin restore still need that verification.
 :::
 
 Windows 10 1809+ and Windows 11 have native snapshots, foreground collection,
-the read commands, the terminal UI, the web dashboard, MCP, OTLP intake and
+the read commands, the terminal UI, the desktop app, MCP, OTLP intake and
 fleet. Install with [Scoop](/start/install).
 
 ## Collector
 
-`driga service install` registers a per-user Task Scheduler task,
-**Driga collector**, that runs at logon with least privilege. It needs no
-password, elevation or PowerShell. `start`, `stop`, `restart`, `status`,
-`logs [-f]` and `uninstall` work as on other platforms. Logs are at
+`Driga.exe`, the app, runs the CLI next to it, `bin\driga.exe`, as its
+collector without a console window. It sits in the notification area, shows
+how many sessions need you in its tooltip and menu, and starts at logon. Scoop
+adds a Start menu shortcut for Driga and puts `bin\driga.exe` on `PATH` as
+`driga`; `driga app` opens the app from a terminal.
+
+On a machine without the app, `driga service install` registers a per-user
+Task Scheduler task, **Driga collector**, that runs at logon with least
+privilege. It needs no password, elevation or PowerShell. `start`, `stop`,
+`restart`, `status`, `logs [-f]` and `uninstall` work as on other platforms. Logs are at
 `%LOCALAPPDATA%\driga\logs\collector.log`, bounded to 10 MiB plus one rotated
 file.
 

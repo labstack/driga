@@ -37,9 +37,10 @@ Driga assumes the operator's workstation and deliberately paired machines are
 trusted. In scope:
 
 - Unintended disclosure of agent data or credentials through storage, logs,
-  exports, the web dashboard, MCP tools, or fleet sharing.
+  exports, the desktop app, MCP tools, or fleet sharing.
 - Bypasses of fleet identity pinning, pairing, or per-viewer grants.
-- Web access-token or loopback-listener bypasses.
+- Bypasses of the desktop app's content security policy, or of the check that
+  its actions apply only to local sessions.
 - Command injection or cleanup that acts outside the confirmed target.
 - Process identity checks that allow signaling an unrelated process.
 - Hook installation that overwrites unrelated agent configuration.

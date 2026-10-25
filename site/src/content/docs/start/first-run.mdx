@@ -1,7 +1,7 @@
 ---
 title: First run
-description: Run Driga without setup, then add the collector service and agent hooks for history, alerts and prompt answering.
-summary: Snapshot mode with no setup, guided setup with driga init, the collector service, and installing agent hooks.
+description: Run Driga without setup, then open the app (or install the service on a headless machine) and add agent hooks for history, alerts and prompt answering.
+summary: Snapshot mode with no setup, guided setup with driga init, the desktop app or the collector service, and installing agent hooks.
 read_when:
   - You just installed Driga and want to see your sessions.
   - You want history, desktop alerts or permission prompt answering.
@@ -13,11 +13,10 @@ import { Steps } from "@astrojs/starlight/components";
 
 ```sh
 driga            # the terminal UI: Flow, Projects and Machines
-driga web        # the same views in your browser
 driga summary    # one-screen text summary
 ```
 
-Without a collector, Driga takes a disposable snapshot and say
+Without a collector, Driga takes a disposable snapshot and says
 `snapshot · no history`. Nothing is written to a database. One agent in one
 repository works without configuring roots or a service: session working
 directories are enough to discover repositories.
@@ -33,9 +32,22 @@ directories are enough to discover repositories.
    ```
 
    It covers repository roots, text capture, hooks and the service. You can do
-   each one by hand instead, as below.
+   each one by hand instead, as below. On a desktop, answer no to the service:
+   the app collects instead.
 
-2. **Install the collector service** for history, the inbox and alerts:
+2. **Start collecting** for history, the inbox and alerts. On a desktop, open
+   Driga from Finder, the Start menu or your launcher, or from a terminal:
+
+   ```sh
+   driga app
+   driga doctor
+   ```
+
+   The app runs the collector as its own child process, sends notifications
+   and starts at login. Closing its window keeps it collecting in the menu bar
+   or tray; Quit stops the collector.
+
+   On a headless machine, install the collector service instead:
 
    ```sh
    driga service install
@@ -43,8 +55,8 @@ directories are enough to discover repositories.
    ```
 
    The service is a per-user LaunchAgent on macOS, a systemd user service on
-   Linux and a Task Scheduler task on Windows. The first import marks older
-   events as already seen.
+   Linux and a Task Scheduler task on Windows. Do not install it where the app
+   runs. Either way, the first import marks older events as already seen.
 
 3. **Install agent hooks** for attention events, Claude permission prompts and
    Copilot sessions. Preview the diff first:
@@ -63,7 +75,7 @@ directories are enough to discover repositories.
 
    ```sh
    driga top              # terminal UI
-   driga web --open       # browser dashboard on loopback
+   driga app              # desktop app
    driga inbox --since yesterday
    ```
 
@@ -73,6 +85,8 @@ Reading an inbox item never acknowledges it. Acknowledge with
 `driga inbox ack <item-id>` or from the Activity section in Flow.
 
 ## Service commands
+
+On a headless machine, manage the collector service with:
 
 ```sh
 driga service status
@@ -90,7 +104,8 @@ On macOS the label is `run.driga.collector` and logs are at
 ## Undo
 
 `driga hooks uninstall` removes only Driga's entries, and
-`driga service uninstall` removes the service. Your agent configuration is
-changed only by these explicit commands.
+`driga service uninstall` removes the service. Turn off launch at login in
+Driga's Settings window. Your agent configuration is changed only by these
+explicit commands.
 
 Next: [Flow](/guides/flow).

@@ -25,7 +25,7 @@ export default defineConfig({
       // The separator between a page's title and the site's: "Install · Driga".
       titleDelimiter: "·",
       description:
-        "See what your coding agents are doing, and what needs you. A CLI, terminal UI and local web dashboard for Claude Code, Codex, Gemini and Copilot sessions.",
+        "See what your coding agents are doing, and what needs you. A desktop app, terminal UI and CLI for Claude Code, Codex, Gemini and Copilot sessions.",
       logo: {
         light: "./src/assets/lockup.svg",
         dark: "./src/assets/lockup-white.svg",

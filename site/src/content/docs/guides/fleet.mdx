@@ -21,14 +21,16 @@ particular overlay is required.
 
 <Steps>
 
-1. **On the peer**, serve the fleet. Stop any running collector first:
+1. **On the peer**, serve the fleet. Stop any running collector first (quit
+   the Driga app, or stop the service):
 
    ```sh
    driga service stop
    driga collect --serve --listen <private-ip>:7411
    ```
 
-   For persistent serving, configure it and restart the service instead:
+   For persistent serving, configure it and restart the app or the service
+   instead:
 
    ```toml
    [fleet]
@@ -48,7 +50,7 @@ particular overlay is required.
 
    ```sh
    driga fleet peers add <private-ip>:7411 --name vm-1
-   driga service install
+   driga app                 # or driga service install on a headless viewer
    driga machines
    driga agents --machine vm-1
    ```

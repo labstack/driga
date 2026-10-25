@@ -77,7 +77,7 @@ const id = `film-${name}`;
     }
   </div>
   {
-    (slots.some((s) => s.wide) || chapters.length > 0) && (
+    slots.some((s) => s.wide) && (
       <div class="dg-film-controls">
         {chapters.length > 0 && (
           <ol class="dg-film-chapters" aria-label="Chapters" style={`--length:${length}`}>

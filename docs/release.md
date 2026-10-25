@@ -168,7 +168,7 @@ Linux CI consumes the committed ICNS and validates every representation.
 
 [Apple's helper documentation](https://developer.apple.com/documentation/servicemanagement/updating-helper-executables-from-earlier-versions-of-macos)
 explains the organization-name fallback and `AssociatedBundleIdentifiers`.
-`service install` resolves a bundled executable, associates `run.driga`, registers
+On a headless Mac, `service install` resolves a bundled executable, associates `run.driga`, registers
 the app with Launch Services, and atomically repairs an existing stale plist.
 It stops a running collector before replacing its stale definition; the CLI
 then starts it. Reinstalling a current definition is harmless. Development
@@ -213,10 +213,12 @@ which installs the bundle into `/Applications`. The `binaries` setting emits
 Ruby cask generation, not GoReleaser's Pro `app`/DMG feature. The caveats
 describe opening the app and no longer mention `driga service install`: the
 app collects in the background and registers its own login item on first
-launch, and uninstalls a launchd service from an earlier release.
+launch. A launchd service from an earlier release keeps the collector lock; the
+app shows it as the collector until `driga service uninstall` hands collection
+to the app.
 
 A real signed release and macOS installation are still needed to qualify
-Gatekeeper, offline staple validation, Homebrew upgrade/service restart, and
+Gatekeeper, offline staple validation, Homebrew upgrade and app relaunch, and
 the actual Driga name/Murmur icon in Settings. macOS may retain older cached
 background entries; no automated BTM reset is performed.
 
@@ -293,7 +295,8 @@ ln -s "$HOME/.local/lib/driga/Driga.app/Contents/MacOS/driga" "$HOME/.local/bin/
 If all ten artifacts are downloaded, `sha256sum -c driga_<version>_checksums.txt`
 (or `shasum -a 256 -c`) checks them together. On Windows, compare the ZIP with
 its exact checksum entry using `Get-FileHash -Algorithm SHA256`, then use
-`Expand-Archive` and place `driga.exe` in a stable directory on PATH.
+`Expand-Archive`, keep `Driga.exe` and its `bin` directory together in a stable
+directory, and put that `bin` directory on PATH.
 
 After verifying a Linux package, install it with
 `sudo dpkg -i driga_<version>_linux_<arch>.deb` or
