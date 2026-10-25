@@ -22,8 +22,12 @@ func handOffApp(system bool) (bool, error) {
 	if !handsOff(system, exe) {
 		return false, nil
 	}
-	return true, exec.Command("open", "-b", "run.driga").Run()
+	return true, handOffCommand(appBundle(exe)).Run()
 }
+
+// handOffCommand opens bundle by its path: another copy of Driga.app, such
+// as one in ~/Applications, has the same bundle identifier.
+func handOffCommand(bundle string) *exec.Cmd { return exec.Command("open", "-a", bundle) }
 
 // handsOff reports whether to hand off: a launch not made by the system, of
 // an executable inside an app bundle. A development build runs in place.

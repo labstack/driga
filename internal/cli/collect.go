@@ -50,14 +50,16 @@ func (c CollectCmd) Run(g *Globals) error {
 	// program that would inherit them too.
 	var notifyFile, parentFile *os.File
 	if c.NotifyFD != nil {
-		if notifyFile = inheritedFile(*c.NotifyFD, "notify"); notifyFile == nil {
-			return invalidUsage("--notify-fd is invalid")
+		var err error
+		if notifyFile, err = inheritedFile(*c.NotifyFD, "notify"); err != nil {
+			return invalidUsage("--notify-fd is not open")
 		}
 		defer notifyFile.Close()
 	}
 	if c.ParentFD != nil {
-		if parentFile = inheritedFile(*c.ParentFD, "parent"); parentFile == nil {
-			return invalidUsage("--parent-fd is invalid")
+		var err error
+		if parentFile, err = inheritedFile(*c.ParentFD, "parent"); err != nil {
+			return invalidUsage("--parent-fd is not open")
 		}
 		defer parentFile.Close()
 	}
