@@ -60,9 +60,7 @@ tolerantly and reported by `driga doctor`.
 
 `driga top` opens on **Flow (`0`)**. The three tabs are `0 Flow`, `1 Projects`
 and `2 Machines`. Flow offers Map (`m`, the default), Timeline (`t`) and Sessions
-(`s`). Map and Timeline use a grouped project tree in the terminal; the app's Map is
-a deterministic SVG of projects, leads and workers. More than four Map workers
-fold into a `+N` control. Timeline and Sessions retain access to every session.
+(`s`). Map and Timeline use a grouped project tree. Timeline and Sessions retain access to every session.
 
 Use arrows or `j`/`k` to select, `/` to find, Enter to open context, Esc to return,
 `?` for help, `M` to change TUI machine scope, and `q` to quit. `S` sorts Sessions.
@@ -75,7 +73,7 @@ idle process. Sessions on a paired machine must be stopped on that machine.
 
 `c` opens contextual Chat as a panel. Esc closes it, retaining the draft and current
 selection. Wide terminals show Chat beside the destination; narrow terminals give
-it the available reading width. The app's Ask Chat prefills the selected session context.
+it the available reading width.
 `Alt+0`/`Alt+1`/`Alt+2` switch TUI tabs while typing.
 
 Flow's expandable Activity section keeps notification and event history; TUI `h`
@@ -94,7 +92,7 @@ from Flow's monetary cost.
 Flow shows only stored evidence: purple spawn links use session ParentID; red dashed
 same-file links require full paths on the same machine. Tool counts/ticks are labelled
 **telemetry** and appear only for actual Claude/Copilot tool events. Cost is labelled
-**retained window**. Unknown history remains neutral. The app's Activity page and
+**retained window**. Unknown history remains neutral. The app's `activity` panels and
 the MCP `get_activity` tool show machine samples and events per minute; missing
 samples are gaps.
 
@@ -758,7 +756,7 @@ vendor connection.
 
 ## Desktop app
 
-Driga is an app plus a CLI. The app collects, notifies and shows the dashboard;
+Driga is an app plus a CLI. The app collects, notifies and runs Chat;
 the CLI (`driga`, `driga top`, scripting, MCP) comes with it.
 
 ```sh
@@ -766,12 +764,22 @@ driga app    # open Driga, or bring the running app forward
 ```
 
 The app runs in a native window with the system webview and opens no network
-port. It updates live as its collector writes. The View menu switches between
-Flow (Cmd+1), Projects (Cmd+2), Machines (Cmd+3) and Chat (Cmd+K); Windows and
-Linux use Ctrl. Flow has Map, Timeline and Sessions views, with Needs you and
-retained Activity history. Chat opens as a contextual panel on `c`; Machines
-includes process and disk reclamation. Stop and other confirmations use native
-dialogs. Help → Keyboard Shortcuts lists the page keys.
+port. It is Chat, with a row of metrics above it: by default Need you, To
+review, Possibly stuck, Leftover processes and Reclaimable. Click a metric to
+ask Chat about it. Change the row by asking Chat ("add cost today to the
+header"), or remove a metric in Edit. The header holds only single numbers,
+eight at most.
+
+Chat opens with a brief: pending permission prompts with Allow and Deny, the
+inbox, and suggested questions. Ask it for a view and it answers with live
+panels; Save as dashboard keeps one, and Chat can create, edit or delete
+dashboards for you. Every dashboard is one you or Chat made. Open one from the
+picker in the header and Chat docks beside it. In Edit, drag and resize panels,
+remove them, or delete the dashboard. Every save is a version Chat can restore.
+
+Panel rows act as the TUI does: open or stop a local session, kill a verified
+idle process tree, remove a ready cleanup candidate, summarize a project. Stop
+and other changes ask a native dialog first.
 
 The menu bar item (the notification area on Windows, the tray on Linux) is an
 icon only: it gains a dot while anything needs you, and its tooltip and menu
@@ -917,7 +925,7 @@ uninstall removes it. Restart existing Claude sessions after changing hooks.
 
 Pending local Claude prompts appear above the inbox waits with the session,
 tool, and exact input. In the TUI select a prompt and press `y` to allow or `n`
-to deny (`a` remains attach); Enter opens the full input. In the app's inbox use
+to deny (`a` remains attach); Enter opens the full input. In the app's Chat brief use
 Allow or Deny.
 
 Action-enabled Chat's `list_prompts` shows inputs only with `capture_text = "snippets"`;

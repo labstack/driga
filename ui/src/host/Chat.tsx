@@ -9,21 +9,23 @@ type Card = { tool: string; input: { id?: string; dashboard?: Dashboard; vars?: 
 
 /** PanelCard runs a panel tool's input again, so the card shows live data
  * rather than what the model saw. */
-function PanelCard({ text, onPin }: { text: string; onPin: (panels: Panel[]) => void }) {
+function PanelCard({ text, pinLabel, onPin }: { text: string; pinLabel: string; onPin: (panels: Panel[], name: string) => void }) {
   const [fragment, setFragment] = useState<Fragment | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   useEffect(() => {
     let card: Card;
     try { card = JSON.parse(text) as Card; } catch { setProblem("This card could not be read."); return; }
     const spec = card.input?.dashboard;
-    const run = spec && (card.tool === "show_panels" || card.tool === "create_dashboard" || card.tool === "replace_dashboard") ? dashboards.run(spec, card.input.vars) : dashboards.open(card.input?.id ?? "home", card.input?.vars);
+    const id = card.input?.id;
+    if (!spec && !id) { setProblem("This card names no dashboard."); return; }
+    const run = spec && (card.tool === "show_panels" || card.tool === "create_dashboard" || card.tool === "replace_dashboard") ? dashboards.run(spec, card.input.vars) : dashboards.open(id!, card.input?.vars);
     run.then(setFragment, (e: Error) => setProblem(e.message));
   }, [text]);
   if (problem) return <p className="problem">{problem}</p>;
   if (!fragment) return <p className="muted">Loading panel…</p>;
   return <div className="chat-card">
     <Board fragment={fragment} compact />
-    <div className="card-actions"><button type="button" onClick={() => onPin(fragment.dashboard.panels)}>Add to dashboard</button></div>
+    <div className="card-actions"><button type="button" onClick={() => onPin(fragment.dashboard.panels, fragment.dashboard.name)}>{pinLabel}</button></div>
   </div>;
 }
 
@@ -59,7 +61,12 @@ function Brief({ inbox, status, act, ask }: { inbox?: { panel: Panel; result?: R
   </div>;
 }
 
-export function Chat({ inbox, status, act, onPin, onClose }: { inbox?: { panel: Panel; result?: Result }; status: string[]; act?: Act; onPin: (panels: Panel[]) => void; onClose: () => void }) {
+export function Chat({ inbox, status, act, ask, pinLabel, onPin, onClose }: {
+  inbox?: { panel: Panel; result?: Result }; status: string[]; act?: Act;
+  /** ask puts a question in the compose box for the user to send. */
+  ask: { text: string; at: number } | null;
+  pinLabel: string; onPin: (panels: Panel[], name: string) => void; onClose?: () => void;
+}) {
   const [id, setId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [actions, setActions] = useState<Map<string, ChatAction>>(new Map());
@@ -67,6 +74,8 @@ export function Chat({ inbox, status, act, onPin, onClose }: { inbox?: { panel: 
   const [draft, setDraft] = useState("");
   const [problem, setProblem] = useState<string | null>(null);
   const log = useRef<HTMLDivElement>(null);
+  const input = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => { if (ask) { setDraft(ask.text); input.current?.focus(); } }, [ask]);
 
   useEffect(() => {
     chat.history().then(list => { if (list.length) setId(list[0].id); }, () => undefined);
@@ -112,11 +121,11 @@ export function Chat({ inbox, status, act, onPin, onClose }: { inbox?: { panel: 
   };
 
   return <aside className="chat" aria-label="Chat">
-    <header className="chat-head"><h2>Chat</h2><span className="muted">through your Claude Code login</span><button type="button" aria-label="Close chat" onClick={onClose}>×</button></header>
+    <header className="chat-head"><h2>Chat</h2><span className="muted">through your Claude Code login</span>{onClose && <button type="button" aria-label="Close chat" onClick={onClose}>×</button>}</header>
     <div className="chat-log" ref={log}>
       {messages.length === 0 && <Brief inbox={inbox} status={status} act={act} ask={text => void send(text)} />}
       {messages.map(m => {
-        if (m.role === "panel") return m.text ? <PanelCard key={m.id} text={m.text} onPin={onPin} /> : null;
+        if (m.role === "panel") return m.text ? <PanelCard key={m.id} text={m.text} pinLabel={pinLabel} onPin={onPin} /> : null;
         if (m.role === "tool") return <p key={m.id} className="chat-tool">✓ {m.text.replace(/^mcp__driga__/, "")}</p>;
         if (m.role === "action") { const a = actions.get(m.id); return a && id ? <ActionCard key={m.id} conversation={id} action={a} /> : null; }
         if (m.role === "user") return <div key={m.id} className="chat-user">{m.text}</div>;
@@ -127,7 +136,7 @@ export function Chat({ inbox, status, act, onPin, onClose }: { inbox?: { panel: 
     </div>
     <form className="chat-compose" onSubmit={e => { e.preventDefault(); void send(draft); }}>
       <label className="sr-only" htmlFor="chat-input">Ask or act</label>
-      <textarea id="chat-input" rows={2} value={draft} placeholder="Ask about your agents, or tell Driga what to show" onChange={e => setDraft(e.target.value)}
+      <textarea id="chat-input" ref={input} rows={2} value={draft} placeholder="Ask about your agents, or tell Driga what to show" onChange={e => setDraft(e.target.value)}
         onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(draft); } }} />
       <div className="compose-row">
         <span className="muted">Actions wait for your approval</span>

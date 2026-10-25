@@ -142,6 +142,11 @@ func (s *Store) save(r Record, spec panel.Dashboard, author Author, message stri
 	if err := panel.Validate(spec); err != nil {
 		return Record{}, err
 	}
+	if r.ID == panel.HeaderID {
+		if err := panel.ValidateHeader(spec); err != nil {
+			return Record{}, err
+		}
+	}
 	v := Version{Version: r.Version + 1, SavedAt: s.now().UTC(), Author: author, Message: strings.TrimSpace(message), Spec: spec}
 	history := append(slices.Clone(r.history), v)
 	if len(history) > maxVersions {
@@ -157,7 +162,7 @@ func (s *Store) save(r Record, spec panel.Dashboard, author Author, message stri
 	return Record{ID: r.ID, Name: spec.Name, Version: v.Version, SavedAt: v.SavedAt, Spec: spec, history: history}, nil
 }
 
-// List returns the built-in dashboards, saved or not, then the user's own.
+// List returns the header, saved or not, then the dashboards Chat made.
 func (s *Store) List() ([]Summary, error) {
 	entries, err := os.ReadDir(s.dir)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -282,6 +287,21 @@ func (s *Store) Restore(id string, version int, author Author) (Record, error) {
 			}
 		}
 		return panel.Dashboard{}, ErrVersion
+	})
+}
+
+// Delete removes a dashboard and its history. Deleting the header puts the
+// shipped one back.
+func (s *Store) Delete(id string) error {
+	return s.locked(func() error {
+		if !idPattern.MatchString(id) {
+			return ErrNotFound
+		}
+		err := os.Remove(s.path(id))
+		if errors.Is(err, os.ErrNotExist) {
+			return ErrNotFound
+		}
+		return err
 	})
 }
 

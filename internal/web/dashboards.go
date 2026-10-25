@@ -36,7 +36,7 @@ func (s *Server) appRoutes(mux *http.ServeMux) {
 	host := http.StripPrefix("/app/", http.FileServer(http.FS(files)))
 	mux.Handle("GET /app/{$}", host)
 	mux.Handle("GET /app/assets/", host)
-	for _, route := range []string{"list", "open", "run", "edit", "versions", "restore"} {
+	for _, route := range []string{"list", "open", "run", "create", "edit", "versions", "restore", "delete"} {
 		mux.HandleFunc("POST /app/api/"+route, s.dashboardAPI)
 	}
 }
@@ -77,7 +77,7 @@ func (s *Server) dashboardAPI(w http.ResponseWriter, r *http.Request) {
 		out = map[string]any{"dashboards": list}
 	case "open":
 		var rec dashboard.Record
-		if rec, err = store.Get(cmpOr(in.ID, panel.HomeID)); err == nil {
+		if rec, err = store.Get(in.ID); err == nil {
 			out, err = s.fragment(r.Context(), rec, in.Vars)
 		}
 	case "run":
@@ -86,17 +86,29 @@ func (s *Server) dashboardAPI(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 		out, err = s.runPanels(r.Context(), panel.RunRequest{Dashboard: *in.Dashboard, Vars: in.Vars})
-	case "edit":
+	case "create":
+		if in.Dashboard == nil {
+			err = errors.New("dashboard is required")
+			break
+		}
 		var rec dashboard.Record
-		if rec, err = store.Edit(cmpOr(in.ID, panel.HomeID), in.Operations, in.BaseVersion, you, in.Message); err == nil {
+		if rec, err = store.Create(*in.Dashboard, you, in.Message); err == nil {
 			out, err = s.fragment(r.Context(), rec, in.Vars)
 		}
+	case "edit":
+		var rec dashboard.Record
+		if rec, err = store.Edit(in.ID, in.Operations, in.BaseVersion, you, in.Message); err == nil {
+			out, err = s.fragment(r.Context(), rec, in.Vars)
+		}
+	case "delete":
+		err = store.Delete(in.ID)
+		out = map[string]bool{"ok": err == nil}
 	case "versions":
-		out, err = store.Versions(cmpOr(in.ID, panel.HomeID))
+		out, err = store.Versions(in.ID)
 		out = map[string]any{"versions": out}
 	case "restore":
 		var rec dashboard.Record
-		if rec, err = store.Restore(cmpOr(in.ID, panel.HomeID), in.Version, you); err == nil {
+		if rec, err = store.Restore(in.ID, in.Version, you); err == nil {
 			out, err = s.fragment(r.Context(), rec, in.Vars)
 		}
 	default:
@@ -138,13 +150,4 @@ func (s *Server) runPanels(ctx context.Context, req panel.RunRequest) (panel.Fra
 		}
 	}
 	return panel.Run(snap, req)
-}
-
-func cmpOr(values ...string) string {
-	for _, v := range values {
-		if v != "" {
-			return v
-		}
-	}
-	return ""
 }

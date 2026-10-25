@@ -433,8 +433,6 @@ func PanelTitle(card string) string {
 		return c.Input.Dashboard.Name
 	case c.Input.ID != "":
 		return "dashboard " + c.Input.ID
-	case c.Tool == "open_dashboard":
-		return "Home"
 	}
 	return "panel"
 }

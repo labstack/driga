@@ -49,24 +49,22 @@ func run(t *testing.T, d Dashboard, vars map[string]string) map[string]Result {
 	return out
 }
 
-func TestHomeRuns(t *testing.T) {
-	results := run(t, Home(), nil)
-	if len(results) != len(Home().Panels) {
+func TestHeaderRuns(t *testing.T) {
+	results := run(t, Header(), nil)
+	if len(results) != len(Header().Panels) {
 		t.Fatalf("results = %d", len(results))
 	}
 	if got := results["waiting"].Frame.Rows[0][0]; got != 2.0 {
 		t.Fatalf("waiting = %v, want 2 (historical waits excluded)", got)
 	}
-	if got := len(results["running"].Frame.Rows); got != 3 {
-		t.Fatalf("sessions = %d, want 3 including workers", got)
+	if got := results["finished"].Frame.Rows[0][0]; got != 1.0 {
+		t.Fatalf("finished = %v", got)
 	}
-	inbox := results["inbox"].Frame
-	id := 0
-	for i, c := range inbox.Columns {
-		if c.Name == "id" {
-			id = i
-		}
-	}
+}
+
+func TestInboxOrder(t *testing.T) {
+	inbox := run(t, Dashboard{Name: "x", Panels: []Panel{{ID: "inbox", Title: "Inbox", Viz: "inbox", Source: "inbox"}}}, nil)["inbox"].Frame
+	id := slices.IndexFunc(inbox.Columns, func(c Column) bool { return c.Name == "id" })
 	var order []string
 	for _, r := range inbox.Rows {
 		order = append(order, r[id].(string))
@@ -77,7 +75,12 @@ func TestHomeRuns(t *testing.T) {
 }
 
 func TestVariablesScopeAndOptions(t *testing.T) {
-	f, err := Run(snapshot(), RunRequest{Dashboard: Home(), Vars: map[string]string{"project": "site"}})
+	scope := []Filter{{Column: "project", Value: "$project"}}
+	d := Dashboard{Name: "x", Variables: []Variable{{Name: "project", Field: "project"}}, Panels: []Panel{
+		{ID: "waiting", Title: "Waiting", Viz: "stat", Source: "inbox", Where: append([]Filter{{Column: "kind", Value: "waiting"}}, scope...)},
+		{ID: "running", Title: "Sessions", Viz: "table", Source: "sessions", Where: scope},
+	}}
+	f, err := Run(snapshot(), RunRequest{Dashboard: d, Vars: map[string]string{"project": "site"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,6 +94,10 @@ func TestVariablesScopeAndOptions(t *testing.T) {
 		if r.ID == "running" && len(r.Frame.Rows) != 1 {
 			t.Fatalf("site sessions = %v", r.Frame.Rows)
 		}
+	}
+	all := run(t, d, nil)
+	if got := len(all["running"].Frame.Rows); got != 3 {
+		t.Fatalf("sessions = %d, want 3 including workers", got)
 	}
 }
 

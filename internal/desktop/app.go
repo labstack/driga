@@ -116,11 +116,9 @@ func Run(opts Options) error {
 	s := &shell{opts: opts, source: source, goos: runtime.GOOS, dataDir: dataDir, cfg: opts.Config, relaunchApp: relaunchApp}
 	s.host = &windowHost{create: s.newWindow}
 	webOpts := opts.Web
-	webOpts.Chat, webOpts.ChatEphemeral = opts.Chat, false
+	webOpts.Chat = opts.Chat
 	webOpts.Confirm = s.confirm
 	webOpts.OpenExternal = func(url string) { _ = mygo.Shell.OpenExternal(url) }
-	// The page follows the app's appearance, which Settings changes live.
-	webOpts.Theme = "system"
 	server, err := web.New(source, webOpts)
 	if err != nil {
 		return err
@@ -604,16 +602,10 @@ func (s *shell) do(command string) {
 		s.host.Command("reload", nil)
 	case CommandBack, CommandForward:
 		s.host.Command(command, nil)
-	case CommandKeys:
-		s.host.Navigate("/help/keys")
 	case CommandDocs:
 		go func() { _ = mygo.Shell.OpenExternal(DocsURL) }()
 	default:
-		if name, ok := strings.CutPrefix(command, "view:"); ok {
-			s.host.Command("view", name)
-		} else if path, ok := strings.CutPrefix(command, "go:"); ok {
-			s.host.Command("go", path)
-		} else if raw, ok := strings.CutPrefix(command, "session:"); ok {
+		if raw, ok := strings.CutPrefix(command, "session:"); ok {
 			if id, err := strconv.ParseInt(raw, 10, 64); err == nil {
 				s.host.Command("openSession", id)
 			}

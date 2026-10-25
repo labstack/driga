@@ -17,7 +17,6 @@ const (
 	CommandReload   = "reload"
 	CommandBack     = "back"
 	CommandForward  = "forward"
-	CommandKeys     = "keys"
 	CommandDocs     = "docs"
 )
 
@@ -89,14 +88,6 @@ func MenuModel(goos string) []MenuSpec {
 		{Label: "Close Window", Role: "close", Accelerator: key("W")},
 	}}
 	viewMenu := MenuSpec{Label: "View", Submenu: []MenuSpec{
-		{Label: "Flow", Accelerator: key("1"), Command: "view:flow"},
-		{Label: "Projects", Accelerator: key("2"), Command: "view:projects"},
-		{Label: "Machines", Accelerator: key("3"), Command: "view:machines"},
-		{Label: "Inbox", Accelerator: key("4"), Command: "go:/inbox"},
-		{Label: "Reclaim Processes", Command: "go:/machines?reclaim=processes"},
-		{Label: "Reclaim Disk", Command: "go:/machines?reclaim=disk"},
-		{Label: "Chat", Accelerator: key("K"), Command: "view:chat"},
-		separator,
 		{Label: "Back", Accelerator: key("["), Command: CommandBack},
 		{Label: "Forward", Accelerator: key("]"), Command: CommandForward},
 		{Label: "Reload", Accelerator: key("R"), Command: CommandReload},
@@ -108,7 +99,6 @@ func MenuModel(goos string) []MenuSpec {
 		{Role: "togglefullscreen"},
 	}}
 	help := MenuSpec{Label: "Help", Submenu: []MenuSpec{
-		{Label: "Keyboard Shortcuts", Command: CommandKeys},
 		{Label: "Documentation", Command: CommandDocs},
 	}}
 	if goos == "darwin" {

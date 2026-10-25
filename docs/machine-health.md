@@ -18,8 +18,7 @@ accounting of kernel memory or unreadable tasks.
 
 The TUI Machines tab (`2`, or `driga top --tab machines`) expands an app with
 Right and collapses it with Left. Enter shows process details, including memory
-measures and attribution proofs. The web `/machines` page uses keyboard-accessible
-native disclosure controls. Both preserve the existing compact table/pane styles.
+measures and attribution proofs. It keeps the existing compact table and pane styles.
 
 ## Agents first
 

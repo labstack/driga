@@ -98,7 +98,7 @@ func (AppCmd) Run(g *Globals) error {
 			}
 			actionGlobals.Stdout = io.Discard
 			return runChatAction(ctx, &actionGlobals, name, args)
-		}, Machine: g.Machine, Activity: pageActivity, Dashboards: dashboard.New(config.DataDir()), CleanupList: func(ctx context.Context) ([]cleanup.Candidate, error) {
+		}, Activity: pageActivity, Dashboards: dashboard.New(config.DataDir()), CleanupList: func(ctx context.Context) ([]cleanup.Candidate, error) {
 			envelope, err := cleanupRead(ctx, &local, "", false, true)
 			if err != nil {
 				return nil, err

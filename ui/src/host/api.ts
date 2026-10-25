@@ -25,6 +25,8 @@ export const dashboards = {
   list: () => post<{ dashboards: Summary[] }>("/app/api/list", {}).then(r => r.dashboards),
   open: (id: string, vars?: Record<string, string>, signal?: AbortSignal) => post<Fragment>("/app/api/open", { id, vars }, signal).then(normalize),
   run: (dashboard: Dashboard, vars?: Record<string, string>) => post<Fragment>("/app/api/run", { dashboard, vars }).then(normalize),
+  create: (dashboard: Dashboard, message?: string) => post<Fragment>("/app/api/create", { dashboard, message }).then(normalize),
+  delete: (id: string) => post<{ ok: boolean }>("/app/api/delete", { id }),
   edit: (id: string, operations: Operation[], base: number, vars?: Record<string, string>, message?: string) =>
     post<Fragment>("/app/api/edit", { id, operations, base_version: base, vars, message }).then(normalize),
 };

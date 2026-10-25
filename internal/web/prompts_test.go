@@ -3,7 +3,6 @@ package web
 import (
 	"context"
 	"encoding/json"
-	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -34,14 +33,9 @@ func TestInboxPromptDecisionsAndAuth(t *testing.T) {
 		t.Run(map[bool]string{true: "allow", false: "deny"}[allow], func(t *testing.T) {
 			s, b, _ := chatFixture(t)
 			done := webPrompt(t, b)
-			page := request(s, "GET", "/inbox")
-			for _, want := range []string{`data-prompt="prompt"`, `data-prompt-answer="allow"`, `data-prompt-answer="deny"`, "&lt;script&gt;private&lt;/script&gt;"} {
-				if !strings.Contains(page.Body.String(), want) {
-					t.Fatal("missing prompt content", want, page.Body.String())
-				}
-			}
-			if strings.Contains(page.Body.String(), "<script>private") {
-				t.Fatal("input not escaped")
+			var listed []chat.Prompt
+			if w := request(s, "GET", "/chat/api/prompts"); json.Unmarshal(w.Body.Bytes(), &listed) != nil || len(listed) != 1 || listed[0].ID != "prompt" || strings.Contains(w.Body.String(), "<script>") {
+				t.Fatal("prompts:", w.Body.String())
 			}
 			body := `{"id":"prompt","allow":false}`
 			if allow {
@@ -66,37 +60,9 @@ func TestInboxPromptDecisionsAndAuth(t *testing.T) {
 			if w.Code != 400 || !strings.Contains(w.Body.String(), "prompt no longer waiting") {
 				t.Fatal(w.Code, w.Body.String())
 			}
-			if page := request(s, "GET", "/inbox"); strings.Contains(page.Body.String(), `data-prompt="prompt"`) {
-				t.Fatal("retained prompt")
+			if w := request(s, "GET", "/chat/api/prompts"); strings.Contains(w.Body.String(), `"prompt"`) {
+				t.Fatal("retained prompt", w.Body.String())
 			}
 		})
-	}
-}
-func TestPromptDOM(t *testing.T) {
-	node, err := exec.LookPath("node")
-	if err != nil {
-		t.Fatal(err)
-	}
-	js, err := assets.ReadFile("static/app.js")
-	if err != nil {
-		t.Fatal(err)
-	}
-	harness := `
-const assert=require("node:assert/strict");
-(async()=>{
- for(const allow of [true,false])for(const ok of [true,false]){
-  const buttons=[{disabled:false},{disabled:false}],status={textContent:""};let removed=false,call;
-  const row={querySelector:()=>status,querySelectorAll:()=>buttons,remove(){removed=true;}};
-  const button={closest:()=>row,dataset:{promptId:"p",promptAnswer:allow?"allow":"deny"}};
-  global.fetch=async(path,options)=>{call={path,options};assert.equal(buttons[0].disabled,true);return {ok,text:async()=>"prompt no longer waiting"};};
-  await DrigaConsole.answerPrompt(button);
-  assert.equal(call.path,"/chat/api/prompt-answer");assert.equal(call.options.method,"POST");assert.deepEqual(call.options.headers,{"Content-Type":"application/json"});assert.deepEqual(JSON.parse(call.options.body),{id:"p",allow});
-  assert.equal(removed,ok);if(!ok){assert.equal(status.textContent,"prompt no longer waiting");assert.equal(buttons[0].disabled,false);}
- }
-})().catch(error=>{console.error(error);process.exitCode=1;});`
-	cmd := exec.Command(node, "-")
-	cmd.Stdin = strings.NewReader(string(js) + "\n" + harness)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("prompt DOM: %v: %s", err, out)
 	}
 }

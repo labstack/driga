@@ -55,9 +55,6 @@ func TestChatPOST(t *testing.T) {
 	if w := request(s, "GET", "/chat/api/send"); w.Code != 405 {
 		t.Fatal(w.Code)
 	}
-	if w := request(s, "GET", "/chat"); w.Code != 200 || !strings.Contains(w.Body.String(), `id="chat-mode-confirm"`) || strings.Contains(w.Body.String(), "actions arrive in the next release") {
-		t.Fatal(w.Code, w.Body)
-	}
 }
 func TestChatWaitReplayAndEscaping(t *testing.T) {
 	s, b, id := chatFixture(t)
@@ -79,10 +76,6 @@ func TestChatWaitReplayAndEscaping(t *testing.T) {
 	}
 	if strings.Contains(w.Body.String(), "<script>") {
 		t.Fatal("wait must JSON-escape HTML")
-	}
-	js := request(s, "GET", "/static/chat.js").Body.String()
-	if !strings.Contains(js, "body.innerHTML=m.html") || strings.Contains(js, "function markdown(") || strings.Contains(js, "function inline(") {
-		t.Fatal("assistant HTML must come from the server renderer")
 	}
 }
 

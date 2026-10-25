@@ -2,10 +2,10 @@ package web
 
 import (
 	"context"
-	"net/http/httptest"
 	"testing"
 
 	"github.com/labstack/driga/internal/cleanup"
+	"github.com/labstack/driga/internal/panel"
 	"github.com/labstack/driga/internal/store"
 	"github.com/labstack/driga/internal/viewer"
 )
@@ -29,12 +29,8 @@ func TestOverviewAndCleanupCaches(t *testing.T) {
 	cleanups := 0
 	s.opts.CleanupList = func(context.Context) ([]cleanup.Candidate, error) { cleanups++; return nil, nil }
 	for i := 0; i < 2; i++ {
-		p, code, err := s.loadPage(httptest.NewRequest("GET", "/", nil))
-		if err != nil || code != 200 {
-			t.Fatal(code, err)
-		}
-		if len(p.AgentDetails) != 0 {
-			t.Fatal("Home built agent details")
+		if _, err := s.runPanels(context.Background(), panel.RunRequest{Dashboard: panel.Dashboard{Name: "x", Panels: []panel.Panel{{ID: "c", Title: "C", Viz: "stat", Source: "cleanup"}}}}); err != nil {
+			t.Fatal(err)
 		}
 	}
 	if source.loads != 1 || cleanups != 1 {

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"testing"
 
 	"github.com/labstack/driga/internal/model"
@@ -83,22 +82,3 @@ func TestAppActionRuns(t *testing.T) {
 
 // The app's pages carry the buttons; without actions they keep pointing at
 // the CLI.
-func TestActionButtons(t *testing.T) {
-	s, _, _, project := fixture(t)
-	pages := map[string]string{
-		"/inbox":                          `data-action="ack_inbox" data-id="waiting"`,
-		"/machines?reclaim=processes":     "Unverified: run driga orphans kill 42:1",
-		fmt.Sprint("/projects/", project): `data-action="summarize" data-project="/fixture"`,
-	}
-	for path, want := range pages {
-		if body := request(s, "GET", path).Body.String(); strings.Contains(body, want) {
-			t.Errorf("%s offers %q without actions", path, want)
-		}
-	}
-	s.opts.Action = func(context.Context, string, json.RawMessage) error { return nil }
-	for path, want := range pages {
-		if body := request(s, "GET", path).Body.String(); !strings.Contains(body, want) {
-			t.Errorf("%s lacks %q", path, want)
-		}
-	}
-}

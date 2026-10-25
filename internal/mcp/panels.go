@@ -23,7 +23,7 @@ var appFiles embed.FS
 
 // DashboardTools are the panel and dashboard tools. Their writes change only
 // Driga's own dashboards, never agents, sessions or the machine.
-var DashboardTools = []string{"describe_panels", "show_panels", "run_panels", "open_dashboard", "list_dashboards", "list_dashboard_versions", "create_dashboard", "edit_dashboard", "replace_dashboard", "restore_dashboard_version"}
+var DashboardTools = []string{"describe_panels", "show_panels", "run_panels", "open_dashboard", "list_dashboards", "list_dashboard_versions", "create_dashboard", "edit_dashboard", "replace_dashboard", "restore_dashboard_version", "delete_dashboard"}
 
 const specGuide = ` A dashboard is {"name", "variables"?, "panels": [...]}. Each panel has an id, title, viz and source; filter with where [{"column","op","value"}] where value may be $variable; bar panels group by a column; stat, gauge, bar and grouped tables aggregate with measure (count, sum:col, avg:col, max:col, min:col); timeseries reads the activity source per minute. Read describe_panels for every source's columns before drafting. Panels render as interactive cards in hosts that support MCP Apps and as text elsewhere.`
 
@@ -40,7 +40,7 @@ type showInput struct {
 }
 
 type openInput struct {
-	ID   string            `json:"id,omitempty" jsonschema:"Dashboard id from list_dashboards; default home"`
+	ID   string            `json:"id" jsonschema:"Dashboard id from list_dashboards"`
 	Vars map[string]string `json:"vars,omitempty" jsonschema:"Variable values by name"`
 }
 
@@ -135,13 +135,13 @@ func registerPanels(s *sdk.Server, o Options) {
 		return run(ctx, panel.RunRequest{Dashboard: in.Dashboard, Vars: in.Vars})
 	})
 	sdk.AddTool(s, &sdk.Tool{Name: "open_dashboard", Title: "Open dashboard", Annotations: readOnly, Meta: appMeta(),
-		Description: "Show a saved dashboard with live data; id defaults to home, the dashboard the Driga app opens on.",
+		Description: "Show a saved dashboard with live data.",
 	}, func(ctx context.Context, _ *sdk.CallToolRequest, in openInput) (*sdk.CallToolResult, panel.Fragment, error) {
-		r, err := o.Dashboards.Get(cmpOr(in.ID, panel.HomeID))
+		r, err := o.Dashboards.Get(in.ID)
 		return saved(ctx, "Opened", r, err, in.Vars)
 	})
 	sdk.AddTool(s, &sdk.Tool{Name: "list_dashboards", Title: "Dashboards", Annotations: readOnly,
-		Description: "List saved dashboards with their ids, panel counts and versions. Home is listed even before it is changed.",
+		Description: "List saved dashboards with their ids, panel counts and versions. The first, id header, holds the metrics the Driga app shows above Chat: only stat panels, at most 8; edit it when the user wants a number there.",
 	}, func(context.Context, *sdk.CallToolRequest, struct{}) (*sdk.CallToolResult, listOutput, error) {
 		list, err := o.Dashboards.List()
 		if err != nil {
@@ -190,6 +190,14 @@ func registerPanels(s *sdk.Server, o Options) {
 	}, func(ctx context.Context, _ *sdk.CallToolRequest, in restoreInput) (*sdk.CallToolResult, panel.Fragment, error) {
 		r, err := o.Dashboards.Restore(in.ID, in.Version, agent)
 		return saved(ctx, "Restored", r, err, nil)
+	})
+	sdk.AddTool(s, &sdk.Tool{Name: "delete_dashboard", Title: "Delete dashboard", Annotations: &sdk.ToolAnnotations{DestructiveHint: boolPtr(true), OpenWorldHint: boolPtr(false)},
+		Description: "Delete a saved dashboard and its history. Deleting header restores the default metrics. Only when the user asks.",
+	}, func(_ context.Context, _ *sdk.CallToolRequest, in idInput) (*sdk.CallToolResult, struct{}, error) {
+		if err := o.Dashboards.Delete(in.ID); err != nil {
+			return nil, struct{}{}, dashboardError(err)
+		}
+		return &sdk.CallToolResult{Content: []sdk.Content{&sdk.TextContent{Text: "Deleted " + in.ID + "."}}}, struct{}{}, nil
 	})
 	addAppResource(s)
 }
@@ -263,12 +271,3 @@ func dashboardError(err error) error {
 }
 
 func boolPtr(b bool) *bool { return &b }
-
-func cmpOr(values ...string) string {
-	for _, v := range values {
-		if v != "" {
-			return v
-		}
-	}
-	return ""
-}

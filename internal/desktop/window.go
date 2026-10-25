@@ -61,12 +61,6 @@ func (h *windowHost) Command(name string, arg any) {
 	h.run("window.drigaCommand(" + string(n) + "," + string(a) + ")")
 }
 
-// Navigate shows the window and loads path, one of the app's pages.
-func (h *windowHost) Navigate(path string) {
-	p, _ := json.Marshal(path)
-	h.run("window.location.assign(" + string(p) + ")")
-}
-
 // Closed forgets the window once it has closed.
 func (h *windowHost) Closed(p page) {
 	h.mu.Lock()

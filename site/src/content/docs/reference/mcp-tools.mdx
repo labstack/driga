@@ -1,7 +1,7 @@
 ---
 title: "MCP tools"
 description: "Every tool driga's MCP server exposes, with its inputs, generated from the server's tools/list answer."
-summary: "The 14 read-only tools and 10 panel and dashboard tools `driga mcp` serves to your agents and the 8 tools only Driga's own Chat receives, with their inputs."
+summary: "The 14 read-only tools and 11 panel and dashboard tools `driga mcp` serves to your agents and the 8 tools only Driga's own Chat receives, with their inputs."
 read_when:
   - "You are connecting an agent to driga over MCP and want to know what it can call."
   - "You need a tool's exact input fields, defaults or limits."
@@ -191,6 +191,7 @@ rendered card, to refresh it.
 | Tool | Read-only |
 |---|---|
 | [`create_dashboard`](#create_dashboard) | no |
+| [`delete_dashboard`](#delete_dashboard) | no |
 | [`describe_panels`](#describe_panels) | yes |
 | [`edit_dashboard`](#edit_dashboard) | no |
 | [`list_dashboard_versions`](#list_dashboard_versions) | yes |
@@ -209,6 +210,14 @@ Save a new dashboard the user can open in the Driga app and edit. Returns it wit
 |---|---|---|---|
 | `dashboard` | object | yes | Complete dashboard spec. |
 | `message` | string |  | One line describing it, shown in history. |
+
+### delete_dashboard
+
+Delete a saved dashboard and its history. Deleting header restores the default metrics. Only when the user asks.
+
+| Input | Type | Required | Description |
+|---|---|---|---|
+| `id` | string | yes | Dashboard id from list_dashboards. |
 
 ### describe_panels
 
@@ -237,17 +246,17 @@ List a dashboard's saved versions, newest first, with who saved each and why.
 
 ### list_dashboards
 
-List saved dashboards with their ids, panel counts and versions. Home is listed even before it is changed.
+List saved dashboards with their ids, panel counts and versions. The first, id header, holds the metrics the Driga app shows above Chat: only stat panels, at most 8; edit it when the user wants a number there.
 
 No inputs.
 
 ### open_dashboard
 
-Show a saved dashboard with live data; id defaults to home, the dashboard the Driga app opens on.
+Show a saved dashboard with live data.
 
 | Input | Type | Required | Description |
 |---|---|---|---|
-| `id` | string |  | Dashboard id from list_dashboards; default home. |
+| `id` | string | yes | Dashboard id from list_dashboards. |
 | `vars` | object |  | Variable values by name. |
 
 ### replace_dashboard

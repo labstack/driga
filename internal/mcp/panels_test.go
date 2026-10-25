@@ -105,8 +105,18 @@ func TestDashboardLifecycleOverMCP(t *testing.T) {
 	if out["version"] != 3.0 {
 		t.Fatalf("restore = %v", out)
 	}
-	_, out = callPanels(t, cs, "open_dashboard", map[string]any{})
-	if out["dashboard"].(map[string]any)["name"] != "Home" {
-		t.Fatalf("home = %v", out)
+	_, out = callPanels(t, cs, "open_dashboard", map[string]any{"id": panel.HeaderID})
+	if d, _ := out["dashboard"].(map[string]any); d["name"] != "Header" {
+		t.Fatalf("header = %v", out)
+	}
+	res, _ = callPanels(t, cs, "edit_dashboard", map[string]any{"id": panel.HeaderID, "operations": []any{map[string]any{"op": "add", "panel": map[string]any{"id": "t", "title": "T", "viz": "table", "source": "sessions"}}}})
+	if !res.IsError {
+		t.Fatal("header accepted a table")
+	}
+	if res, _ = callPanels(t, cs, "delete_dashboard", map[string]any{"id": id}); res.IsError {
+		t.Fatalf("delete = %+v", res.Content)
+	}
+	if res, _ = callPanels(t, cs, "open_dashboard", map[string]any{"id": id}); !res.IsError {
+		t.Fatal("opened a deleted dashboard")
 	}
 }

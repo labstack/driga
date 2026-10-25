@@ -115,14 +115,16 @@ func TestTUITokensExist(t *testing.T) {
 	}
 }
 
-// Every palette variable used by web assets must have a console value.
+// Every palette variable the app's styles use must have a console value.
 func TestWebAssetsUseConsoleTokens(t *testing.T) {
 	console := map[string]bool{}
 	for _, tok := range consoleTokens {
 		console[tok.Name] = true
 	}
-	files, err := filepath.Glob("../web/static/*.[cj]s*")
-	if err != nil || len(files) == 0 {
+	host, _ := filepath.Glob("../../ui/src/host/*.css")
+	files, err := filepath.Glob("../../ui/src/panels/*.css")
+	files = append(files, host...)
+	if err != nil || len(files) < 2 {
 		t.Fatalf("static assets: %v %v", files, err)
 	}
 	ref := regexp.MustCompile(`var\(--([a-z0-9-]+)`)

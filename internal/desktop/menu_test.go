@@ -43,20 +43,12 @@ func TestMenuModelAccelerators(t *testing.T) {
 	for goos, mod := range map[string]string{"darwin": "Cmd", "windows": "Ctrl", "linux": "Ctrl"} {
 		menu := MenuModel(goos)
 		for label, want := range map[string]struct{ key, command string }{
-			"Settings…":          {mod + "+,", CommandSettings},
-			"Flow":               {mod + "+1", "view:flow"},
-			"Projects":           {mod + "+2", "view:projects"},
-			"Machines":           {mod + "+3", "view:machines"},
-			"Inbox":              {mod + "+4", "go:/inbox"},
-			"Reclaim Processes":  {"", "go:/machines?reclaim=processes"},
-			"Reclaim Disk":       {"", "go:/machines?reclaim=disk"},
-			"Chat":               {mod + "+K", "view:chat"},
-			"Back":               {mod + "+[", CommandBack},
-			"Forward":            {mod + "+]", CommandForward},
-			"Reload":             {mod + "+R", CommandReload},
-			"Find":               {mod + "+F", CommandFind},
-			"Keyboard Shortcuts": {"", CommandKeys},
-			"Documentation":      {"", CommandDocs},
+			"Settings…":     {mod + "+,", CommandSettings},
+			"Back":          {mod + "+[", CommandBack},
+			"Forward":       {mod + "+]", CommandForward},
+			"Reload":        {mod + "+R", CommandReload},
+			"Find":          {mod + "+F", CommandFind},
+			"Documentation": {"", CommandDocs},
 		} {
 			item, ok := find(menu, label)
 			if !ok {
