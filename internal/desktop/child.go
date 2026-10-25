@@ -1,12 +1,15 @@
 package desktop
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
 	"time"
 )
@@ -29,7 +32,9 @@ type execChild struct {
 
 // StartCollector runs exe as the app's collector with login merged over a
 // minimal environment. Notifications arrive on one pipe; the other is the
-// lifeline. The collector writes its own log, so its output is discarded.
+// lifeline. The collector writes its own log once it runs; what it prints
+// before that, such as why it could not start, goes to the app's log and
+// ends the error Wait returns.
 func StartCollector(_ context.Context, exe string, login map[string]string) (Child, error) {
 	notifyR, notifyW, err := os.Pipe()
 	if err != nil {
@@ -41,6 +46,10 @@ func StartCollector(_ context.Context, exe string, login map[string]string) (Chi
 	}
 	cmd := exec.Command(exe)
 	cmd.Env = childEnvironment(login)
+	output := &outputLog{}
+	cmd.Stdout, cmd.Stderr = output, output
+	// A program the collector started may hold its output open after it exits.
+	cmd.WaitDelay = time.Second
 	notifyFD, parentFD, err := passFiles(cmd, notifyW, parentR)
 	if err == nil {
 		cmd.Args = append(cmd.Args, "collect", "--owner=app", fmt.Sprintf("--notify-fd=%d", notifyFD), fmt.Sprintf("--parent-fd=%d", parentFD))
@@ -61,6 +70,10 @@ func StartCollector(_ context.Context, exe string, login map[string]string) (Chi
 	c := &execChild{cmd: cmd, notes: &closingReader{f: notifyR}, lifeline: parentW, done: make(chan struct{})}
 	go func() {
 		c.err = cmd.Wait()
+		output.flush()
+		if line := output.last(); c.err != nil && line != "" {
+			c.err = fmt.Errorf("%w: %s", c.err, line)
+		}
 		_ = c.lifeline.Close()
 		close(c.done)
 	}()
@@ -102,4 +115,58 @@ func (r *closingReader) Read(p []byte) (int, error) {
 		_ = r.f.Close()
 	}
 	return n, err
+}
+
+// outputLog logs each line the collector prints and keeps the last one,
+// which is why it exited when it could not start.
+type outputLog struct {
+	mu      sync.Mutex
+	partial []byte
+	line    string
+}
+
+// maxOutputLine bounds a line held while it has no newline yet.
+const maxOutputLine = 4 << 10
+
+func (o *outputLog) Write(p []byte) (int, error) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.partial = append(o.partial, p...)
+	for {
+		i := bytes.IndexByte(o.partial, '\n')
+		if i < 0 {
+			break
+		}
+		o.emit(o.partial[:i])
+		o.partial = o.partial[i+1:]
+	}
+	if len(o.partial) > maxOutputLine {
+		o.emit(o.partial)
+		o.partial = nil
+	}
+	return len(p), nil
+}
+
+// flush logs a last line that ended without a newline.
+func (o *outputLog) flush() {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.emit(o.partial)
+	o.partial = nil
+}
+
+func (o *outputLog) emit(b []byte) {
+	line := strings.TrimSpace(string(b))
+	if line == "" {
+		return
+	}
+	// The CLI prefixes its fatal error with its name.
+	o.line = strings.TrimPrefix(line, "driga: ")
+	slog.Warn("collector output", "event", "collector_output", "line", line)
+}
+
+func (o *outputLog) last() string {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.line
 }

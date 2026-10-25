@@ -3,9 +3,14 @@ package desktop
 import (
 	"context"
 	"encoding/json"
+	"encoding/xml"
 	"errors"
+	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
+	"sync"
 	"time"
 )
 
@@ -21,22 +26,45 @@ type upgradeWatch struct {
 	interval time.Duration
 	stat     func(path string) (time.Time, error)
 	read     func(ctx context.Context, exe string) (string, error)
-	stamp    time.Time
+
+	mu    sync.Mutex
+	stamp time.Time
 }
 
 func newUpgradeWatch(exe, version string) *upgradeWatch {
-	return &upgradeWatch{exe: exe, version: version, stat: modTime, read: exeVersion}
+	return &upgradeWatch{exe: exe, version: version, stat: modTime, read: installedVersion}
 }
 
+// errUpgradePending holds collector restarts while the executable changed.
+var errUpgradePending = errors.New("waiting for Driga to restart after an update")
+
 // start records the executable as it is now.
-func (w *upgradeWatch) start() { w.stamp, _ = w.stat(w.exe) }
+func (w *upgradeWatch) start() {
+	stamp, _ := w.stat(w.exe)
+	w.mu.Lock()
+	w.stamp = stamp
+	w.mu.Unlock()
+}
+
+// pending reports whether the executable changed since the watch last read
+// its version. A collector started now could be another version than the
+// app, and migrate the store the app reads.
+func (w *upgradeWatch) pending() bool {
+	stamp, err := w.stat(w.exe)
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return err == nil && !w.stamp.IsZero() && !stamp.Equal(w.stamp)
+}
 
 // changed reports whether the executable now holds another version. It asks
 // the executable only after its modification time moved, and asks again on
 // the next check while it cannot answer, as during an upgrade.
 func (w *upgradeWatch) changed(ctx context.Context) bool {
 	stamp, err := w.stat(w.exe)
-	if err != nil || stamp.Equal(w.stamp) {
+	w.mu.Lock()
+	unchanged := stamp.Equal(w.stamp)
+	w.mu.Unlock()
+	if err != nil || unchanged {
 		return false
 	}
 	version, err := w.read(ctx, w.exe)
@@ -46,7 +74,9 @@ func (w *upgradeWatch) changed(ctx context.Context) bool {
 	if version != w.version {
 		return true
 	}
+	w.mu.Lock()
 	w.stamp = stamp
+	w.mu.Unlock()
 	return false
 }
 
@@ -79,6 +109,60 @@ func modTime(path string) (time.Time, error) {
 		return time.Time{}, err
 	}
 	return info.ModTime(), nil
+}
+
+// installedVersion reads the version of the app bundle the executable is
+// in from its Info.plist, and asks any other executable. Running a freshly
+// installed bundle can wait on Gatekeeper's first-launch prompt.
+func installedVersion(ctx context.Context, exe string) (string, error) {
+	contents := filepath.Dir(filepath.Dir(exe))
+	if filepath.Base(filepath.Dir(exe)) == "MacOS" && filepath.Base(contents) == "Contents" && strings.HasSuffix(filepath.Dir(contents), ".app") {
+		f, err := os.Open(filepath.Join(contents, "Info.plist"))
+		if err != nil {
+			return "", err
+		}
+		defer f.Close()
+		return plistString(f, "DrigaReleaseVersion")
+	}
+	return exeVersion(ctx, exe)
+}
+
+// plistString returns the string under key in an XML property list's
+// top-level dictionary.
+func plistString(r io.Reader, key string) (string, error) {
+	dec := xml.NewDecoder(r)
+	depth, found := 0, false
+	for {
+		tok, err := dec.Token()
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return "", errors.New(key + " not in Info.plist")
+			}
+			return "", err
+		}
+		switch t := tok.(type) {
+		case xml.StartElement:
+			depth++
+			// plist > dict > key/string: the top-level entries sit at depth 3.
+			if depth != 3 {
+				continue
+			}
+			var text string
+			if err := dec.DecodeElement(&text, &t); err != nil {
+				return "", err
+			}
+			depth--
+			if found {
+				if t.Name.Local != "string" || text == "" {
+					return "", errors.New(key + " is not a string")
+				}
+				return text, nil
+			}
+			found = t.Name.Local == "key" && text == key
+		case xml.EndElement:
+			depth--
+		}
+	}
 }
 
 // exeVersion asks a driga executable for its version.

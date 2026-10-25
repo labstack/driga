@@ -100,6 +100,11 @@ func (c serviceControl) Run(g *Globals) error {
 	}
 	switch c.Action {
 	case "install":
+		// A service installed while the app collects would only wait for the
+		// lock, and take over collection from the app once it quits.
+		if owner, held, err := collector.ReadOwner(config.DataDir()); err == nil && held && owner.Kind == "app" {
+			return errors.New("the Driga app collects on this computer; quit Driga first to collect with the service instead")
+		}
 		if runtime.GOOS == "darwin" {
 			// launchd opens these streams before the collector starts.
 			dir := filepath.Dir(service.LogPath())
@@ -182,6 +187,27 @@ func collectorHint(goos string) string {
 		return "driga app"
 	}
 	return "driga service install"
+}
+
+// restartHint says how to restart the collector that holds the lock: the
+// app, the service or a collector run by hand. With none holding it, the
+// collector is started the way this platform runs it.
+func restartHint(goos string, owner collector.Owner, held bool) string {
+	if !held {
+		return collectorHint(goos)
+	}
+	switch owner.Kind {
+	case "app":
+		return "quit and reopen Driga"
+	case "service":
+		return "driga service restart"
+	case "manual":
+		return "stop and rerun driga collect"
+	}
+	if goos == "darwin" || goos == "windows" {
+		return "quit and reopen Driga"
+	}
+	return "driga service restart"
 }
 
 func serviceBinaryPath(bin string) (string, error) {

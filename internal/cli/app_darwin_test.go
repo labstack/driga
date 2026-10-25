@@ -37,10 +37,11 @@ func TestAppHandOff(t *testing.T) {
 }
 
 // The hand-off opens the bundle the command line ran from, not whichever
-// bundle Launch Services knows by the identifier.
+// bundle Launch Services knows by the identifier, with the command line's
+// DRIGA_* variables.
 func TestAppHandOffCommand(t *testing.T) {
-	cmd := handOffCommand("/Users/someone/Applications/Driga.app")
-	if want := []string{"open", "-a", "/Users/someone/Applications/Driga.app"}; !slices.Equal(cmd.Args, want) {
+	cmd := handOffCommand("/Users/someone/Applications/Driga.app", []string{"PATH=/bin", "DRIGA_DATA_DIR=/data dir", "DRIGA_APP=1", "DRIGA_CONFIG="})
+	if want := []string{"open", "--env", "DRIGA_DATA_DIR=/data dir", "--env", "DRIGA_CONFIG=", "-a", "/Users/someone/Applications/Driga.app"}; !slices.Equal(cmd.Args, want) {
 		t.Fatalf("hand-off runs %q, want %q", cmd.Args, want)
 	}
 }

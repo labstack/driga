@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -47,7 +48,10 @@ type Options struct {
 	// fills Start, ReadOwner, Ready and Executable when they are unset.
 	Supervisor *Supervisor
 	Config     config.Config
-	Version    string
+	// ConfigErr is why the settings file could not be read; Config then
+	// holds the defaults, and the app says so once it is ready.
+	ConfigErr error
+	Version   string
 }
 
 // shell is the running app: the main window, the tray and the collector.
@@ -84,6 +88,8 @@ type shell struct {
 	status     Status
 	envErr     error
 	serviceErr error
+	// shadowed are the DRIGA_* variables the login shell sets otherwise.
+	shadowed []string
 	// restartPending is set once an upgrade's relaunch was cancelled.
 	restartPending bool
 	needs          []view.BoardRow
@@ -159,6 +165,9 @@ func Run(opts Options) error {
 		}
 	})
 	mygo.App.WhenReady(func() {
+		if opts.ConfigErr != nil {
+			s.reportConfigError(opts.ConfigErr)
+		}
 		_ = s.applyOpenAtLogin(opts.Config.App.LaunchAtLogin)
 		s.applyTray(opts.Config.App.Tray)
 		if !startHidden(s.goos, mygo.App.WasOpenedAtLogin(), s.trayCreated()) {
@@ -211,12 +220,21 @@ func (s *shell) prepareSupervisor(dataDir string) (string, error) {
 		sup.Start = func(ctx context.Context) (Child, error) {
 			// Without the login environment the collector still runs, with
 			// the app's own; the status says what is missing.
+			if s.upgrade != nil && s.upgrade.pending() {
+				return nil, errUpgradePending
+			}
 			env, err := s.loginEnv.get(ctx)
+			shadowed := shadowedKeys(env, os.Getenv)
 			s.mu.Lock()
 			s.envErr = err
+			logShadowed := !slices.Equal(s.shadowed, shadowed)
+			s.shadowed = shadowed
 			s.mu.Unlock()
 			if err != nil {
 				slog.Warn("login environment unavailable", "event", "login_env_failed", "err", err.Error())
+			}
+			if logShadowed && len(shadowed) > 0 {
+				slog.Warn("the login shell sets DRIGA_* variables the app does not use", "event", "login_env_shadowed", "keys", strings.Join(shadowed, ","))
 			}
 			return StartCollector(ctx, sup.Executable, env)
 		}
@@ -243,6 +261,16 @@ func (s *shell) replaceService() {
 	go func() {
 		_, _ = mygo.Dialog.Message(mygo.MessageOptions{Parent: s.mainWindow(), Type: mygo.MessageInfo,
 			Message: serviceReplacedMessage, Buttons: []string{"OK"}})
+	}()
+}
+
+// reportConfigError says the settings could not be read. The collector
+// reads the same file, so the tray shows its error until the file is fixed.
+func (s *shell) reportConfigError(err error) {
+	slog.Warn("settings unreadable; using the defaults", "event", "config_invalid", "err", err.Error())
+	go func() {
+		_, _ = mygo.Dialog.Message(mygo.MessageOptions{Parent: s.mainWindow(), Type: mygo.MessageWarning,
+			Message: "Driga could not read its settings and uses the defaults.", Detail: err.Error() + "\n\nFix the file, then quit and reopen Driga.", Buttons: []string{"OK"}})
 	}()
 }
 
@@ -372,6 +400,8 @@ func (s *shell) trayStatus() Status {
 		st.Err = errors.New("background service not removed; run driga service uninstall")
 	case s.envErr != nil && st.Collecting:
 		st.Err = fmt.Errorf("without login shell PATH: %w", s.envErr)
+	case len(s.shadowed) > 0 && st.Collecting:
+		st.Err = fmt.Errorf("ignoring %s from the login shell; quit Driga and run driga app from it", strings.Join(s.shadowed, ", "))
 	}
 	return st
 }

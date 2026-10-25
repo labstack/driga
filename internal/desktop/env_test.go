@@ -13,17 +13,14 @@ import (
 	"time"
 )
 
-// fakeShell writes a login shell under the isolated HOME that prints a fixed
+// fakeShell writes a login shell in a fresh directory that prints a fixed
 // environment, with noise a profile might print, and records its arguments.
 func fakeShell(t *testing.T, body string) string {
 	t.Helper()
 	if runtime.GOOS == "windows" {
 		t.Skip("login shells are a Unix concept")
 	}
-	dir := filepath.Join(os.Getenv("HOME"), t.Name())
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		t.Fatal(err)
-	}
+	dir := t.TempDir()
 	path := filepath.Join(dir, "shell")
 	if err := os.WriteFile(path, []byte("#!/bin/sh\n"+body), 0o700); err != nil {
 		t.Fatal(err)
@@ -210,5 +207,14 @@ func TestChildEnvironmentDrigaFromAppOnly(t *testing.T) {
 		if !slices.Contains(env, want) {
 			t.Fatalf("environment %v lacks %s", env, want)
 		}
+	}
+}
+
+func TestShadowedKeys(t *testing.T) {
+	login := map[string]string{"PATH": "/bin", "DRIGA_DATA_DIR": "/shell", "DRIGA_CONFIG": "/same", "DRIGA_SPOOL_DIR": "/spool"}
+	own := map[string]string{"DRIGA_CONFIG": "/same", "DRIGA_SPOOL_DIR": "/other"}
+	got := shadowedKeys(login, func(k string) string { return own[k] })
+	if want := []string{"DRIGA_DATA_DIR", "DRIGA_SPOOL_DIR"}; !slices.Equal(got, want) {
+		t.Fatalf("shadowed = %q, want %q", got, want)
 	}
 }

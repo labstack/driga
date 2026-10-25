@@ -168,7 +168,7 @@ func TestDoctorStaleSource(t *testing.T) {
 	if err := st.Tx(context.Background(), func(tx *store.Tx) error { return tx.SetSourceOK("git", d.Now.Add(-16*time.Minute)) }); err != nil {
 		t.Fatal(err)
 	}
-	requireCheck(t, Doctor(context.Background(), d), "source:git", "warn", "driga service restart")
+	requireCheck(t, Doctor(context.Background(), d), "source:git", "warn", "stop and rerun driga collect")
 }
 
 func TestDoctorIntakeRejections(t *testing.T) {
@@ -226,8 +226,8 @@ func TestDoctorCadenceAndRSS(t *testing.T) {
 		t.Fatal(err)
 	}
 	checks := Doctor(context.Background(), d)
-	requireCheck(t, checks, "collector", "warn", "driga service restart")
-	requireCheck(t, checks, "source:machine", "warn", "driga service restart")
+	requireCheck(t, checks, "collector", "warn", "stop and rerun driga collect")
+	requireCheck(t, checks, "source:machine", "warn", "stop and rerun driga collect")
 	c := requireCheck(t, checks, "collector_rss", "warn", "")
 	if !strings.Contains(c.Detail, "51.0 MB") {
 		t.Fatal(c)
@@ -445,5 +445,26 @@ func TestDoctorMalformedExcludeWarning(t *testing.T) {
 	}
 	if len(cfg.Exclude) != 1 || cfg.Exclude[0] != "**/node_modules" {
 		t.Fatal(cfg.Exclude)
+	}
+}
+
+// The fix restarts whichever collector holds the lock.
+func TestRestartHintFollowsOwner(t *testing.T) {
+	for _, tc := range []struct {
+		goos, kind string
+		held       bool
+		want       string
+	}{
+		{"darwin", "", false, "driga app"},
+		{"linux", "", false, "driga service install"},
+		{"darwin", "app", true, "quit and reopen Driga"},
+		{"darwin", "service", true, "driga service restart"},
+		{"linux", "manual", true, "stop and rerun driga collect"},
+		{"windows", "unknown", true, "quit and reopen Driga"},
+		{"linux", "unknown", true, "driga service restart"},
+	} {
+		if got := restartHint(tc.goos, collector.Owner{Kind: tc.kind}, tc.held); got != tc.want {
+			t.Errorf("restartHint(%s, %q, %v) = %q, want %q", tc.goos, tc.kind, tc.held, got, tc.want)
+		}
 	}
 }

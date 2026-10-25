@@ -22,12 +22,23 @@ func handOffApp(system bool) (bool, error) {
 	if !handsOff(system, exe) {
 		return false, nil
 	}
-	return true, handOffCommand(appBundle(exe)).Run()
+	return true, handOffCommand(appBundle(exe), os.Environ()).Run()
 }
 
 // handOffCommand opens bundle by its path: another copy of Driga.app, such
-// as one in ~/Applications, has the same bundle identifier.
-func handOffCommand(bundle string) *exec.Cmd { return exec.Command("open", "-a", bundle) }
+// as one in ~/Applications, has the same bundle identifier. Launch Services
+// does not pass on the caller's environment, so the DRIGA_* variables naming
+// the data, config and settings go along explicitly. A running app keeps
+// its own.
+func handOffCommand(bundle string, environ []string) *exec.Cmd {
+	args := []string{}
+	for _, entry := range environ {
+		if strings.HasPrefix(entry, "DRIGA_") && !strings.HasPrefix(entry, "DRIGA_APP=") {
+			args = append(args, "--env", entry)
+		}
+	}
+	return exec.Command("open", append(args, "-a", bundle)...)
+}
 
 // handsOff reports whether to hand off: a launch not made by the system, of
 // an executable inside an app bundle. A development build runs in place.
