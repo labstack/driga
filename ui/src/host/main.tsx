@@ -30,6 +30,16 @@ function initial(): string {
   return new URLSearchParams(location.search).get("dashboard") || homeID;
 }
 
+/** showPanel scrolls a panel into view and marks it for a moment. */
+function showPanel(id: string) {
+  const title = document.getElementById(`panel-${id}`);
+  const el = title?.closest(".mantine-Card-root") ?? title;
+  if (!el) return;
+  el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  el.classList.add("panel-shown");
+  window.setTimeout(() => el.classList.remove("panel-shown"), 1600);
+}
+
 function App() {
   const [id, setId] = useState<string>(initial);
   const [list, setList] = useState<Summary[]>([]);
@@ -81,7 +91,13 @@ function App() {
       switch (kind) {
         case "jump":
         case "open": await action({ action: "jump", session_id: session, machine }); say("Opened the session's pane"); return;
-        case "ack": await action({ action: "ack_inbox", id: row.id, machine }); say("Acknowledged"); break;
+        case "ack": {
+          // A session's finished turns are one row; acknowledging it clears every one.
+          const ids = typeof row.ids === "string" && row.ids ? row.ids.split(",") : [row.id];
+          for (const id of ids) await action({ action: "ack_inbox", id, machine });
+          say(ids.length > 1 ? `Acknowledged ${ids.length} turns` : "Acknowledged");
+          break;
+        }
         case "stop":
           if (!await ask(`Stop ${name}? Its agent and the processes it started are ended.`)) return;
           await action({ action: "kill", session_id: session, machine, confirmed: true }); say(`Stopped ${name}`); break;
@@ -152,7 +168,8 @@ function App() {
       <AppShell.Header px="md" style={{ background: "color-mix(in srgb, var(--driga-ground) 88%, transparent)", backdropFilter: "blur(10px)", borderColor: "var(--driga-border)" }}>
         <Group h="100%" gap="md" wrap="nowrap">
           <Brand />
-          <Metrics fragment={header} editing={editing} onAsk={m => setAsk({ text: `Tell me about "${m.panel.title}" right now.`, at: Date.now() })}
+          <Metrics fragment={header} editing={editing} onAsk={m => { setChatOpen(true); setAsk({ text: `Tell me about "${m.panel.title}" right now.`, at: Date.now() }); }}
+            onShow={target => { if (id !== homeID) open(homeID); window.setTimeout(() => showPanel(target), id !== homeID ? 600 : 0); }}
             onRemove={pid => header && void edit(headerID, header.version ?? 0, [{ op: "remove", id: pid }], "Removed a metric")} />
           <Tooltip label={chatOpen ? "Hide Chat" : "Show Chat"}>
             <ActionIcon size="lg" variant={chatOpen ? "light" : "subtle"} color={chatOpen ? "brand" : "gray"} aria-pressed={chatOpen} aria-label="Chat" onClick={() => setChatOpen(o => !o)}><ChatCircle size={20} /></ActionIcon>
@@ -162,7 +179,7 @@ function App() {
       <AppShell.Main style={{ height: "100dvh", display: "flex", flexDirection: "column" }}>
         <Group justify="space-between" wrap="nowrap" gap="sm" px="md" pt="sm" pb={8}>
           <Box style={{ minWidth: 0 }}>
-            <Title order={1} fz="lg" fw={600} style={{ letterSpacing: "-0.01em" }}>{d?.name ?? "Loading…"}</Title>
+            <Title order={1} fz={28} fw={650} lh={1.2} style={{ letterSpacing: "-0.02em" }}>{d?.name ?? "Loading…"}</Title>
             {d?.description && <Text size="xs" c="dimmed" truncate>{d.description}</Text>}
           </Box>
           <Group gap="xs" wrap="nowrap">

@@ -27,3 +27,6 @@ body { font-variant-numeric: tabular-nums; }
 .row-menu { opacity: 0; transition: opacity 120ms ease-out; }
 tr:hover .row-menu, tr:focus-within .row-menu, .row-hover:hover .row-menu, .row-hover:focus-within .row-menu, .row-menu[aria-expanded="true"], .row-menu:focus-visible { opacity: 1; }
 @media (pointer: coarse) { .row-menu { opacity: 1; } }
+
+/* A panel the header just pointed at. */
+.panel-shown { box-shadow: 0 0 0 2px var(--mantine-color-brand-filled); transition: box-shadow 150ms ease-out; }

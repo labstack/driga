@@ -31,3 +31,14 @@ describe("packed", () => {
     expect(items.every(i => i.h >= 2)).toBe(true);
   });
 });
+
+import { byteSteps } from "../panels/charts";
+
+describe("byteSteps", () => {
+  it("steps byte axes in powers of two of a 1024 unit", () => {
+    const gb = 1024 ** 3;
+    expect(byteSteps("bytes", 33 * gb)).toEqual({ interval: 8 * gb, max: 40 * gb });
+    expect(byteSteps("bytes", 3.7 * gb)).toEqual({ interval: gb, max: 4 * gb });
+    expect(byteSteps("count", 33)).toEqual({});
+  });
+});

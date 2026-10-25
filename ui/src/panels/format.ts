@@ -16,14 +16,15 @@ export function bytes(n: number): string {
   return `${n >= 10 || i === 0 ? whole.format(n) : tenths.format(n)} ${units[i]}`;
 }
 
+/** duration reads the two largest units: 45s, 12m, 3h 5m, 2d 4h. */
 export function duration(ms: number): string {
   const s = Math.round(ms / 1000);
   if (s < 60) return `${s}s`;
   const m = Math.round(s / 60);
   if (m < 60) return `${m}m`;
   const h = Math.floor(m / 60);
-  if (h < 48) return `${h}h ${m % 60}m`;
-  return `${Math.floor(h / 24)}d`;
+  if (h < 24) return `${h}h ${m % 60}m`;
+  return `${Math.floor(h / 24)}d ${h % 24}h`;
 }
 
 export function relative(iso: string, now: number = Date.now()): string {

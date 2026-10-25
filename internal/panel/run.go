@@ -23,7 +23,7 @@ const defaultLimit = 50
 
 // identity are the columns actions need to name a row: its id, session and
 // machine, plus what decides whether an action is offered.
-var identity = []string{"id", "session_id", "machine_id", "path", "verified", "young", "status", "label", "kind"}
+var identity = []string{"id", "ids", "session_id", "machine_id", "path", "verified", "young", "status", "label", "state", "inferred", "evidence", "kind"}
 
 // RunRequest asks for a dashboard's panels with variable values. Panels, when
 // set, limits the run to those ids.
@@ -42,6 +42,8 @@ type Result struct {
 	// Trend is a stat's value per minute, oldest first, when its source has
 	// readings over time; missing minutes are null.
 	Trend []any `json:"trend,omitempty"`
+	// Total is what a stat is out of, when its panel names one.
+	Total any `json:"total,omitempty"`
 }
 
 // Fragment is a dashboard with its results: what a tool returns and an MCP
@@ -140,6 +142,9 @@ func runPanel(p Panel, vars map[string]string, rows func(string) [][]any) Result
 			}
 		}
 		frame = Frame{Columns: []Column{{Name: "value", Type: Number, Unit: cmp.Or(p.Unit, unit)}}, Rows: [][]any{{value}}}
+		if p.Total != "" {
+			r.Total, _ = aggregate(s, data, p.Total)
+		}
 	case p.Viz == "timeseries":
 		frame = timeseries(s, data, p)
 	case p.Viz == "timeline":
@@ -152,7 +157,7 @@ func runPanel(p Panel, vars map[string]string, rows func(string) [][]any) Result
 	if len(frame.Rows) == 0 {
 		// An empty frame is [] on the wire, never null.
 		frame.Rows = [][]any{}
-		r.Status, r.Message = StatusEmpty, "Nothing matches right now."
+		r.Status, r.Message = StatusEmpty, cmp.Or(p.Empty, "Nothing matches right now.")
 	}
 	r.Frame = &frame
 	return r
@@ -229,6 +234,10 @@ func aggregate(s schema, rows [][]any, measure string) (any, string) {
 		}
 	}
 	unit := s.columns[i].Unit
+	// Nothing to add up is zero; rows without readings are no reading.
+	if len(rows) == 0 && fn == "sum" {
+		return 0.0, unit
+	}
 	if len(values) == 0 {
 		return nil, unit
 	}

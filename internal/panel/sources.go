@@ -89,14 +89,14 @@ func ms(d time.Duration) float64 { return float64(d.Milliseconds()) }
 // the app's views use.
 var sources = map[string]schema{
 	"sessions": {
-		description: "Every live agent session, workers included, with its state label",
-		columns:     []Column{col("id", Number), col("title", String), col("label", String), col("agent", String), col("project", String), col("branch", String), col("machine", String), col("age", Number, "duration"), col("mem_bytes", Number, "bytes"), col("last_activity_at", Time), col("machine_id", String)},
+		description: "Every live agent session, workers included. label is Driga's raw label (a leading ~ marks an inferred one); state is the label without the mark, inferred says whether it was inferred, and evidence is why",
+		columns:     []Column{col("id", Number), col("title", String), col("label", String), col("agent", String), col("project", String), col("branch", String), col("machine", String), col("age", Number, "duration"), col("mem_bytes", Number, "bytes"), col("last_activity_at", Time), col("machine_id", String), col("state", String), col("inferred", Bool), col("evidence", String)},
 		build: func(s viewer.Snapshot) [][]any {
 			var rows [][]any
 			var walk func([]view.AgentRow)
 			walk = func(agents []view.AgentRow) {
 				for _, a := range agents {
-					rows = append(rows, []any{float64(a.ID), a.Title, a.Label, a.Adapter, a.Project, a.Branch, a.MachineName, ms(a.Age), float64(a.Mem), stamp(a.LastActivityAt), a.MachineID})
+					rows = append(rows, []any{float64(a.ID), sessionTitle(a.Title, a.Adapter, a.Project), a.Label, a.Adapter, a.Project, a.Branch, a.MachineName, ms(a.Age), bytesKnown(a.Mem), stamp(a.LastActivityAt), a.MachineID, strings.TrimPrefix(a.Label, "~"), a.Heuristic || strings.HasPrefix(a.Label, "~"), a.Evidence})
 					walk(a.Children)
 				}
 			}
@@ -105,15 +105,39 @@ var sources = map[string]schema{
 		},
 	},
 	"inbox": {
-		description: "What needs you and what finished: waits, completions and machine warnings",
-		columns:     []Column{col("id", String), col("kind", String), col("reason", String), col("tool", String), col("detail", String), col("summary", String), col("title", String), col("project", String), col("branch", String), col("agent", String), col("session_id", Number), col("machine_id", String), col("machine", String), col("waited", Number, "duration"), col("age", Number, "duration"), col("occurred_at", Time), col("ack_pending", Bool)},
+		description: "What needs you and what finished: waits, completions and machine warnings. A session's finished turns are one item, its latest, with how many turns it holds",
+		columns:     []Column{col("id", String), col("kind", String), col("reason", String), col("tool", String), col("detail", String), col("summary", String), col("title", String), col("project", String), col("branch", String), col("agent", String), col("session_id", Number), col("machine_id", String), col("machine", String), col("waited", Number, "duration"), col("age", Number, "duration"), col("occurred_at", Time), col("ack_pending", Bool), col("turns", Number, "count"), col("ids", String)},
 		build: func(s viewer.Snapshot) [][]any {
+			type key struct {
+				machine string
+				session int64
+			}
 			rows := make([][]any, 0, len(s.Inbox.Rows))
+			finished := map[key]int{}
 			for _, r := range s.Inbox.Rows {
 				if r.Historical {
 					continue
 				}
-				rows = append(rows, []any{r.ID, r.Kind, r.Reason, r.Tool, r.Detail, r.Summary, r.Title, r.Project, r.Branch, r.Adapter, float64(r.SessionID), r.MachineID, r.MachineName, ms(r.Waited), ms(r.Age), stamp(r.TS), r.AckPendingAt != nil})
+				row := []any{r.ID, r.Kind, r.Reason, r.Tool, r.Detail, r.Summary, sessionTitle(r.Title, r.Adapter, r.Project), r.Project, r.Branch, r.Adapter, float64(r.SessionID), r.MachineID, r.MachineName, ms(r.Waited), ms(r.Age), stamp(r.TS), r.AckPendingAt != nil, 1.0, r.ID}
+				k := key{r.MachineID, r.SessionID}
+				if r.Kind != "finished" || r.SessionID == 0 {
+					rows = append(rows, row)
+					continue
+				}
+				// Review needs a session's latest finish, not every turn's.
+				i, seen := finished[k]
+				if !seen {
+					finished[k] = len(rows)
+					rows = append(rows, row)
+					continue
+				}
+				kept := rows[i]
+				turns, ids := kept[17].(float64)+1, kept[18].(string)+","+r.ID
+				if latest, _ := kept[15].(string); stampAfter(r.TS, latest) {
+					kept = row
+				}
+				kept[17], kept[18] = turns, ids
+				rows[i] = kept
 			}
 			return rows
 		},
@@ -298,4 +322,33 @@ func machineNames(s viewer.Snapshot) map[string]string {
 		names[m.MachineID] = view.MachineName(m.Machine)
 	}
 	return names
+}
+
+// sessionTitle names a session that has no title of its own by its agent and
+// project, so a row never reads as a dash.
+func sessionTitle(title, agent, project string) string {
+	switch {
+	case title != "":
+		return title
+	case agent != "" && project != "":
+		return agent + " session in " + project
+	case agent != "":
+		return agent + " session"
+	}
+	return title
+}
+
+// stampAfter reports whether t is later than a stamp, or the stamp is unset.
+func stampAfter(t time.Time, stamp string) bool {
+	at, err := time.Parse(time.RFC3339, stamp)
+	return err != nil || t.After(at)
+}
+
+// bytesKnown is a memory reading, or none when the session's processes were
+// not measured: zero bytes is never a real reading for a live session.
+func bytesKnown(n uint64) any {
+	if n == 0 {
+		return nil
+	}
+	return float64(n)
 }

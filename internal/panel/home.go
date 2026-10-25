@@ -37,11 +37,15 @@ func Home() Dashboard {
 		Description: "What needs you, what finished, what is running away, and what is in flight.",
 		Variables:   []Variable{{Name: "project", Field: "project"}, {Name: "machine", Field: "machine"}},
 		Panels: []Panel{
-			{ID: "inbox", Title: "Inbox", Description: "Waits first, longest waiting first, then completions to review.", Viz: "inbox", Source: "inbox", Where: with(), Width: 7, Height: "m"},
-			{ID: "orphans", Title: "Leftover process trees", Description: "Helper processes whose agent is gone. Only verified idle trees can be stopped.", Viz: "list", Source: "orphans", Columns: []string{"signature", "processes", "rss_bytes", "verified"}, Sort: "-rss_bytes", Where: []Filter{{Column: "machine", Value: "$machine"}}, Width: 5, Height: "m"},
-			{ID: "stuck", Title: "Quiet longer than expected", Description: "Busy sessions with no new activity past stalled_after; suspected, not proven.", Viz: "table", Source: "sessions", Columns: []string{"id", "title", "agent", "project", "age", "last_activity_at"}, Sort: "last_activity_at", Where: with(Filter{Column: "label", Value: "stalled?"}), Width: 12, Height: "s"},
-			{ID: "sessions", Title: "Sessions", Viz: "table", Source: "sessions", Columns: []string{"id", "title", "label", "agent", "project", "branch", "age", "mem_bytes"}, Sort: "-last_activity_at", Where: with(), Width: 12, Height: "m"},
-			{ID: "memory", Title: "Memory by project", Viz: "bar", Source: "costs", By: "project", Measure: "sum:mem_bytes", Width: 6, Height: "m"},
+			{ID: "inbox", Title: "Inbox", Description: "Waits first, longest waiting first, then each session's latest finished turn to review.", Viz: "inbox", Source: "inbox", Where: with(), Width: 7, Height: "m",
+				Empty: "Nothing needs you. Agents waiting on you, and sessions that finished, show here."},
+			{ID: "orphans", Title: "Leftover process trees", Description: "Helper processes whose agent is gone. Only verified idle trees can be stopped.", Viz: "list", Source: "orphans", Columns: []string{"signature", "processes", "rss_bytes", "verified"}, Sort: "-rss_bytes", Where: []Filter{{Column: "machine", Value: "$machine"}}, Width: 5, Height: "m",
+				Empty: "No leftover processes. Helper trees an agent left running after it ended show here."},
+			{ID: "stuck", Title: "Quiet longer than expected", Description: "Busy sessions with no new activity past stalled_after; suspected, not proven.", Viz: "table", Source: "sessions", Columns: []string{"title", "agent", "project", "machine", "last_activity_at", "evidence"}, Sort: "last_activity_at", Where: with(Filter{Column: "state", Value: "stalled?"}), Width: 12, Height: "s",
+				Empty: "No session looks stuck. A busy session quiet past stalled_after shows here."},
+			{ID: "sessions", Title: "Sessions", Viz: "table", Source: "sessions", Columns: []string{"state", "title", "project", "branch", "agent", "machine", "last_activity_at", "mem_bytes"}, Sort: "age", Where: with(), Width: 12, Height: "m",
+				Empty: "No live sessions. Agent sessions on your machines show here while they run."},
+			{ID: "memory", Title: "Memory by project", Description: "Agent memory on this machine.", Viz: "bar", Source: "costs", By: "project", Measure: "sum:mem_bytes", Width: 6, Height: "m"},
 			{ID: "machine_memory", Title: "Machine memory used", Viz: "timeseries", Source: "activity", Measure: "max:mem_used_bytes", Where: []Filter{{Column: "machine", Value: "$machine"}}, Width: 6, Height: "m"},
 		},
 	}
@@ -58,10 +62,10 @@ func Header() Dashboard {
 		Panels: []Panel{
 			{ID: "waiting", Title: "Need you", Viz: "stat", Source: "inbox", Where: []Filter{{Column: "kind", Value: "waiting"}}},
 			{ID: "finished", Title: "To review", Viz: "stat", Source: "inbox", Where: []Filter{{Column: "kind", Value: "finished"}}},
-			{ID: "stuck", Title: "Possibly stuck", Viz: "stat", Source: "sessions", Where: []Filter{{Column: "label", Value: "stalled?"}}},
+			{ID: "stuck", Title: "Possibly stuck", Viz: "stat", Source: "sessions", Where: []Filter{{Column: "state", Value: "stalled?"}}},
 			{ID: "leftover", Title: "Leftover processes", Viz: "stat", Source: "orphans", Measure: "sum:rss_bytes"},
 			{ID: "reclaim", Title: "Reclaimable", Viz: "stat", Source: "summary", Measure: "sum:reclaim_bytes"},
-			{ID: "memory", Title: "Memory used", Viz: "stat", Source: "activity", Measure: "max:mem_used_bytes"},
+			{ID: "memory", Title: "Memory used", Viz: "stat", Source: "activity", Measure: "max:mem_used_bytes", Total: "max:mem_total_bytes"},
 		},
 	}
 }

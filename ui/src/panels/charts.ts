@@ -53,7 +53,7 @@ export function bar(frame: Frame, panel: Panel, t: Theme): Option {
   return {
     ...base(t, panel),
     tooltip: { ...base(t, panel).tooltip as object, trigger: "item", formatter: (p: { name: string; value: number }) => `${escape(p.name)}: ${escape(value(p.value, unit))}` },
-    xAxis: { type: "value", axisLabel: { ...axisLabel(t), formatter: (n: number) => value(n, unit) }, axisLine: { show: false }, axisTick: { show: false }, splitLine: { lineStyle: { color: t.grid } } },
+    xAxis: { type: "value", ...byteSteps(unit, Math.max(0, ...data.map(d => d.value))), axisLabel: { ...axisLabel(t), formatter: (n: number) => value(n, unit) }, axisLine: { show: false }, axisTick: { show: false }, splitLine: { lineStyle: { color: t.grid } } },
     yAxis: { type: "category", data: data.map(d => d.name), axisLabel: { color: t.text, fontSize: typeScale.small, width: 140, overflow: "truncate" }, axisLine: { show: false }, axisTick: { show: false } },
     series: [{ type: "bar", data: data.map(d => d.value), itemStyle: { color: slot(t, 0), borderRadius: [0, 2, 2, 0] }, barMaxWidth: 14 }],
   };
@@ -90,7 +90,7 @@ export function timeseries(frame: Frame, panel: Panel, t: Theme): Option {
       },
     },
     xAxis: { type: "time", axisLabel: { ...axisLabel(t), hideOverlap: true }, axisLine: { show: false }, axisTick: { show: false }, splitLine: { show: false } },
-    yAxis: { type: "value", axisLabel: { ...axisLabel(t), formatter: (n: number) => value(n, unit) }, axisLine: { show: false }, axisTick: { show: false }, splitLine: { lineStyle: { color: t.grid } } },
+    yAxis: { type: "value", ...byteSteps(unit, Math.max(0, ...[...bySeries.values()].flat().map(p => p[1]))), axisLabel: { ...axisLabel(t), formatter: (n: number) => value(n, unit) }, axisLine: { show: false }, axisTick: { show: false }, splitLine: { lineStyle: { color: t.grid } } },
     dataZoom: [{ type: "inside", filterMode: "none" }],
     series,
   };
@@ -120,4 +120,17 @@ export function sparkline(trend: (number | null)[], title: string, t: Theme, col
 function lastPoint(points: (number | null)[][]): { coord: (number | null)[] }[] {
   for (let i = points.length - 1; i >= 0; i--) if (points[i][1] !== null) return [{ coord: points[i] }];
   return [];
+}
+
+/** byteSteps puts a byte axis on 1024-based steps, 4 GB rather than 4.7 GB,
+ * with four to six of them up to the largest value. */
+export function byteSteps(unit: string | undefined, max: number): { interval?: number; max?: number } {
+  if (unit !== "bytes" || !(max > 0)) return {};
+  for (let power = 1; power <= 1024 ** 5; power *= 1024) {
+    for (const k of [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]) {
+      const step = k * power;
+      if (max / step <= 5) return { interval: step, max: Math.ceil(max / step) * step };
+    }
+  }
+  return {};
 }

@@ -209,3 +209,54 @@ func TestRowsMatchColumnsAndKeepIdentity(t *testing.T) {
 		}
 	}
 }
+
+// A session's finished turns are one inbox item, its latest, holding every
+// item's id so acknowledging it clears them all.
+func TestInboxCollapsesFinishedTurns(t *testing.T) {
+	snap := snapshot()
+	at := snap.ObservedAt
+	snap.Inbox.Rows = append(snap.Inbox.Rows,
+		view.InboxRow{InboxItem: model.InboxItem{ID: "done2", Kind: "finished", SessionID: 3, TS: at}, Project: "site", Adapter: "codex"},
+		view.InboxRow{InboxItem: model.InboxItem{ID: "done0", Kind: "finished", SessionID: 3, TS: at.Add(-time.Hour)}, Project: "site", Adapter: "codex"})
+	f, err := Run(snap, RunRequest{Dashboard: Dashboard{Name: "x", Panels: []Panel{{ID: "i", Title: "I", Viz: "table", Source: "inbox", Columns: []string{"id", "kind", "title", "turns", "ids"}, Where: []Filter{{Column: "kind", Value: "finished"}}}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := f.Results[0].Frame.Rows
+	if len(rows) != 1 || rows[0][0] != "done2" || rows[0][2] != "codex session in site" || rows[0][3] != 3.0 || rows[0][4] != "done,done2,done0" {
+		t.Fatalf("finished = %v", rows)
+	}
+}
+
+// An inferred label is the same state, marked inferred; a sum over nothing is
+// zero, and rows without readings are no reading; a stat shows its total.
+func TestStatesTotalsAndEmptySums(t *testing.T) {
+	snap := snapshot()
+	snap.Agents.Rows = append(snap.Agents.Rows, view.AgentRow{ID: 4, Label: "~stalled?", Adapter: "codex", Project: "core", Evidence: "no output for 2h"})
+	snap.Activity.Machines[0].Buckets[0].Sample.MemTotal = 32
+	f, err := Run(snap, RunRequest{Dashboard: Dashboard{Name: "x", Panels: []Panel{
+		{ID: "stuck", Title: "S", Viz: "table", Source: "sessions", Columns: []string{"state", "inferred", "evidence"}, Where: []Filter{{Column: "state", Value: "stalled?"}}},
+		{ID: "none", Title: "N", Viz: "stat", Source: "orphans", Measure: "sum:rss_bytes"},
+		{ID: "mem", Title: "M", Viz: "stat", Source: "activity", Measure: "max:mem_used_bytes", Total: "max:mem_total_bytes"},
+		{ID: "quiet", Title: "Q", Viz: "table", Source: "orphans", Empty: "No leftover processes."},
+	}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := map[string]Result{}
+	for _, x := range f.Results {
+		r[x.ID] = x
+	}
+	if rows := r["stuck"].Frame.Rows; len(rows) != 1 || rows[0][0] != "stalled?" || rows[0][1] != true || rows[0][2] != "no output for 2h" {
+		t.Fatalf("stuck = %v", rows)
+	}
+	if v := r["none"].Frame.Rows[0][0]; v != 0.0 {
+		t.Fatalf("sum over no orphans = %v, want 0", v)
+	}
+	if r["mem"].Total != 32.0 {
+		t.Fatalf("total = %v", r["mem"].Total)
+	}
+	if r["quiet"].Status != StatusEmpty || r["quiet"].Message != "No leftover processes." {
+		t.Fatalf("empty = %+v", r["quiet"])
+	}
+}

@@ -268,8 +268,12 @@ func (b *Broker) capture(text string) string {
 	}
 	return ""
 }
+
+// save stores a message within the capture policy. Tool names and panel
+// cards, which hold a panel spec and no agent text, are kept whole: a card
+// runs its spec again for live data each time it is shown.
 func (b *Broker) save(ctx context.Context, m store.ChatMessage) error {
-	if m.Role != "tool" {
+	if m.Role != "tool" && m.Role != "panel" {
 		m.Text = b.capture(m.Text)
 	}
 	return b.st.SaveChatMessage(ctx, m)

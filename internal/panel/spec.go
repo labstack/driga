@@ -45,6 +45,8 @@ type Panel struct {
 	Limit       int      `json:"limit,omitempty" jsonschema:"Most rows to return, 1 to 200; default 50"`
 	Unit        string   `json:"unit,omitempty" jsonschema:"count, bytes, percent, duration, usd or none; inferred from the measured column when omitted"`
 	Max         *float64 `json:"max,omitempty" jsonschema:"gauge: the value that fills the gauge"`
+	Total       string   `json:"total,omitempty" jsonschema:"stat: a second measure the value is out of, shown as value / total, e.g. max:mem_total_bytes"`
+	Empty       string   `json:"empty,omitempty" jsonschema:"What the panel says when nothing matches: what would appear here and why, at most 160 characters"`
 	Width       int      `json:"width,omitempty" jsonschema:"Grid columns from 1 to 12; default depends on viz"`
 	Height      string   `json:"height,omitempty" jsonschema:"s, m or l; default depends on viz"`
 	Content     string   `json:"content,omitempty" jsonschema:"text panels: Markdown, at most 4000 characters"`
@@ -193,16 +195,25 @@ func Validate(d Dashboard) error {
 		if sortBy := strings.TrimPrefix(p.Sort, "-"); sortBy != "" && !has(sortBy) && sortBy != "value" {
 			add(path+".sort", "%q is not a column of %s (%s)", sortBy, p.Source, schema.names())
 		}
-		if p.Measure != "" {
-			if _, column, err := parseMeasure(p.Measure); err != nil {
-				add(path+".measure", "%s", err)
+		for field, m := range map[string]string{"measure": p.Measure, "total": p.Total} {
+			if m == "" {
+				continue
+			}
+			if _, column, err := parseMeasure(m); err != nil {
+				add(path+"."+field, "%s", err)
 			} else if column != "" {
 				if c := schema.column(column); c == nil {
-					add(path+".measure", "%q is not a column of %s (%s)", column, p.Source, schema.names())
+					add(path+"."+field, "%q is not a column of %s (%s)", column, p.Source, schema.names())
 				} else if c.Type != Number {
-					add(path+".measure", "%q is not numeric", column)
+					add(path+"."+field, "%q is not numeric", column)
 				}
 			}
+		}
+		if p.Total != "" && p.Viz != "stat" {
+			add(path+".total", "only stat panels show a total")
+		}
+		if len(p.Empty) > 160 {
+			add(path+".empty", "at most 160 characters")
 		}
 		switch p.Viz {
 		case "timeseries":

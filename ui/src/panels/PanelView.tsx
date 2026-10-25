@@ -1,5 +1,5 @@
 import { ActionIcon, Badge, Box, Button, Card, Group, Paper, Progress, ScrollArea, SimpleGrid, Stack, Table, Text, Title, Tooltip, UnstyledButton } from "@mantine/core";
-import { CaretDown, CaretUp, Info } from "@phosphor-icons/react";
+import { CaretDown, CaretUp, CheckCircle, Info } from "@phosphor-icons/react";
 import { createSortedRowModel, rowSortingFeature, sortFn_alphanumeric, sortFn_basic, tableFeatures, useTable, type ColumnDef, type SortingState } from "@tanstack/react-table";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import Markdown from "react-markdown";
@@ -36,7 +36,7 @@ export function PanelView({ panel, result, act: given, fill }: { panel: Panel; r
   else body = <Body panel={panel} result={result} frame={result.frame} height={height} act={act} />;
   return <Card component="section" aria-labelledby={`panel-${panel.id}`} h={fill ? "100%" : undefined} style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
     <Group gap={6} wrap="nowrap" mb={6} className="panel-handle">
-      <Title order={2} id={`panel-${panel.id}`} fz="sm" fw={600} lineClamp={1}>{panel.title}</Title>
+      <Title order={2} id={`panel-${panel.id}`} fz="md" fw={600} lineClamp={1} style={{ letterSpacing: "-0.01em" }}>{panel.title}</Title>
       {panel.description && <Tooltip label={panel.description} multiline maw={320}>
         <ActionIcon size="xs" aria-label={`About ${panel.title}`}><Info size={14} /></ActionIcon>
       </Tooltip>}
@@ -49,7 +49,7 @@ function Body({ panel, result, frame, height, act }: { panel: Panel; result: Res
   const chartHeight = height ? height - 48 : undefined;
   const option = useCallback((t: Parameters<typeof bar>[2]) => panel.viz === "bar" ? bar(frame, panel, t) : timeseries(frame, panel, t), [panel, frame]);
   switch (panel.viz) {
-    case "stat": return <Stat frame={frame} trend={result.trend} title={panel.title} />;
+    case "stat": return <Stat frame={frame} trend={result.trend} title={panel.title} total={result.total} />;
     case "gauge": return <Gauge frame={frame} max={panel.max} />;
     case "bar":
     case "timeseries": return <Chart option={option} label={panel.description ? `${panel.title}: ${panel.description}` : panel.title} height={chartHeight} />;
@@ -63,12 +63,28 @@ function Body({ panel, result, frame, height, act }: { panel: Panel; result: Res
 
 /** Measure shows a number with its unit at a smaller size, as Canon's stat
  * tile does: "1.8" then "GB". */
-export function Measure({ n, unit, size = 28 }: { n: Cell; unit?: string; size?: number }) {
+export function Measure({ n, unit, size = 28, total }: { n: Cell; unit?: string; size?: number; total?: Cell }) {
   if (typeof n !== "number") return <Text ff="monospace" fz={size} fw={600} lh={1.1} c="dimmed">–</Text>;
   const [number, suffix] = splitUnit(value(n, unit));
+  // Out of a total, the value and the total share the total's unit: 25 / 32 GB.
+  if (typeof total === "number") {
+    const [whole, wholeSuffix] = splitUnit(value(total, unit));
+    const [part] = splitUnit(unit === "bytes" ? sameUnit(n, total) : value(n, unit));
+    return <Text ff="monospace" fz={size} fw={600} lh={1.1} style={{ fontVariantNumeric: "tabular-nums" }}>
+      {part}<Text span ff="monospace" fz="0.6em" fw={500} c="dimmed" mx={3}>/ {whole}</Text>{wholeSuffix && <Text span ff="monospace" fz="0.6em" fw={500} c="dimmed">{wholeSuffix}</Text>}
+    </Text>;
+  }
   return <Text ff="monospace" fz={size} fw={600} lh={1.1} style={{ fontVariantNumeric: "tabular-nums" }}>
     {number}{suffix && <Text span ff="monospace" fz="0.6em" fw={500} c="dimmed" ml={3}>{suffix}</Text>}
   </Text>;
+}
+
+// sameUnit writes n in the unit total is written in, so 25 GB / 32 GB reads
+// as 25 / 32 GB.
+function sameUnit(n: number, total: number): string {
+  const steps = Math.max(0, Math.min(4, Math.floor(Math.log(Math.max(total, 1)) / Math.log(1024))));
+  const scaled = n / 1024 ** steps;
+  return scaled >= 10 ? String(Math.round(scaled)) : scaled.toFixed(1);
 }
 
 function splitUnit(text: string): [string, string] {
@@ -76,9 +92,9 @@ function splitUnit(text: string): [string, string] {
   return m ? [m[1], m[2]] : [text, ""];
 }
 
-function Stat({ frame, trend, title }: { frame: Frame; trend?: (number | null)[]; title: string }) {
+function Stat({ frame, trend, title, total }: { frame: Frame; trend?: (number | null)[]; title: string; total?: number | null }) {
   return <Stack gap={4} style={{ flex: 1 }}>
-    <Measure n={frame.rows[0]?.[0] ?? null} unit={frame.columns[0]?.unit} />
+    <Measure n={frame.rows[0]?.[0] ?? null} unit={frame.columns[0]?.unit} total={total} />
     {trend && trend.length > 1 && <Box style={{ flex: 1, minHeight: 24 }}><Sparkline trend={trend} title={title} /></Box>}
   </Stack>;
 }
@@ -105,8 +121,14 @@ const features = tableFeatures({ rowSortingFeature, sortedRowModel: createSorted
 
 /** CellView renders a value by its column: states as status badges, times as
  * relative with the exact UTC time on hover, numbers in mono. */
-function CellView({ v, column }: { v: Cell; column: Column }) {
-  if ((column.name === "label" || column.name === "state") && typeof v === "string" && v) return <StatusBadge tone={toneOf(v)}>{v}</StatusBadge>;
+function CellView({ v, column, row }: { v: Cell; column: Column; row?: Row }) {
+  if ((column.name === "label" || column.name === "state") && typeof v === "string" && v) {
+    const state = v.replace(/^~/, "");
+    const inferred = row?.inferred === true || v.startsWith("~");
+    const badge = <StatusBadge tone={toneOf(state)} inferred={inferred}>{state}</StatusBadge>;
+    const why = typeof row?.evidence === "string" && row.evidence ? row.evidence : inferred ? "Inferred from process and file activity, not reported by the agent." : "";
+    return why ? <Tooltip label={why} multiline maw={320}>{badge}</Tooltip> : badge;
+  }
   const text = cell(v, column);
   if (column.type === "time" && typeof v === "string") return <Text span fz="inherit" title={exact(v)}>{text}</Text>;
   if (column.type === "number") return <Text span ff="monospace" fz="inherit">{text}</Text>;
@@ -120,7 +142,7 @@ function DataTable({ frame, source, act }: { frame: Frame; source?: string; act?
   const columns = useMemo<ColumnDef<typeof features, Row>[]>(() => frame.columns.filter(c => !c.hidden).map(c => ({
     id: c.name, accessorFn: (r: Row) => r[c.name], header: label(c.name),
     sortFn: c.type === "number" ? "basic" : "alphanumeric", sortDescFirst: c.type === "number",
-    cell: ({ row }: { row: { original: Row } }) => <CellView v={row.original[c.name]} column={c} />,
+    cell: ({ row }: { row: { original: Row } }) => <CellView v={row.original[c.name]} column={c} row={row.original} />,
     meta: { column: c },
   })), [frame.columns]);
   const table = useTable({ features, data, columns, state: { sorting }, onSortingChange: setSorting });
@@ -186,17 +208,28 @@ function Inbox({ frame, act, prompts, answer }: { frame: Frame; act?: Act; promp
     const waiting = r.kind === "waiting";
     const why = waiting ? [r.reason || "waiting", r.tool, r.detail].filter(Boolean).join(" · ") : String(r.summary || r.kind || "");
     const kinds: ActionKind[] = act ? [...(Number(r.session_id) > 0 ? ["jump" as const] : []), ...(!waiting && !r.ack_pending ? ["ack" as const] : [])] : [];
-    return <Paper key={String(r.id)} p="xs" radius="sm" withBorder {...rowProps(kinds, r, act)} className={`row-hover ${rowProps(kinds, r, act).className ?? ""}`} style={{ background: "var(--driga-inset)", borderLeft: waiting ? "3px solid var(--mantine-color-warning-filled)" : undefined }}>
+    const name = String(r.title || r.summary || "Session " + r.session_id);
+    const where = [r.project, r.agent, r.machine].filter(Boolean).join(" · ");
+    const props = rowProps(kinds, r, act);
+    // A finished turn is one line; a wait keeps a second for what it waits on.
+    if (!waiting) return <Group key={String(r.id)} gap={8} wrap="nowrap" px={6} py={4} {...props} className={`row-hover ${props.className ?? ""}`} style={{ borderRadius: "var(--mantine-radius-sm)" }}>
+      <CheckCircle size={14} aria-hidden style={{ color: "var(--driga-muted)", flex: "none" }} />
+      <Text size="sm" fw={500} truncate style={{ flex: "0 1 auto" }}>{name}</Text>
+      <Text size="xs" c="dimmed" truncate style={{ flex: 1 }}>{[where, typeof r.turns === "number" && r.turns > 1 ? `${r.turns} turns` : ""].filter(Boolean).join(" · ")}</Text>
+      {typeof r.age === "number" && <Text size="xs" c="dimmed" style={{ whiteSpace: "nowrap" }}>{duration(r.age)} ago</Text>}
+      {act && <RowMenu kinds={kinds} row={r} act={act} label={name} />}
+    </Group>;
+    return <Paper key={String(r.id)} p="xs" radius="sm" withBorder {...props} className={`row-hover ${props.className ?? ""}`} style={{ background: "var(--driga-inset)", borderLeft: "3px solid var(--mantine-color-warning-filled)" }}>
       <Group justify="space-between" wrap="nowrap" align="flex-start" gap="sm">
         <Stack gap={2} style={{ minWidth: 0 }}>
           <Group gap={6} wrap="nowrap">
-            <StatusBadge tone={waiting ? "warning" : "neutral"}>{waiting ? `waiting ${typeof r.waited === "number" ? duration(r.waited) : ""}`.trim() : "finished"}</StatusBadge>
-            <Text size="sm" fw={500} truncate>{String(r.title || r.summary || "Session " + r.session_id)}</Text>
+            <StatusBadge tone="warning">{`waiting ${typeof r.waited === "number" ? duration(r.waited) : ""}`.trim()}</StatusBadge>
+            <Text size="sm" fw={500} truncate>{name}</Text>
           </Group>
-          <Text size="xs" ff="monospace" c="dimmed" style={{ overflowWrap: "anywhere" }}>{why}</Text>
-          <Text size="xs" c="dimmed">{[r.project, r.agent, r.machine].filter(Boolean).join(" · ")}</Text>
+          <Text size="xs" ff={r.tool || r.detail ? "monospace" : undefined} c="dimmed" style={{ overflowWrap: "anywhere" }}>{why}</Text>
+          <Text size="xs" c="dimmed">{where}</Text>
         </Stack>
-        {act && <RowMenu kinds={kinds} row={r} act={act} label={rowLabel(r)} />}
+        {act && <RowMenu kinds={kinds} row={r} act={act} label={name} />}
       </Group>
     </Paper>;
   };

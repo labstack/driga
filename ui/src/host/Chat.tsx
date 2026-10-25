@@ -125,6 +125,9 @@ export function Chat({ inbox, act, ask, pinLabel, onPin, onSave, onClose }: {
     } catch (e) { setProblem((e as Error).message); }
   };
 
+  const dropped = (m: ChatMessage) => (m.role === "user" || m.role === "assistant") && !m.text.trim() && m.status !== "streaming" && m.status !== "queued";
+  const firstDropped = messages.findIndex(dropped);
+  const lastReply = messages.map(m => m.role).lastIndexOf("assistant");
   return <Stack component="section" aria-label="Chat" h="100%" gap={0}>
     <Group justify="space-between" px="md" py="sm" style={{ borderBottom: "1px solid var(--driga-border)" }}>
       <Group gap={8} align="baseline"><Title order={2} fz="sm" fw={600}>Chat</Title><Text size="xs" c="dimmed">through your Claude Code login</Text></Group>
@@ -132,8 +135,17 @@ export function Chat({ inbox, act, ask, pinLabel, onPin, onSave, onClose }: {
     </Group>
     <ScrollArea viewportRef={log} style={{ flex: 1 }} type="auto">
       <Stack gap="sm" p="md">
-        {messages.length === 0 && <Brief inbox={inbox} act={act} ask={text => void send(text)} />}
-        {messages.map(m => {
+        {messages.every(dropped) && <Brief inbox={inbox} act={act} ask={text => void send(text)} />}
+        {messages.map((m, i) => {
+          // Under capture_text = "titles" a turn's text is not kept: earlier
+          // turns come back empty. One note stands for all of them; only
+          // the latest reply says it failed.
+          if ((m.role === "user" || m.role === "assistant") && !m.text.trim()) {
+            if (m.status === "streaming" || m.status === "queued") return null;
+            if (m.role === "assistant" && m.status === "error" && i === lastReply) return <Text key={m.id} size="xs" c="danger">This reply failed. <Text span ff="monospace" fz="inherit">driga service logs</Text> has the error.</Text>;
+            if (i !== firstDropped) return null;
+            return <Text key={m.id} size="xs" c="dimmed">Earlier messages aren't kept. Set <Text span ff="monospace" fz="inherit">capture_text = "snippets"</Text> to keep Chat history.</Text>;
+          }
           if (m.role === "panel") return m.text ? <PanelCard key={m.id} text={m.text} pinLabel={pinLabel} onPin={onPin} onSave={onSave} /> : null;
           if (m.role === "tool") return <Group key={m.id} gap={4} c="dimmed"><Check size={12} /><Text size="xs" ff="monospace">{m.text.replace(/^mcp__driga__/, "")}</Text></Group>;
           if (m.role === "action") { const a = actions.get(m.id); return a && id ? <ActionCard key={m.id} conversation={id} action={a} /> : null; }

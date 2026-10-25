@@ -21,6 +21,8 @@ export type Panel = {
   limit?: number;
   unit?: string;
   max?: number;
+  total?: string;
+  empty?: string;
   width?: number;
   height?: "s" | "m" | "l";
   content?: string;
@@ -39,7 +41,7 @@ export type Span = { session_id: number; kind: string; from: string | null; to: 
 
 export type Frame = { columns: Column[]; rows: Cell[][]; spans?: Span[] };
 
-export type Result = { id: string; status: "ok" | "empty" | "error"; message?: string; frame?: Frame; trend?: (number | null)[] };
+export type Result = { id: string; status: "ok" | "empty" | "error"; message?: string; frame?: Frame; trend?: (number | null)[]; total?: number | null };
 
 export type Fragment = {
   dashboard: Dashboard;
