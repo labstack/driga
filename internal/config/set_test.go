@@ -3,6 +3,7 @@ package config_test
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -87,5 +88,55 @@ func TestSetRefusesInvalidValues(t *testing.T) {
 	}
 	if b, _ := os.ReadFile(path); string(b) != original {
 		t.Fatalf("file changed after a refused set:\n%s", b)
+	}
+}
+
+func TestSetKeepsInlineComments(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	original := "motion = 'on'   # the Flow map moves\n\n[ui]\ntheme = \"a # b\" # picked by hand\n[app]\ntray=true#keep\n"
+	if err := os.WriteFile(path, []byte(original), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.Set(path, map[string]any{"motion": "off", "ui.theme": "dark", "app.tray": false}); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "motion = \"off\"   # the Flow map moves\n\n[ui]\ntheme = \"dark\" # picked by hand\n[app]\ntray = false#keep\n"
+	if string(b) != want {
+		t.Fatalf("got:\n%s\nwant:\n%s", b, want)
+	}
+}
+
+func TestSetWritesThroughASymlink(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlinks need privileges on Windows")
+	}
+	dir := t.TempDir()
+	target := filepath.Join(dir, "dotfiles", "driga.toml")
+	if err := os.MkdirAll(filepath.Dir(target), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(target, []byte("[ui]\ntheme = 'light'\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "config", "config.toml")
+	if err := os.MkdirAll(filepath.Dir(link), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("../dotfiles/driga.toml", link); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.Set(link, map[string]any{"ui.theme": "dark"}); err != nil {
+		t.Fatal(err)
+	}
+	if info, err := os.Lstat(link); err != nil || info.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("config.toml is no longer a symlink: %v", err)
+	}
+	b, err := os.ReadFile(target)
+	if err != nil || !strings.Contains(string(b), "theme = \"dark\"") {
+		t.Fatalf("target not written: %q %v", b, err)
 	}
 }

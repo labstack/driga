@@ -16,8 +16,14 @@ import (
 // Set writes bool and string settings into the TOML file at path, creating it
 // if missing. It edits the lines of those keys in place, or adds them to their
 // section, so the user's comments and other settings stay as written. The file
-// is replaced only when the result loads.
+// is replaced only when the result loads. A symlinked file is written at its
+// target, so the link stays.
 func Set(path string, values map[string]any) error {
+	if target, err := filepath.EvalSymlinks(path); err == nil {
+		path = target
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
 	byKey := map[string]Setting{}
 	for _, s := range settings {
 		byKey[s.Key] = s
@@ -82,14 +88,14 @@ func setLine(lines []string, key, value string) []string {
 			}
 			continue
 		}
-		name, _, ok := strings.Cut(trimmed, "=")
+		name, old, ok := strings.Cut(trimmed, "=")
 		if !ok || strings.HasPrefix(trimmed, "#") {
 			continue
 		}
 		name = strings.TrimSpace(name)
 		if current == section && name == leaf || current == "" && name == key {
 			indent := line[:len(line)-len(strings.TrimLeft(line, " \t"))]
-			lines[i] = indent + name + " = " + value
+			lines[i] = indent + name + " = " + value + inlineComment(old)
 			return lines
 		}
 	}
@@ -104,4 +110,37 @@ func setLine(lines []string, key, value string) []string {
 		lines = append(lines, "")
 	}
 	return append(lines, "["+section+"]", assignment)
+}
+
+// inlineComment is the comment after a bool or string value, with the space
+// before it, or "" when there is none.
+func inlineComment(value string) string {
+	value = strings.TrimLeft(value, " \t")
+	end := 0
+	switch {
+	case strings.HasPrefix(value, `"`):
+		end = 1
+		for end < len(value) && value[end] != '"' {
+			if value[end] == '\\' {
+				end++
+			}
+			end++
+		}
+		end++
+	case strings.HasPrefix(value, "'"):
+		end = strings.IndexByte(value[1:], '\'') + 2
+		if end == 1 {
+			end = len(value)
+		}
+	default:
+		end = strings.IndexAny(value, " \t#")
+		if end < 0 {
+			end = len(value)
+		}
+	}
+	rest := value[min(end, len(value)):]
+	if !strings.HasPrefix(strings.TrimLeft(rest, " \t"), "#") {
+		return ""
+	}
+	return strings.TrimRight(rest, " \t")
 }
