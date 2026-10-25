@@ -103,13 +103,16 @@ the same click behaviour. The headless service keeps its own notifier.
 The app watches its executable's version. When `brew upgrade` (or the Windows
 installer) replaces it, the app stops its child and relaunches itself, so an
 old app never reads a store migrated by a newer collector (`ErrSchemaNewer`).
+If the quit is cancelled, no collector starts under the old app: the tray
+says "Restart Driga to finish updating" and the app asks again on its next
+check.
 
 ### Executables
 
 - macOS: one binary, `Driga.app/Contents/MacOS/driga`, the CLI and the app.
   Homebrew links it as `driga`. `driga app` hands off to Launch Services
-  (`open -b run.driga`) so the login item and notification identity are the
-  bundle's.
+  (`open -a` with the bundle's path) so the login item and notification
+  identity are the bundle's.
 - Windows: `Driga.exe` (GUI subsystem, the app) and `bin\driga.exe` (console
   subsystem, the CLI), built from the same packages, like VS Code's `Code.exe`
   and `code`. The collector child is started with `CREATE_NO_WINDOW`.

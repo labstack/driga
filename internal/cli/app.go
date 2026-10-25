@@ -20,6 +20,8 @@ var (
 	// openedAtLogin and runDesktop are the desktop package's, replaced in tests.
 	openedAtLogin = desktop.OpenedAtLogin
 	runDesktop    = desktop.Run
+	// openAppViewer opens the app's data; tests count its calls.
+	openAppViewer = openViewer
 	// systemLaunch records that the system started this process as the app:
 	// Finder, the Dock or Launch Services (DRIGA_APP=1), the login item, or
 	// the Windows app executable.
@@ -69,15 +71,14 @@ func (AppCmd) Run(g *Globals) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	g.Machine = "all"
-	source, _, closeSource, err := openViewer(ctx, g, cfg, view.Filter{})
-	if err != nil {
-		return err
-	}
-	defer closeSource()
 	local := *g
 	local.Machine = "local"
 	return runDesktop(desktop.Options{
-		Source: source,
+		// The app opens the viewer once it is the only instance.
+		OpenSource: func() (web.Source, func(), error) {
+			source, _, closeSource, err := openAppViewer(ctx, g, cfg, view.Filter{})
+			return source, closeSource, err
+		},
 		Web: web.Options{SessionAction: func(ctx context.Context, action string, id int64) error {
 			raw, _ := json.Marshal(map[string]any{"session_id": id})
 			actionGlobals := local

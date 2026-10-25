@@ -13,7 +13,8 @@ import (
 	"github.com/labstack/driga/internal/attention"
 )
 
-const helperEnv = "DRIGA_DESKTOP_TEST_COLLECTOR"
+// Not a DRIGA_* name: the child takes those from the app only.
+const helperEnv = "DESKTOP_TEST_COLLECTOR"
 
 // TestMain lets the test binary stand in for `driga collect`: it reports its
 // arguments and environment as a notification, then runs until its parent

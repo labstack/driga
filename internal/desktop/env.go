@@ -7,12 +7,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/labstack/driga/internal/secfile"
@@ -61,42 +63,100 @@ func LoginEnvironment(ctx context.Context) (map[string]string, error) {
 	return env, scanner.Err()
 }
 
-// LoadEnvironment returns the login environment stored in dataDir, capturing
-// and storing it on first use. Running the login shell is slow and can show
-// prompts from the user's profile, so it happens once.
-func LoadEnvironment(ctx context.Context, dataDir string) (map[string]string, error) {
-	path := filepath.Join(dataDir, "app-env.json")
-	if b, err := os.ReadFile(path); err == nil {
-		env := map[string]string{}
-		if err := json.Unmarshal(b, &env); err != nil {
-			return nil, fmt.Errorf("read %s: %w", path, err)
+// loginEnv is the login environment collector starts use. Each launch reads
+// the login shell again in the background, so a PATH changed since the last
+// launch takes effect; until that capture ends, the one an earlier launch
+// stored in the data directory serves.
+type loginEnv struct {
+	path    string
+	capture func(context.Context) (map[string]string, error)
+	// done closes once this launch's capture ended.
+	done  chan struct{}
+	mu    sync.Mutex
+	fresh map[string]string
+	err   error
+}
+
+func newLoginEnv(dataDir string, capture func(context.Context) (map[string]string, error)) *loginEnv {
+	return &loginEnv{path: filepath.Join(dataDir, "app-env.json"), capture: capture, done: make(chan struct{})}
+}
+
+// refresh captures the login environment and stores it for the next launch.
+// It runs once per launch.
+func (e *loginEnv) refresh(ctx context.Context) {
+	defer close(e.done)
+	env, err := e.capture(ctx)
+	if err == nil {
+		if werr := e.store(env); werr != nil {
+			slog.Warn("could not store the login environment", "event", "login_env_store_failed", "err", werr.Error())
 		}
-		return env, nil
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return nil, err
 	}
-	env, err := LoginEnvironment(ctx)
-	if err != nil {
-		return nil, err
-	}
+	e.mu.Lock()
+	e.fresh, e.err = env, err
+	e.mu.Unlock()
+}
+
+func (e *loginEnv) store(env map[string]string) error {
 	b, err := json.Marshal(env)
 	if err != nil {
+		return err
+	}
+	if err := secfile.MkdirPrivate(filepath.Dir(e.path)); err != nil {
+		return err
+	}
+	return secfile.WritePrivate(e.path, b)
+}
+
+// get returns this launch's capture once it ended, else the stored
+// environment. With neither, as on the first launch, it waits for the capture.
+func (e *loginEnv) get(ctx context.Context) (map[string]string, error) {
+	select {
+	case <-e.done:
+		e.mu.Lock()
+		fresh, err := e.fresh, e.err
+		e.mu.Unlock()
+		if err == nil {
+			return fresh, nil
+		}
+		if stored, serr := e.stored(); serr == nil {
+			return stored, nil
+		}
+		return nil, err
+	default:
+	}
+	stored, err := e.stored()
+	if err == nil {
+		return stored, nil
+	}
+	if !errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	}
-	if err := secfile.MkdirPrivate(dataDir); err != nil {
+	select {
+	case <-e.done:
+		return e.get(ctx)
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+func (e *loginEnv) stored() (map[string]string, error) {
+	b, err := os.ReadFile(e.path)
+	if err != nil {
 		return nil, err
 	}
-	if err := secfile.WritePrivate(path, b); err != nil {
-		return nil, err
+	env := map[string]string{}
+	if err := json.Unmarshal(b, &env); err != nil {
+		return nil, fmt.Errorf("read %s: %w", e.path, err)
 	}
 	return env, nil
 }
 
 // childEnvironment merges the login environment over a minimal base taken
 // from the app's own environment. Windows children inherit the session
-// environment whole, as any program started from the shell does. The app's
-// own DRIGA_* variables win over the login ones: they name the data and
-// config the app shows, which its collector must write.
+// environment whole, as any program started from the shell does. The child's
+// DRIGA_* variables are exactly the app's own, without DRIGA_APP: they name
+// the data, config and settings the app shows, which its collector must use,
+// so a login shell's never reach it.
 func childEnvironment(login map[string]string) []string {
 	env := map[string]string{}
 	if runtime.GOOS == "windows" {
@@ -115,8 +175,13 @@ func childEnvironment(login map[string]string) []string {
 	for key, value := range login {
 		env[key] = value
 	}
+	for key := range env {
+		if strings.HasPrefix(key, "DRIGA_") {
+			delete(env, key)
+		}
+	}
 	for _, entry := range os.Environ() {
-		if key, value, ok := strings.Cut(entry, "="); ok && strings.HasPrefix(key, "DRIGA_") {
+		if key, value, ok := strings.Cut(entry, "="); ok && strings.HasPrefix(key, "DRIGA_") && key != "DRIGA_APP" {
 			env[key] = value
 		}
 	}

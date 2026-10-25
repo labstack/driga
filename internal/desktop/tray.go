@@ -51,6 +51,9 @@ func (s *shell) updateTray() { s.redrawTray(false) }
 // goroutines; drawing on the main thread keeps an older menu from landing
 // after a newer one.
 func (s *shell) redrawTray(force bool) {
+	if !s.trayCreated() {
+		return
+	}
 	mygo.RunOnMain(func() { s.drawTray(force) })
 }
 

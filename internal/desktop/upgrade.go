@@ -17,9 +17,11 @@ const upgradeInterval = time.Minute
 type upgradeWatch struct {
 	exe     string
 	version string
-	stat    func(path string) (time.Time, error)
-	read    func(ctx context.Context, exe string) (string, error)
-	stamp   time.Time
+	// interval defaults to upgradeInterval.
+	interval time.Duration
+	stat     func(path string) (time.Time, error)
+	read     func(ctx context.Context, exe string) (string, error)
+	stamp    time.Time
 }
 
 func newUpgradeWatch(exe, version string) *upgradeWatch {
@@ -48,18 +50,23 @@ func (w *upgradeWatch) changed(ctx context.Context) bool {
 	return false
 }
 
-// run checks every minute and calls upgraded once, on a new version.
-func (w *upgradeWatch) run(ctx context.Context, upgraded func()) {
+// run checks every minute and calls upgraded on a new version until it
+// reports that the app restarts. A refused restart is asked again on the
+// next check.
+func (w *upgradeWatch) run(ctx context.Context, upgraded func() bool) {
 	w.start()
-	ticker := time.NewTicker(upgradeInterval)
+	interval := w.interval
+	if interval <= 0 {
+		interval = upgradeInterval
+	}
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			if w.changed(ctx) {
-				upgraded()
+			if w.changed(ctx) && upgraded() {
 				return
 			}
 		}

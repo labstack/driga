@@ -615,3 +615,35 @@ func TestSupervisorReadyFailureIsNotCollecting(t *testing.T) {
 		t.Fatalf("statuses = %+v, want not collecting with an error", got)
 	}
 }
+
+// A child slow to serve chat, such as one migrating a large store, is asked
+// again with backoff while it runs and counts as collecting once it answers.
+func TestSupervisorRetriesReadyWhileChildRuns(t *testing.T) {
+	clock := &fakeClock{}
+	statuses := &statusLog{}
+	s := newSupervisor(clock, statuses)
+	var mu sync.Mutex
+	checks := 0
+	s.Ready = func(context.Context) error {
+		mu.Lock()
+		defer mu.Unlock()
+		checks++
+		if checks <= 3 {
+			return errors.New("connection refused")
+		}
+		return nil
+	}
+	s.Start = func(context.Context) (Child, error) { return newFakeChild(), nil }
+	ctx, cancel := context.WithCancel(context.Background())
+	done := runSupervisor(t, s, ctx)
+	waitCollecting(t, statuses)
+	cancel()
+	wait(t, done)
+	if want := []time.Duration{time.Second, 2 * time.Second, 5 * time.Second}; !reflect.DeepEqual(clock.waits(), want) {
+		t.Fatalf("ready retries waited %v, want %v", clock.waits(), want)
+	}
+	got := statuses.all()
+	if len(got) != 2 || got[0].Collecting || got[0].Err == nil || !got[1].Collecting || got[1].Err != nil {
+		t.Fatalf("statuses = %+v, want not answering, then collecting", got)
+	}
+}

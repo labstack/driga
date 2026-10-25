@@ -2,10 +2,14 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"testing"
 
+	"github.com/labstack/driga/internal/config"
 	"github.com/labstack/driga/internal/desktop"
+	"github.com/labstack/driga/internal/view"
+	"github.com/labstack/driga/internal/viewer"
 )
 
 func TestAppLaunch(t *testing.T) {
@@ -77,6 +81,14 @@ func TestAppCommandRunsDesktop(t *testing.T) {
 	defer func(prev func(desktop.Options) error) { runDesktop = prev }(runDesktop)
 	var got desktop.Options
 	var env string
+	opened := 0
+	defer func(prev func(context.Context, *Globals, config.Config, view.Filter) (viewer.ScopedSource, string, func(), error)) {
+		openAppViewer = prev
+	}(openAppViewer)
+	openAppViewer = func(ctx context.Context, g *Globals, cfg config.Config, f view.Filter) (viewer.ScopedSource, string, func(), error) {
+		opened++
+		return openViewer(ctx, g, cfg, f)
+	}
 	runDesktop = func(opts desktop.Options) error {
 		got, env = opts, os.Getenv("DRIGA_APP")
 		return nil
@@ -94,9 +106,17 @@ func TestAppCommandRunsDesktop(t *testing.T) {
 	if env != "" {
 		t.Fatalf("app started with DRIGA_APP=%q", env)
 	}
-	if got.Source == nil || got.Supervisor == nil || got.Version != "test-version" {
+	if got.OpenSource == nil || got.Supervisor == nil || got.Version != "test-version" {
 		t.Fatalf("options: %+v", got)
 	}
+	if opened != 0 {
+		t.Fatal("the viewer opened before the app asked for it")
+	}
+	source, closeSource, err := got.OpenSource()
+	if err != nil || source == nil || opened != 1 {
+		t.Fatalf("open source: %v, %v, opened %d", source, err, opened)
+	}
+	closeSource()
 	if got.Web.SessionAction == nil || got.Web.CleanupList == nil || got.Web.Activity == nil || got.Web.Machine != "all" {
 		t.Fatalf("page handlers: %+v", got.Web)
 	}
