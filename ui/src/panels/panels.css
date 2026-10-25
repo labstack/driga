@@ -18,3 +18,5 @@
 .tl-bar.waiting, .tl-wait { background: var(--mantine-color-warning-filled); }
 .tl-wait { position: absolute; top: 0; height: 14px; border-radius: var(--mantine-radius-xs); opacity: 0.85; }
 @media (max-width: 720px) { .tl-row { grid-template-columns: 1fr; } .tl-axis { display: none; } }
+.markdown table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; font-size: var(--mantine-font-size-xs); }
+.markdown th, .markdown td { padding: 2px 8px 2px 0; text-align: left; white-space: nowrap; }

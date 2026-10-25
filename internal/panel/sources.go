@@ -217,11 +217,20 @@ var sources = map[string]schema{
 	},
 	"costs": {
 		description: "Memory and CPU each live session costs on this machine",
-		columns:     []Column{col("session_id", Number), col("agent", String), col("project", String), col("mem_bytes", Number, "bytes"), col("cpu_percent", Number, "percent"), col("processes", Number, "count")},
+		columns:     []Column{col("session_id", Number), col("agent", String), col("project", String), col("mem_bytes", Number, "bytes"), col("cpu_percent", Number, "percent"), col("processes", Number, "count"), col("title", String)},
 		build: func(s viewer.Snapshot) [][]any {
+			titles := map[int64]string{}
+			var walk func([]view.AgentRow)
+			walk = func(agents []view.AgentRow) {
+				for _, a := range agents {
+					titles[a.ID] = sessionTitle(a.Title, a.Adapter, a.Project, a.Branch)
+					walk(a.Children)
+				}
+			}
+			walk(s.Agents.Rows)
 			rows := make([][]any, 0, len(s.Machine.SessionCosts))
 			for _, c := range s.Machine.SessionCosts {
-				rows = append(rows, []any{float64(c.SessionID), c.Adapter, c.Project, float64(c.Memory), c.CPUPercent, float64(len(c.Processes))})
+				rows = append(rows, []any{float64(c.SessionID), c.Adapter, c.Project, float64(c.Memory), c.CPUPercent, float64(len(c.Processes)), cmp.Or(titles[c.SessionID], sessionTitle("", c.Adapter, c.Project, ""))})
 			}
 			return rows
 		},

@@ -309,11 +309,21 @@ func grouped(s schema, rows [][]any, p Panel) Frame {
 		}
 		groups[key] = append(groups[key], r)
 	}
+	// A session grouped by its id is named by its title, which a person
+	// reads; the id alone says nothing.
+	title := -1
+	if p.By == "id" || p.By == "session_id" {
+		title = slices.IndexFunc(s.columns, func(c Column) bool { return c.Name == "title" })
+	}
 	_, unit := aggregate(s, nil, p.Measure)
 	frame := Frame{Columns: []Column{{Name: p.By, Type: String}, {Name: "value", Type: Number, Unit: cmp.Or(p.Unit, unit)}}}
 	for _, key := range keys {
 		value, _ := aggregate(s, groups[key], p.Measure)
-		frame.Rows = append(frame.Rows, []any{key, value})
+		name := key
+		if t, ok := groups[key][0][max(title, 0)].(string); title >= 0 && ok && t != "" {
+			name = t + " #" + key
+		}
+		frame.Rows = append(frame.Rows, []any{name, value})
 	}
 	sortRows(frame, cmp.Or(p.Sort, "-value"))
 	return limit(frame, p.Limit)

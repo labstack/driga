@@ -344,3 +344,16 @@ func TestTitlesFillVariablesAndTimesCompare(t *testing.T) {
 		t.Fatalf("empty variable title = %q", f.Results[0].Title)
 	}
 }
+
+// Bars grouped by session id are named by the session's title.
+func TestBarsBySessionAreNamedByTitle(t *testing.T) {
+	snap := snapshot()
+	snap.Agents.Rows = []view.AgentRow{{ID: 7, Title: "Fix login", Label: "working", Mem: 2}}
+	f, err := Run(snap, RunRequest{Dashboard: Dashboard{Name: "x", Panels: []Panel{{ID: "b", Title: "B", Viz: "bar", Source: "sessions", By: "id", Measure: "sum:mem_bytes"}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rows := f.Results[0].Frame.Rows; len(rows) != 1 || rows[0][0] != "Fix login #7" {
+		t.Fatalf("bars = %v", rows)
+	}
+}

@@ -1,38 +1,11 @@
 import { ActionIcon, Box, Button, Group, Paper, ScrollArea, Stack, Text, Textarea, Title } from "@mantine/core";
 import { Check, Sparkle, X } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
-import { Board } from "../panels/Board";
 import { useHost } from "../panels/host";
 import { PanelView, type Act } from "../panels/PanelView";
-import type { Dashboard, Fragment, Panel, Result } from "../panels/types";
-import { chat, dashboards, type ChatAction, type ChatMessage, type ChatState } from "./api";
-
-type Card = { tool: string; input: { id?: string; dashboard?: Dashboard; vars?: Record<string, string> } };
-
-/** PanelCard runs a panel tool's input again, so the card shows live data
- * rather than what the model saw. */
-function PanelCard({ text, pinLabel, onPin, onSave }: { text: string; pinLabel: string; onPin: (panels: Panel[]) => void; onSave: (panels: Panel[], name: string) => void }) {
-  const [fragment, setFragment] = useState<Fragment | null>(null);
-  const [problem, setProblem] = useState<string | null>(null);
-  useEffect(() => {
-    let card: Card;
-    try { card = JSON.parse(text) as Card; } catch { setProblem("This card could not be read."); return; }
-    const spec = card.input?.dashboard;
-    const id = card.input?.id;
-    if (!spec && !id) { setProblem("This card names no dashboard."); return; }
-    const run = spec && (card.tool === "show_panels" || card.tool === "create_dashboard" || card.tool === "replace_dashboard") ? dashboards.run(spec, card.input.vars) : dashboards.open(id!, card.input?.vars);
-    run.then(setFragment, (e: Error) => setProblem(e.message));
-  }, [text]);
-  if (problem) return <Text size="sm" c="danger">{problem}</Text>;
-  if (!fragment) return <Text size="sm" c="dimmed">Loading panel…</Text>;
-  return <Paper withBorder radius="md" style={{ background: "var(--driga-ground)" }}>
-    <Board fragment={fragment} compact />
-    <Group gap={6} px="xs" pb="xs">
-      <Button variant="default" onClick={() => onPin(fragment.dashboard.panels)}>{pinLabel}</Button>
-      <Button variant="subtle" onClick={() => onSave(fragment.dashboard.panels, fragment.dashboard.name)}>Save as dashboard</Button>
-    </Group>
-  </Paper>;
-}
+import type { Fragment, Panel, Result } from "../panels/types";
+import { chat, type ChatAction, type ChatMessage, type ChatState } from "./api";
+import { ChatCard } from "./ChatCard";
 
 function ActionCard({ conversation, action }: { conversation: string; action: ChatAction }) {
   const pending = action.status === "pending";
@@ -66,11 +39,12 @@ function Brief({ inbox, act, ask }: { inbox?: { panel: Panel; result?: Result; l
   </Stack>;
 }
 
-export function Chat({ inbox, act, ask, pinLabel, onPin, onSave, onClose }: {
+export function Chat({ inbox, act, ask, pinLabel, onPin, onSave, onShow, onOpen, onClose }: {
   inbox?: { panel: Panel; result?: Result; listed: boolean }; act?: Act;
   /** ask puts a question in the compose box for the user to send. */
   ask: { text: string; at: number } | null;
-  pinLabel: string; onPin: (panels: Panel[]) => void; onSave: (panels: Panel[], name: string) => void; onClose?: () => void;
+  pinLabel: string; onPin: (panels: Panel[]) => void; onSave: (panels: Panel[], name: string) => void;
+  onShow: (f: Fragment) => void; onOpen: (id: string) => void; onClose?: () => void;
 }) {
   const [id, setId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -155,7 +129,7 @@ export function Chat({ inbox, act, ask, pinLabel, onPin, onSave, onClose }: {
             if (i !== firstDropped) return null;
             return <Text key={m.id} size="xs" c="dimmed">Earlier messages aren't kept. Set <Text span ff="monospace" fz="inherit">capture_text = "snippets"</Text> to keep Chat history.</Text>;
           }
-          if (m.role === "panel") return m.text ? <PanelCard key={m.id} text={m.text} pinLabel={pinLabel} onPin={onPin} onSave={onSave} /> : null;
+          if (m.role === "panel") return m.text ? <ChatCard key={m.id} text={m.text} pinLabel={pinLabel} onShow={onShow} onOpen={onOpen} onPin={onPin} onSave={onSave} /> : null;
           if (m.role === "tool") return <Group key={m.id} gap={4} c="dimmed"><Check size={12} /><Text size="xs" ff="monospace">{m.text.replace(/^mcp__driga__/, "")}</Text></Group>;
           if (m.role === "action") { const a = actions.get(m.id); return a && id ? <ActionCard key={m.id} conversation={id} action={a} /> : null; }
           if (m.role === "user") return <Paper key={m.id} px="sm" py={6} radius="lg" maw="85%" style={{ alignSelf: "flex-end", background: "var(--driga-hover)", whiteSpace: "pre-wrap" }}><Text size="sm">{m.text}</Text></Paper>;
