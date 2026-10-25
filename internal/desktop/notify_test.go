@@ -9,7 +9,9 @@ import (
 	"time"
 
 	"github.com/labstack/driga/internal/attention"
+	"github.com/labstack/driga/internal/config"
 	"github.com/labstack/driga/internal/model"
+	"github.com/labstack/driga/internal/store"
 	"github.com/labstack/driga/internal/view"
 )
 
@@ -216,5 +218,143 @@ func TestUpgradeWatch(t *testing.T) {
 	stamp, version = time.Unix(300, 0), "v2"
 	if !w.changed(ctx) {
 		t.Fatal("new version not reported")
+	}
+}
+
+// A window create reaches back into the host, as the toolkit's activation and
+// close listeners do while the window opens: nothing deadlocks, and no second
+// window is made.
+func TestWindowHostCreateReentry(t *testing.T) {
+	var host *windowHost
+	var pages []*fakePage
+	var loads []func()
+	host = &windowHost{create: func(loaded func()) page {
+		p := &fakePage{}
+		pages, loads = append(pages, p), append(loads, loaded)
+		if len(pages) == 1 {
+			host.Open()
+			host.Command("view", "flow")
+			if host.IsOpen() || host.Current() != nil {
+				t.Error("a window being created counts as open")
+			}
+		}
+		return p
+	}}
+	within(t, host.Open)
+	if len(pages) != 1 || host.Current() != pages[0] {
+		t.Fatalf("windows %d, current %v", len(pages), host.Current())
+	}
+	loads[0]()
+	if !slices.Equal(pages[0].evals, []string{`window.drigaCommand("view","flow")`}) {
+		t.Fatalf("evals %q", pages[0].evals)
+	}
+}
+
+// A window closed while it was being created is not kept; the next Open
+// makes a new one.
+func TestWindowHostClosedDuringCreate(t *testing.T) {
+	var host *windowHost
+	var pages []*fakePage
+	host = &windowHost{create: func(func()) page {
+		p := &fakePage{}
+		pages = append(pages, p)
+		if len(pages) == 1 {
+			host.Closed(p)
+		}
+		return p
+	}}
+	within(t, func() { host.Command("view", "flow") })
+	if host.IsOpen() {
+		t.Fatal("kept a closed window")
+	}
+	host.Open()
+	if len(pages) != 2 || host.Current() != pages[1] {
+		t.Fatalf("windows %d", len(pages))
+	}
+}
+
+// within fails the test when f does not return, as when it deadlocks.
+func within(t *testing.T, f func()) {
+	t.Helper()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		f()
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the host deadlocked")
+	}
+}
+
+// The click finds the session through the data the app really has: the
+// collector plans the notification from the store's alert candidates and the
+// app reads the inbox rows of a snapshot. A peer's item with the same ID is
+// not the one clicked.
+func TestClickTargetFromStore(t *testing.T) {
+	st, err := store.Open("", store.Memory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	now := time.Now().UTC().Truncate(time.Second)
+	var local int64
+	err = st.Tx(context.Background(), func(tx *store.Tx) error {
+		for _, id := range []string{tx.MachineID(), "peer"} {
+			w := tx.ForMachine(id)
+			if err := w.UpsertMachine(model.Machine{OS: "linux", Hostname: id, State: "live", LastContactAt: now}); err != nil {
+				return err
+			}
+			// The peer's session gets another ID, so a mix-up shows.
+			if id == "peer" {
+				if _, err := w.UpsertSession(model.Session{SessionObs: model.SessionObs{Adapter: "claude", ExternalID: "other", Cwd: "/code/other", LastActivityAt: now}, Label: "working"}); err != nil {
+					return err
+				}
+			}
+			sid, err := w.UpsertSession(model.Session{SessionObs: model.SessionObs{Adapter: "claude", ExternalID: "s", Cwd: "/code/api", StartedAt: now.Add(-time.Minute), LastActivityAt: now}, Label: "waiting"})
+			if err != nil {
+				return err
+			}
+			if id == tx.MachineID() {
+				local = sid
+			}
+			if err := w.UpsertInboxItem(model.InboxItem{ID: "wait-1", SessionID: sid, Kind: "waiting", TS: now, Summary: "Allow pnpm test?"}); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var notes []attention.Notification
+	err = st.Tx(context.Background(), func(tx *store.Tx) error {
+		scope := store.Scope{Machines: []string{tx.MachineID()}}
+		items, err := tx.InboxAlertCandidates(scope)
+		if err != nil {
+			return err
+		}
+		sessions, err := tx.InboxSessionLabels(scope)
+		if err != nil {
+			return err
+		}
+		notes = attention.PlanAlerts(items, sessions, config.Default().Inbox, "titles", now, map[string]time.Time{}, map[string]time.Time{})
+		return nil
+	})
+	if err != nil || len(notes) != 1 || notes[0].ItemID != "wait-1" {
+		t.Fatalf("notifications %+v, %v", notes, err)
+	}
+	inbox, err := view.Inbox(st, view.Filter{}, now)
+	if err != nil || len(inbox.Rows) != 2 {
+		t.Fatalf("inbox %+v, %v", inbox, err)
+	}
+	// The notification goes through its ID, as a click hands it back.
+	n, ok := parseNotificationID(notificationID(notes[0]))
+	if !ok {
+		t.Fatal("notification ID unreadable")
+	}
+	if id, ok := ClickTarget(n, inbox.Rows); !ok || id != local {
+		t.Fatalf("ClickTarget = %d %v; want local session %d", id, ok, local)
 	}
 }

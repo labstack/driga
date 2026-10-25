@@ -6,16 +6,19 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/egoist/mygo"
 	"github.com/labstack/driga/internal/chat"
 	"github.com/labstack/driga/internal/collector"
 	"github.com/labstack/driga/internal/config"
+	"github.com/labstack/driga/internal/secfile"
 	"github.com/labstack/driga/internal/store"
 	"github.com/labstack/driga/internal/view"
 	"github.com/labstack/driga/internal/web"
@@ -23,6 +26,10 @@ import (
 
 // needsPoll is how often the tray and badge check the data for a change.
 const needsPoll = 2 * time.Second
+
+// loginMarker, in the data directory, records the open-at-login setting the
+// app last registered.
+const loginMarker = "open-at-login"
 
 // Options configure the desktop app.
 type Options struct {
@@ -44,22 +51,33 @@ type Options struct {
 type shell struct {
 	opts    Options
 	goos    string
+	dataDir string
 	host    *windowHost
 	notes   notifier
 	upgrade *upgradeWatch
+	// ctx lives as long as the app; the collector runs under it.
+	ctx context.Context
+	// runCollector runs the supervisor until its context ends.
+	runCollector func(context.Context)
+	// openService opens the background service the app replaces.
+	openService func() (installedService, error)
+	// relaunchApp quits and starts the app again, and reports false when
+	// the quit was cancelled.
+	relaunchApp func() bool
 
-	stopOnce   sync.Once
+	collectMu  sync.Mutex
 	stopCancel context.CancelFunc
 	stopped    chan struct{}
 
-	mu       sync.Mutex
-	cfg      config.Config
-	tray     *mygo.Tray
-	status   Status
-	envErr   error
-	needs    []view.BoardRow
-	trayKey  string
-	settings *mygo.Window
+	mu         sync.Mutex
+	cfg        config.Config
+	tray       *mygo.Tray
+	status     Status
+	envErr     error
+	serviceErr error
+	needs      []view.BoardRow
+	trayKey    string
+	settings   *mygo.Window
 }
 
 // Run runs the desktop app until it quits. It must be called on the main
@@ -76,7 +94,7 @@ func Run(opts Options) error {
 		defer remote.Close()
 		opts.Chat = remote
 	}
-	s := &shell{opts: opts, goos: runtime.GOOS, cfg: opts.Config, stopped: make(chan struct{})}
+	s := &shell{opts: opts, goos: runtime.GOOS, dataDir: dataDir, cfg: opts.Config, relaunchApp: relaunchApp}
 	s.host = &windowHost{create: s.newWindow}
 	webOpts := opts.Web
 	webOpts.Chat, webOpts.ChatEphemeral = opts.Chat, false
@@ -93,9 +111,16 @@ func Run(opts Options) error {
 		return err
 	}
 	s.upgrade = newUpgradeWatch(exe, opts.Version)
+	s.openService = openUserService(exe)
+	s.runCollector = func(ctx context.Context) {
+		if err := opts.Supervisor.Run(ctx); err != nil {
+			slog.Warn("collector did not stop cleanly", "event", "collector_stop_failed", "err", err.Error())
+		}
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	s.ctx = ctx
 	go server.Watch(ctx)
 	mygo.Protocol.Handle("mygo", server)
 	mygo.Theme.SetSource(themeSource(opts.Config.UI.Theme))
@@ -124,17 +149,9 @@ func Run(opts Options) error {
 			s.host.Open()
 		}
 		s.applyDock()
-		supCtx, supCancel := context.WithCancel(ctx)
-		s.stopCancel = supCancel
-		go func() {
-			defer close(s.stopped)
-			// The service's collector holds the lock until it stops; the
-			// supervisor then starts the app's own.
-			s.replaceService(dataDir, exe)
-			if err := opts.Supervisor.Run(supCtx); err != nil {
-				slog.Warn("collector did not stop cleanly", "event", "collector_stop_failed", "err", err.Error())
-			}
-		}()
+		// The service's collector holds the lock until it stops; the
+		// supervisor then starts the app's own.
+		s.startCollector(s.replaceService)
 		go s.watchNeeds(ctx)
 		go s.upgrade.run(ctx, s.relaunch)
 	})
@@ -184,15 +201,11 @@ func (s *shell) prepareSupervisor(dataDir string) (string, error) {
 
 // replaceService removes the background service the app replaces, and says
 // so once.
-func (s *shell) replaceService(dataDir, exe string) {
-	removed, err := replaceService(s.goos, dataDir, openUserService(exe))
-	if err != nil {
-		slog.Warn("could not remove the collector service", "event", "service_replace_failed", "err", err.Error())
-	}
-	if !removed {
+func (s *shell) replaceService() {
+	if !s.removeService(s.dataDir) {
+		s.updateTray()
 		return
 	}
-	slog.Info("removed the collector service; the app collects", "event", "service_replaced")
 	// The notice waits for OK; the collector does not.
 	go func() {
 		_, _ = mygo.Dialog.Message(mygo.MessageOptions{Parent: s.mainWindow(), Type: mygo.MessageInfo,
@@ -200,26 +213,84 @@ func (s *shell) replaceService(dataDir, exe string) {
 	}()
 }
 
+// removeService removes the background service when the app replaces it, and
+// reports whether it did. A failure is kept for the tray, whose status line
+// then says how to remove the service by hand.
+func (s *shell) removeService(dataDir string) bool {
+	removed, err := replaceService(s.goos, dataDir, s.openService)
+	s.mu.Lock()
+	s.serviceErr = err
+	s.mu.Unlock()
+	if err != nil {
+		slog.Warn("could not remove the collector service", "event", "service_replace_failed", "err", err.Error())
+	}
+	if removed {
+		slog.Info("removed the collector service; the app collects", "event", "service_replaced")
+	}
+	return removed
+}
+
+// startCollector runs the collector until stopCollector, after first, when
+// it is set.
+func (s *shell) startCollector(first func()) {
+	ctx, cancel := context.WithCancel(s.ctx)
+	done := make(chan struct{})
+	s.collectMu.Lock()
+	s.stopCancel, s.stopped = cancel, done
+	s.collectMu.Unlock()
+	go func() {
+		defer close(done)
+		if first != nil {
+			first()
+		}
+		s.runCollector(ctx)
+	}()
+}
+
 // stopCollector stops the supervisor and waits for its child to exit.
 func (s *shell) stopCollector() {
-	s.stopOnce.Do(func() {
-		if s.stopCancel == nil {
-			close(s.stopped)
-			return
-		}
-		s.stopCancel()
-	})
-	<-s.stopped
+	s.collectMu.Lock()
+	cancel, done := s.stopCancel, s.stopped
+	s.collectMu.Unlock()
+	if cancel == nil {
+		return
+	}
+	cancel()
+	<-done
 }
 
 // relaunch restarts the app on the upgraded executable, after its collector
-// stopped so the new one starts from the new binary.
+// stopped so the new one starts from the new binary. When the quit is
+// cancelled the app keeps running, and collecting.
 func (s *shell) relaunch() {
 	slog.Info("executable upgraded; relaunching", "event", "app_relaunch")
 	s.stopCollector()
 	// The relaunched process starts as the app again, whatever launched this one.
+	previous, set := os.LookupEnv("DRIGA_APP")
 	_ = os.Setenv("DRIGA_APP", "1")
+	if s.relaunchApp() {
+		return
+	}
+	slog.Info("relaunch cancelled; collecting again", "event", "app_relaunch_cancelled")
+	if set {
+		_ = os.Setenv("DRIGA_APP", previous)
+	} else {
+		_ = os.Unsetenv("DRIGA_APP")
+	}
+	s.startCollector(nil)
+}
+
+// relaunchApp asks the toolkit to relaunch and reports whether the quit went
+// ahead. Relaunch quits on the main thread, where a function queued after it
+// runs once the quit is over: OnWillQuit has fired by then unless the quit
+// was cancelled. Driga's windows close without asking, so no dialog runs the
+// queue early.
+func relaunchApp() bool {
+	var quitting atomic.Bool
+	off := mygo.App.OnWillQuit(func(*mygo.QuitEvent) { quitting.Store(true) })
 	mygo.App.Relaunch()
+	mygo.RunOnMain(off)
+	return quitting.Load()
 }
 
 func (s *shell) setStatus(st Status) {
@@ -235,7 +306,12 @@ func (s *shell) trayStatus() Status {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	st := s.status
-	if st.Err == nil && s.envErr != nil && st.Collecting {
+	switch {
+	case st.Err != nil:
+	case s.serviceErr != nil:
+		// The error itself is in the log; the line has room for the fix.
+		st.Err = errors.New("background service not removed; run driga service uninstall")
+	case s.envErr != nil && st.Collecting:
 		st.Err = fmt.Errorf("without login shell PATH: %w", s.envErr)
 	}
 	return st
@@ -353,15 +429,41 @@ func (s *shell) applyDock() {
 	mygo.App.SetActivationPolicy(policy)
 }
 
+// applyOpenAtLogin registers the open-at-login setting when it changed since
+// the app last did.
 func (s *shell) applyOpenAtLogin(open bool) error {
-	if mygo.App.OpenAtLogin() == open {
-		return nil
-	}
-	err := mygo.App.SetOpenAtLogin(open)
+	err := syncOpenAtLogin(s.dataDir, open, func(open bool) error {
+		if mygo.App.OpenAtLogin() == open {
+			return nil
+		}
+		return mygo.App.SetOpenAtLogin(open)
+	})
 	if err != nil {
 		slog.Warn("could not change open at login", "event", "open_at_login_failed", "err", err.Error())
 	}
 	return err
+}
+
+// syncOpenAtLogin calls set on the first launch and when the setting differs
+// from the one last set, recorded in dataDir. Other launches leave the login
+// item alone, so turning it off in the system's settings sticks.
+func syncOpenAtLogin(dataDir string, open bool, set func(bool) error) error {
+	path := filepath.Join(dataDir, loginMarker)
+	want := strconv.FormatBool(open)
+	b, err := os.ReadFile(path)
+	if err == nil && string(b) == want {
+		return nil
+	}
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	if err := set(open); err != nil {
+		return err
+	}
+	if err := secfile.MkdirPrivate(dataDir); err != nil {
+		return err
+	}
+	return secfile.WritePrivate(path, []byte(want))
 }
 
 // confirm asks with a native dialog on the main window.

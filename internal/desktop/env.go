@@ -94,7 +94,9 @@ func LoadEnvironment(ctx context.Context, dataDir string) (map[string]string, er
 
 // childEnvironment merges the login environment over a minimal base taken
 // from the app's own environment. Windows children inherit the session
-// environment whole, as any program started from the shell does.
+// environment whole, as any program started from the shell does. The app's
+// own DRIGA_* variables win over the login ones: they name the data and
+// config the app shows, which its collector must write.
 func childEnvironment(login map[string]string) []string {
 	env := map[string]string{}
 	if runtime.GOOS == "windows" {
@@ -112,6 +114,11 @@ func childEnvironment(login map[string]string) []string {
 	}
 	for key, value := range login {
 		env[key] = value
+	}
+	for _, entry := range os.Environ() {
+		if key, value, ok := strings.Cut(entry, "="); ok && strings.HasPrefix(key, "DRIGA_") {
+			env[key] = value
+		}
 	}
 	out := make([]string, 0, len(env))
 	for key, value := range env {

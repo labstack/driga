@@ -115,3 +115,21 @@ func TestChildEnvironmentMergesLoginOverBase(t *testing.T) {
 		t.Fatalf("environment not sorted: %v", env)
 	}
 }
+
+// The app's own DRIGA_* variables say where it reads and writes, so its
+// collector uses them over the login shell's.
+func TestChildEnvironmentKeepsAppDrigaValues(t *testing.T) {
+	t.Setenv("DRIGA_DATA_DIR", "/app/data")
+	t.Setenv("DRIGA_CONFIG", "/app/config.toml")
+	t.Setenv("DRIGA_SPOOL_DIR", "")
+	os.Unsetenv("DRIGA_SPOOL_DIR") // restored by t.Setenv
+	env := childEnvironment(map[string]string{"DRIGA_DATA_DIR": "/login/data", "DRIGA_SPOOL_DIR": "/login/spool"})
+	for _, want := range []string{"DRIGA_DATA_DIR=/app/data", "DRIGA_CONFIG=/app/config.toml", "DRIGA_SPOOL_DIR=/login/spool"} {
+		if !slices.Contains(env, want) {
+			t.Fatalf("environment %v lacks %s", env, want)
+		}
+	}
+	if slices.Contains(env, "DRIGA_DATA_DIR=/login/data") {
+		t.Fatalf("login DRIGA_DATA_DIR kept: %v", env)
+	}
+}
