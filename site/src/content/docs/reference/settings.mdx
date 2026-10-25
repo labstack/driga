@@ -34,6 +34,8 @@ variable.
 | [`open_cmd`](#open_cmd) | string | empty | `DRIGA_OPEN_CMD` |
 | [`no_service_hint`](#no_service_hint) | bool | `false` | `DRIGA_NO_SERVICE_HINT` |
 | [`ui.theme`](#uitheme) | string | `system` | `DRIGA_UI_THEME` |
+| [`app.tray`](#apptray) | bool | `true` | `DRIGA_APP_TRAY` |
+| [`app.launch_at_login`](#applaunch_at_login) | bool | `true` | `DRIGA_APP_LAUNCH_AT_LOGIN` |
 | [`adapters.claude.enabled`](#adaptersclaudeenabled) | bool | `true` | `DRIGA_ADAPTERS_CLAUDE_ENABLED` |
 | [`adapters.codex.enabled`](#adapterscodexenabled) | bool | `true` | `DRIGA_ADAPTERS_CODEX_ENABLED` |
 | [`adapters.gemini.enabled`](#adaptersgeminienabled) | bool | `true` | `DRIGA_ADAPTERS_GEMINI_ENABLED` |
@@ -143,6 +145,26 @@ Palette for the whole terminal UI: light, dark, or system to follow the terminal
 | Type | Default | Allowed | Environment |
 |---|---|---|---|
 | string | `system` | system, light or dark | `DRIGA_UI_THEME` |
+
+## Desktop app
+
+The `[app]` table. The app's Settings window writes it.
+
+### app.tray
+
+Show the desktop app in the menu bar or notification area; closing its window keeps it collecting there.
+
+| Type | Default | Allowed | Environment |
+|---|---|---|---|
+| bool | `true` | true or false | `DRIGA_APP_TRAY` |
+
+### app.launch_at_login
+
+Start the desktop app when you log in.
+
+| Type | Default | Allowed | Environment |
+|---|---|---|---|
+| bool | `true` | true or false | `DRIGA_APP_LAUNCH_AT_LOGIN` |
 
 ## Agent adapters
 

@@ -16,3 +16,5 @@ func passFiles(cmd *exec.Cmd, notify, parent *os.File) (int, int, error) {
 
 // TerminateProcess asks a collector to shut down as on logout.
 func TerminateProcess(pid int) error { return syscall.Kill(pid, syscall.SIGTERM) }
+
+func hideWindow(*exec.Cmd) {}

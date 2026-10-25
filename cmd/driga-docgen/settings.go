@@ -13,6 +13,7 @@ import (
 var settingGroups = []struct{ prefix, title, intro string }{
 	{"", "General", "Top-level keys of `config.toml`."},
 	{"ui", "Terminal UI", "The `[ui]` table."},
+	{"app", "Desktop app", "The `[app]` table. The app's Settings window writes it."},
 	{"adapters", "Agent adapters", "One `[adapters.<name>]` table per agent."},
 	{"orphans", "Orphans", "The `[orphans]` table."},
 	{"machine", "Machine health", "The `[machine]` table."},

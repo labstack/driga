@@ -32,7 +32,7 @@ func TestConsoleStructureAndCSP(t *testing.T) {
 		if inline.MatchString(body) {
 			t.Errorf("%s has inline script/style/handler", path)
 		}
-		for _, want := range []string{`driga console`, `class="status"`, `data-view="flow"`, `data-pane`, `id="cmdline"`, `id="command-menu"`, `id="help"`, `/static/app.js`} {
+		for _, want := range []string{`aria-label="Driga"`, `class="status"`, `data-view="flow"`, `data-pane`, `id="cmdline"`, `id="command-menu"`, `id="help"`, `/static/app.js`} {
 			if !strings.Contains(body, want) {
 				t.Errorf("%s missing %s", path, want)
 			}

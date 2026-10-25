@@ -14,6 +14,7 @@ import (
 type Config struct {
 	Warnings        []string
 	UI              UIConfig
+	App             AppConfig
 	Motion          string
 	Roots           []string
 	RootDepth       int
@@ -34,6 +35,12 @@ type Config struct {
 }
 
 type UIConfig struct{ Theme string }
+
+// AppConfig controls the desktop app.
+type AppConfig struct {
+	Tray          bool
+	LaunchAtLogin bool
+}
 
 // MachineConfig controls machine warnings; zero selects the documented default.
 type MachineConfig struct{ DiskFreeMin uint64 }

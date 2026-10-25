@@ -31,3 +31,8 @@ func TerminateProcess(pid int) error {
 	}
 	return p.Kill()
 }
+
+// hideWindow runs a console program without opening a console window.
+func hideWindow(cmd *exec.Cmd) {
+	cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: windows.CREATE_NO_WINDOW}
+}

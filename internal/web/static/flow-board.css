@@ -14,7 +14,6 @@ body:has(.flow-board) .status>:not(.views){display:none}
 body:has(.flow-board) .grid{padding:0;gap:0}
 body:has(.flow-board) .notices:empty{display:none}
 body:has(.flow-board) .cmd{display:none}
-body:has(.flow-board) .grid+footer{display:none}
 .fb-row.working .fb-glyph{color:var(--working)}.fb-row.waiting .fb-glyph{color:var(--warn)}.fb-row.stalled .fb-glyph{color:var(--stalled)}.fb-row.idle .fb-glyph{color:var(--idle)}.fb-row.finished .fb-glyph{color:var(--finished)}
 .fb-overlap-link{display:none}.fb-overlap-link.on{display:inline}.fb-node-meta .fb-overlap{fill:var(--stalled)}
 .fb-detail-actions .fb-stop{color:var(--stalled);border-color:color-mix(in srgb,var(--stalled) 45%,transparent)}

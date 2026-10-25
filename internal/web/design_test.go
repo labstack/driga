@@ -25,12 +25,16 @@ func TestThemeStylesheet(t *testing.T) {
 	}
 }
 
-func TestFooterDescribesChatActions(t *testing.T) {
+// The window, its title and its menus name the app; the page keeps no footer
+// or label of its own naming it.
+func TestPageLeavesAppNamingToShell(t *testing.T) {
 	s, _, _, _ := fixture(t)
 	for _, page := range []string{"/", "/chat", "/flow"} {
 		body := request(s, "GET", page).Body.String()
-		if strings.Contains(body, "Read-only dashboard") || !strings.Contains(body, "Local actions in Chat") {
-			t.Fatal(page, "footer misrepresents available actions")
+		for _, leftover := range []string{"driga console", "Local actions in Chat", "<footer>"} {
+			if strings.Contains(body, leftover) {
+				t.Errorf("%s contains %q", page, leftover)
+			}
 		}
 	}
 }
