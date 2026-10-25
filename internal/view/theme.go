@@ -1,6 +1,7 @@
 package view
 
 import (
+	"encoding/json"
 	"fmt"
 	"image/color"
 	"math"
@@ -142,16 +143,38 @@ func Contrast(a, b [3]uint8) float64 {
 	return (max(x, y) + 0.05) / (min(x, y) + 0.05)
 }
 
-// ThemeCSS supports named preferences and the system default without script.
-func ThemeCSS() string {
-	var light, dark strings.Builder
-	for _, t := range consoleTokens {
-		fmt.Fprintf(&light, "--%s:%s;", t.Name, t.Light)
-		fmt.Fprintf(&dark, "--%s:%s;", t.Name, t.Dark)
+// ThemeJSON is the palette the app's UI theme is built from: the console
+// roles for each scheme, and both Catppuccin flavors by name for the colors
+// the UI needs that the console has no role for, such as chart series.
+func ThemeJSON() string {
+	roles := func(light bool) map[string]string {
+		out := map[string]string{}
+		for _, t := range consoleTokens {
+			out[t.Name] = t.Dark
+			if light {
+				out[t.Name] = t.Light
+			}
+		}
+		return out
 	}
-	return `:root,[data-theme="dark"]{` + dark.String() + "color-scheme:dark;}\n" +
-		`[data-theme="light"]{` + light.String() + "color-scheme:light;}\n" +
-		`@media (prefers-color-scheme: light){:root:not([data-theme="dark"]):not([data-theme="light"]){` + light.String() + "color-scheme:light;}}\n"
+	flavor := func(f catppuccin.Flavor) map[string]string {
+		out := map[string]string{}
+		for name, c := range map[string]catppuccin.Color{
+			"rosewater": f.Rosewater(), "flamingo": f.Flamingo(), "pink": f.Pink(), "mauve": f.Mauve(), "red": f.Red(),
+			"maroon": f.Maroon(), "peach": f.Peach(), "yellow": f.Yellow(), "green": f.Green(), "teal": f.Teal(),
+			"sky": f.Sky(), "sapphire": f.Sapphire(), "blue": f.Blue(), "lavender": f.Lavender(), "text": f.Text(),
+			"subtext1": f.Subtext1(), "subtext0": f.Subtext0(), "overlay2": f.Overlay2(), "overlay1": f.Overlay1(),
+			"overlay0": f.Overlay0(), "surface2": f.Surface2(), "surface1": f.Surface1(), "surface0": f.Surface0(),
+			"base": f.Base(), "mantle": f.Mantle(), "crust": f.Crust(),
+		} {
+			out[name] = hex(c)
+		}
+		return out
+	}
+	b, _ := json.MarshalIndent(map[string]map[string]string{
+		"light": roles(true), "dark": roles(false), "latte": flavor(catppuccin.Latte), "mocha": flavor(catppuccin.Mocha),
+	}, "", "  ")
+	return string(b) + "\n"
 }
 
 // Background detection belongs to the interactive event loop. Import-time

@@ -241,7 +241,10 @@ func (w *headerWriter) WriteHeader(code int) {
 		return
 	}
 	w.wrote = true
-	w.Header().Set("Content-Security-Policy", csp)
+	// A page with its own policy, such as the app's nonce, keeps it.
+	if w.Header().Get("Content-Security-Policy") == "" {
+		w.Header().Set("Content-Security-Policy", csp)
+	}
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	w.Header().Set("Cache-Control", "no-store")

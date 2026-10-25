@@ -39,7 +39,7 @@ export type Span = { session_id: number; kind: string; from: string | null; to: 
 
 export type Frame = { columns: Column[]; rows: Cell[][]; spans?: Span[] };
 
-export type Result = { id: string; status: "ok" | "empty" | "error"; message?: string; frame?: Frame };
+export type Result = { id: string; status: "ok" | "empty" | "error"; message?: string; frame?: Frame; trend?: (number | null)[] };
 
 export type Fragment = {
   dashboard: Dashboard;

@@ -1,25 +1,25 @@
+import { useComputedColorScheme } from "@mantine/core";
 import { useEffect, useRef } from "react";
-import { bar, echarts, theme, timeseries } from "./charts";
-import type { Frame, Panel } from "./types";
+import { echarts, type Theme, chartTheme } from "./charts";
 
-/** Chart owns one ECharts instance: created on mount, updated in place on
- * refresh, resized with its box and disposed on unmount, so chat cards that
- * scroll away release their canvas. */
-export function Chart({ panel, frame, height }: { panel: Panel; frame: Frame; height?: number }) {
+/** Chart is Driga's one ECharts wrapper: it creates the instance on mount,
+ * replaces the option when the data or color scheme changes, resizes with its
+ * box and disposes on unmount, so chat cards that scroll away release it.
+ * Small charts render as SVG, the rest to canvas. */
+export function Chart({ option, label, height, small }: { option: (t: Theme) => echarts.EChartsCoreOption; label: string; height?: number | string; small?: boolean }) {
+  const scheme = useComputedColorScheme("dark");
   const el = useRef<HTMLDivElement>(null);
   const chart = useRef<echarts.ECharts | null>(null);
   useEffect(() => {
     if (!el.current) return;
-    const instance = echarts.init(el.current, undefined, { renderer: "canvas" });
+    const instance = echarts.init(el.current, undefined, { renderer: small ? "svg" : "canvas" });
     chart.current = instance;
     const observer = new ResizeObserver(() => instance.resize());
     observer.observe(el.current);
     return () => { observer.disconnect(); instance.dispose(); chart.current = null; };
-  }, []);
+  }, [small]);
   useEffect(() => {
-    if (!chart.current || !el.current) return;
-    const t = theme(el.current);
-    chart.current.setOption(panel.viz === "bar" ? bar(frame, panel, t) : timeseries(frame, panel, t), { notMerge: true });
-  }, [panel, frame]);
-  return <div ref={el} role="img" aria-label={panel.description ? `${panel.title}: ${panel.description}` : panel.title} style={{ height: height ?? "100%", width: "100%", minHeight: 80 }} />;
+    chart.current?.setOption(option(chartTheme(scheme)), { notMerge: true });
+  }, [option, scheme]);
+  return <div ref={el} role="img" aria-label={label} style={{ height: height ?? "100%", width: "100%", minHeight: small ? 0 : 80 }} />;
 }

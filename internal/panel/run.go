@@ -39,6 +39,9 @@ type Result struct {
 	Status  string `json:"status"`
 	Message string `json:"message,omitempty"`
 	Frame   *Frame `json:"frame,omitempty"`
+	// Trend is a stat's value per minute, oldest first, when its source has
+	// readings over time; missing minutes are null.
+	Trend []any `json:"trend,omitempty"`
 }
 
 // Fragment is a dashboard with its results: what a tool returns and an MCP
@@ -127,6 +130,15 @@ func runPanel(p Panel, vars map[string]string, rows func(string) [][]any) Result
 	switch {
 	case p.Viz == "stat" || p.Viz == "gauge":
 		value, unit := aggregate(s, data, p.Measure)
+		if slices.ContainsFunc(s.columns, func(c Column) bool { return c.Name == "ts" }) {
+			// Over time, the stat is the latest reading and the trend leads to it.
+			for _, row := range timeseries(s, data, p).Rows {
+				r.Trend = append(r.Trend, row[2])
+				if row[2] != nil {
+					value = row[2]
+				}
+			}
+		}
 		frame = Frame{Columns: []Column{{Name: "value", Type: Number, Unit: cmp.Or(p.Unit, unit)}}, Rows: [][]any{{value}}}
 	case p.Viz == "timeseries":
 		frame = timeseries(s, data, p)

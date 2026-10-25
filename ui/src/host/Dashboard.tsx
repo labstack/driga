@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { GridLayout, useContainerWidth, type Layout } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
+import { ActionIcon, Box } from "@mantine/core";
+import { X } from "@phosphor-icons/react";
 import { PanelView, type Act } from "../panels/PanelView";
 import type { Fragment, Panel, Result } from "../panels/types";
 
@@ -89,7 +91,9 @@ export function packed(layout: Item[], panels: Map<string, Panel>, results: Map<
   return items;
 }
 
-function useHeight(active: boolean) {
+// useHeight follows the height of the board's container; key changes when
+// the board element is replaced.
+function useHeight(key: boolean) {
   const ref = useRef<HTMLDivElement>(null);
   const [height, setHeight] = useState(0);
   useEffect(() => {
@@ -98,46 +102,48 @@ function useHeight(active: boolean) {
     const observe = new ResizeObserver(() => setHeight(el.clientHeight - parseFloat(getComputedStyle(el).paddingTop) - parseFloat(getComputedStyle(el).paddingBottom)));
     observe.observe(el);
     return () => observe.disconnect();
-  }, [active]);
+  }, [key]);
   return { ref, height };
 }
 
-/** Dashboard is the app's board. It fills its space when viewed; editing
- * drags and resizes panels on the grid, and a move is saved as one layout
- * edit when the drag ends. */
+/** Dashboard is the app's board, packed to fill its space. Editing drags and
+ * resizes panels on the same grid; a move is saved as one layout edit when
+ * the drag ends. */
 export function Dashboard({ fragment, editing, act, onLayout, onRemove }: {
   fragment: Fragment; editing: boolean; act?: Act;
   onLayout: (grids: Record<string, { x: number; y: number; w: number; h: number }>) => void;
   onRemove: (id: string) => void;
 }) {
   const { width, containerRef, mounted } = useContainerWidth();
-  const fill = useHeight(!editing);
+  const fill = useHeight(editing);
   const results = new Map(fragment.results.map(r => [r.id, r]));
   const byId = new Map(fragment.dashboard.panels.map(p => [p.id, p]));
-  const layout = layoutOf(fragment.dashboard.panels);
+  // Editing starts from the packed board the user sees, so nothing jumps;
+  // a drag saves every panel where it now is.
+  const available = Math.max(1, Math.floor((fill.height + gap) / unit));
+  const items = packed(layoutOf(fragment.dashboard.panels), byId, results, fill.ref.current?.clientWidth ?? 1200, available);
+  const ref = (el: HTMLDivElement | null) => { fill.ref.current = el; containerRef.current = el; };
   if (!editing) {
-    const available = Math.max(1, Math.floor((fill.height + gap) / unit));
-    const items = packed(layout, byId, results, fill.ref.current?.clientWidth ?? 1200, available);
     const rows = Math.max(1, ...items.map(i => i.y + i.h));
     // Rows share any height left after whole rows, so the board ends exactly at the edge.
-    return <div ref={fill.ref} className="dashboard fill" style={{ gridTemplateRows: `repeat(${rows}, minmax(${rowHeight}px, 1fr))` }}>
-      {items.map(it => <div key={it.i} className="cell" style={{ gridColumn: `${it.x + 1} / span ${it.w}`, gridRow: `${it.y + 1} / span ${it.h}` }}>
+    return <Box ref={ref} style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateColumns: "repeat(12, minmax(0, 1fr))", gap, gridTemplateRows: `repeat(${rows}, minmax(${rowHeight}px, 1fr))` }}>
+      {items.map(it => <Box key={it.i} style={{ minWidth: 0, minHeight: 0, gridColumn: `${it.x + 1} / span ${it.w}`, gridRow: `${it.y + 1} / span ${it.h}` }}>
         <PanelView panel={byId.get(it.i)!} result={results.get(it.i)} act={act} fill />
-      </div>)}
-    </div>;
+      </Box>)}
+    </Box>;
   }
   const save = (next: Layout) => {
-    const changed = next.filter(n => { const before = layout.find(l => l.i === n.i); return !before || before.x !== n.x || before.y !== n.y || before.w !== n.w || before.h !== n.h; });
-    if (changed.length) onLayout(Object.fromEntries(next.map(n => [n.i, { x: n.x, y: n.y, w: n.w, h: n.h }])));
+    const changed = next.some(n => { const before = items.find(l => l.i === n.i); return !before || before.x !== n.x || before.y !== n.y || before.w !== n.w || before.h !== n.h; });
+    if (changed) onLayout(Object.fromEntries(next.map(n => [n.i, { x: n.x, y: n.y, w: n.w, h: n.h }])));
   };
-  return <div ref={containerRef} className="dashboard editing">
-    {mounted && <GridLayout width={width} layout={layout} gridConfig={{ cols: 12, rowHeight, margin: [12, 12], containerPadding: [0, 0] }}
-      dragConfig={{ enabled: true, handle: ".panel > header" }} resizeConfig={{ enabled: true }}
+  return <Box ref={ref} className="editing" style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
+    {mounted && <GridLayout width={width} layout={items} gridConfig={{ cols: 12, rowHeight, margin: [gap, gap], containerPadding: [0, 0] }}
+      dragConfig={{ enabled: true, handle: ".panel-handle" }} resizeConfig={{ enabled: true }}
       onDragStop={(next: Layout) => save(next)} onResizeStop={(next: Layout) => save(next)}>
-      {fragment.dashboard.panels.map(p => <div key={p.id} className="cell">
-        <PanelView panel={p} result={results.get(p.id)} fill />
-        <button type="button" className="remove" aria-label={`Remove ${p.title}`} onClick={() => onRemove(p.id)}>×</button>
+      {items.map(it => <div key={it.i} style={{ position: "relative" }}>
+        <PanelView panel={byId.get(it.i)!} result={results.get(it.i)} fill />
+        <ActionIcon variant="default" pos="absolute" top={8} right={8} aria-label={`Remove ${byId.get(it.i)!.title}`} onClick={() => onRemove(it.i)}><X /></ActionIcon>
       </div>)}
     </GridLayout>}
-  </div>;
+  </Box>;
 }

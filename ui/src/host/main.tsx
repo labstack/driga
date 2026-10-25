@@ -1,17 +1,22 @@
 // The app is a dashboard that fills the window with Chat docked beside it,
 // under the few numbers that say whether anything needs you. Every action
 // goes through the app's own checks and dialogs.
+import "@mantine/notifications/styles.css";
+import { ActionIcon, AppShell, Box, Button, Group, Select, Text, Title, Tooltip } from "@mantine/core";
+import { Notifications, notifications } from "@mantine/notifications";
+import { ChatCircle, PencilSimple } from "@phosphor-icons/react";
 import { StrictMode, useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { value } from "../panels/format";
 import { HostContext, type Act, type Host } from "../panels/host";
-import type { Dashboard as Spec, Fragment, Panel, Prompt, Result } from "../panels/types";
-import "../panels/theme.css";
+import type { Dashboard as Spec, Fragment, Panel, Prompt } from "../panels/types";
+import { Provider } from "../theme/Provider";
 import "../panels/panels.css";
 import "./host.css";
 import { action, chat, confirm, dashboards, type Operation, type Summary } from "./api";
+import { Brand } from "./Brand";
 import { Chat } from "./Chat";
 import { Dashboard } from "./Dashboard";
+import { Metrics } from "./Metrics";
 
 const refreshMs = 5000;
 const headerID = "header";
@@ -25,26 +30,6 @@ function initial(): string {
   return new URLSearchParams(location.search).get("dashboard") || homeID;
 }
 
-type Metric = { panel: Panel; result?: Result };
-
-function Metrics({ fragment, editing, onAsk, onRemove }: { fragment: Fragment | null; editing: boolean; onAsk: (m: Metric) => void; onRemove: (id: string) => void }) {
-  if (!fragment) return <div className="metrics" />;
-  return <ul className="metrics" aria-label="Metrics">
-    {fragment.dashboard.panels.map(p => {
-      const r = fragment.results.find(x => x.id === p.id);
-      const n = r?.frame?.rows[0]?.[0];
-      const shown = typeof n === "number" ? value(n, r!.frame!.columns[0]?.unit) : "–";
-      const hot = typeof n === "number" && n > 0 && (p.id === "waiting" || p.id === "stuck");
-      return <li key={p.id} className={hot ? "metric hot" : "metric"}>
-        <button type="button" title={p.description ?? `Ask Chat about ${p.title}`} onClick={() => onAsk({ panel: p, result: r })}>
-          <span className="metric-value">{shown}</span><span className="metric-label">{p.title}</span>
-        </button>
-        {editing && <button type="button" className="metric-remove" aria-label={`Remove ${p.title}`} onClick={() => onRemove(p.id)}>×</button>}
-      </li>;
-    })}
-  </ul>;
-}
-
 function App() {
   const [id, setId] = useState<string>(initial);
   const [list, setList] = useState<Summary[]>([]);
@@ -54,19 +39,18 @@ function App() {
   const [vars, setVars] = useState<Record<string, string>>({});
   const [editing, setEditing] = useState(false);
   const [chatOpen, setChatOpen] = useState(true);
-  const [notice, setNotice] = useState<string | null>(null);
   const [prompts, setPrompts] = useState<Prompt[]>([]);
   const [ask, setAsk] = useState<{ text: string; at: number } | null>(null);
   const timer = useRef<number | undefined>(undefined);
 
-  const say = (text: string) => { setNotice(text); window.setTimeout(() => setNotice(n => n === text ? null : n), 4000); };
+  const say = (message: string) => notifications.show({ message, autoClose: 4000 });
   const load = useCallback(async () => {
     const [h, i] = await Promise.allSettled([dashboards.open(headerID), dashboards.run(inboxSpec)]);
     if (h.status === "fulfilled") setHeader(h.value);
     if (i.status === "fulfilled") setInbox(i.value);
     chat.prompts().then(setPrompts, () => setPrompts([]));
     try { setFragment(await dashboards.open(id, vars)); }
-    catch (e) { setNotice((e as Error).message); if (id !== homeID) setId(homeID); }
+    catch (e) { say((e as Error).message); if (id !== homeID) setId(homeID); }
   }, [id, vars]);
   useEffect(() => { void load(); }, [load]);
   // Refresh while visible; editing holds the board still.
@@ -162,35 +146,45 @@ function App() {
   const inboxPanel = inbox?.dashboard.panels[0];
   const shown = fragment?.dashboard.panels.some(p => p.viz === "inbox");
   const brief = inboxPanel ? { panel: inboxPanel, result: inbox!.results[0], listed: !!shown } : undefined;
-  return <HostContext.Provider value={host}><div className={chatOpen ? "shell with-chat" : "shell"}>
-    <header className="top">
-      <span className="mark" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 12 12"><circle cx="6" cy="6" r="4" fill="none" stroke="#fff" strokeWidth="1.6" /></svg></span>
-      <Metrics fragment={header} editing={editing} onAsk={m => setAsk({ text: `Tell me about "${m.panel.title}" right now.`, at: Date.now() })}
-        onRemove={pid => header && void edit(headerID, header.version ?? 0, [{ op: "remove", id: pid }], "Removed a metric")} />
-      <span className="spacer" />
-      {list.length > 1 && <label className="picker"><span className="sr-only">Dashboard</span>
-        <select value={id} onChange={e => open(e.target.value)}>
-          {list.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-        </select>
-      </label>}
-      {fragment?.dashboard.variables?.map(v => <label key={v.name} className="picker"><span>{v.name}</span>
-        <select value={vars[v.name] ?? ""} onChange={e => setVars(prev => ({ ...prev, [v.name]: e.target.value }))}>
-          <option value="">All</option>
-          {(fragment.options?.[v.name] ?? []).map(o => <option key={o} value={o}>{o}</option>)}
-        </select>
-      </label>)}
-      <button type="button" aria-pressed={editing} onClick={() => setEditing(e => !e)}>{editing ? "Done" : "Edit"}</button>
-      <button type="button" aria-pressed={chatOpen} onClick={() => setChatOpen(o => !o)}>Chat</button>
-    </header>
-    <main className="main">
-      {editing && <div className="hint"><span className="muted">Drag panels by their title, resize from the corner, remove a header metric with ×, or ask Chat to change any of it.</span><button type="button" className="danger" onClick={() => void remove()}>{id === homeID ? "Reset Home" : "Delete dashboard"}</button></div>}
-      {fragment ? <Dashboard fragment={fragment} editing={editing} act={act}
-        onLayout={grids => void edit(fragment.id!, fragment.version ?? 0, [{ op: "layout", grids }], "Moved panels")}
-        onRemove={pid => void edit(fragment.id!, fragment.version ?? 0, [{ op: "remove", id: pid }], "Removed a panel")} /> : <p className="muted">Loading…</p>}
-    </main>
-    {chatOpen && <Chat inbox={brief} act={act} ask={ask} pinLabel={`Add to ${fragment?.dashboard.name ?? "dashboard"}`} onPin={pin} onSave={save} onClose={() => setChatOpen(false)} />}
-    {notice && <p className="toast" role="status">{notice}</p>}
-  </div></HostContext.Provider>;
+  const d = fragment?.dashboard;
+  return <HostContext.Provider value={host}>
+    <AppShell header={{ height: 56 }} aside={{ width: 400, breakpoint: "md", collapsed: { desktop: !chatOpen, mobile: !chatOpen } }} padding={0}>
+      <AppShell.Header px="md" style={{ background: "color-mix(in srgb, var(--driga-ground) 88%, transparent)", backdropFilter: "blur(10px)", borderColor: "var(--driga-border)" }}>
+        <Group h="100%" gap="md" wrap="nowrap">
+          <Brand />
+          <Metrics fragment={header} editing={editing} onAsk={m => setAsk({ text: `Tell me about "${m.panel.title}" right now.`, at: Date.now() })}
+            onRemove={pid => header && void edit(headerID, header.version ?? 0, [{ op: "remove", id: pid }], "Removed a metric")} />
+          <Tooltip label={chatOpen ? "Hide Chat" : "Show Chat"}>
+            <ActionIcon size="lg" variant={chatOpen ? "light" : "subtle"} color={chatOpen ? "brand" : "gray"} aria-pressed={chatOpen} aria-label="Chat" onClick={() => setChatOpen(o => !o)}><ChatCircle size={20} /></ActionIcon>
+          </Tooltip>
+        </Group>
+      </AppShell.Header>
+      <AppShell.Main style={{ height: "100dvh", display: "flex", flexDirection: "column" }}>
+        <Group justify="space-between" wrap="nowrap" gap="sm" px="md" pt="sm" pb={8}>
+          <Box style={{ minWidth: 0 }}>
+            <Title order={1} fz="lg" fw={600} style={{ letterSpacing: "-0.01em" }}>{d?.name ?? "Loading…"}</Title>
+            {d?.description && <Text size="xs" c="dimmed" truncate>{d.description}</Text>}
+          </Box>
+          <Group gap="xs" wrap="nowrap">
+            {d?.variables?.map(v => <Select key={v.name} size="xs" w={140} aria-label={v.name} placeholder={`All ${v.name}s`} clearable
+              data={fragment?.options?.[v.name] ?? []} value={vars[v.name] || null} onChange={next => setVars(prev => ({ ...prev, [v.name]: next ?? "" }))} />)}
+            {list.length > 1 && <Select size="xs" w={170} aria-label="Dashboard" allowDeselect={false} data={list.map(x => ({ value: x.id, label: x.name }))} value={id} onChange={next => next && open(next)} />}
+            {editing && <Button variant="light" color="danger" onClick={() => void remove()}>{id === homeID ? "Reset Home" : "Delete dashboard"}</Button>}
+            <Button variant={editing ? "filled" : "default"} leftSection={<PencilSimple />} aria-pressed={editing} onClick={() => setEditing(e => !e)}>{editing ? "Done" : "Edit"}</Button>
+          </Group>
+        </Group>
+        {editing && <Text size="xs" c="dimmed" px="md" pb={6}>Drag panels by their title, resize from the corner, remove a header metric with its ×, or ask Chat to change any of it.</Text>}
+        <Box px="md" pb="md" style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+          {fragment ? <Dashboard fragment={fragment} editing={editing} act={act}
+            onLayout={grids => void edit(fragment.id!, fragment.version ?? 0, [{ op: "layout", grids }], "Moved panels")}
+            onRemove={pid => void edit(fragment.id!, fragment.version ?? 0, [{ op: "remove", id: pid }], "Removed a panel")} /> : <Text size="sm" c="dimmed">Loading…</Text>}
+        </Box>
+      </AppShell.Main>
+      <AppShell.Aside style={{ borderColor: "var(--driga-border)", background: "var(--driga-inset)" }}>
+        {chatOpen && <Chat inbox={brief} act={act} ask={ask} pinLabel={`Add to ${d?.name ?? "dashboard"}`} onPin={pin} onSave={save} onClose={() => setChatOpen(false)} />}
+      </AppShell.Aside>
+    </AppShell>
+  </HostContext.Provider>;
 }
 
-createRoot(document.getElementById("root")!).render(<StrictMode><App /></StrictMode>);
+createRoot(document.getElementById("root")!).render(<StrictMode><Provider><Notifications position="bottom-center" /><App /></Provider></StrictMode>);

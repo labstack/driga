@@ -4,6 +4,8 @@ import (
 	"context"
 	"net/http/httptest"
 	"path/filepath"
+	"regexp"
+	"strings"
 	"testing"
 	"time"
 
@@ -99,7 +101,7 @@ func TestMethods(t *testing.T) {
 
 func TestHeaders(t *testing.T) {
 	s, _, _, _ := fixture(t)
-	for _, path := range []string{"/", "/app/", "/missing", "/static/fonts/ibm-plex-sans-latin-400-normal.woff2"} {
+	for _, path := range []string{"/", "/missing", "/static/fonts/ibm-plex-sans-latin-400-normal.woff2"} {
 		w := request(s, "GET", path)
 		for key, value := range map[string]string{
 			"Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'",
@@ -109,6 +111,28 @@ func TestHeaders(t *testing.T) {
 				t.Errorf("%s %s: %q", path, key, w.Header().Get(key))
 			}
 		}
+	}
+}
+
+// The app's page allows Mantine's style element by a nonce that is new on
+// every response and matches the one the page hands to Mantine.
+func TestAppPageStyleNonce(t *testing.T) {
+	s, _, _, _ := fixture(t)
+	nonce := regexp.MustCompile(`style-src 'self' 'nonce-([A-Za-z0-9+/=]{24})'`)
+	var seen []string
+	for range 2 {
+		w := request(s, "GET", "/app/")
+		m := nonce.FindStringSubmatch(w.Header().Get("Content-Security-Policy"))
+		if w.Code != 200 || m == nil || !strings.Contains(w.Body.String(), `name="driga-style-nonce" content="`+m[1]+`"`) || strings.Contains(w.Body.String(), "__DRIGA_STYLE_NONCE__") {
+			t.Fatalf("app page: %d %q", w.Code, w.Header().Get("Content-Security-Policy"))
+		}
+		if strings.Replace(w.Header().Get("Content-Security-Policy"), " 'nonce-"+m[1]+"'", "", 1) != csp {
+			t.Errorf("policy beyond the nonce: %q", w.Header().Get("Content-Security-Policy"))
+		}
+		seen = append(seen, m[1])
+	}
+	if seen[0] == seen[1] {
+		t.Error("the nonce repeats")
 	}
 }
 

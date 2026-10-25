@@ -1,3 +1,5 @@
+import { ActionIcon, Box, Button, Group, Paper, ScrollArea, Stack, Text, Textarea, Title } from "@mantine/core";
+import { Check, Sparkle, X } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 import { Board } from "../panels/Board";
 import { useHost } from "../panels/host";
@@ -21,24 +23,27 @@ function PanelCard({ text, pinLabel, onPin, onSave }: { text: string; pinLabel: 
     const run = spec && (card.tool === "show_panels" || card.tool === "create_dashboard" || card.tool === "replace_dashboard") ? dashboards.run(spec, card.input.vars) : dashboards.open(id!, card.input?.vars);
     run.then(setFragment, (e: Error) => setProblem(e.message));
   }, [text]);
-  if (problem) return <p className="problem">{problem}</p>;
-  if (!fragment) return <p className="muted">Loading panel…</p>;
-  return <div className="chat-card">
+  if (problem) return <Text size="sm" c="danger">{problem}</Text>;
+  if (!fragment) return <Text size="sm" c="dimmed">Loading panel…</Text>;
+  return <Paper withBorder radius="md" style={{ background: "var(--driga-ground)" }}>
     <Board fragment={fragment} compact />
-    <div className="card-actions"><button type="button" onClick={() => onPin(fragment.dashboard.panels)}>{pinLabel}</button><button type="button" onClick={() => onSave(fragment.dashboard.panels, fragment.dashboard.name)}>Save as dashboard</button></div>
-  </div>;
+    <Group gap={6} px="xs" pb="xs">
+      <Button variant="default" onClick={() => onPin(fragment.dashboard.panels)}>{pinLabel}</Button>
+      <Button variant="subtle" onClick={() => onSave(fragment.dashboard.panels, fragment.dashboard.name)}>Save as dashboard</Button>
+    </Group>
+  </Paper>;
 }
 
 function ActionCard({ conversation, action }: { conversation: string; action: ChatAction }) {
   const pending = action.status === "pending";
-  return <div className={pending ? "chat-action pending" : "chat-action"}>
-    <div><strong>{action.title}</strong><span className="muted"> · {action.status}</span></div>
-    {action.result && <div className="muted">{action.result}</div>}
-    {pending && <div className="card-actions">
-      <button type="button" className="primary-button" onClick={() => void chat.decide(conversation, action.id, true)}>Allow</button>
-      <button type="button" onClick={() => void chat.decide(conversation, action.id, false)}>Deny</button>
-    </div>}
-  </div>;
+  return <Paper withBorder p="xs" radius="md" style={{ background: "var(--driga-raised)", borderColor: pending ? "var(--mantine-color-warning-filled)" : undefined }}>
+    <Text size="sm" fw={600}>{action.title} <Text span size="xs" c="dimmed" fw={400}>· {action.status}</Text></Text>
+    {action.result && <Text size="xs" c="dimmed" mt={2}>{action.result}</Text>}
+    {pending && <Group gap={6} mt="xs">
+      <Button onClick={() => void chat.decide(conversation, action.id, true)}>Allow</Button>
+      <Button variant="default" onClick={() => void chat.decide(conversation, action.id, false)}>Deny</Button>
+    </Group>}
+  </Paper>;
 }
 
 /** Brief is what Chat opens with: the inbox and the next steps, posted as if
@@ -54,11 +59,11 @@ function Brief({ inbox, act, ask }: { inbox?: { panel: Panel; result?: Result; l
     "Make a dashboard for the project I am working on",
     "Which processes can I reclaim?",
   ];
-  return <div className="brief">
-    <p className="brief-lead">{prompts.length > 0 && `${prompts.length} permission ${prompts.length === 1 ? "prompt" : "prompts"} to answer. `}{waits ? `${waits} ${waits === 1 ? "session needs" : "sessions need"} you.` : prompts.length ? "" : "Nothing is waiting on you."}</p>
+  return <Stack gap="sm">
+    <Text size="sm" c="dimmed">{prompts.length > 0 && `${prompts.length} permission ${prompts.length === 1 ? "prompt" : "prompts"} to answer. `}{waits ? `${waits} ${waits === 1 ? "session needs" : "sessions need"} you.` : prompts.length ? "" : "Nothing is waiting on you."}</Text>
     {inbox && !inbox.listed && items > 0 && <PanelView panel={inbox.panel} result={inbox.result} act={act} />}
-    <div className="chips">{suggestions.map(s => <button type="button" key={s} onClick={() => ask(s)}>{s}</button>)}</div>
-  </div>;
+    <Stack gap={6} align="flex-start">{suggestions.map(s => <Button key={s} variant="default" radius="xl" leftSection={<Sparkle />} onClick={() => ask(s)} styles={{ label: { whiteSpace: "normal", textAlign: "left" } }} h="auto" py={6}>{s}</Button>)}</Stack>
+  </Stack>;
 }
 
 export function Chat({ inbox, act, ask, pinLabel, onPin, onSave, onClose }: {
@@ -120,28 +125,32 @@ export function Chat({ inbox, act, ask, pinLabel, onPin, onSave, onClose }: {
     } catch (e) { setProblem((e as Error).message); }
   };
 
-  return <aside className="chat" aria-label="Chat">
-    <header className="chat-head"><h2>Chat</h2><span className="muted">through your Claude Code login</span>{onClose && <button type="button" aria-label="Close chat" onClick={onClose}>×</button>}</header>
-    <div className="chat-log" ref={log}>
-      {messages.length === 0 && <Brief inbox={inbox} act={act} ask={text => void send(text)} />}
-      {messages.map(m => {
-        if (m.role === "panel") return m.text ? <PanelCard key={m.id} text={m.text} pinLabel={pinLabel} onPin={onPin} onSave={onSave} /> : null;
-        if (m.role === "tool") return <p key={m.id} className="chat-tool">✓ {m.text.replace(/^mcp__driga__/, "")}</p>;
-        if (m.role === "action") { const a = actions.get(m.id); return a && id ? <ActionCard key={m.id} conversation={id} action={a} /> : null; }
-        if (m.role === "user") return <div key={m.id} className="chat-user">{m.text}</div>;
-        return <div key={m.id} className="chat-assistant">{m.html ? <div dangerouslySetInnerHTML={{ __html: m.html }} /> : <p>{m.text}</p>}</div>;
-      })}
-      {active && <p className="muted">Working…</p>}
-      {problem && <p className="problem">{problem}</p>}
-    </div>
-    <form className="chat-compose" onSubmit={e => { e.preventDefault(); void send(draft); }}>
-      <label className="sr-only" htmlFor="chat-input">Ask or act</label>
-      <textarea id="chat-input" ref={input} rows={2} value={draft} placeholder="Ask about your agents, or tell Driga what to show" onChange={e => setDraft(e.target.value)}
-        onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(draft); } }} />
-      <div className="compose-row">
-        <span className="muted">Actions wait for your approval</span>
-        {active ? <button type="button" onClick={() => id && void chat.stop(id)}>Stop</button> : <button type="submit" className="primary-button">Send</button>}
-      </div>
-    </form>
-  </aside>;
+  return <Stack component="section" aria-label="Chat" h="100%" gap={0}>
+    <Group justify="space-between" px="md" py="sm" style={{ borderBottom: "1px solid var(--driga-border)" }}>
+      <Group gap={8} align="baseline"><Title order={2} fz="sm" fw={600}>Chat</Title><Text size="xs" c="dimmed">through your Claude Code login</Text></Group>
+      {onClose && <ActionIcon aria-label="Close chat" onClick={onClose}><X /></ActionIcon>}
+    </Group>
+    <ScrollArea viewportRef={log} style={{ flex: 1 }} type="auto">
+      <Stack gap="sm" p="md">
+        {messages.length === 0 && <Brief inbox={inbox} act={act} ask={text => void send(text)} />}
+        {messages.map(m => {
+          if (m.role === "panel") return m.text ? <PanelCard key={m.id} text={m.text} pinLabel={pinLabel} onPin={onPin} onSave={onSave} /> : null;
+          if (m.role === "tool") return <Group key={m.id} gap={4} c="dimmed"><Check size={12} /><Text size="xs" ff="monospace">{m.text.replace(/^mcp__driga__/, "")}</Text></Group>;
+          if (m.role === "action") { const a = actions.get(m.id); return a && id ? <ActionCard key={m.id} conversation={id} action={a} /> : null; }
+          if (m.role === "user") return <Paper key={m.id} px="sm" py={6} radius="lg" maw="85%" style={{ alignSelf: "flex-end", background: "var(--driga-hover)", whiteSpace: "pre-wrap" }}><Text size="sm">{m.text}</Text></Paper>;
+          return <Box key={m.id} fz="sm" className="markdown">{m.html ? <div dangerouslySetInnerHTML={{ __html: m.html }} /> : <Text size="sm">{m.text}</Text>}</Box>;
+        })}
+        {active && <Text size="xs" c="dimmed">Working…</Text>}
+        {problem && <Text size="xs" c="danger">{problem}</Text>}
+      </Stack>
+    </ScrollArea>
+    <Box component="form" p="sm" style={{ borderTop: "1px solid var(--driga-border)" }} onSubmit={e => { e.preventDefault(); void send(draft); }}>
+      <Textarea ref={input} aria-label="Ask or act" autosize minRows={2} maxRows={8} value={draft} placeholder="Ask about your agents, or tell Driga what to show"
+        onChange={e => setDraft(e.currentTarget.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(draft); } }} />
+      <Group justify="space-between" mt={8}>
+        <Text size="xs" c="dimmed">Actions wait for your approval</Text>
+        {active ? <Button variant="default" onClick={() => id && void chat.stop(id)}>Stop</Button> : <Button type="submit" disabled={!draft.trim()}>Send</Button>}
+      </Group>
+    </Box>
+  </Stack>;
 }

@@ -72,6 +72,17 @@ func TestHomeRuns(t *testing.T) {
 	}
 }
 
+// A stat over readings in time is the latest reading, with its trend.
+func TestStatTrend(t *testing.T) {
+	r := run(t, Dashboard{Name: "x", Panels: []Panel{{ID: "mem", Title: "Memory", Viz: "stat", Source: "activity", Measure: "max:mem_used_bytes"}}}, nil)["mem"]
+	if len(r.Trend) != 2 || r.Trend[0] != 10.0 || r.Trend[1] != nil || r.Frame.Rows[0][0] != 10.0 {
+		t.Fatalf("trend = %v, value = %v", r.Trend, r.Frame.Rows)
+	}
+	if r := run(t, Header(), nil)["waiting"]; r.Trend != nil {
+		t.Fatalf("a count with no readings over time has a trend: %v", r.Trend)
+	}
+}
+
 func TestInboxOrder(t *testing.T) {
 	inbox := run(t, Dashboard{Name: "x", Panels: []Panel{{ID: "inbox", Title: "Inbox", Viz: "inbox", Source: "inbox"}}}, nil)["inbox"].Frame
 	id := slices.IndexFunc(inbox.Columns, func(c Column) bool { return c.Name == "id" })

@@ -1,6 +1,7 @@
 package view
 
 import (
+	"encoding/json"
 	"fmt"
 	catppuccin "github.com/catppuccin/go"
 	"math"
@@ -14,15 +15,18 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
-func TestThemeCSSContainsEveryToken(t *testing.T) {
-	css := ThemeCSS()
-	sections := strings.Split(css, "}")
+func TestThemeJSONContainsEveryToken(t *testing.T) {
+	var palette map[string]map[string]string
+	if err := json.Unmarshal([]byte(ThemeJSON()), &palette); err != nil {
+		t.Fatal(err)
+	}
 	for _, token := range consoleTokens {
-		for i, value := range []string{token.Dark, token.Light} {
-			if !strings.Contains(sections[i], "--"+token.Name+":"+value+";") {
-				t.Errorf("theme %d missing %s=%s", i, token.Name, value)
-			}
+		if palette["dark"][token.Name] != token.Dark || palette["light"][token.Name] != token.Light {
+			t.Errorf("palette missing %s", token.Name)
 		}
+	}
+	if len(palette["mocha"]) != 26 || len(palette["latte"]) != 26 {
+		t.Errorf("flavors: %d %d", len(palette["mocha"]), len(palette["latte"]))
 	}
 }
 
@@ -42,15 +46,6 @@ func TestThemeTerminalParity(t *testing.T) {
 			if r != er || g != eg || b != eb || a != ea {
 				t.Errorf("%s dark=%v differs from CSS", token.Name, dark)
 			}
-		}
-	}
-}
-
-func TestConsoleThemeSelectors(t *testing.T) {
-	css := ThemeCSS()
-	for _, selector := range []string{`[data-theme="dark"]`, `[data-theme="light"]`, `prefers-color-scheme: light`} {
-		if !strings.Contains(css, selector) {
-			t.Errorf("missing %s", selector)
 		}
 	}
 }
@@ -115,29 +110,23 @@ func TestTUITokensExist(t *testing.T) {
 	}
 }
 
-// Every palette variable the app's styles use must have a console value.
-func TestWebAssetsUseConsoleTokens(t *testing.T) {
-	console := map[string]bool{}
-	for _, tok := range consoleTokens {
-		console[tok.Name] = true
-	}
+// The app's colors come from the console palette through ui/src/theme, so its
+// style sheets name theme variables and never a color of their own.
+func TestAppStylesUseThemeColors(t *testing.T) {
 	host, _ := filepath.Glob("../../ui/src/host/*.css")
 	files, err := filepath.Glob("../../ui/src/panels/*.css")
 	files = append(files, host...)
 	if err != nil || len(files) < 2 {
-		t.Fatalf("static assets: %v %v", files, err)
+		t.Fatalf("style sheets: %v %v", files, err)
 	}
-	ref := regexp.MustCompile(`var\(--([a-z0-9-]+)`)
+	color := regexp.MustCompile(`#[0-9a-fA-F]{3,8}\b|rgba?\(`)
 	for _, f := range files {
 		b, err := os.ReadFile(f)
 		if err != nil {
 			t.Fatal(err)
 		}
-		// Fonts and component-local meter/state variables are defined by the assets.
-		for _, m := range ref.FindAllStringSubmatch(string(b), -1) {
-			if !console[m[1]] && m[1] != "mono" && m[1] != "sans" && m[1] != "meter-fill" && m[1] != "state" {
-				t.Errorf("%s uses --%s, which has no console value", filepath.Base(f), m[1])
-			}
+		if m := color.Find(b); m != nil {
+			t.Errorf("%s sets %s; use a theme variable", filepath.Base(f), m)
 		}
 	}
 }

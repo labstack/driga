@@ -11,11 +11,17 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@mantine/core": "9.7.2",
+    "@mantine/hooks": "9.7.2",
+    "@mantine/notifications": "9.7.2",
     "@modelcontextprotocol/ext-apps": "2.0.3",
+    "@phosphor-icons/react": "2.1.10",
+    "@tanstack/react-table": "9.3.1",
     "echarts": "6.1.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
-    "react-grid-layout": "2.3.0"
+    "react-grid-layout": "2.3.0",
+    "react-markdown": "10.1.0"
   },
   "devDependencies": {
     "@types/react": "19.3.0",

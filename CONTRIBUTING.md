@@ -43,6 +43,21 @@ just build        # builds ./bin/driga, which is not on PATH
 just install      # deliberately copies it to ~/.local/bin
 ```
 
+### The app's UI
+
+The app's page and the panels MCP App are built from `ui/` with [Bun](https://bun.sh):
+`just ui` installs the pinned packages, type-checks and writes both bundles into
+`internal/web/app` and `internal/mcp/apps`. The bundles are committed, so a Go
+build needs no JavaScript toolchain. Run `cd ui && bun run test` for the UI tests.
+
+The UI follows LabStack's Canon: Mantine components themed through
+`ui/src/theme`, Phosphor icons, TanStack Table for tables and one ECharts
+wrapper for charts. Its colors come from the console palette: after changing a
+color in `internal/view`, run `DRIGA_WRITE_THEME=1 go test ./internal/view` to
+regenerate `ui/src/theme/palette.json`. Style sheets name theme variables, never
+colors. `@labstack/ui` is a private package this public repository cannot
+install, so Driga composes its status badge and stat tile from Mantine instead.
+
 ## Verify
 
 ```sh

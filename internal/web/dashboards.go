@@ -1,8 +1,11 @@
 package web
 
 import (
+	"bytes"
 	"context"
+	"crypto/rand"
 	"embed"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io/fs"
@@ -34,10 +37,32 @@ func (s *Server) appRoutes(mux *http.ServeMux) {
 	// One page at /app/, its state in the query; the app's other POST
 	// endpoints under /app/ keep answering GET with 405.
 	host := http.StripPrefix("/app/", http.FileServer(http.FS(files)))
-	mux.Handle("GET /app/{$}", host)
+	mux.HandleFunc("GET /app/{$}", s.appPage)
 	mux.Handle("GET /app/assets/", host)
 	for _, route := range []string{"list", "open", "run", "create", "edit", "versions", "restore", "delete"} {
 		mux.HandleFunc("POST /app/api/"+route, s.dashboardAPI)
+	}
+}
+
+// appPage serves the app's page with a fresh style nonce: Mantine writes its
+// theme variables into a style element, which the policy allows by nonce
+// only, so no other inline style runs.
+func (s *Server) appPage(w http.ResponseWriter, r *http.Request) {
+	page, err := appBuild.ReadFile("app/index.html")
+	if err != nil {
+		http.Error(w, "The app is not built", http.StatusInternalServerError)
+		return
+	}
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		http.Error(w, "could not serve the app", http.StatusInternalServerError)
+		return
+	}
+	nonce := base64.StdEncoding.EncodeToString(b)
+	w.Header().Set("Content-Security-Policy", strings.Replace(csp, "style-src 'self'", "style-src 'self' 'nonce-"+nonce+"'", 1))
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if r.Method != http.MethodHead {
+		_, _ = w.Write(bytes.Replace(page, []byte("__DRIGA_STYLE_NONCE__"), []byte(nonce), 1))
 	}
 }
 

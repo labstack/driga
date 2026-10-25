@@ -49,7 +49,8 @@ func Home() Dashboard {
 
 // Header's metrics follow what people supervising agents need most: what
 // waits on them, what finished for review, agents that look stuck, then
-// what runaway processes and leftover disk cost.
+// what runaway processes and leftover disk cost, and the machine's memory
+// over the last hour.
 func Header() Dashboard {
 	return Dashboard{
 		Name:        "Header",
@@ -60,6 +61,7 @@ func Header() Dashboard {
 			{ID: "stuck", Title: "Possibly stuck", Viz: "stat", Source: "sessions", Where: []Filter{{Column: "label", Value: "stalled?"}}},
 			{ID: "leftover", Title: "Leftover processes", Viz: "stat", Source: "orphans", Measure: "sum:rss_bytes"},
 			{ID: "reclaim", Title: "Reclaimable", Viz: "stat", Source: "summary", Measure: "sum:reclaim_bytes"},
+			{ID: "memory", Title: "Memory used", Viz: "stat", Source: "activity", Measure: "max:mem_used_bytes"},
 		},
 	}
 }

@@ -2,6 +2,7 @@ package dashboard
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/labstack/driga/internal/panel"
@@ -24,7 +25,7 @@ func TestHeaderExistsBeforeItIsSaved(t *testing.T) {
 		t.Fatalf("list = %+v, %v", list, err)
 	}
 	var problems panel.Problems
-	if _, err := s.Edit(panel.HeaderID, []Operation{{Op: "add", Panel: &panel.Panel{ID: "t", Title: "T", Viz: "table", Source: "sessions"}}}, 0, you, ""); !errors.As(err, &problems) || problems[0].Path != "panels[4].viz" {
+	if _, err := s.Edit(panel.HeaderID, []Operation{{Op: "add", Panel: &panel.Panel{ID: "t", Title: "T", Viz: "table", Source: "sessions"}}}, 0, you, ""); !errors.As(err, &problems) || problems[0].Path != fmt.Sprintf("panels[%d].viz", len(edited.Spec.Panels)) {
 		t.Fatalf("table in header = %v", err)
 	}
 }
