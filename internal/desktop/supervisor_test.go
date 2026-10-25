@@ -484,3 +484,134 @@ func TestSupervisorReportsReadOwnerError(t *testing.T) {
 		t.Fatalf("statuses = %+v, want one deduplicated error", got)
 	}
 }
+
+// eofReader records whether its stream was read to the end.
+type eofReader struct {
+	r    io.Reader
+	mu   sync.Mutex
+	done bool
+}
+
+func (e *eofReader) Read(p []byte) (int, error) {
+	n, err := e.r.Read(p)
+	if err == io.EOF {
+		e.mu.Lock()
+		e.done = true
+		e.mu.Unlock()
+	}
+	return n, err
+}
+
+func (e *eofReader) drained() bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.done
+}
+
+func TestSupervisorDrainsNotifications(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		notify bool
+	}{{"notify", true}, {"no notify", false}} {
+		t.Run(tt.name, func(t *testing.T) {
+			s := newSupervisor(&fakeClock{}, &statusLog{})
+			var got []string
+			s.Notify = nil
+			if tt.notify {
+				s.Notify = func(n attention.Notification) { got = append(got, n.ItemID) }
+			}
+			notes := &eofReader{r: bytes.NewReader([]byte("garbage\n{\"item_id\":\"a\"}\n" + string(bytes.Repeat([]byte("x"), 1<<16))))}
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			s.Start = func(context.Context) (Child, error) {
+				child := newFakeChild()
+				child.notes = notes
+				child.exit <- errors.New("exit status 1")
+				cancel()
+				return child, nil
+			}
+			wait(t, runSupervisor(t, s, ctx))
+			if !notes.drained() {
+				t.Fatal("notification stream not read to the end")
+			}
+			if tt.notify && !reflect.DeepEqual(got, []string{"a"}) {
+				t.Fatalf("delivered %v, want [a]", got)
+			}
+		})
+	}
+}
+
+// A child that exits just as the app quits is a clean shutdown, not a crash.
+func TestSupervisorShutdownRaceReturnsStopResult(t *testing.T) {
+	for range 100 {
+		s := newSupervisor(&fakeClock{}, &statusLog{})
+		ctx, cancel := context.WithCancel(context.Background())
+		s.Start = func(context.Context) (Child, error) {
+			child := newFakeChild()
+			child.exit <- errors.New("signal: terminated")
+			cancel()
+			return child, nil
+		}
+		if err := wait(t, runSupervisor(t, s, ctx)); err != nil {
+			t.Fatalf("Run = %v, want nil on shutdown", err)
+		}
+	}
+}
+
+func TestSupervisorRechecksOwnerAfterOrphanExits(t *testing.T) {
+	clock := &fakeClock{}
+	statuses := &statusLog{}
+	s := newSupervisor(clock, statuses)
+	orphan := collector.Owner{PID: 42, Kind: "app", Executable: "/apps/driga"}
+	service := collector.Owner{PID: 7, Kind: "service", Executable: "/usr/local/bin/driga"}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	terminated := false
+	reads := 0
+	s.Terminate = func(int) error {
+		terminated = true
+		return nil
+	}
+	s.ReadOwner = func() (collector.Owner, bool, error) {
+		reads++
+		switch {
+		case !terminated:
+			return orphan, true, nil
+		case reads > 6:
+			cancel()
+		}
+		return service, true, nil
+	}
+	s.Start = func(context.Context) (Child, error) {
+		t.Error("started while the service holds the lock")
+		return newFakeChild(), nil
+	}
+	wait(t, runSupervisor(t, s, ctx))
+	if got := statuses.all(); len(got) == 0 || got[len(got)-1] != (Status{Owner: service}) {
+		t.Fatalf("statuses = %+v, want the service reported", got)
+	}
+}
+
+func TestSupervisorReadyFailureIsNotCollecting(t *testing.T) {
+	statuses := &statusLog{}
+	s := newSupervisor(&fakeClock{}, statuses)
+	s.Ready = func(context.Context) error { return errors.New("connection refused") }
+	started := make(chan struct{})
+	s.Start = func(context.Context) (Child, error) {
+		close(started)
+		return newFakeChild(), nil
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := runSupervisor(t, s, ctx)
+	wait(t, started)
+	deadline := time.Now().Add(5 * time.Second)
+	for len(statuses.all()) == 0 && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	cancel()
+	wait(t, done)
+	got := statuses.all()
+	if len(got) != 1 || got[0].Collecting || got[0].Err == nil {
+		t.Fatalf("statuses = %+v, want not collecting with an error", got)
+	}
+}

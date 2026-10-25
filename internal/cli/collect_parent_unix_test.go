@@ -3,18 +3,39 @@
 package cli
 
 import (
+	"context"
 	"os"
 	"syscall"
 	"testing"
 	"time"
 
+	"github.com/labstack/driga/internal/attention"
 	"github.com/labstack/driga/internal/collector"
 	"github.com/labstack/driga/internal/config"
+	"github.com/labstack/driga/internal/model"
 )
+
+type emptyPlatform struct{}
+
+func (emptyPlatform) Procs(context.Context) ([]model.Proc, error) { return nil, nil }
+func (emptyPlatform) Machine(context.Context) (model.MachineSample, error) {
+	return model.MachineSample{}, nil
+}
+func (emptyPlatform) Cwds(context.Context, []int32) (map[int32]string, error) { return nil, nil }
+func (emptyPlatform) Alive(int32, time.Time) bool                             { return false }
 
 // A running collector whose parent goes away, closing the write end of its
 // lifeline pipe, exits cleanly instead of running on as an orphan.
 func TestCollectExitsWhenParentGone(t *testing.T) {
+	// Collect from an empty machine: the run must read no real process table.
+	defer func(previous func(config.Config, attention.Notifier) (collector.Deps, error)) {
+		newCollectDeps = previous
+	}(newCollectDeps)
+	newCollectDeps = func(cfg config.Config, notifier attention.Notifier) (collector.Deps, error) {
+		d, err := newDeps(cfg, notifier)
+		d.Plat = emptyPlatform{}
+		return d, err
+	}
 	parentR, parentW, err := os.Pipe()
 	if err != nil {
 		t.Fatal(err)

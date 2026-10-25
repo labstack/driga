@@ -119,8 +119,9 @@ func (s *Supervisor) Run(ctx context.Context) error {
 			if err := s.replace(ctx, owner); err != nil {
 				s.report(Status{Owner: owner, Err: err})
 				s.sleep(ctx, poll)
-				continue
 			}
+			// Read the lock again: another collector may have taken it.
+			continue
 		}
 		started := s.clock.Now()
 		err = s.supervise(ctx)
@@ -154,7 +155,7 @@ func (s *Supervisor) replace(ctx context.Context, orphan collector.Owner) error 
 		if err != nil {
 			return fmt.Errorf("read collector lock: %w", err)
 		}
-		if !held || owner.PID != orphan.PID {
+		if !held || owner != orphan {
 			return nil
 		}
 	}
@@ -171,9 +172,16 @@ func (s *Supervisor) supervise(ctx context.Context) error {
 	drained := make(chan struct{})
 	go func() {
 		defer close(drained)
-		if r := child.Notifications(); r != nil && s.Notify != nil {
+		r := child.Notifications()
+		if r == nil {
+			return
+		}
+		if s.Notify != nil {
 			_ = attention.ReadNotifications(r, s.Notify)
 		}
+		// Read whatever is left so the child never blocks writing to a full
+		// pipe and the pipe closes once it ends.
+		_, _ = io.Copy(io.Discard, r)
 	}()
 	exited := make(chan error, 1)
 	go func() { exited <- child.Wait() }()
@@ -192,11 +200,18 @@ func (s *Supervisor) supervise(ctx context.Context) error {
 		case err := <-ready:
 			ready = nil
 			if err != nil {
-				err = fmt.Errorf("collector not answering: %w", err)
+				// Not collecting as far as the app is concerned: it opens
+				// chat only while Collecting is set.
+				s.report(Status{Err: fmt.Errorf("collector not answering: %w", err)})
+				continue
 			}
-			s.report(Status{Collecting: true, Err: err})
+			s.report(Status{Collecting: true})
 		case err := <-exited:
 			<-drained
+			if ctx.Err() != nil {
+				// Exited as the app quit: a clean shutdown, not a crash.
+				return nil
+			}
 			if err == nil {
 				return errors.New("collector exited")
 			}

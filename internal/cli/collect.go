@@ -19,6 +19,10 @@ import (
 	"github.com/labstack/driga/internal/store"
 )
 
+// newCollectDeps builds the collector's sources; tests replace it so a full
+// collect run reads no real machine state.
+var newCollectDeps = newDeps
+
 // CollectCmd runs the daemon, or one persistent pass with --once.
 type CollectCmd struct {
 	Owner          string        `hidden:"" default:"manual" enum:"app,service,manual"`
@@ -41,6 +45,21 @@ func (c CollectCmd) Run(g *Globals) error {
 	}
 	if c.ParentFD != nil && *c.ParentFD < 0 {
 		return invalidUsage("--parent-fd must be non-negative")
+	}
+	// Take the inherited descriptors first, before anything can start a
+	// program that would inherit them too.
+	var notifyFile, parentFile *os.File
+	if c.NotifyFD != nil {
+		if notifyFile = inheritedFile(*c.NotifyFD, "notify"); notifyFile == nil {
+			return invalidUsage("--notify-fd is invalid")
+		}
+		defer notifyFile.Close()
+	}
+	if c.ParentFD != nil {
+		if parentFile = inheritedFile(*c.ParentFD, "parent"); parentFile == nil {
+			return invalidUsage("--parent-fd is invalid")
+		}
+		defer parentFile.Close()
 	}
 	if c.Once && c.Serve != nil && *c.Serve {
 		return invalidUsage("--once and --serve cannot be combined")
@@ -77,15 +96,10 @@ func (c CollectCmd) Run(g *Globals) error {
 		}
 	}
 	var notifier attention.Notifier
-	if c.NotifyFD != nil {
-		f := inheritedFile(*c.NotifyFD, "notify")
-		if f == nil {
-			return invalidUsage("--notify-fd is invalid")
-		}
-		defer f.Close()
-		notifier = &attention.PipeNotifier{W: f}
+	if notifyFile != nil {
+		notifier = &attention.PipeNotifier{W: notifyFile}
 	}
-	d, err := newDeps(cfg, notifier)
+	d, err := newCollectDeps(cfg, notifier)
 	if err != nil {
 		return err
 	}
@@ -104,16 +118,11 @@ func (c CollectCmd) Run(g *Globals) error {
 	}
 	ctx, stop := notifyContext(context.Background())
 	defer stop()
-	if c.ParentFD != nil {
-		f := inheritedFile(*c.ParentFD, "parent")
-		if f == nil {
-			return invalidUsage("--parent-fd is invalid")
-		}
-		defer f.Close()
+	if parentFile != nil {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithCancel(ctx)
 		defer cancel()
-		go watchParent(f, cancel)
+		go watchParent(parentFile, cancel)
 	}
 	if c.CPUProfile != "" {
 		stopProfile, err := startCPUProfile(c.CPUProfile, c.ProfileFor)

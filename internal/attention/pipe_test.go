@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"reflect"
 	"runtime"
 	"strings"
@@ -118,9 +117,15 @@ func TestPipeNotificationErrors(t *testing.T) {
 			t.Fatalf("valid input %q: %v", input, err)
 		}
 	}
-	for _, input := range []string{"invalid\n", "{", "{}\n{"} {
-		if err := ReadNotifications(strings.NewReader(input), func(Notification) {}); err == nil || errors.Is(err, io.EOF) {
-			t.Fatalf("malformed input %q: %v", input, err)
-		}
+}
+
+func TestReadNotificationsSkipsMalformedLines(t *testing.T) {
+	input := "invalid\n{\"item_id\":\"a\"}\n{\n\n{\"item_id\":\"b\"}\n{\"item_id\":"
+	var got []string
+	if err := ReadNotifications(strings.NewReader(input), func(n Notification) { got = append(got, n.ItemID) }); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got, []string{"a", "b"}) {
+		t.Fatalf("delivered %v, want [a b]", got)
 	}
 }

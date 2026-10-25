@@ -80,7 +80,10 @@ func (c *execChild) Stop() error {
 		select {
 		case <-c.done:
 		case <-time.After(stopTimeout):
-			c.stopErr = c.cmd.Process.Kill()
+			// It may exit between the timeout and the kill.
+			if err := c.cmd.Process.Kill(); !errors.Is(err, os.ErrProcessDone) {
+				c.stopErr = err
+			}
 			<-c.done
 		}
 	})
