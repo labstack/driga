@@ -23,6 +23,7 @@ import (
 type CollectCmd struct {
 	Owner          string        `hidden:"" default:"manual" enum:"app,service,manual"`
 	NotifyFD       *int          `hidden:""`
+	ParentFD       *int          `hidden:""`
 	Serve          *bool         `help:"Enable fleet serving alongside collection (overrides fleet.serve)."`
 	Listen         string        `help:"Fleet private IP or interface and port (requires serving)."`
 	Scheduled      bool          `hidden:""`
@@ -37,6 +38,9 @@ type CollectCmd struct {
 func (c CollectCmd) Run(g *Globals) error {
 	if c.NotifyFD != nil && *c.NotifyFD < 0 {
 		return invalidUsage("--notify-fd must be non-negative")
+	}
+	if c.ParentFD != nil && *c.ParentFD < 0 {
+		return invalidUsage("--parent-fd must be non-negative")
 	}
 	if c.Once && c.Serve != nil && *c.Serve {
 		return invalidUsage("--once and --serve cannot be combined")
@@ -74,7 +78,7 @@ func (c CollectCmd) Run(g *Globals) error {
 	}
 	var notifier attention.Notifier
 	if c.NotifyFD != nil {
-		f := os.NewFile(uintptr(*c.NotifyFD), "notify")
+		f := inheritedFile(*c.NotifyFD, "notify")
 		if f == nil {
 			return invalidUsage("--notify-fd is invalid")
 		}
@@ -100,6 +104,17 @@ func (c CollectCmd) Run(g *Globals) error {
 	}
 	ctx, stop := notifyContext(context.Background())
 	defer stop()
+	if c.ParentFD != nil {
+		f := inheritedFile(*c.ParentFD, "parent")
+		if f == nil {
+			return invalidUsage("--parent-fd is invalid")
+		}
+		defer f.Close()
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithCancel(ctx)
+		defer cancel()
+		go watchParent(f, cancel)
+	}
 	if c.CPUProfile != "" {
 		stopProfile, err := startCPUProfile(c.CPUProfile, c.ProfileFor)
 		if err != nil {
@@ -136,6 +151,15 @@ func (c CollectCmd) Run(g *Globals) error {
 	}
 	_, err = fmt.Fprintf(out, "Collected %d sessions, %d processes, %d samples (%d source errors).\n", r.Sessions, r.Procs, r.Samples, len(r.SourceErrors))
 	return err
+}
+
+// watchParent stops the collector when its parent goes away. The parent holds
+// the write end of the pipe and never writes, so a read returns only once the
+// parent closes it or exits; the collector then shuts down as on SIGTERM.
+func watchParent(r io.Reader, cancel context.CancelFunc) {
+	_, _ = io.Copy(io.Discard, r)
+	slog.Info("parent process gone", "event", "parent_gone")
+	cancel()
 }
 
 func collectorLogging() (func(), error) {

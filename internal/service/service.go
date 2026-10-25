@@ -29,6 +29,20 @@ func logPathForOS(goos string) string {
 	return filepath.Join(config.ExpandHome("~"), "Library", "Logs", "driga", "collector.log")
 }
 
+// EnvKeys lists the environment variables a collector started outside the
+// user's shell needs from it. PATH and TMUX_TMPDIR matter most: launchd,
+// systemd and desktop sessions start processes with a bare PATH, so tmux and
+// agent CLIs would not be found.
+func EnvKeys() []string {
+	keys := []string{"PATH", "TMUX_TMPDIR", "DRIGA_CONFIG", "DRIGA_DATA_DIR", "DRIGA_SPOOL_DIR", "CODEX_HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS"}
+	for _, setting := range config.Settings() {
+		if name := setting.EnvName(); name != "" {
+			keys = append(keys, name)
+		}
+	}
+	return keys
+}
+
 // Config returns configuration only; it never contacts the service manager.
 func Config(binPath string) *ks.Config { return configForOS(binPath, runtime.GOOS) }
 
@@ -46,15 +60,7 @@ func configForOS(binPath, goos string) *ks.Config {
 	}
 	template = strings.ReplaceAll(template, "BUNDLE_ASSOCIATION", association)
 	env := map[string]string{"HOME": config.ExpandHome("~")}
-	// PATH and TMUX_TMPDIR come from the installing shell: launchd and systemd
-	// start services with a bare PATH, so tmux and agent CLIs would not be found.
-	keys := []string{"PATH", "TMUX_TMPDIR", "DRIGA_CONFIG", "DRIGA_DATA_DIR", "DRIGA_SPOOL_DIR", "CODEX_HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS"}
-	for _, setting := range config.Settings() {
-		if name := setting.EnvName(); name != "" {
-			keys = append(keys, name)
-		}
-	}
-	for _, key := range keys {
+	for _, key := range EnvKeys() {
 		if value := os.Getenv(key); value != "" {
 			env[key] = value
 		}
