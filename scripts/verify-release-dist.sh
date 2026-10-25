@@ -128,8 +128,8 @@ for architecture in 64bit:amd64 arm64:arm64; do
     echo "Scoop ${scoop_arch} URL = ${actual_url}, want ${expected_url}." >&2
     exit 1
   fi
-  if ! jq -e --arg arch "$scoop_arch" '.architecture[$arch].bin | index("bin/driga.exe") != null' "$scoop_manifest" >/dev/null; then
-    echo "Scoop ${scoop_arch} entry does not install bin/driga.exe." >&2
+  if ! jq -e --arg arch "$scoop_arch" '.architecture[$arch].bin == ["bin/driga.exe"]' "$scoop_manifest" >/dev/null; then
+    echo "Scoop ${scoop_arch} entry must shim only bin/driga.exe, never Driga.exe." >&2
     exit 1
   fi
   expected_hash=$(artifact_hash "driga_${release_version}_windows_${artifact_arch}.zip")
@@ -219,7 +219,7 @@ if [ -n "$native_binary" ]; then
   fi
 fi
 
-# Inspect the archived PE resources without executing either Windows binary.
+# Inspect the archived PE resources of Driga.exe and bin/driga.exe without executing them.
 absolute_dist=$(cd "$dist_dir" && pwd)
 repository_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 (cd "$repository_root" && go test ./scripts/windows-resources -run '^TestReleaseResources$' -count=1 -args -dist "$absolute_dist" -version "$release_version")

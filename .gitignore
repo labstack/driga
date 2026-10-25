@@ -2,6 +2,7 @@
 /bin/
 /dist/
 /cmd/driga/rsrc_windows_*.syso
+/cmd/driga-app/rsrc_windows_*.syso
 *.db*
 .env
 .env*

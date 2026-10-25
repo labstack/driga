@@ -65,9 +65,6 @@ archives:
   - id: driga
     ids:
       - driga
-      - driga-app
-    # Only the Windows archive holds Driga.exe beside the CLI.
-    allow_different_binary_count: true
     name_template: "driga_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     formats:
       - tar.gz
@@ -77,8 +74,34 @@ archives:
           - none
       - goos: windows
         formats:
-          - zip
+          - none
     files:
+      - README.md
+      - LICENSE
+      - NOTICE
+      - src: internal/web/static/vendor/LICENSES.txt
+        dst: third-party/vendor-LICENSES.txt
+      - src: internal/web/static/fonts/LICENSE.txt
+        dst: third-party/fonts-LICENSE.txt
+
+  # Driga.exe is a plain file here, not an archive binary, so Scoop shims only
+  # the CLI (bin/driga.exe): a shim named Driga.exe would collide with driga.exe
+  # on case-insensitive Windows and make `driga` open the app.
+  - id: driga-windows
+    ids:
+      - driga
+    name_template: "driga_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    formats:
+      - zip
+    format_overrides:
+      - goos: linux
+        formats: [none]
+      - goos: darwin
+        formats: [none]
+    files:
+      - src: '{{ dir (dir (dir .ArtifactPath)) }}/driga-app_windows_{{ .Arch }}_*/Driga.exe'
+        dst: .
+        strip_parent: true
       - README.md
       - LICENSE
       - NOTICE
@@ -189,7 +212,7 @@ scoops:
   - name: driga
     skip_upload: false
     ids:
-      - driga
+      - driga-windows
     url_template: "https://github.com/labstack/driga/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
     commit_msg_template: "chore: update driga to {{ .Tag }}"
     homepage: https://github.com/labstack/driga

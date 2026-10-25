@@ -116,8 +116,9 @@ Changelogs sort ascending and omit `docs:` and `test:` entries.
 The global GoReleaser before hook runs `go run ./scripts/windows-resources
 -version <version>` once before parallel builds. It uses the pure-Go
 `github.com/tc-hib/go-winres` tool pinned to **v0.3.3**, so cross-builds require
-neither cgo nor a Windows SDK. It generates `cmd/driga/rsrc_windows_amd64.syso`
-and `rsrc_windows_arm64.syso`; Go's filename constraints include each object
+neither cgo nor a Windows SDK. It generates `rsrc_windows_amd64.syso` and
+`rsrc_windows_arm64.syso` in both `cmd/driga` and `cmd/driga-app`, so `Driga.exe`
+and `bin/driga.exe` share the icon and version resources; Go's filename constraints include each object
 only in its matching Windows build. These deterministic, version-specific
 objects are ignored rather than committed, avoiding stale release metadata.
 
@@ -262,6 +263,11 @@ Scoop on experimental Windows:
 scoop bucket add labstack https://github.com/labstack/scoop-bucket
 scoop install labstack/driga
 ```
+
+The manifest shims only `bin/driga.exe` and adds a Start menu shortcut to
+`Driga.exe`. The app is a plain archive file, not an archive binary, because a
+`Driga.exe` shim would collide with `driga.exe` on case-insensitive Windows and
+make `driga` open the app.
 
 For manual installation, download the archive or Linux package for your
 OS/architecture and `driga_<version>_checksums.txt` from

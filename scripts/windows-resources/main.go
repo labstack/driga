@@ -22,9 +22,12 @@ func main() {
 	root := flag.String("root", ".", "repository root")
 	version := flag.String("version", "dev", "full release or snapshot version, without v")
 	flag.Parse()
-	if err := generate(*root, filepath.Join(*root, "cmd", "driga"), *version); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+	// The CLI and the Windows app carry the same icon and version resources.
+	for dir, file := range map[string]string{"driga": "driga.exe", "driga-app": "Driga.exe"} {
+		if err := generate(*root, filepath.Join(*root, "cmd", dir), *version, file); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 	}
 }
 
@@ -46,16 +49,16 @@ func numericVersion(version string) (string, error) {
 	return strings.Join(parts[1:4], ".") + ".0", nil
 }
 
-func versionStrings(version string) map[string]string {
+func versionStrings(version, file string) map[string]string {
 	return map[string]string{
 		"ProductName": "Driga", "FileDescription": "Driga",
 		"CompanyName": "LabStack LLC", "LegalCopyright": "Copyright 2026 LabStack LLC",
-		"OriginalFilename": "driga.exe", "InternalName": "driga",
+		"OriginalFilename": file, "InternalName": strings.TrimSuffix(strings.ToLower(file), ".exe"),
 		"FileVersion": version, "ProductVersion": version,
 	}
 }
 
-func generate(root, output, version string) error {
+func generate(root, output, version, file string) error {
 	numeric, err := numericVersion(version)
 	if err != nil {
 		return err
@@ -71,7 +74,7 @@ func generate(root, output, version string) error {
 	resources := map[string]any{
 		"RT_GROUP_ICON": map[string]any{"#1": map[string]any{"0000": "murmur.ico"}},
 		"RT_VERSION": map[string]any{"#1": map[string]any{"0000": map[string]any{
-			"fixed": fixed, "info": map[string]any{"0409": versionStrings(version)},
+			"fixed": fixed, "info": map[string]any{"0409": versionStrings(version, file)},
 		}}},
 	}
 	body, err := json.Marshal(resources)
