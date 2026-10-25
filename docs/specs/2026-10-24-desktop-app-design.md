@@ -161,14 +161,13 @@ stay. Alpha: no compatibility path.
   (Keyboard Shortcuts, Documentation opens driga.dev in the browser). Ctrl
   replaces Cmd on Windows and Linux. Menu items send the page's existing
   commands (the same functions its `m`, `t`, `s`, `/` keys call).
-- **Tray.** Template icon from the Driga mark. macOS shows the needs-you count
-  as its title. Menu: Open Driga, the first five needs (each opens that
+- **Tray.** An icon only, never text: the Driga mark (a template on macOS),
+  with a dot while anything needs you. Menu: Open Driga, the first five needs (each opens that
   session), collector status ("Collecting", or who else is, or the error),
   Quit. Off with `app.tray = false`.
-- **Count.** Dock badge on macOS, launcher badge on Linux where supported.
-  Windows has neither a tray title nor a badge in mygo, so the count shows in
-  the tray tooltip and the tray menu's first line, and the tray icon switches
-  to a variant with a dot while anything needs you.
+- **Count.** Dock badge on macOS, launcher badge on Linux where supported. On
+  every platform the tray tooltip and the tray menu's first line say how many
+  need you.
 - **Dialogs.** Stop asks with a native dialog parented to the window ("Stop
   ‹title›?" Stop / Cancel). Every `confirm()` in the page becomes a native
   dialog.
