@@ -3,21 +3,48 @@ package panel
 import "fmt"
 
 // HeaderID is the app's header: the few numbers that say whether anything
-// needs the user, shown above Chat on every view. People change it like any
-// dashboard, by asking Chat or in the app. Every other dashboard is one Chat
-// made.
-const HeaderID = "header"
+// needs the user, shown on every view. HomeID is the dashboard the app opens
+// on, with Chat beside it. People change both like any dashboard, by asking
+// Chat or in the app; every other dashboard is one they or Chat made.
+const (
+	HeaderID = "header"
+	HomeID   = "home"
+)
 
 // BuiltinIDs are the dashboards Driga ships. Until the user saves one, its
-// spec comes from here.
-var BuiltinIDs = []string{HeaderID}
+// spec comes from here; deleting it brings the shipped one back.
+var BuiltinIDs = []string{HeaderID, HomeID}
 
 // Builtin returns a shipped dashboard by id.
 func Builtin(id string) (Dashboard, bool) {
-	if id == HeaderID {
+	switch id {
+	case HeaderID:
 		return Header(), true
+	case HomeID:
+		return Home(), true
 	}
 	return Dashboard{}, false
+}
+
+// Home follows what people supervising agents need most, after the counts
+// the header already shows: what waits on them and what finished, runaway
+// processes, agents that look stuck, work in flight, then memory.
+func Home() Dashboard {
+	scope := []Filter{{Column: "project", Value: "$project"}, {Column: "machine", Value: "$machine"}}
+	with := func(f ...Filter) []Filter { return append(f, scope...) }
+	return Dashboard{
+		Name:        "Home",
+		Description: "What needs you, what finished, what is running away, and what is in flight.",
+		Variables:   []Variable{{Name: "project", Field: "project"}, {Name: "machine", Field: "machine"}},
+		Panels: []Panel{
+			{ID: "inbox", Title: "Inbox", Description: "Waits first, longest waiting first, then completions to review.", Viz: "inbox", Source: "inbox", Where: with(), Width: 7, Height: "m"},
+			{ID: "orphans", Title: "Leftover process trees", Description: "Helper processes whose agent is gone. Only verified idle trees can be stopped.", Viz: "list", Source: "orphans", Columns: []string{"signature", "processes", "rss_bytes", "verified"}, Sort: "-rss_bytes", Where: []Filter{{Column: "machine", Value: "$machine"}}, Width: 5, Height: "m"},
+			{ID: "stuck", Title: "Quiet longer than expected", Description: "Busy sessions with no new activity past stalled_after; suspected, not proven.", Viz: "table", Source: "sessions", Columns: []string{"id", "title", "agent", "project", "age", "last_activity_at"}, Sort: "last_activity_at", Where: with(Filter{Column: "label", Value: "stalled?"}), Width: 12, Height: "s"},
+			{ID: "sessions", Title: "Sessions", Viz: "table", Source: "sessions", Columns: []string{"id", "title", "label", "agent", "project", "branch", "age", "mem_bytes"}, Sort: "-last_activity_at", Where: with(), Width: 12, Height: "m"},
+			{ID: "memory", Title: "Memory by project", Viz: "bar", Source: "costs", By: "project", Measure: "sum:mem_bytes", Width: 6, Height: "m"},
+			{ID: "machine_memory", Title: "Machine memory used", Viz: "timeseries", Source: "activity", Measure: "max:mem_used_bytes", Where: []Filter{{Column: "machine", Value: "$machine"}}, Width: 6, Height: "m"},
+		},
+	}
 }
 
 // Header's metrics follow what people supervising agents need most: what

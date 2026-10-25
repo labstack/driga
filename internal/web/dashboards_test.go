@@ -14,7 +14,7 @@ func TestDashboardAPI(t *testing.T) {
 		t.Fatal(err)
 	}
 	var list struct{ Dashboards []dashboard.Summary }
-	if w := postJSON(s, "/app/api/list", `{}`); json.Unmarshal(w.Body.Bytes(), &list) != nil || len(list.Dashboards) != 1 || list.Dashboards[0].ID != panel.HeaderID {
+	if w := postJSON(s, "/app/api/list", `{}`); json.Unmarshal(w.Body.Bytes(), &list) != nil || len(list.Dashboards) != len(panel.BuiltinIDs) || list.Dashboards[0].ID != panel.HeaderID {
 		t.Fatalf("list: %d %s", w.Code, w.Body)
 	}
 	if w := postJSON(s, "/app/api/open", `{}`); w.Code != 404 {

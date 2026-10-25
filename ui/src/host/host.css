@@ -4,9 +4,8 @@
 @font-face { font-family: "IBM Plex Mono"; src: url("/static/fonts/ibm-plex-mono-latin-600-normal.woff2") format("woff2"); font-weight: 500 700; font-display: swap; }
 
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-.shell { min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; background: var(--flow-canvas, var(--bg)); }
+.shell { height: 100vh; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); background: var(--flow-canvas, var(--bg)); }
 .shell.with-chat { grid-template-columns: minmax(0, 1fr) 400px; }
-.shell.solo { height: 100vh; grid-template-rows: auto auto 1fr; }
 .top { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 10px 16px; background: var(--pane); border-bottom: 1px solid var(--raise); }
 .mark { width: 22px; height: 22px; border-radius: 6px; background: #d20f39; display: flex; align-items: center; justify-content: center; }
 .metrics { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; min-width: 0; }
@@ -18,14 +17,17 @@
 .metric.hot .metric-value { color: var(--waiting); }
 .metric.hot > button:first-child { border-color: var(--waiting); }
 .metric-remove { position: absolute; top: -7px; right: -7px; width: 18px; height: 18px; padding: 0; border-radius: 9px; font-size: 11px; line-height: 1; }
-.solo-hint { margin: 10px auto 0; padding: 0 16px; max-width: 820px; width: 100%; box-sizing: border-box; }
+
 .picker { display: flex; align-items: center; gap: 6px; color: var(--dim); font-size: 12px; }
 .spacer { flex: 1; }
 button[aria-pressed="true"] { background: var(--raise); border-color: var(--rail); }
 .primary-button { background: var(--fg); color: var(--bg); border-color: var(--fg); font-weight: 600; }
 .primary-button:hover { background: var(--mid); }
 
-.main { grid-column: 1; grid-row: 2; min-width: 0; padding: 16px; }
+.main { grid-column: 1; grid-row: 2; min-width: 0; min-height: 0; padding: 12px; display: flex; flex-direction: column; overflow: auto; }
+.dashboard.fill { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 12px; }
+.dashboard.fill .cell { min-width: 0; min-height: 0; display: flex; }
+.dashboard.fill .cell > .panel { flex: 1; min-height: 0; }
 .hint { margin: 0 0 10px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .dashboard .cell { position: relative; }
 .dashboard.editing .panel > header { cursor: grab; }
@@ -33,9 +35,7 @@ button[aria-pressed="true"] { background: var(--raise); border-color: var(--rail
 .dashboard .remove { position: absolute; top: 6px; right: 6px; width: 26px; height: 26px; padding: 0; border-radius: 6px; }
 .react-grid-item.react-grid-placeholder { background: var(--accent); opacity: 0.15; border-radius: 10px; }
 
-.chat { grid-column: 2; grid-row: 2; display: flex; flex-direction: column; min-height: 0; max-height: calc(100vh - 49px); position: sticky; top: 0; background: var(--pane); border-left: 1px solid var(--line); }
-.shell.solo .chat { grid-column: 1; grid-row: 3; position: static; max-height: none; min-height: 0; width: 100%; max-width: 820px; margin: 0 auto; border-left: 0; background: transparent; }
-.shell.solo .chat-head { display: none; }
+.chat { grid-column: 2; grid-row: 2; display: flex; flex-direction: column; min-height: 0; background: var(--pane); border-left: 1px solid var(--line); }
 .chat-head { display: flex; align-items: baseline; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--raise); }
 .chat-head h2 { margin: 0; font-size: 14px; }
 .chat-head button { margin-left: auto; width: 28px; padding: 0; }
@@ -57,6 +57,9 @@ button[aria-pressed="true"] { background: var(--raise); border-color: var(--rail
 .toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); margin: 0; padding: 8px 14px; border-radius: 8px; background: var(--raise); border: 1px solid var(--line); }
 
 @media (max-width: 960px) {
+  .shell { height: auto; min-height: 100vh; }
   .shell.with-chat { grid-template-columns: minmax(0, 1fr); }
+  .main { overflow: visible; }
+  .dashboard.fill { min-height: 80vh; }
   .chat { grid-column: 1; grid-row: auto; position: static; max-height: none; border-left: 0; border-top: 1px solid var(--line); }
 }

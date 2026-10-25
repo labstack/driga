@@ -764,18 +764,21 @@ driga app    # open Driga, or bring the running app forward
 ```
 
 The app runs in a native window with the system webview and opens no network
-port. It is Chat, with a row of metrics above it: by default Need you, To
-review, Possibly stuck, Leftover processes and Reclaimable. Click a metric to
-ask Chat about it. Change the row by asking Chat ("add cost today to the
-header"), or remove a metric in Edit. The header holds only single numbers,
-eight at most.
+port. It opens on Home, a dashboard that fills the window, with Chat docked
+beside it and a row of metrics above: by default Need you, To review, Possibly
+stuck, Leftover processes and Reclaimable. Click a metric to ask Chat about it.
+Change the row by asking Chat ("add cost today to the header"), or remove a
+metric in Edit. The header holds only single numbers, eight at most.
 
-Chat opens with a brief: pending permission prompts with Allow and Deny, the
-inbox, and suggested questions. Ask it for a view and it answers with live
-panels; Save as dashboard keeps one, and Chat can create, edit or delete
-dashboards for you. Every dashboard is one you or Chat made. Open one from the
-picker in the header and Chat docks beside it. In Edit, drag and resize panels,
-remove them, or delete the dashboard. Every save is a version Chat can restore.
+Home shows the inbox with pending permission prompts (Allow or Deny), leftover
+process trees, sessions that look stuck, every session, and memory. Panels take
+the rows their content needs and stretch to leave no empty space; long lists
+scroll inside their panel. Chat opens with suggested questions. Ask it for a
+view and it answers with live panels: add them to the open dashboard, or save
+them as a new one. Chat can also create, edit or delete dashboards for you;
+open one from the picker in the header. In Edit, drag and resize panels, remove
+them, or delete the dashboard; resetting Home brings back the default. Every
+save is a version Chat can restore.
 
 Panel rows act as the TUI does: open or stop a local session, kill a verified
 idle process tree, remove a ready cleanup candidate, summarize a project. Stop

@@ -20,7 +20,7 @@ func TestHeaderExistsBeforeItIsSaved(t *testing.T) {
 		t.Fatalf("edited header = %+v, %v", edited, err)
 	}
 	list, err := s.List()
-	if err != nil || len(list) != 1 || list[0].ID != panel.HeaderID || list[0].Version != 1 {
+	if err != nil || len(list) != len(panel.BuiltinIDs) || list[0].ID != panel.HeaderID || list[0].Version != 1 || list[1].ID != panel.HomeID {
 		t.Fatalf("list = %+v, %v", list, err)
 	}
 	var problems panel.Problems

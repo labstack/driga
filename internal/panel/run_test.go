@@ -62,6 +62,16 @@ func TestHeaderRuns(t *testing.T) {
 	}
 }
 
+func TestHomeRuns(t *testing.T) {
+	results := run(t, Home(), nil)
+	if len(results) != len(Home().Panels) {
+		t.Fatalf("results = %d", len(results))
+	}
+	if got := len(results["sessions"].Frame.Rows); got != 3 {
+		t.Fatalf("sessions = %d, want 3 including workers", got)
+	}
+}
+
 func TestInboxOrder(t *testing.T) {
 	inbox := run(t, Dashboard{Name: "x", Panels: []Panel{{ID: "inbox", Title: "Inbox", Viz: "inbox", Source: "inbox"}}}, nil)["inbox"].Frame
 	id := slices.IndexFunc(inbox.Columns, func(c Column) bool { return c.Name == "id" })
