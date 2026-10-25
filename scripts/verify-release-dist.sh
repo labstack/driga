@@ -103,7 +103,10 @@ done
 if command -v dpkg-deb >/dev/null 2>&1; then
   for arch in amd64 arm64; do
     deb="${dist_dir}/driga_${release_version}_linux_${arch}.deb"
-    if ! dpkg-deb -c "$deb" | grep -q ' \./usr/bin/driga$'; then
+    # Read the whole listing first: grep -q stops early, and with pipefail the
+    # writer's broken pipe would fail the check.
+    contents=$(dpkg-deb -c "$deb")
+    if ! grep -q ' \./usr/bin/driga$' <<<"$contents"; then
       echo "Debian package does not install /usr/bin/driga: $(basename "$deb")" >&2
       exit 1
     fi
