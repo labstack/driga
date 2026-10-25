@@ -12,6 +12,11 @@ const covered: Record<string, string> = {
   "./theme/Provider.tsx": "the theme provider, which the preview wraps every story in",
 };
 
+// Stories whose component is not one the app renders, and why.
+const specimens: Record<string, string> = {
+  "theme-tokens": "a sample of the theme's tokens, drawn with Mantine in the app's theme",
+};
+
 // One story of each panel kind, by its export in Components/Panel.
 const vizStories: Record<Viz, string> = { stat: "Stat", gauge: "Gauge", timeseries: "Timeseries", bar: "Bar", table: "Table", list: "List", inbox: "Inbox", cards: "Cards", timeline: "Timeline", text: "Notes" };
 
@@ -29,6 +34,20 @@ describe("catalog", () => {
     const sources = import.meta.glob<string>(["./**/*.{ts,tsx}", "!./**/*.stories.tsx", "!./**/*.test.{ts,tsx}", "!./fixtures/**", "!./host/flows/**"], { query: "?raw", import: "default", eager: true });
     const importing = Object.entries(sources).filter(([, text]) => /(?:from|import)\s*\(?\s*["'][^"']*\/fixtures\//.test(text)).map(([file]) => file);
     expect(importing).toEqual([]);
+  });
+  it("renders the app's own components: each story's component is an app export", () => {
+    // The entries mount the page when imported, so they stay out.
+    const app = import.meta.glob<Record<string, unknown>>(["./**/*.tsx", "!./**/*.stories.tsx", "!./**/*.test.tsx", "!./fixtures/**", "!./**/main.tsx"], { eager: true });
+    const exported = new Set(Object.values(app).flatMap(m => Object.values(m)));
+    const stories = import.meta.glob<{ default: { id: string; component?: unknown } }>("./**/*.stories.tsx", { eager: true });
+    const foreign = Object.entries(stories)
+      .filter(([, m]) => !specimens[m.default.id] && !exported.has(m.default.component))
+      .map(([file, m]) => `${file} (${m.default.id})`);
+    expect(foreign).toEqual([]);
+  });
+  it("lists only specimens that are stories", () => {
+    const ids = Object.values(import.meta.glob<{ default: { id: string } }>("./**/*.stories.tsx", { eager: true })).map(m => m.default.id);
+    expect(Object.keys(specimens).filter(id => !ids.includes(id))).toEqual([]);
   });
   it("has a story for every kind of panel", () => {
     const missing = Object.entries(vizStories).filter(([, name]) => !(name in panelStories)).map(([viz]) => viz);
