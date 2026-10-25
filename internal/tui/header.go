@@ -310,7 +310,7 @@ func (m *app) View() tea.View {
 	if !m.loaded {
 		body = "Loading…"
 		if _, ok := m.src.(*LiveSnapshotSource); ok {
-			body = "Collecting a snapshot (no collector running)…"
+			body = "Collecting a snapshot (the Driga service is not running)…"
 		}
 	}
 	if m.tab == chatTab {

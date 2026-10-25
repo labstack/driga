@@ -327,7 +327,7 @@ func (e *SchemaError) Fix() string {
 	case e.Newer:
 		return "upgrade driga to the version that created this database"
 	case e.Behind:
-		return "restart the collector so it applies the update: driga service restart"
+		return "restart the Driga service so it applies the update: driga service restart"
 	}
 	return resetCommand(e.Path, runtime.GOOS)
 }

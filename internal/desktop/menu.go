@@ -131,25 +131,19 @@ func needLabel(n int) string {
 	return fmt.Sprintf("%d need you", n)
 }
 
-// StatusLine says who collects, or why nothing does.
+// StatusLine says whether the Driga service runs, or why it does not.
 func StatusLine(st Status) string {
 	switch {
 	case st.RestartPending:
 		return "Restart Driga to finish updating"
-	case st.Collecting && st.Err != nil:
-		return clip("Collecting · "+st.Err.Error(), 80)
-	case st.Collecting:
-		return "Collecting"
+	case st.Running && st.Err != nil:
+		return clip("Driga service running · "+st.Err.Error(), 80)
+	case st.Running:
+		return "Driga service running"
 	case st.Err != nil:
-		return clip("Collector error: "+st.Err.Error(), 80)
-	case st.Owner.Kind != "":
-		who := map[string]string{"service": "the background service", "manual": "driga collect", "app": "another Driga app"}[st.Owner.Kind]
-		if who == "" {
-			who = "another process"
-		}
-		return fmt.Sprintf("Collected by %s (pid %d)", who, st.Owner.PID)
+		return clip("Driga service: "+st.Err.Error(), 80)
 	}
-	return "Starting the collector…"
+	return "Starting the Driga service…"
 }
 
 // clip shortens s to n runes, marking the cut.

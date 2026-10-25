@@ -5,34 +5,21 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"strings"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/labstack/driga/internal/web"
 )
 
-// A service the app could not remove keeps collecting, and the tray says how
-// to remove it.
-func TestServiceRemovalFailureInTray(t *testing.T) {
-	failed := errors.New("launchctl failed")
-	dataDir := t.TempDir()
-	s := &shell{goos: "darwin", homes: sameHomes, openService: func() (installedService, error) {
-		return &fakeService{installed: true, dataDir: dataDir, uninstallErr: failed}, nil
-	}}
-	if removed := s.removeService(dataDir); removed {
-		t.Fatal("reported a removal that failed")
+// A service the app could not install or start shows in the tray, whether
+// or not an earlier one still runs.
+func TestServiceErrorInTray(t *testing.T) {
+	s := &shell{serviceErr: errors.New("driga service install: denied")}
+	if line := StatusLine(s.trayStatus()); line != "Driga service: driga service install: denied" {
+		t.Errorf("tray says %q", line)
 	}
-	for _, st := range []Status{{}, {Collecting: true}} {
-		s.status = st
-		if line := StatusLine(s.trayStatus()); !strings.Contains(line, "run driga service uninstall") {
-			t.Errorf("status %+v: tray says %q", st, line)
-		}
-	}
-	// The supervisor's own error comes first.
-	s.status = Status{Err: errors.New("collector exited")}
-	if line := StatusLine(s.trayStatus()); line != "Collector error: collector exited" {
+	s.status = Status{Running: true}
+	if line := StatusLine(s.trayStatus()); line != "Driga service running · driga service install: denied" {
 		t.Errorf("tray says %q", line)
 	}
 }
@@ -71,64 +58,13 @@ func TestOpenAtLoginRegistersOnChangeOnly(t *testing.T) {
 	}
 }
 
-// fakeCollector counts the collector runs the shell starts and keeps each
-// running until it is stopped.
-type fakeCollector struct {
-	mu      sync.Mutex
-	runs    int
-	running int
-}
-
-func (f *fakeCollector) run(ctx context.Context) {
-	f.mu.Lock()
-	f.runs++
-	f.running++
-	f.mu.Unlock()
-	<-ctx.Done()
-	f.mu.Lock()
-	f.running--
-	f.mu.Unlock()
-}
-
-func (f *fakeCollector) state() (runs, running int) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return f.runs, f.running
-}
-
-func (f *fakeCollector) waitRunning(t *testing.T, runs int) {
-	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		if r, n := f.state(); r == runs && n == 1 {
-			return
-		}
-		time.Sleep(time.Millisecond)
-	}
-	r, n := f.state()
-	t.Fatalf("collector runs %d, running %d; want %d, 1", r, n, runs)
-}
-
-// A cancelled relaunch leaves the collector stopped: starting it again would
-// run the upgraded binary's collector under the old app, which may then read
-// a store the new one migrated. The tray says how to finish.
+// A cancelled relaunch keeps the app as it is, and the tray says how to
+// finish updating.
 func TestRelaunchCancelledWaitsForRestart(t *testing.T) {
 	os.Unsetenv("DRIGA_APP")
 	t.Cleanup(func() { os.Unsetenv("DRIGA_APP") })
-	collector := &fakeCollector{}
 	var during string
-	s := &shell{runCollector: collector.run, relaunchApp: func() bool {
-		if _, running := collector.state(); running != 0 {
-			t.Error("relaunched while the old collector ran")
-		}
-		during = os.Getenv("DRIGA_APP")
-		return false
-	}}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	s.ctx = ctx
-	s.startCollector(nil)
-	collector.waitRunning(t, 1)
+	s := &shell{relaunchApp: func() bool { during = os.Getenv("DRIGA_APP"); return false }, ctx: context.Background()}
 	if s.relaunch() {
 		t.Fatal("a cancelled relaunch reported as done")
 	}
@@ -138,11 +74,7 @@ func TestRelaunchCancelledWaitsForRestart(t *testing.T) {
 	if value, set := os.LookupEnv("DRIGA_APP"); set {
 		t.Fatalf("DRIGA_APP=%q left set after the cancelled quit", value)
 	}
-	time.Sleep(50 * time.Millisecond)
-	if runs, running := collector.state(); runs != 1 || running != 0 {
-		t.Fatalf("collector runs %d, running %d after a cancelled relaunch", runs, running)
-	}
-	s.status = Status{Err: errors.New("collector exited")}
+	s.status = Status{Running: true}
 	if line := StatusLine(s.trayStatus()); line != "Restart Driga to finish updating" {
 		t.Fatalf("tray says %q", line)
 	}
@@ -175,37 +107,18 @@ func TestUpgradeWatchRetriesCancelledRelaunch(t *testing.T) {
 
 func TestRelaunchKeepsALoginLaunchMarked(t *testing.T) {
 	t.Setenv("DRIGA_APP", "1")
-	s := &shell{runCollector: (&fakeCollector{}).run, relaunchApp: func() bool { return false }, ctx: context.Background()}
+	s := &shell{relaunchApp: func() bool { return false }, ctx: context.Background()}
 	s.relaunch()
-	s.stopCollector()
 	if os.Getenv("DRIGA_APP") != "1" {
 		t.Fatal("DRIGA_APP the app started with was removed")
 	}
 }
 
-// An app in an isolated home says nothing about the service in the tray.
-func TestIsolatedHomeHasNoServiceHint(t *testing.T) {
-	s := &shell{goos: "darwin", homes: func() (string, string) { return "/tmp/fake", "/Users/someone" },
-		openService: func() (installedService, error) { t.Fatal("opened the service"); return nil, nil }}
-	if s.removeService(t.TempDir()) {
-		t.Fatal("removed")
-	}
-	if line := StatusLine(s.trayStatus()); line != "Starting the collector…" {
-		t.Fatalf("tray says %q", line)
-	}
-}
-
-// Once the app's final stop has run, nothing starts the collector again.
-func TestNoCollectorAfterQuit(t *testing.T) {
-	collector := &fakeCollector{}
-	s := &shell{runCollector: collector.run, ctx: context.Background()}
-	s.startCollector(nil)
-	collector.waitRunning(t, 1)
-	s.finish()
-	s.startCollector(nil)
-	time.Sleep(50 * time.Millisecond)
-	if runs, running := collector.state(); runs != 1 || running != 0 {
-		t.Fatalf("collector runs %d, running %d after quit", runs, running)
+// An app in an isolated home leaves the login service alone.
+func TestIsolatedHomeLeavesTheService(t *testing.T) {
+	s := &shell{homes: func() (string, string) { return "/tmp/fake", "/Users/someone" }, serviceExe: "/nonexistent/driga"}
+	if err := s.ensureService(context.Background()); !errors.Is(err, errIsolatedHome) {
+		t.Fatalf("ensureService: %v", err)
 	}
 }
 

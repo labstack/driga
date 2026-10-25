@@ -4,7 +4,7 @@ description: Install the Driga app and CLI with Homebrew on macOS, packages on L
 summary: Homebrew cask on macOS, .deb/.rpm and archives on Linux, Scoop on Windows (experimental), and source builds.
 read_when:
   - You are installing Driga for the first time.
-  - You are upgrading from a release that used the collector service on a desktop.
+  - You are upgrading from a release that used the Driga service on a desktop.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components";
@@ -19,18 +19,17 @@ brew install --cask labstack/tap/driga
 ```
 
 The cask installs `Driga.app` in `/Applications` and links `driga` to the CLI
-inside it. Open Driga from Finder or Spotlight, or run `driga app`. The app
-runs the collector, sends [desktop notifications](/guides/notifications) and
-starts at login. After `brew upgrade`, a running app relaunches itself on the
-new version.
-
-If an earlier release installed the collector service, the app removes it on
-its first launch, says so once, and collects itself.
+inside it. Open Driga from Finder or Spotlight, or run `driga app`. Its first
+launch installs the Driga service, `drigad`, which collects from login, sends
+[desktop notifications](/guides/notifications) and runs Chat whether or not the
+app is open. After `brew upgrade`, a running app relaunches itself on the new
+version and restarts the service on it. The first launch also removes the
+collector an earlier release installed.
 
 The app reads `DRIGA_*` variables from its own environment, not your shell
-profile: `driga app` passes the terminal's on to it. It logs to the collector
-log, which `driga service logs` prints, and `driga service install` refuses
-while the app collects.
+profile: `driga app` passes the terminal's on to it, and the service it
+installs keeps them. It logs to the Driga service log, which `driga service logs`
+prints.
 
 </TabItem>
 <TabItem label="Linux">
@@ -45,7 +44,7 @@ recommend GTK 3, WebKitGTK and an AppIndicator library for the app. The tray
 needs a desktop with a StatusNotifierItem host; GNOME needs an extension. The
 desktop app on Linux is best effort.
 
-On a VM or server, run the collector as a systemd user service instead, and
+On a VM or server, run the Driga service as a systemd user service instead, and
 allow it to run after logout:
 
 ```sh
@@ -53,7 +52,7 @@ driga service install
 loginctl enable-linger "$USER"
 ```
 
-Without systemd, run `driga collect` under tmux or nohup instead.
+Without systemd, run `driga service run` under tmux or nohup instead.
 
 </TabItem>
 <TabItem label="Windows">
@@ -69,7 +68,7 @@ Scoop installs the app, `Driga.exe`, with a Start menu shortcut, and puts the
 CLI, `bin\driga.exe`, on `PATH` as `driga`. Archives with both are also on
 [GitHub Releases](https://github.com/labstack/driga/releases). Keep them at a
 stable path without shell metacharacters before installing hooks or the
-service. The app's first launch removes a collector task installed earlier and
+service. The app's first launch removes the Driga service task installed earlier and
 says so once.
 
 </TabItem>
@@ -93,7 +92,7 @@ archive or a checkout.
 ## Before hooks or the service
 
 Keep Git on `PATH` and the installed binary at a stable absolute path. Hooks
-and the collector service record that path; moving the binary afterwards breaks
+and the Driga service record that path; moving the binary afterwards breaks
 them until you reinstall them.
 
 Check the install:

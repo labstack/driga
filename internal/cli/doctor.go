@@ -141,18 +141,18 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 	restart := restartHint(goos, owner, held)
 	switch {
 	case err != nil:
-		add("collector", "fail", err.Error(), "check access to "+d.DataDir+"/driga.lock")
+		add("service", "fail", err.Error(), "check access to "+d.DataDir+"/driga.lock")
 	case !held:
-		add("collector", "warn", "not running; snapshot mode has no history", collectorHint(goos))
+		add("service", "warn", "not running; snapshot mode has no history", collectorHint(goos))
 	case d.Store == nil:
-		add("collector", "warn", "lock held but database unavailable", restart)
+		add("service", "warn", "service lock held but its database is unavailable", restart)
 	default:
 		raw, err := d.Store.Meta("last_pass_at")
 		last, parseErr := time.Parse(time.RFC3339Nano, raw)
 		if err != nil || parseErr != nil || last.After(d.Now) || d.Now.Sub(last) > 3*intervals.Procs {
-			add("collector", "warn", "lock held but last pass is missing or stale", restart)
+			add("service", "warn", "service lock held but its last pass is missing or stale", restart)
 		} else {
-			add("collector", "ok", fmt.Sprintf("running (%s, pid %d); last pass %s ago", owner.Kind, owner.PID, d.Now.Sub(last).Round(time.Second)), "")
+			add("service", "ok", fmt.Sprintf("running (%s, pid %d); last pass %s ago", owner.Kind, owner.PID, d.Now.Sub(last).Round(time.Second)), "")
 		}
 	}
 	if d.Store != nil {
@@ -188,7 +188,7 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 		}
 		procs, err := d.Store.Procs()
 		if err != nil {
-			add("collector_rss", "fail", err.Error(), "check database access; "+restart)
+			add("service_rss", "fail", err.Error(), "check database access; "+restart)
 		} else {
 			sigs, _ := signatures.Load(nil)
 			for _, p := range procs {
@@ -217,7 +217,7 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 			for _, p := range procs {
 				// The lock owner is this data directory's collector whatever its
 				// binary is called; other collectors are recognised by name.
-				owned := held && p.PID > 0 && int(p.PID) == owner.PID && alive(p.PID, p.StartTime) && len(p.Argv) >= 2 && p.Argv[1] == "collect"
+				owned := held && p.PID > 0 && int(p.PID) == owner.PID && alive(p.PID, p.StartTime) && serviceArgv(p.Argv)
 				if !owned {
 					if isCollectorProc(p) {
 						others++
@@ -233,7 +233,7 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 				found = true
 			}
 			if others > 0 {
-				add("other_collectors", "info", fmt.Sprintf("%d other collector processes; excluded from this data directory's memory budget", others), "")
+				add("other_services", "info", fmt.Sprintf("%d other Driga service processes; excluded from this data directory's memory budget", others), "")
 			}
 
 			status, fix, detail := "ok", "", fmt.Sprintf("%.1f MB", float64(rss)/1e6)
@@ -241,11 +241,11 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 				detail = fmt.Sprintf("%.1f MB footprint (RSS %.1f MB)", float64(footprint)/1e6, float64(rss)/1e6)
 			}
 			if !found {
-				status, detail, fix = "warn", "collector absent from process snapshot", restart
+				status, detail, fix = "warn", "the Driga service is absent from the process snapshot", restart
 			} else if budget > 50_000_000 {
 				status, fix = "warn", restart+"; inspect driga service logs"
 			}
-			add("collector_rss", status, detail, fix)
+			add("service_rss", status, detail, fix)
 		}
 	}
 	if info, err := os.Stat(filepath.Join(d.Home, ".gemini", "antigravity-cli")); err == nil && info.IsDir() {
@@ -419,9 +419,9 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 		if d.ServicePlistStale != nil {
 			stale, err := d.ServicePlistStale()
 			if err != nil {
-				add("service", "warn", err.Error(), "check collector plist; driga service install")
+				add("service_definition", "warn", err.Error(), "check the service plist; driga service install")
 			} else if stale {
-				add("service", "warn", "collector plist points at a stale binary", "driga service install")
+				add("service_definition", "warn", "the service plist points at a stale binary", "driga service install")
 			}
 		}
 		status := d.NotificationStatus
@@ -462,7 +462,7 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 
 func doctorChatSocket(d DoctorDeps, held bool) Check {
 	path := chat.SocketPath(d.DataDir)
-	c := Check{Name: "chat socket", Status: "info", Detail: path + "; optional, collector not running"}
+	c := Check{Name: "chat socket", Status: "info", Detail: path + "; optional, the Driga service is not running"}
 	if held {
 		c.Status, c.Detail = "ok", path
 		if _, err := os.Lstat(path); err != nil {
@@ -481,7 +481,7 @@ func doctorChatSocket(d DoctorDeps, held bool) Check {
 		}
 	}
 	if c.Status == "warn" {
-		c.Fix = "check the socket directory permissions; restart the collector to retry Chat"
+		c.Fix = "check the socket directory permissions; restart the Driga service to retry Chat"
 	}
 	return c
 }
@@ -510,7 +510,7 @@ func doctorIntake(d DoctorDeps, held bool) Check {
 		if count == "" || count == "0" {
 			c.Detail = "no OTLP records accepted since start"
 		}
-		c.Fix = "check collector logs for otlp_request_rejected"
+		c.Fix = "check driga service logs for otlp_request_rejected"
 	}
 	c.Detail += "; rejected: " + rejected
 	var reasons []string
@@ -537,7 +537,7 @@ func doctorIntake(d DoctorDeps, held bool) Check {
 			if s.Name == "otlp" && s.LastError != "" && !s.LastErrorAt.Before(s.LastOKAt) {
 				c.Status = "warn"
 				c.Detail += "; last error: " + s.LastError
-				c.Fix = "check intake.listen and restart the collector"
+				c.Fix = "check intake.listen and run driga service restart"
 			}
 		}
 	}
@@ -570,7 +570,7 @@ func doctorLinuxChecks(d DoctorDeps) []Check {
 	if pid, ok := platform.UserSubreaper(root, uid); ok {
 		checks = append(checks, Check{"systemd_user", "ok", fmt.Sprintf("systemd --user pid %d", pid), ""})
 	} else {
-		checks = append(checks, Check{"systemd_user", "warn", "no systemd user instance found", "start a systemd user session or run driga collect in the foreground"})
+		checks = append(checks, Check{"systemd_user", "warn", "no systemd user instance found", "start a systemd user session or run drigad in the foreground"})
 	}
 	linger := d.LingerDir
 	if linger == "" {
@@ -578,22 +578,22 @@ func doctorLinuxChecks(d DoctorDeps) []Check {
 	}
 	info, err := os.Stat(filepath.Join(linger, username))
 	if username != "" && err == nil && info.Mode().IsRegular() {
-		checks = append(checks, Check{"linger", "ok", "enabled; collector can run after logout", ""})
+		checks = append(checks, Check{"linger", "ok", "enabled; the Driga service runs after logout", ""})
 	} else {
-		checks = append(checks, Check{"linger", "warn", "not enabled; collector may stop after logout", "loginctl enable-linger $USER"})
+		checks = append(checks, Check{"linger", "warn", "not enabled; the Driga service may stop after logout", "loginctl enable-linger $USER"})
 	}
 	return checks
 }
 
+// isCollectorProc reports whether a process is this machine's Driga service.
 func isCollectorProc(p model.Proc) bool {
-	if p.Exe != "" {
-		if !strings.EqualFold(filepath.Base(p.Exe), "driga") && !strings.EqualFold(filepath.Base(p.Exe), "driga.exe") {
+	if p.Exe != "" && !service.IsDaemon(p.Exe) {
+		name := strings.ToLower(strings.TrimSuffix(filepath.Base(p.Exe), filepath.Ext(p.Exe)))
+		if name != "driga" && !strings.HasPrefix(name, "driga-") {
 			return false
 		}
-
 	}
-	args := p.Argv
-	return len(args) >= 2 && (filepath.Base(args[0]) == "driga" || strings.EqualFold(filepath.Base(args[0]), "driga.exe")) && args[1] == "collect"
+	return serviceArgv(p.Argv)
 }
 
 // runtimeDoctor gives CLI and MCP diagnostics the same read-only probes.
@@ -607,7 +607,7 @@ func runtimeDoctor(ctx context.Context, cfg config.Config, now time.Time, reader
 			if err != nil {
 				return false, err
 			}
-			return service.PlistStale(filepath.Join(d.Home, "Library", "LaunchAgents", "run.driga.collector.plist"), stablePath(bin))
+			return service.PlistStale(filepath.Join(d.Home, "Library", "LaunchAgents", service.Label("darwin")+".plist"), stablePath(bin))
 		}
 	}
 	if runtime.GOOS == "windows" {
@@ -683,4 +683,16 @@ func (DoctorCmd) Run(g *Globals) error {
 		}
 	}
 	return nil
+}
+
+// serviceArgv reports whether a process's arguments are the Driga service's:
+// drigad, or driga service run.
+func serviceArgv(args []string) bool {
+	if len(args) == 0 {
+		return false
+	}
+	if service.IsDaemon(args[0]) {
+		return true
+	}
+	return len(args) >= 3 && args[1] == "service" && args[2] == "run"
 }

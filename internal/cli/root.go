@@ -60,8 +60,7 @@ type Root struct {
 	Doctor     DoctorCmd   `cmd:"" help:"Check setup and collection health."`
 	Init       InitCmd     `cmd:"" help:"Guide optional setup."`
 	Config     ConfigCmd   `cmd:"" help:"Inspect or edit configuration."`
-	Collect    CollectCmd  `cmd:"" help:"Run the collector (what launchd runs)."`
-	Service    ServiceCmd  `cmd:"" help:"Manage the collector service."`
+	Service    ServiceCmd  `cmd:"" help:"Run or manage the Driga service (drigad)."`
 	Hooks      HooksCmd    `cmd:"" help:"Manage agent hooks."`
 	Fleet      FleetCmd    `cmd:"" help:"Inspect fleet identity, serving status and viewers."`
 	Hook       HookCmd     `cmd:"" hidden:"" help:"Record an agent hook."`

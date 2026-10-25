@@ -28,7 +28,7 @@ func identityLock(dataDir string) (*os.File, error) {
 	}
 	if err := filelock.Lock(f, true); err != nil {
 		f.Close()
-		return nil, fmt.Errorf("stop the collector before identity maintenance or purging: %w", err)
+		return nil, fmt.Errorf("stop the Driga service before identity maintenance or purging: %w", err)
 	}
 	return f, nil
 }

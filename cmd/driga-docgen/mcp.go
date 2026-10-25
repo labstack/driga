@@ -97,7 +97,7 @@ func renderMCP() (string, error) {
 	)
 	b.WriteString("`driga mcp` serves read tools and panel tools over stdio. Every read tool\n")
 	b.WriteString("answers with the same schema-2 view envelope as the CLI's `--json` output, and reading never\n")
-	b.WriteString("acknowledges inbox items. Without a running collector the tools answer from a\n")
+	b.WriteString("acknowledges inbox items. Without the Driga service running the tools answer from a\n")
 	b.WriteString("labelled one-shot snapshot with no history. Registration is covered in\n")
 	b.WriteString("[Connect an agent over MCP](/guides/mcp).\n\n")
 

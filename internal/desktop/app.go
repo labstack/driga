@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -17,7 +16,6 @@ import (
 
 	"github.com/egoist/mygo"
 	"github.com/labstack/driga/internal/chat"
-	"github.com/labstack/driga/internal/collector"
 	"github.com/labstack/driga/internal/config"
 	"github.com/labstack/driga/internal/secfile"
 	"github.com/labstack/driga/internal/store"
@@ -42,45 +40,37 @@ type Options struct {
 	// cleanup, the machine scope and activity. Run sets its Chat, Confirm,
 	// OpenExternal and Theme.
 	Web web.Options
-	// Chat defaults to the running collector's chat broker, dialed on use.
+	// Chat defaults to the Driga service's chat broker, dialed on use.
 	Chat chat.Client
-	// Supervisor runs the collector. Run sets its Notify and Status, and
-	// fills Start, ReadOwner, Ready and Executable when they are unset.
-	Supervisor *Supervisor
-	Config     config.Config
+	// ServiceExecutable is the driga executable that installs and controls
+	// the Driga service; empty means this one.
+	ServiceExecutable string
+	Config            config.Config
 	// ConfigErr is why the settings file could not be read; Config then
 	// holds the defaults, and the app says so once it is ready.
 	ConfigErr error
 	Version   string
 }
 
-// shell is the running app: the main window, the tray and the collector.
+// shell is the running app: the main window and the tray, a client of the
+// Driga service.
 type shell struct {
 	opts    Options
 	source  web.Source
 	goos    string
 	dataDir string
 	host    *windowHost
-	notes   notifier
 	upgrade *upgradeWatch
-	// ctx lives as long as the app; the collector runs under it.
-	ctx context.Context
-	// runCollector runs the supervisor until its context ends.
-	runCollector func(context.Context)
-	// openService opens the background service the app replaces.
-	openService func() (installedService, error)
+	ctx     context.Context
+	// serviceExe is the driga executable the service is installed from.
+	serviceExe string
 	// homes returns HOME and the account's home directory.
 	homes func() (string, string)
-	// loginEnv is the login environment the collector starts with.
+	// loginEnv is the login environment the service is installed with.
 	loginEnv *loginEnv
 	// relaunchApp quits and starts the app again, and reports false when
 	// the quit was cancelled.
 	relaunchApp func() bool
-
-	collectMu  sync.Mutex
-	finished   bool // The app's final stop ran: no collector starts again.
-	stopCancel context.CancelFunc
-	stopped    chan struct{}
 
 	mu         sync.Mutex
 	cfg        config.Config
@@ -123,17 +113,15 @@ func Run(opts Options) error {
 	if err != nil {
 		return err
 	}
-	exe, err := s.prepareSupervisor(dataDir)
-	if err != nil {
-		return err
-	}
-	s.upgrade = newUpgradeWatch(exe, opts.Version)
-	s.openService, s.homes = openUserService(exe), accountHomes
-	s.runCollector = func(ctx context.Context) {
-		if err := opts.Supervisor.Run(ctx); err != nil {
-			slog.Warn("collector did not stop cleanly", "event", "collector_stop_failed", "err", err.Error())
+	s.serviceExe = opts.ServiceExecutable
+	if s.serviceExe == "" {
+		if s.serviceExe, err = os.Executable(); err != nil {
+			return err
 		}
 	}
+	s.upgrade = newUpgradeWatch(s.serviceExe, opts.Version)
+	s.homes = accountHomes
+	s.loginEnv = newLoginEnv(dataDir, LoginEnvironment)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -146,12 +134,6 @@ func Run(opts Options) error {
 	mygo.Theme.SetSource(themeSource(opts.Config.UI.Theme))
 	mygo.App.SetMenu(s.menu(MenuModel(s.goos)))
 	mygo.App.OnSecondInstance(func([]string, string) { s.host.Open() })
-	mygo.App.OnNotificationClick(func(id string) {
-		go func() {
-			rows := s.inboxRows()
-			mygo.RunOnMain(func() { openNotification(s.host, id, func() []view.InboxRow { return rows }) })
-		}()
-	})
 	mygo.App.OnActivate(func(visible bool) {
 		if !visible {
 			s.host.Open()
@@ -172,15 +154,11 @@ func Run(opts Options) error {
 			s.host.Open()
 		}
 		s.applyDock()
-		// The service's collector holds the lock until it stops; the
-		// supervisor then starts the app's own.
-		s.startCollector(s.replaceService)
+		go s.watchService(ctx)
 		go s.watchNeeds(ctx)
 		go s.upgrade.run(ctx, s.relaunch)
 	})
-	err = mygo.App.Run()
-	s.finish()
-	return err
+	return mygo.App.Run()
 }
 
 // openAfterLock takes the single-instance lock and only then opens the
@@ -199,69 +177,6 @@ func openAfterLock(lock func() bool, open func() (web.Source, func(), error)) (w
 	return source, closeSource, true, nil
 }
 
-// prepareSupervisor fills the supervisor's production defaults and wires its
-// reports to the shell. It returns the collector executable.
-func (s *shell) prepareSupervisor(dataDir string) (string, error) {
-	sup := s.opts.Supervisor
-	if sup == nil {
-		return "", errors.New("desktop: no collector supervisor")
-	}
-	if sup.Executable == "" {
-		exe, err := os.Executable()
-		if err != nil {
-			return "", err
-		}
-		sup.Executable = exe
-	}
-	if sup.Start == nil {
-		s.loginEnv = newLoginEnv(dataDir, LoginEnvironment)
-		sup.Start = func(ctx context.Context) (Child, error) {
-			// Without the login environment the collector still runs, with
-			// the app's own; the status says what is missing.
-			if s.upgrade != nil && s.upgrade.pending() {
-				return nil, errUpgradePending
-			}
-			env, err := s.loginEnv.get(ctx)
-			shadowed := shadowedKeys(env, os.Getenv)
-			s.mu.Lock()
-			s.envErr = err
-			logShadowed := !slices.Equal(s.shadowed, shadowed)
-			s.shadowed = shadowed
-			s.mu.Unlock()
-			if err != nil {
-				slog.Warn("login environment unavailable", "event", "login_env_failed", "err", err.Error())
-			}
-			if logShadowed && len(shadowed) > 0 {
-				slog.Warn("the login shell sets DRIGA_* variables the app does not use", "event", "login_env_shadowed", "keys", strings.Join(shadowed, ","))
-			}
-			return StartCollector(ctx, sup.Executable, env)
-		}
-	}
-	if sup.ReadOwner == nil {
-		sup.ReadOwner = func() (collector.Owner, bool, error) { return collector.ReadOwner(dataDir) }
-	}
-	if sup.Ready == nil {
-		sup.Ready = func(ctx context.Context) error { return WaitChat(ctx, dataDir) }
-	}
-	sup.Notify = s.notes.post
-	sup.Status = s.setStatus
-	return sup.Executable, nil
-}
-
-// replaceService removes the background service the app replaces, and says
-// so once.
-func (s *shell) replaceService() {
-	if !s.removeService(s.dataDir) {
-		s.updateTray()
-		return
-	}
-	// The notice waits for OK; the collector does not.
-	go func() {
-		_, _ = mygo.Dialog.Message(mygo.MessageOptions{Parent: s.mainWindow(), Type: mygo.MessageInfo,
-			Message: serviceReplacedMessage, Buttons: []string{"OK"}})
-	}()
-}
-
 // reportConfigError says the settings could not be read. The collector
 // reads the same file, so the tray shows its error until the file is fixed.
 func (s *shell) reportConfigError(err error) {
@@ -272,78 +187,12 @@ func (s *shell) reportConfigError(err error) {
 	}()
 }
 
-// removeService removes the background service when the app replaces it, and
-// reports whether it did. A failure is kept for the tray, whose status line
-// then says how to remove the service by hand.
-func (s *shell) removeService(dataDir string) bool {
-	removed, err := replaceService(s.goos, dataDir, s.homes, s.openService)
-	if errors.Is(err, errIsolatedHome) {
-		slog.Info("the app runs in an isolated environment; leaving the collector service alone", "event", "service_replace_isolated")
-		return false
-	}
-	s.mu.Lock()
-	s.serviceErr = err
-	s.mu.Unlock()
-	if err != nil {
-		slog.Warn("could not remove the collector service", "event", "service_replace_failed", "err", err.Error())
-	}
-	if removed {
-		slog.Info("removed the collector service; the app collects", "event", "service_replaced")
-	}
-	return removed
-}
-
-// startCollector runs the collector until stopCollector, after first, when
-// it is set.
-func (s *shell) startCollector(first func()) {
-	ctx, cancel := context.WithCancel(s.ctx)
-	done := make(chan struct{})
-	s.collectMu.Lock()
-	if s.finished {
-		s.collectMu.Unlock()
-		cancel()
-		return
-	}
-	s.stopCancel, s.stopped = cancel, done
-	s.collectMu.Unlock()
-	go func() {
-		defer close(done)
-		if first != nil {
-			first()
-		}
-		s.runCollector(ctx)
-	}()
-}
-
-// stopCollector stops the supervisor and waits for its child to exit.
-func (s *shell) stopCollector() {
-	s.collectMu.Lock()
-	cancel, done := s.stopCancel, s.stopped
-	s.collectMu.Unlock()
-	if cancel == nil {
-		return
-	}
-	cancel()
-	<-done
-}
-
-// finish is the app's final stop of the collector: none starts after it.
-func (s *shell) finish() {
-	s.collectMu.Lock()
-	s.finished = true
-	s.collectMu.Unlock()
-	s.stopCollector()
-}
-
-// relaunch restarts the app on the upgraded executable, after its collector
-// stopped so the new one starts from the new binary, and reports whether the
-// quit went ahead. When it is cancelled the app keeps running without a
-// collector: one started now would be the upgraded binary's, whose store the
-// old app may not read. The tray asks for a restart, and the upgrade watch
-// asks again on its next check.
+// relaunch restarts the app on the upgraded executable and reports whether
+// the quit went ahead; the relaunched app restarts the Driga service on the
+// new version. When it is cancelled the tray asks for a restart, and the
+// upgrade watch asks again on its next check.
 func (s *shell) relaunch() bool {
 	slog.Info("executable upgraded; relaunching", "event", "app_relaunch")
-	s.stopCollector()
 	// The relaunched process starts as the app again, whatever launched this one.
 	previous, set := os.LookupEnv("DRIGA_APP")
 	_ = os.Setenv("DRIGA_APP", "1")
@@ -376,15 +225,8 @@ func relaunchApp() bool {
 	return quitting.Load()
 }
 
-func (s *shell) setStatus(st Status) {
-	s.mu.Lock()
-	s.status = st
-	s.mu.Unlock()
-	s.updateTray()
-}
-
-// trayStatus is the supervisor's status with a missing login environment
-// added, which the supervisor does not know about.
+// trayStatus is the service's status with what the app knows added: a
+// pending restart, a failed install and the login environment.
 func (s *shell) trayStatus() Status {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -394,11 +236,10 @@ func (s *shell) trayStatus() Status {
 		st = Status{RestartPending: true}
 	case st.Err != nil:
 	case s.serviceErr != nil:
-		// The error itself is in the log; the line has room for the fix.
-		st.Err = errors.New("background service not removed; run driga service uninstall")
-	case s.envErr != nil && st.Collecting:
+		st.Err = s.serviceErr
+	case s.envErr != nil && st.Running:
 		st.Err = fmt.Errorf("without login shell PATH: %w", s.envErr)
-	case len(s.shadowed) > 0 && st.Collecting:
+	case len(s.shadowed) > 0 && st.Running:
 		st.Err = fmt.Errorf("ignoring %s from the login shell; quit Driga and run driga app from it", strings.Join(s.shadowed, ", "))
 	}
 	return st
@@ -435,18 +276,6 @@ func (s *shell) watchNeeds(ctx context.Context) {
 		case <-ticker.C:
 		}
 	}
-}
-
-// inboxRows reads the inbox for a notification click.
-func (s *shell) inboxRows() []view.InboxRow {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	snap, err := s.source.LoadScope(ctx, store.Scope{})
-	if err != nil {
-		slog.Warn("inbox unavailable for a notification click", "event", "notification_click_failed", "err", err.Error())
-		return nil
-	}
-	return snap.Inbox.Rows
 }
 
 // mainPage is the main window as the window host drives it.

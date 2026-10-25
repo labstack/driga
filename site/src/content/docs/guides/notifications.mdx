@@ -10,7 +10,7 @@ read_when:
 Driga raises a desktop alert when a session needs you. The alert shows the
 session title or project and why it needs you, within your capture policy.
 
-Alerts come from the Driga app, which runs the collector and posts what it
+Alerts come from the Driga app, which runs the Driga service and posts what it
 raises. Keep Driga running: closing its window leaves it collecting in the
 menu bar or tray, and it starts at login.
 
@@ -51,7 +51,7 @@ them. `driga doctor` reports availability.
 
 ## Headless machines
 
-Without the app, the collector service posts alerts itself:
+Without the app, the Driga service posts alerts itself:
 
 ```sh
 driga service install

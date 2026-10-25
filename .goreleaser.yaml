@@ -40,8 +40,31 @@ builds:
         - cmd: 'bash scripts/build-macos-app.sh "{{ .Path }}" "{{ .Os }}" "{{ .Version }}" "{{ .IsSnapshot }}"'
           output: true
 
-  # Driga.exe, the Windows desktop app: a GUI-subsystem binary that supervises
-  # the CLI next to it. Other platforms have a single binary.
+  # drigad, the Driga service: the same program under the name it runs as the
+  # service by. On macOS the bundle script copies it into the app before
+  # signing; here it is built for Linux and Windows, beside driga.
+  - id: drigad
+    main: ./cmd/driga
+    binary: '{{ if eq .Os "windows" }}bin/{{ end }}drigad'
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - >-
+        -s -w
+        -X main.version={{ .Version }}
+        -X main.commit={{ .FullCommit }}
+        -X main.date={{ .CommitDate }}
+
+  # Driga.exe, the Windows desktop app: a GUI-subsystem binary that installs
+  # the Driga service and shows its data.
   - id: driga-app
     main: ./cmd/driga-app
     binary: Driga
@@ -65,6 +88,7 @@ archives:
   - id: driga
     ids:
       - driga
+      - drigad
     name_template: "driga_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     formats:
       - tar.gz
@@ -79,8 +103,10 @@ archives:
       - README.md
       - LICENSE
       - NOTICE
-      - src: internal/web/static/vendor/LICENSES.txt
-        dst: third-party/vendor-LICENSES.txt
+      - src: internal/web/app/THIRD-PARTY.txt
+        dst: third-party/app-THIRD-PARTY.txt
+      - src: internal/mcp/apps/THIRD-PARTY.txt
+        dst: third-party/panels-THIRD-PARTY.txt
       - src: internal/web/static/fonts/LICENSE.txt
         dst: third-party/fonts-LICENSE.txt
 
@@ -90,6 +116,7 @@ archives:
   - id: driga-windows
     ids:
       - driga
+      - drigad
     name_template: "driga_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     formats:
       - zip
@@ -105,8 +132,10 @@ archives:
       - README.md
       - LICENSE
       - NOTICE
-      - src: internal/web/static/vendor/LICENSES.txt
-        dst: third-party/vendor-LICENSES.txt
+      - src: internal/web/app/THIRD-PARTY.txt
+        dst: third-party/app-THIRD-PARTY.txt
+      - src: internal/mcp/apps/THIRD-PARTY.txt
+        dst: third-party/panels-THIRD-PARTY.txt
       - src: internal/web/static/fonts/LICENSE.txt
         dst: third-party/fonts-LICENSE.txt
 
@@ -130,8 +159,10 @@ archives:
       - README.md
       - LICENSE
       - NOTICE
-      - src: internal/web/static/vendor/LICENSES.txt
-        dst: third-party/vendor-LICENSES.txt
+      - src: internal/web/app/THIRD-PARTY.txt
+        dst: third-party/app-THIRD-PARTY.txt
+      - src: internal/mcp/apps/THIRD-PARTY.txt
+        dst: third-party/panels-THIRD-PARTY.txt
       - src: internal/web/static/fonts/LICENSE.txt
         dst: third-party/fonts-LICENSE.txt
 
@@ -139,6 +170,7 @@ nfpms:
   - id: driga
     ids:
       - driga
+      - drigad
     package_name: driga
     file_name_template: "driga_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     vendor: LabStack
@@ -191,9 +223,10 @@ homebrew_casks:
       app "Driga.app"
     caveats: |
       Driga.app is in /Applications, and driga links to the CLI inside it.
-      Open Driga from Finder, Spotlight or with driga app. The app collects in
-      the background and starts at login. After upgrading from an earlier
-      release, open Driga once: it replaces the old background service.
+      Open Driga from Finder, Spotlight or with driga app. Its first launch
+      installs the Driga service (drigad), which collects at login whether or
+      not the app is open. After upgrading from an earlier release, open Driga
+      once: it replaces the old collector.
     url:
       template: "https://github.com/labstack/driga/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
     commit_msg_template: "chore: update driga to {{ .Tag }}"

@@ -42,7 +42,7 @@ func TestRunExclusiveLock(t *testing.T) {
 	manual := d
 	manual.Owner = Owner{Kind: "manual"}
 	err = Run(context.Background(), manual, dir)
-	if !errors.Is(err, ErrAlreadyRunning) || !strings.Contains(err.Error(), "another driga collector is running (service, pid ") {
+	if !errors.Is(err, ErrAlreadyRunning) || !strings.Contains(err.Error(), "the Driga service is already running (service, pid ") {
 		t.Fatalf("lock: %v", err)
 	}
 	info, err := os.Stat(filepath.Join(dir, "driga.lock"))

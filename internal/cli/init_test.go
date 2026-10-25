@@ -162,9 +162,9 @@ func TestCollectorSetup(t *testing.T) {
 		goos, hint, text string
 		ask              bool
 	}{
-		{"darwin", "driga app", "The Driga app collects", false},
-		{"windows", "driga app", "The Driga app collects", false},
-		{"linux", "driga service install", "per-user systemd unit", true},
+		{"darwin", "driga service install", "a login item", true},
+		{"windows", "driga service install", "a scheduled task at logon", true},
+		{"linux", "driga service install", "a systemd user unit", true},
 	} {
 		if got := collectorHint(tc.goos); got != tc.hint {
 			t.Errorf("collectorHint(%q) = %q; want %q", tc.goos, got, tc.hint)
@@ -176,13 +176,13 @@ func TestCollectorSetup(t *testing.T) {
 	}
 }
 
-func TestInitRecommendsTheAppOnDesktops(t *testing.T) {
+func TestInitOffersTheService(t *testing.T) {
 	g, out := initFixture(t, "\n\n\n\n\n")
 	if err := (InitCmd{}).Run(g); err != nil {
 		t.Fatal(err)
 	}
 	text, ask := collectorSetup(runtime.GOOS)
-	if !strings.Contains(out.String(), text) || strings.Contains(out.String(), "Install and start the collector service?") != ask {
+	if !strings.Contains(out.String(), text) || strings.Contains(out.String(), "Install and start the Driga service?") != ask {
 		t.Fatal(out.String())
 	}
 }

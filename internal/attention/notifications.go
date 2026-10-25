@@ -157,20 +157,28 @@ const notificationDefaultAction = "com.apple.UNNotificationDefaultActionIdentifi
 
 // Notification clicks use argv, never a shell. Remote items and summaries have
 // no ItemID, as enforced by the collector before handing them to the backend.
+// notificationResponse jumps to the item a clicked notification is about. It
+// runs the CLI, driga, beside path: drigad would start another service.
 func notificationResponse(ctx context.Context, r Runner, path, action, itemID string) error {
 	if action != notificationDefaultAction || itemID == "" || path == "" || r == nil {
 		return nil
+	}
+	if filepath.Base(path) == "drigad" {
+		path = filepath.Join(filepath.Dir(path), "driga")
 	}
 	_, err := r.Run(ctx, path, "inbox", "jump", itemID)
 	return err
 }
 
+// drigaAppExecutable reports whether path is one of Driga.app's executables:
+// driga, the app and CLI, or drigad, the Driga service.
 func drigaAppExecutable(path string) bool {
 	resolved, err := filepath.EvalSymlinks(path)
 	if err != nil {
 		return false
 	}
-	return filepath.Base(resolved) == "driga" && filepath.Base(filepath.Dir(resolved)) == "MacOS" &&
+	base := filepath.Base(resolved)
+	return (base == "driga" || base == "drigad") && filepath.Base(filepath.Dir(resolved)) == "MacOS" &&
 		filepath.Base(filepath.Dir(filepath.Dir(resolved))) == "Contents" &&
 		filepath.Base(filepath.Dir(filepath.Dir(filepath.Dir(resolved)))) == "Driga.app"
 }

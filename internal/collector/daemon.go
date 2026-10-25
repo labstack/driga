@@ -140,7 +140,7 @@ func Lock(dataDir string, owner Owner) (*os.File, error) {
 	if err := filelock.Lock(f, true); err != nil {
 		if filelock.Busy(err) {
 			holder := readHolder(f)
-			return failed(fmt.Errorf("another driga collector is running (%s, pid %d): %w", holder.Kind, holder.PID, ErrAlreadyRunning))
+			return failed(fmt.Errorf("the Driga service is already running (%s, pid %d): %w", holder.Kind, holder.PID, ErrAlreadyRunning))
 		}
 		return failed(err)
 	}
@@ -227,7 +227,7 @@ func lockFor(ctx context.Context, clock daemonClock, dataDir string, owner Owner
 			return lock, err
 		}
 		if !logged {
-			slog.Info("another collector holds the lock; waiting for it to stop", "event", "lock_wait", "err", err.Error())
+			slog.Info("another Driga service holds the lock; waiting for it to stop", "event", "lock_wait", "err", err.Error())
 			logged = true
 		}
 		timer := clock.NewTimer(lockWait)

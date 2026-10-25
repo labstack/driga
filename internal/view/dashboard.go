@@ -244,5 +244,5 @@ func ActivityHasEvents(buckets []ActivityBucket) bool {
 	return false
 }
 
-const HistoryEmpty = "History builds while the collector runs"
+const HistoryEmpty = "History builds while the Driga service runs"
 const EventsEmpty = "Events need agent hooks: driga hooks install"

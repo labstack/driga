@@ -29,7 +29,7 @@ func (MachinesListCmd) Run(g *Globals) error {
 		v, e := view.Machines(r, now, f.Scope)
 		if !g.Snapshot {
 			if !collector.Running(config.DataDir()) {
-				v.Warning = "viewer collector not running"
+				v.Warning = "this machine's Driga service is not running"
 			}
 		}
 		return v, e

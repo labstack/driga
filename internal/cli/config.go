@@ -103,7 +103,7 @@ func configTextSources(c config.Config, commented bool, chosen map[string]bool, 
 	var b strings.Builder
 	defaults := config.Default()
 	if commented {
-		b.WriteString("# Driga configuration. Commented settings use built-in defaults.\n# Precedence: explicit flags > environment > this file > defaults.\n# Restart collector after changes; CLI/hooks reload per invocation.\n# Roots add repo discovery; session working directories are always discovered.\n# Snippets are opt-in, scrubbed, and limited to 200 characters.\n# open_cmd is auto-detected when empty; {cwd} is the session directory.\n\n")
+		b.WriteString("# Driga configuration. Commented settings use built-in defaults.\n# Precedence: explicit flags > environment > this file > defaults.\n# Restart the Driga service after changes; CLI/hooks reload per invocation.\n# Roots add repo discovery; session working directories are always discovered.\n# Snippets are opt-in, scrubbed, and limited to 200 characters.\n# open_cmd is auto-detected when empty; {cwd} is the session directory.\n\n")
 	}
 	value := func(s config.Setting, c config.Config) any {
 		v := s.Value(c)

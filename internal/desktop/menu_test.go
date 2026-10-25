@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/driga/internal/collector"
 	"github.com/labstack/driga/internal/view"
 )
 
@@ -106,21 +105,21 @@ func TestTrayMenuModel(t *testing.T) {
 	for i := 1; i <= 7; i++ {
 		needs = append(needs, view.BoardRow{Title: fmt.Sprintf("session %d", i), Node: view.FlowNode{ID: int64(i)}})
 	}
-	menu := TrayMenuModel(needs, Status{Collecting: true})
+	menu := TrayMenuModel(needs, Status{Running: true})
 	var labels []string
 	for _, item := range menu {
 		if !item.Separator {
 			labels = append(labels, item.Label)
 		}
 	}
-	want := []string{"Open Driga", "7 need you", "session 1", "session 2", "session 3", "session 4", "session 5", "Collecting", "Settings…", "About Driga", "Quit"}
+	want := []string{"Open Driga", "7 need you", "session 1", "session 2", "session 3", "session 4", "session 5", "Driga service running", "Settings…", "About Driga", "Quit"}
 	if strings.Join(labels, "|") != strings.Join(want, "|") {
 		t.Fatalf("tray menu %q; want %q", labels, want)
 	}
 	if item, _ := find(menu, "session 3"); item.Command != "session:3" {
 		t.Errorf("need opens %q", item.Command)
 	}
-	if item, _ := find(menu, "Collecting"); !item.Disabled {
+	if item, _ := find(menu, "Driga service running"); !item.Disabled {
 		t.Error("status line is clickable")
 	}
 	if item, _ := find(menu, "Quit"); item.Role != "quit" {
@@ -137,15 +136,12 @@ func TestStatusLine(t *testing.T) {
 		status Status
 		want   string
 	}{
-		{Status{Collecting: true}, "Collecting"},
-		{Status{}, "Starting the collector…"},
-		{Status{Owner: collector.Owner{Kind: "service", PID: 42}}, "Collected by the background service (pid 42)"},
-		{Status{Owner: collector.Owner{Kind: "manual", PID: 7}}, "Collected by driga collect (pid 7)"},
-		{Status{Owner: collector.Owner{Kind: "app", PID: 9}}, "Collected by another Driga app (pid 9)"},
-		{Status{Owner: collector.Owner{Kind: "unknown", PID: 3}}, "Collected by another process (pid 3)"},
-		{Status{Err: errors.New("collector exited: exit status 1")}, "Collector error: collector exited: exit status 1"},
-		{Status{Collecting: true, Err: errors.New("login shell: timeout")}, "Collecting · login shell: timeout"},
-		{Status{Err: errors.New(strings.Repeat("x", 200))}, "Collector error: " + strings.Repeat("x", 62) + "…"},
+		{Status{Running: true}, "Driga service running"},
+		{Status{}, "Starting the Driga service…"},
+		{Status{RestartPending: true, Running: true}, "Restart Driga to finish updating"},
+		{Status{Err: errors.New("driga service install: denied")}, "Driga service: driga service install: denied"},
+		{Status{Running: true, Err: errors.New("login shell: timeout")}, "Driga service running · login shell: timeout"},
+		{Status{Err: errors.New(strings.Repeat("x", 200))}, "Driga service: " + strings.Repeat("x", 64) + "…"},
 	} {
 		if got := StatusLine(tc.status); got != tc.want {
 			t.Errorf("StatusLine(%+v) = %q; want %q", tc.status, got, tc.want)

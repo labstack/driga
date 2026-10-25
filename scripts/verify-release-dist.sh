@@ -82,7 +82,7 @@ done
 for platform in linux_amd64 linux_arm64; do
   archive="${dist_dir}/driga_${release_version}_${platform}.tar.gz"
   entries=$(tar -tzf "$archive" | LC_ALL=C sort)
-  if [ "$entries" != $'LICENSE\nNOTICE\nREADME.md\ndriga\nthird-party/fonts-LICENSE.txt\nthird-party/vendor-LICENSES.txt' ]; then
+  if [ "$entries" != $'LICENSE\nNOTICE\nREADME.md\ndriga\ndrigad\nthird-party/app-THIRD-PARTY.txt\nthird-party/fonts-LICENSE.txt\nthird-party/panels-THIRD-PARTY.txt' ]; then
     echo "unexpected contents in $(basename "$archive"):" >&2
     printf '%s\n' "$entries" >&2
     exit 1
@@ -91,7 +91,7 @@ done
 for platform in windows_amd64 windows_arm64; do
   archive="${dist_dir}/driga_${release_version}_${platform}.zip"
   entries=$(unzip -Z1 "$archive" | LC_ALL=C sort)
-  if [ "$entries" != $'Driga.exe\nLICENSE\nNOTICE\nREADME.md\nbin/driga.exe\nthird-party/fonts-LICENSE.txt\nthird-party/vendor-LICENSES.txt' ]; then
+  if [ "$entries" != $'Driga.exe\nLICENSE\nNOTICE\nREADME.md\nbin/driga.exe\nbin/drigad.exe\nthird-party/app-THIRD-PARTY.txt\nthird-party/fonts-LICENSE.txt\nthird-party/panels-THIRD-PARTY.txt' ]; then
     echo "unexpected contents in $(basename "$archive"):" >&2
     printf '%s\n' "$entries" >&2
     exit 1
@@ -106,10 +106,12 @@ if command -v dpkg-deb >/dev/null 2>&1; then
     # Read the whole listing first: grep -q stops early, and with pipefail the
     # writer's broken pipe would fail the check.
     contents=$(dpkg-deb -c "$deb")
-    if ! grep -q ' \./usr/bin/driga$' <<<"$contents"; then
-      echo "Debian package does not install /usr/bin/driga: $(basename "$deb")" >&2
-      exit 1
-    fi
+    for binary in driga drigad; do
+      if ! grep -q " \./usr/bin/${binary}\$" <<<"$contents"; then
+        echo "Debian package does not install /usr/bin/${binary}: $(basename "$deb")" >&2
+        exit 1
+      fi
+    done
   done
 fi
 

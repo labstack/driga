@@ -56,8 +56,8 @@ def verify_archive(path, version):
         require(len(names) == len(set(names)), "duplicate archive members")
         require(all(entry.isfile() or entry.isdir() for entry in members), "unexpected archive link or special file")
         required = {"LICENSE", "NOTICE", "README.md", "third-party/fonts-LICENSE.txt",
-                    "third-party/vendor-LICENSES.txt", "Driga.app/Contents/Info.plist",
-                    "Driga.app/Contents/MacOS/driga", "Driga.app/Contents/Resources/Driga.icns"}
+                    "third-party/app-THIRD-PARTY.txt", "third-party/panels-THIRD-PARTY.txt", "Driga.app/Contents/Info.plist",
+                    "Driga.app/Contents/MacOS/driga", "Driga.app/Contents/MacOS/drigad", "Driga.app/Contents/Resources/Driga.icns"}
         # CodeResources is Apple's app staple; the resource seal is separate.
         allowed = required | {"Driga.app/Contents/_CodeSignature/CodeResources", "Driga.app/Contents/CodeResources"}
         require(required <= set(names) <= allowed, "unexpected contents in Darwin archive")
@@ -76,8 +76,9 @@ def verify_archive(path, version):
                            "NSHighResolutionCapable": True}.items():
             require(info.get(key) == value, f"incorrect {key} in Info.plist")
         require("LSUIElement" not in info, "Info.plist must not set LSUIElement")
-        binary = archive.getmember("Driga.app/Contents/MacOS/driga")
-        require(binary.mode & 0o111 and binary.size > 0, "bundle executable is empty or not executable")
+        for name in ("driga", "drigad"):
+            binary = archive.getmember(f"Driga.app/Contents/MacOS/{name}")
+            require(binary.mode & 0o111 and binary.size > 0, f"bundle executable {name} is empty or not executable")
         verify_icns(read("Driga.app/Contents/Resources/Driga.icns"))
 
 

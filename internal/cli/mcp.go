@@ -91,7 +91,7 @@ func newMCPServer(g *Globals, actions bool, capture ...string) *sdk.Server {
 			if q.CachedMachines && !copy.Snapshot {
 				if v, ok := data.(view.MachinesView); ok {
 					if !collector.Running(config.DataDir()) {
-						v.Warning = "viewer collector not running"
+						v.Warning = "this machine's Driga service is not running"
 					}
 					data = v
 				}

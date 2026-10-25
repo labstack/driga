@@ -13,7 +13,7 @@ generated: true
 Driga reads `config.toml` and the process environment. Precedence is explicit
 flags, then environment, then the TOML file, then the defaults below. Empty
 environment values count as unset, and dotenv files are never loaded. An
-unknown `DRIGA_*` name is an error. Restart the collector after changing its
+unknown `DRIGA_*` name is an error. Restart the Driga service after changing its
 configuration; the CLI and hooks reload on every invocation.
 
 Find and edit the file with `driga config path`, `driga config show` and

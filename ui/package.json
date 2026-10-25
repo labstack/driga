@@ -28,6 +28,7 @@
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.1.2",
     "happy-dom": "20.14.5",
+    "rollup-plugin-license": "3.7.1",
     "typescript": "7.0.2",
     "vite": "8.3.4",
     "vite-plugin-singlefile": "2.3.3",

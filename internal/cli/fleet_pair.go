@@ -47,7 +47,7 @@ func (c FleetEnrollCmd) Run(g *Globals) error {
 	defer stop()
 	status, err := fleet.Control(ctx, config.DataDir(), fleet.ControlRequest{Op: "status"})
 	if err != nil {
-		return fmt.Errorf("fleet collector unavailable: %w", err)
+		return fmt.Errorf("the Driga service is unavailable: %w", err)
 	}
 	if _, err := fmt.Fprintf(g.Stdout, "peer id %s · listen %s · enrollment window %s\n", status.Status.DeviceID, status.Status.Listen, window); err != nil {
 		return err

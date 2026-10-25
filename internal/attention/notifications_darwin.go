@@ -64,7 +64,7 @@ func MacNotificationStatus() (string, error) {
 	case 1:
 		return "", ErrNotificationsDenied
 	case 0:
-		return "native, not asked yet: macOS asks when the collector starts", nil
+		return "native, not asked yet: macOS asks when the Driga service starts", nil
 	case -1:
 		return "native UserNotifications (Driga); permission unknown", nil
 	}

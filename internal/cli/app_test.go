@@ -109,7 +109,7 @@ func TestAppCommandRunsDesktop(t *testing.T) {
 	if env != "" {
 		t.Fatalf("app started with DRIGA_APP=%q", env)
 	}
-	if got.OpenSource == nil || got.Supervisor == nil || got.Version != "test-version" {
+	if got.OpenSource == nil || got.Version != "test-version" {
 		t.Fatalf("options: %+v", got)
 	}
 	if opened != 0 {

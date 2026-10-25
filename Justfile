@@ -16,7 +16,9 @@ build:
     CGO_ENABLED=0 go build -trimpath \
       -ldflags "-s -w -X main.version=${version} -X main.commit=$(git rev-parse HEAD) -X main.date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
       -o bin/driga ./cmd/driga
-    echo "built bin/driga (${version})"
+    # drigad, the Driga service, is the same program under its own name.
+    ln -f bin/driga bin/drigad
+    echo "built bin/driga and bin/drigad (${version})"
 
 # Put the built binary on PATH, deliberately; it may shadow an installed release.
 install: build
@@ -25,6 +27,7 @@ install: build
     dir="${DRIGA_INSTALL_DIR:-${HOME}/.local/bin}"
     mkdir -p "$dir"
     install -m 0755 bin/driga "$dir/driga"
+    ln -f "$dir/driga" "$dir/drigad"
     echo "installed $dir/driga ($("$dir/driga" version | head -1)); first on PATH: $(command -v driga)"
 
 # Remove the checkout build (never the copy on PATH).

@@ -19,15 +19,17 @@ import (
 	"github.com/labstack/driga/internal/service"
 )
 
-// ServiceCmd controls the optional per-user collector.
+// ServiceCmd runs and controls the Driga service, drigad: the one process
+// per machine that collects, stores, hosts Chat and runs actions.
 type ServiceCmd struct {
-	Install   ServiceInstallCmd   `cmd:"" help:"Install and start the collector service."`
-	Start     ServiceStartCmd     `cmd:"" help:"Start the collector service."`
-	Stop      ServiceStopCmd      `cmd:"" help:"Stop the collector service."`
-	Restart   ServiceRestartCmd   `cmd:"" help:"Restart the collector service."`
-	Status    ServiceStatusCmd    `cmd:"" help:"Show collector service status."`
-	Logs      ServiceLogsCmd      `cmd:"" help:"Print collector logs."`
-	Uninstall ServiceUninstallCmd `cmd:"" help:"Uninstall the collector service."`
+	Run       ServiceRunCmd       `cmd:"" help:"Run the Driga service in the foreground (what drigad runs)."`
+	Install   ServiceInstallCmd   `cmd:"" help:"Install the Driga service as a login service and start it."`
+	Start     ServiceStartCmd     `cmd:"" help:"Start the Driga service."`
+	Stop      ServiceStopCmd      `cmd:"" help:"Stop the Driga service."`
+	Restart   ServiceRestartCmd   `cmd:"" help:"Restart the Driga service."`
+	Status    ServiceStatusCmd    `cmd:"" help:"Show whether the Driga service runs."`
+	Logs      ServiceLogsCmd      `cmd:"" help:"Print the Driga service's log."`
+	Uninstall ServiceUninstallCmd `cmd:"" help:"Uninstall the Driga service."`
 }
 type ServiceInstallCmd struct{}
 
@@ -50,7 +52,7 @@ type ServiceStatusCmd struct{}
 func (ServiceStatusCmd) Run(g *Globals) error { return (serviceControl{Action: "status"}).Run(g) }
 
 type ServiceLogsCmd struct {
-	Follow bool `short:"f" help:"Follow collector log output."`
+	Follow bool `short:"f" help:"Follow the log."`
 }
 
 func (c ServiceLogsCmd) Run(g *Globals) error {
@@ -66,7 +68,7 @@ type serviceControl struct {
 	Follow bool
 }
 
-// Run controls the user service or prints the last 50 collector log lines.
+// Run controls the login service or prints the last 50 lines of its log.
 func (c serviceControl) Run(g *Globals) error {
 	if c.Action == "logs" {
 		ctx, stop := notifyContext(context.Background())
@@ -100,11 +102,6 @@ func (c serviceControl) Run(g *Globals) error {
 	}
 	switch c.Action {
 	case "install":
-		// A service installed while the app collects would only wait for the
-		// lock, and take over collection from the app once it quits.
-		if owner, held, err := collector.ReadOwner(config.DataDir()); err == nil && held && owner.Kind == "app" {
-			return errors.New("the Driga app collects on this computer; quit Driga first to collect with the service instead")
-		}
 		if runtime.GOOS == "darwin" {
 			// launchd opens these streams before the collector starts.
 			dir := filepath.Dir(service.LogPath())
@@ -122,6 +119,9 @@ func (c serviceControl) Run(g *Globals) error {
 				return err
 			}
 		}
+		if err := service.RemoveLegacy(); err != nil {
+			return fmt.Errorf("remove the collector an earlier release installed: %w", err)
+		}
 		if err := s.Install(); err != nil {
 			return err
 		}
@@ -131,7 +131,7 @@ func (c serviceControl) Run(g *Globals) error {
 			}
 		}
 		if err := s.Start(); err != nil {
-			return fmt.Errorf("installed collector; start with driga service start: %w", err)
+			return fmt.Errorf("installed the Driga service; start it with driga service start: %w", err)
 		}
 	case "uninstall":
 		err = s.Uninstall()
@@ -145,13 +145,13 @@ func (c serviceControl) Run(g *Globals) error {
 		if task, ok := s.(interface{ TaskState() (string, error) }); ok {
 			state, stateErr := task.TaskState()
 			if stateErr != nil && !errors.Is(stateErr, ks.ErrNotInstalled) {
-				return fmt.Errorf("query collector task: %w", stateErr)
+				return fmt.Errorf("query the service task: %w", stateErr)
 			}
 			owner, held, err := collector.ReadOwner(config.DataDir())
 			if err != nil {
-				return fmt.Errorf("probe collector lock: %w", err)
+				return fmt.Errorf("probe the service lock: %w", err)
 			}
-			_, err = fmt.Fprintf(commandOutput(g), "task: %s; collector: lock held=%t, pid=%d, alive=%t\n", state, held, owner.PID, collector.Running(config.DataDir()))
+			_, err = fmt.Fprintf(commandOutput(g), "task: %s; service: lock held=%t, pid=%d, alive=%t\n", state, held, owner.PID, collector.Running(config.DataDir()))
 			return err
 		}
 		status, statusErr := s.Status()
@@ -176,18 +176,13 @@ func (c serviceControl) Run(g *Globals) error {
 	if err != nil {
 		return err
 	}
-	_, err = fmt.Fprintln(commandOutput(g), "collector:", c.Action)
+	_, err = fmt.Fprintln(commandOutput(g), "Driga service:", c.Action)
 	return err
 }
 
-// collectorHint is the command that starts background collection: the app on
-// macOS and Windows desktops, the service on Linux and headless machines.
-func collectorHint(goos string) string {
-	if goos == "darwin" || goos == "windows" {
-		return "driga app"
-	}
-	return "driga service install"
-}
+// collectorHint is the command that starts the Driga service. The app
+// installs it on a desktop; anywhere, this does.
+func collectorHint(string) string { return "driga service install" }
 
 // restartHint says how to restart the collector that holds the lock: the
 // app, the service or a collector run by hand. With none holding it, the
@@ -197,15 +192,10 @@ func restartHint(goos string, owner collector.Owner, held bool) string {
 		return collectorHint(goos)
 	}
 	switch owner.Kind {
-	case "app":
-		return "quit and reopen Driga"
 	case "service":
 		return "driga service restart"
 	case "manual":
-		return "stop and rerun driga collect"
-	}
-	if goos == "darwin" || goos == "windows" {
-		return "quit and reopen Driga"
+		return "stop and rerun driga service run"
 	}
 	return "driga service restart"
 }
@@ -284,7 +274,7 @@ func commandOutput(g *Globals) io.Writer {
 func serviceLogCommand(goos string, follow bool) (string, []string) {
 	name, args := "tail", []string{"-n", "50"}
 	if goos == "linux" {
-		name, args = "journalctl", []string{"--user", "-u", "run.driga.collector", "-n", "50"}
+		name, args = "journalctl", []string{"--user", "-u", service.Label("linux"), "-n", "50"}
 	}
 	if follow {
 		args = append(args, "-f")

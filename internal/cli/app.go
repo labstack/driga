@@ -31,9 +31,9 @@ var (
 	// Finder, the Dock or Launch Services (DRIGA_APP=1), the login item, or
 	// the Windows app executable.
 	systemLaunch bool
-	// collectorExecutable is the CLI executable the app starts as its
-	// collector; empty means this one.
-	collectorExecutable string
+	// serviceExecutable is the CLI executable the app installs the Driga
+	// service from; empty means this one.
+	serviceExecutable string
 )
 
 // AppLaunch reports whether this process runs as the desktop app. It reads
@@ -57,10 +57,10 @@ func appLaunch(env func(string) string, openedAtLogin bool, args []string) bool 
 }
 
 // AppMain runs the desktop app from the Windows app executable, Driga.exe,
-// whose collector is the CLI executable at collector.
-func AppMain(collector, version string, metadata ...string) int {
+// whose service is installed from the CLI executable at cli.
+func AppMain(cli, version string, metadata ...string) int {
 	_ = os.Unsetenv("DRIGA_APP")
-	systemLaunch, collectorExecutable = true, collector
+	systemLaunch, serviceExecutable = true, cli
 	return Main([]string{"app"}, version, metadata...)
 }
 
@@ -105,15 +105,15 @@ func (AppCmd) Run(g *Globals) error {
 			}
 			return envelope.Data.([]cleanup.Candidate), nil
 		}},
-		Supervisor: &desktop.Supervisor{Executable: collectorExecutable},
-		Config:     cfg,
-		ConfigErr:  configErr,
-		Version:    g.Version,
+		ServiceExecutable: serviceExecutable,
+		Config:            cfg,
+		ConfigErr:         configErr,
+		Version:           g.Version,
 	})
 }
 
-// appLogging writes the app's log, and its collector's output, to the
-// collector log, which driga service logs shows. A launch from Finder or at
+// appLogging writes the app's log to the Driga service's log, which driga
+// service logs shows. A launch from Finder or at
 // login has nowhere else to write; stderr keeps a terminal run readable.
 func appLogging() func() {
 	sink := io.MultiWriter(&logfile.Writer{Path: service.LogPath()}, os.Stderr)
@@ -122,7 +122,7 @@ func appLogging() func() {
 	return func() { slog.SetDefault(previous) }
 }
 
-// pageActivity keeps the collector's viewer heartbeat fresh while the page is used.
+// pageActivity keeps the service's viewer heartbeat fresh while the page is used.
 func pageActivity(active bool) {
 	if active {
 		_ = touchHeartbeat()

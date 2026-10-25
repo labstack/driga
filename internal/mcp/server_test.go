@@ -373,7 +373,7 @@ func TestMachinesUsesStaleCache(t *testing.T) {
 		t.Fatalf("mode=%v", e["mode"])
 	}
 	data := e["data"].(map[string]any)
-	if len(data["rows"].([]any)) != 2 || data["warning"] != "viewer collector not running" {
+	if len(data["rows"].([]any)) != 2 || data["warning"] != "this machine's Driga service is not running" {
 		t.Fatalf("cached machines: %+v", data)
 	}
 }

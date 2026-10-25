@@ -69,12 +69,12 @@ func TestDoctorNoDaemon(t *testing.T) {
 	d.Store = nil
 	d.LockProbe = func(string) (collector.Owner, bool, error) { return collector.Owner{}, false, nil }
 	d.OS = "linux"
-	requireCheck(t, Doctor(context.Background(), d), "collector", "warn", "driga service install")
+	requireCheck(t, Doctor(context.Background(), d), "service", "warn", "driga service install")
 	d.OS = "darwin"
 	d.NotificationStatus = func() (string, error) { return "fixture", nil }
-	requireCheck(t, Doctor(context.Background(), d), "collector", "warn", "driga app")
+	requireCheck(t, Doctor(context.Background(), d), "service", "warn", "driga service install")
 	d.DataDir = filepath.Join(d.DataDir, "missing")
-	requireCheck(t, Doctor(context.Background(), d), "data_permissions", "warn", "driga app")
+	requireCheck(t, Doctor(context.Background(), d), "data_permissions", "warn", "driga service install")
 }
 
 func TestDoctorCollectorOwner(t *testing.T) {
@@ -85,7 +85,7 @@ func TestDoctorCollectorOwner(t *testing.T) {
 	}
 	defer lock.Close()
 	d.LockProbe = nil
-	c := requireCheck(t, Doctor(context.Background(), d), "collector", "ok", "")
+	c := requireCheck(t, Doctor(context.Background(), d), "service", "ok", "")
 	want := fmt.Sprintf("running (app, pid %d); last pass 0s ago", os.Getpid())
 	if c.Detail != want {
 		t.Fatalf("collector detail: %q; want %q", c.Detail, want)
@@ -168,7 +168,7 @@ func TestDoctorStaleSource(t *testing.T) {
 	if err := st.Tx(context.Background(), func(tx *store.Tx) error { return tx.SetSourceOK("git", d.Now.Add(-16*time.Minute)) }); err != nil {
 		t.Fatal(err)
 	}
-	requireCheck(t, Doctor(context.Background(), d), "source:git", "warn", "stop and rerun driga collect")
+	requireCheck(t, Doctor(context.Background(), d), "source:git", "warn", "stop and rerun driga service run")
 }
 
 func TestDoctorIntakeRejections(t *testing.T) {
@@ -221,14 +221,14 @@ func TestDoctorCadenceAndRSS(t *testing.T) {
 		if err := tx.SetSourceOK("machine", d.Now.Add(-31*time.Second)); err != nil {
 			return err
 		}
-		return tx.ReplaceProcs([]model.Proc{{PID: 1, Cmdline: "/opt/driga collect", Argv: []string{"/opt/driga", "collect"}, RSS: 51_000_000}, {PID: 2, Cmdline: "editor driga collect", Argv: []string{"editor", "driga", "collect"}, RSS: 1_000_000_000}})
+		return tx.ReplaceProcs([]model.Proc{{PID: 1, Cmdline: "/opt/driga service run", Argv: []string{"/opt/driga", "service", "run"}, RSS: 51_000_000}, {PID: 2, Cmdline: "editor driga service run", Argv: []string{"editor", "driga", "service", "run"}, RSS: 1_000_000_000}})
 	}); err != nil {
 		t.Fatal(err)
 	}
 	checks := Doctor(context.Background(), d)
-	requireCheck(t, checks, "collector", "warn", "stop and rerun driga collect")
-	requireCheck(t, checks, "source:machine", "warn", "stop and rerun driga collect")
-	c := requireCheck(t, checks, "collector_rss", "warn", "")
+	requireCheck(t, checks, "service", "warn", "stop and rerun driga service run")
+	requireCheck(t, checks, "source:machine", "warn", "stop and rerun driga service run")
+	c := requireCheck(t, checks, "service_rss", "warn", "")
 	if !strings.Contains(c.Detail, "51.0 MB") {
 		t.Fatal(c)
 	}
@@ -275,14 +275,14 @@ func TestDoctorCollectorPaths(t *testing.T) {
 	d, st := doctorFixture(t)
 	if err := st.Tx(context.Background(), func(tx *store.Tx) error {
 		return tx.ReplaceProcs([]model.Proc{
-			{PID: 1, Exe: "/opt/path with spaces/driga", Cmdline: "/opt/path with spaces/driga collect", Argv: []string{"/opt/path with spaces/driga", "collect"}, RSS: 10_000_000},
-			{PID: 2, Cmdline: `"/opt/another path/driga" collect`, Argv: []string{"/opt/another path/driga", "collect"}, RSS: 10_000_000},
-			{PID: 3, Exe: "/opt/editor", Cmdline: "driga collect", Argv: []string{"driga", "collect"}, RSS: 1_000_000_000},
+			{PID: 1, Exe: "/opt/path with spaces/driga", Cmdline: "/opt/path with spaces/driga service run", Argv: []string{"/opt/path with spaces/driga", "service", "run"}, RSS: 10_000_000},
+			{PID: 2, Cmdline: `"/opt/another path/driga" service run`, Argv: []string{"/opt/another path/driga", "service", "run"}, RSS: 10_000_000},
+			{PID: 3, Exe: "/opt/editor", Cmdline: "driga service run", Argv: []string{"driga", "service", "run"}, RSS: 1_000_000_000},
 		})
 	}); err != nil {
 		t.Fatal(err)
 	}
-	c := requireCheck(t, Doctor(context.Background(), d), "collector_rss", "ok", "")
+	c := requireCheck(t, Doctor(context.Background(), d), "service_rss", "ok", "")
 	if c.Detail != "10.0 MB" {
 		t.Fatal(c)
 	}
@@ -300,11 +300,11 @@ func TestDoctorCollectorFootprint(t *testing.T) {
 	} {
 		d, st := doctorFixture(t)
 		if err := st.Tx(context.Background(), func(tx *store.Tx) error {
-			return tx.ReplaceProcs([]model.Proc{{PID: 1, Cmdline: "/opt/driga collect", Argv: []string{"/opt/driga", "collect"}, Footprint: tc.footprint, MemoryMeasure: "physical_footprint", RSS: tc.rss}})
+			return tx.ReplaceProcs([]model.Proc{{PID: 1, Cmdline: "/opt/driga service run", Argv: []string{"/opt/driga", "service", "run"}, Footprint: tc.footprint, MemoryMeasure: "physical_footprint", RSS: tc.rss}})
 		}); err != nil {
 			t.Fatal(err)
 		}
-		c := requireCheck(t, Doctor(context.Background(), d), "collector_rss", tc.status, "")
+		c := requireCheck(t, Doctor(context.Background(), d), "service_rss", tc.status, "")
 		if c.Detail != tc.detail {
 			t.Fatalf("detail %q, want %q", c.Detail, tc.detail)
 		}
@@ -325,7 +325,7 @@ func TestDoctorCommandWarningsAndFailures(t *testing.T) {
 	if err := json.Unmarshal(out.Bytes(), &checks); err != nil {
 		t.Fatal(err)
 	}
-	requireCheck(t, checks, "collector", "warn", collectorHint(runtime.GOOS))
+	requireCheck(t, checks, "service", "warn", collectorHint(runtime.GOOS))
 	if _, err := os.Stat(config.DataDir()); !os.IsNotExist(err) {
 		t.Fatalf("doctor wrote data directory: %v", err)
 	}
@@ -385,7 +385,7 @@ func TestDoctorLinuxChecks(t *testing.T) {
 
 func TestServiceLogsLinux(t *testing.T) {
 	name, args := serviceLogCommand("linux", true)
-	if name != "journalctl" || strings.Join(args, " ") != "--user -u run.driga.collector -n 50 -f" {
+	if name != "journalctl" || strings.Join(args, " ") != "--user -u driga -n 50 -f" {
 		t.Fatal(name, args)
 	}
 	name, args = serviceLogCommand("linux", false)
@@ -455,13 +455,11 @@ func TestRestartHintFollowsOwner(t *testing.T) {
 		held       bool
 		want       string
 	}{
-		{"darwin", "", false, "driga app"},
+		{"darwin", "", false, "driga service install"},
 		{"linux", "", false, "driga service install"},
-		{"darwin", "app", true, "quit and reopen Driga"},
 		{"darwin", "service", true, "driga service restart"},
-		{"linux", "manual", true, "stop and rerun driga collect"},
-		{"windows", "unknown", true, "quit and reopen Driga"},
-		{"linux", "unknown", true, "driga service restart"},
+		{"linux", "manual", true, "stop and rerun driga service run"},
+		{"windows", "unknown", true, "driga service restart"},
 	} {
 		if got := restartHint(tc.goos, collector.Owner{Kind: tc.kind}, tc.held); got != tc.want {
 			t.Errorf("restartHint(%s, %q, %v) = %q, want %q", tc.goos, tc.kind, tc.held, got, tc.want)

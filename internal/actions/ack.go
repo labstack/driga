@@ -87,7 +87,7 @@ func (c AckOptions) Ack(g Environment) error {
 			return openErr
 		}
 		if g.Machine != "" && g.Machine != "all" && g.Machine != "local" {
-			return fmt.Errorf("unknown machine %q: viewer collector not running", g.Machine)
+			return fmt.Errorf("unknown machine %q: this machine's Driga service is not running", g.Machine)
 		}
 	}
 

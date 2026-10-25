@@ -23,46 +23,22 @@ import (
 // collect run reads no real machine state.
 var newCollectDeps = newDeps
 
-// CollectCmd runs the daemon, or one persistent pass with --once.
-type CollectCmd struct {
-	Owner          string        `hidden:"" default:"manual" enum:"app,service,manual"`
-	NotifyFD       *int          `hidden:""`
-	ParentFD       *int          `hidden:""`
+// ServiceRunCmd runs the Driga service in the foreground: what drigad runs,
+// and what the login service starts. --once runs one pass and exits.
+type ServiceRunCmd struct {
+	Owner          string        `hidden:"" default:"manual" enum:"service,manual"`
 	Serve          *bool         `help:"Enable fleet serving alongside collection (overrides fleet.serve)."`
 	Listen         string        `help:"Fleet private IP or interface and port (requires serving)."`
 	Scheduled      bool          `hidden:""`
 	ServiceEnv     []string      `hidden:"" sep:"none"`
 	ServiceDataDir string        `hidden:""`
 	Once           bool          `help:"Collect once into the persistent database and exit."`
-	CPUProfile     string        `name:"cpu-profile" type:"path" help:"Write a CPU profile of the collector to this file."`
+	CPUProfile     string        `name:"cpu-profile" type:"path" help:"Write a CPU profile of the service to this file."`
 	ProfileFor     time.Duration `name:"profile-for" default:"2m" help:"How long --cpu-profile records before it stops."`
 }
 
 // Run loads collection sources and handles graceful termination signals.
-func (c CollectCmd) Run(g *Globals) error {
-	if c.NotifyFD != nil && *c.NotifyFD < 0 {
-		return invalidUsage("--notify-fd must be non-negative")
-	}
-	if c.ParentFD != nil && *c.ParentFD < 0 {
-		return invalidUsage("--parent-fd must be non-negative")
-	}
-	// Take the inherited descriptors first, before anything can start a
-	// program that would inherit them too.
-	var notifyFile, parentFile *os.File
-	if c.NotifyFD != nil {
-		var err error
-		if notifyFile, err = inheritedFile(*c.NotifyFD, "notify"); err != nil {
-			return invalidUsage("--notify-fd is not open")
-		}
-		defer notifyFile.Close()
-	}
-	if c.ParentFD != nil {
-		var err error
-		if parentFile, err = inheritedFile(*c.ParentFD, "parent"); err != nil {
-			return invalidUsage("--parent-fd is not open")
-		}
-		defer parentFile.Close()
-	}
+func (c ServiceRunCmd) Run(g *Globals) error {
 	if c.Once && c.Serve != nil && *c.Serve {
 		return invalidUsage("--once and --serve cannot be combined")
 	}
@@ -97,11 +73,7 @@ func (c CollectCmd) Run(g *Globals) error {
 			return err
 		}
 	}
-	var notifier attention.Notifier
-	if notifyFile != nil {
-		notifier = &attention.PipeNotifier{W: notifyFile}
-	}
-	d, err := newCollectDeps(cfg, notifier)
+	d, err := newCollectDeps(cfg, nil)
 	if err != nil {
 		return err
 	}
@@ -109,7 +81,7 @@ func (c CollectCmd) Run(g *Globals) error {
 	if g != nil {
 		d.Owner.Version = g.Version
 	}
-	if runtime.GOOS == "darwin" && c.NotifyFD == nil {
+	if runtime.GOOS == "darwin" {
 		// Record what macOS reports, so a silent notification problem shows in the log.
 		if status, err := attention.MacNotificationStatus(); err != nil {
 			slog.Warn("macOS notifications unavailable", "event", "notifications_unavailable", "err", err.Error())
@@ -120,12 +92,6 @@ func (c CollectCmd) Run(g *Globals) error {
 	}
 	ctx, stop := notifyContext(context.Background())
 	defer stop()
-	if parentFile != nil {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithCancel(ctx)
-		defer cancel()
-		go watchParent(parentFile, cancel)
-	}
 	if c.CPUProfile != "" {
 		stopProfile, err := startCPUProfile(c.CPUProfile, c.ProfileFor)
 		if err != nil {
@@ -164,24 +130,14 @@ func (c CollectCmd) Run(g *Globals) error {
 	return err
 }
 
-// watchParent stops the collector when its parent goes away. The parent holds
-// the write end of the pipe and never writes, so a read returns only once the
-// parent closes it or exits; the collector then shuts down as on SIGTERM.
-func watchParent(r io.Reader, cancel context.CancelFunc) {
-	_, _ = io.Copy(io.Discard, r)
-	slog.Info("parent process gone", "event", "parent_gone")
-	cancel()
-}
-
-// collectorLogging writes the collector's log. On Linux a service's journal
-// shows it too; the app logs a child's output itself, so that copy is left out.
+// collectorLogging writes the service's log. On Linux the journal shows it too.
 func collectorLogging(owner string) (func(), error) {
 	w := &logfile.Writer{Path: service.LogPath()}
 	if _, err := w.Write(nil); err != nil {
 		return nil, err
 	}
 	var sink io.Writer = w
-	if runtime.GOOS == "linux" && owner != "app" {
+	if runtime.GOOS == "linux" {
 		sink = io.MultiWriter(sink, os.Stderr)
 	}
 	previous := slog.Default()

@@ -41,8 +41,8 @@ case "$name" in
   uname) printf 'Darwin\n' ;;
   ditto) touch "${@: -1}" ;;
   codesign)
-    if [ "$1" = --force ]; then
-      app="${@: -1}"
+    app="${@: -1}"
+    if [ "$1" = --force ] && [ "${app%.app}" != "$app" ]; then
       mkdir -p "$app/Contents/_CodeSignature"
       printf 'seal' > "$app/Contents/_CodeSignature/CodeResources"
     fi ;;
@@ -142,6 +142,7 @@ func TestMacOSAppPlistLaunchesInAppMode(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeFixtureFile(t, filepath.Join(dir, "driga"), "fixture", 0o700)
+	writeFixtureFile(t, filepath.Join(dir, "drigad"), "fixture", 0o700)
 	command := exec.CommandContext(t.Context(), "python3", "macos-app.py", app, "2026.10.5-alpha")
 	command.Env = releaseTestEnv(t)
 	if out, err := command.CombinedOutput(); err != nil {
