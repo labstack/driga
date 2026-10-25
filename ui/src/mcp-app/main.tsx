@@ -5,11 +5,10 @@ import type { App, McpUiHostContext } from "@modelcontextprotocol/ext-apps";
 import { useApp } from "@modelcontextprotocol/ext-apps/react";
 import { StrictMode, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { Board } from "../panels/Board";
-import { Text } from "@mantine/core";
 import { isFragment, normalize, type Fragment } from "../panels/types";
 import { Provider } from "../theme/Provider";
 import "../panels/panels.css";
+import { PanelsView } from "./PanelsView";
 
 type ToolResult = Awaited<ReturnType<App["callServerTool"]>>;
 
@@ -54,10 +53,9 @@ function PanelsApp() {
     try { accept(await app.callServerTool({ name: "run_panels", arguments: { dashboard: fragment.dashboard, vars } })); }
     catch { setProblem("This view could not be refreshed."); }
   } : undefined;
-  return <Provider scheme={host?.theme === "light" || host?.theme === "dark" ? host.theme : undefined}><div ref={root} role="main" aria-label="Driga panels">
-    {problem && <Text size="sm" c="danger" role="alert" px="md" py="xs">{problem}</Text>}
-    {fragment ? <Board fragment={fragment} onVars={onVars} compact /> : !problem && <Text size="sm" c="dimmed" p="md">{error ? "This view could not connect." : "Loading…"}</Text>}
-  </div></Provider>;
+  return <Provider scheme={host?.theme === "light" || host?.theme === "dark" ? host.theme : undefined}>
+    <PanelsView ref={root} fragment={fragment} problem={problem} disconnected={!!error} onVars={onVars} />
+  </Provider>;
 }
 
 createRoot(document.getElementById("root")!).render(<StrictMode><PanelsApp /></StrictMode>);

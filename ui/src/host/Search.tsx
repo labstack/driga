@@ -2,7 +2,7 @@
 // header's search button. Mantine's Spotlight filters by title, description
 // and keywords; this file only supplies the actions.
 import "@mantine/spotlight/styles.css";
-import { Group, Kbd, Text, UnstyledButton } from "@mantine/core";
+import { Group, Kbd, Text, UnstyledButton, VisuallyHidden } from "@mantine/core";
 import { isActionsGroup, Spotlight, spotlight, type SpotlightActionData, type SpotlightActionGroupData, type SpotlightFilterFunction } from "@mantine/spotlight";
 import { ArrowSquareOut, ChatCircle, Copy, MagnifyingGlass, SquaresFour } from "@phosphor-icons/react";
 import { useState } from "react";
@@ -41,7 +41,7 @@ export function sessionActions(live: Row[], ended: Row[], now: number, act: Act,
       description: [r.project, r.branch, r.agent, r.machine, `ended ${ago(now, r.ended_at)}`].filter(Boolean).join(" · "),
       keywords: keywords(r),
       leftSection: r.resume ? <Copy size={16} aria-hidden /> : <ChatCircle size={16} aria-hidden />,
-      rightSection: <Text className="search-hint" size="xs" c="dimmed" style={{ whiteSpace: "nowrap" }}>{r.resume ? "Copy resume command" : "Ask Chat"}</Text>,
+      rightSection: <Text className="search-hint" size="xs" c="var(--driga-text)" style={{ whiteSpace: "nowrap" }}>{r.resume ? "Copy resume command" : "Ask Chat"}</Text>,
       onClick: () => resume(r),
     })) },
   ];
@@ -78,14 +78,15 @@ export function Search({ list, act, ask, open, say }: { list: Summary[]; act: Ac
   };
   const boards: SpotlightActionGroupData = { group: "Dashboards", actions: list.map(d => ({ id: `dashboard-${d.id}`, label: d.name, leftSection: <SquaresFour size={16} aria-hidden />, onClick: () => open(d.id) })) };
   return <>
-    <UnstyledButton className="search-button" onClick={spotlight.open} aria-label="Search sessions and dashboards" aria-keyshortcuts="Meta+K">
+    <UnstyledButton className="search-button" onClick={spotlight.open} aria-keyshortcuts="Meta+K" title="Search sessions and dashboards (⌘K)">
       <Group gap={8} wrap="nowrap">
         <MagnifyingGlass size={16} aria-hidden />
         <Text size="sm" c="dimmed" visibleFrom="lg">Search</Text>
-        <Kbd size="xs" visibleFrom="lg">⌘K</Kbd>
+        <VisuallyHidden hiddenFrom="lg">Search</VisuallyHidden>
+        <Kbd size="xs" visibleFrom="lg" aria-hidden>⌘K</Kbd>
       </Group>
     </UnstyledButton>
-    <Spotlight shortcut={["mod + K"]} filter={filter} onSpotlightOpen={() => void load()} limit={40} highlightQuery scrollable maxHeight={480}
+    <Spotlight title="Search sessions and dashboards" styles={{ actionDescription: { color: "var(--driga-text)", opacity: 1 }, actionSection: { opacity: 1 } }} shortcut={["mod + K"]} filter={filter} onSpotlightOpen={() => void load()} limit={40} highlightQuery scrollable maxHeight={480}
       actions={[...sessionActions(found.live, found.ended, Date.now(), act, resume), ...(boards.actions.length ? [boards] : [])]}
       nothingFound={failed ? "Driga can't reach its service, so there is nothing to search." : "No session or dashboard matches. Sessions that ended more than two weeks ago aren't listed."}
       searchProps={{ "aria-label": "Search sessions and dashboards", leftSection: <MagnifyingGlass size={18} aria-hidden />, placeholder: "Search sessions by title, project, branch, agent or machine" }} />

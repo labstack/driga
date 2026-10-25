@@ -114,9 +114,19 @@ dev: ui-deps
 ui: ui-deps
     cd ui && bun run build
 
-# Test and rebuild the UI, and fail when the build in git (staged counts) is
-# behind ui/.
-ui-check: ui
+# Review the UI in Storybook, locally only (Canon design.md): every
+# component, panel, page and flow over a fictional fleet. Never published.
+design port="6506": ui-deps
+    cd ui && bun run design -p {{port}}
+
+# The catalog check: every story, its play, accessibility and the layout
+# check, in Chromium, in both schemes.
+design-check: ui-deps
+    cd ui && bun run design-check
+
+# Test and rebuild the UI, run the catalog, and fail when the build in git
+# (staged counts) is behind ui/.
+ui-check: ui design-check
     #!/usr/bin/env bash
     set -euo pipefail
     (cd ui && bun run test)

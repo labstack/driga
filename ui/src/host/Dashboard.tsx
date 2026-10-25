@@ -40,7 +40,9 @@ function fitted(p: Panel, r: Result | undefined, w: number, width: number): numb
       break;
     }
     case "cards": { const across = Math.max(1, Math.floor((width * w / 12) / 230)); px = chrome + 160 * Math.ceil(n / across); break; }
-    case "stat": case "gauge": return 2;
+    case "stat": return 2;
+    // A gauge's bar and its "of" line need a row more than a stat.
+    case "gauge": return 3;
     default: return undefined;
   }
   return Math.max(2, Math.ceil((px + gap) / unit));

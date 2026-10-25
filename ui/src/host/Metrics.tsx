@@ -31,7 +31,8 @@ function delta(trend: (number | null)[] | undefined, unit?: string): string | nu
  * count that needs the person takes its tone. Clicking one asks Chat. */
 export function Metrics({ fragment, editing, extra, onAsk, onShow, onRemove }: { fragment: Fragment | null; editing: boolean; extra?: Record<string, number>; onAsk: (m: Metric) => void; onShow?: (panel: string) => void; onRemove: (id: string) => void }) {
   if (!fragment) return <Box style={{ flex: 1 }} />;
-  return <ScrollArea type="never" style={{ flex: 1, minWidth: 0 }}>
+  // The row scrolls sideways when the window is too narrow for every tile.
+  return <ScrollArea type="scroll" scrollbarSize={4} style={{ flex: 1, minWidth: 0 }}>
     <Group gap={6} wrap="nowrap" component="ul" aria-label="Metrics" m={0} p={0} style={{ listStyle: "none" }}>
       {fragment.dashboard.panels.map(p => {
         const r = fragment.results.find(x => x.id === p.id);
@@ -46,8 +47,7 @@ export function Metrics({ fragment, editing, extra, onAsk, onShow, onRemove }: {
         return <Box component="li" key={p.id} pos="relative">
           <Menu position="bottom-start" withinPortal shadow="md" width={200}>
             <Menu.Target>
-            <UnstyledButton className="metric" px={10} py={4}
-              aria-label={`${p.title}: ${typeof n === "number" ? value(n, unit) : "no reading"}`}>
+            <UnstyledButton className="metric" px={10} py={4} title={p.description}>
               <Group gap={10} wrap="nowrap" align="center">
                 <Stack gap={1}>
                   <Group gap={5} wrap="nowrap" c={tone ? tone : "dimmed"}>
@@ -57,15 +57,14 @@ export function Metrics({ fragment, editing, extra, onAsk, onShow, onRemove }: {
                   </Group>
                   <Group gap={6} wrap="nowrap" align="center">
                     <Box c={tone ? tone : undefined}><Measure n={n} unit={unit} size={17} total={r?.total} /></Box>
-                    {change && <Badge size="xs" color="gray" variant="light" ff="monospace">{change}</Badge>}
+                    {change && <Badge size="xs" color="gray" variant="light" ff="monospace" visibleFrom="xl" style={{ flex: "none" }}>{change}</Badge>}
                   </Group>
                 </Stack>
-                {r?.trend && r.trend.length > 1 && <Box w={64} h={26}><Sparkline trend={r.trend} title={p.title} /></Box>}
+                {r?.trend && r.trend.length > 1 && <Box w={64} h={26} visibleFrom="xl"><Sparkline trend={r.trend} title={p.title} /></Box>}
               </Group>
             </UnstyledButton>
             </Menu.Target>
             <Menu.Dropdown>
-              {p.description && <Menu.Label style={{ textTransform: "none", whiteSpace: "normal" }}>{p.description}</Menu.Label>}
               {onShow && shows[p.id] && <Menu.Item leftSection={<SquaresFour />} onClick={() => onShow(shows[p.id])}>Show on Home</Menu.Item>}
               <Menu.Item leftSection={<ChatCircle />} onClick={() => onAsk({ panel: p, result: r })}>Ask Chat about it</Menu.Item>
             </Menu.Dropdown>

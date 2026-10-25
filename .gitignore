@@ -8,3 +8,5 @@
 .env*
 !.env.example
 .playwright-mcp/
+/ui/storybook-static/
+/ui/node_modules/.cache/

@@ -38,7 +38,7 @@ export function RowMenu({ kinds, row, act, label }: { kinds: ActionKind[]; row: 
   };
   return <Menu position="bottom-end" withinPortal shadow="md" width={180}>
     <Menu.Target>
-      <ActionIcon className="row-menu" aria-label={`Actions for ${label}`} onClick={e => e.stopPropagation()}><DotsThree size={18} /></ActionIcon>
+      <ActionIcon className="row-menu" style={{ flex: "none" }} aria-label={`Actions for ${label}`} onClick={e => e.stopPropagation()}><DotsThree size={18} /></ActionIcon>
     </Menu.Target>
     <Menu.Dropdown>
       {first && item(first)}

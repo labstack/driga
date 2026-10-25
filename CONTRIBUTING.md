@@ -51,6 +51,19 @@ The app's page and the panels MCP App are built from `ui/` with [Bun](https://bu
 build needs no JavaScript toolchain, but `just check` needs Bun: it runs the UI
 tests, rebuilds the bundles and fails when the committed ones are behind `ui/`.
 
+`just design` opens the UI's Storybook at http://127.0.0.1:6506, for review
+only: it is never published. It follows Canon's design review convention
+(`conventions/design.md`): every component, every kind of panel, the Home page
+and its flows, each with one Docs page of its states, over a fictional fleet
+and a fake service, so no story reaches a real Driga. Stories render the
+shipping components themselves. The panel data in `ui/src/fixtures` is Driga's
+own engine run over that fleet; `DRIGA_WRITE_STORIES=1 go test ./internal/panel`
+regenerates it, and `just check` fails when it is stale. `just design-check`
+runs every story, its play, accessibility and Canon's layout check in Chromium,
+light and dark; `just check` runs it too, and a unit test fails when a component
+or a kind of panel has no story. Agents writing or changing UI add the story
+first. UI files keep the code's PascalCase names rather than Canon's kebab-case.
+
 `just dev` develops the UI in a browser at http://127.0.0.1:5173/app/: Vite
 hot-reloads it, and `driga dev serve` answers the API on 127.0.0.1:47801 from
 the data directory your environment names, restarting on Go changes when

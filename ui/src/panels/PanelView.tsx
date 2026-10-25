@@ -32,7 +32,7 @@ export function PanelView({ panel, result, act: given, fill }: { panel: Panel; r
   const [asTable, setAsTable] = useState(false);
   const chart = (panel.viz === "bar" || panel.viz === "timeseries") && result?.status !== "error" && !!result?.frame?.rows.length;
   let body: ReactNode;
-  if (panel.viz === "text") body = <Text component="div" size="sm" className="markdown"><Markdown remarkPlugins={[remarkGfm]}>{panel.content ?? ""}</Markdown></Text>;
+  if (panel.viz === "text") body = <ScrollArea style={{ flex: 1 }} type="auto" viewportProps={scrollable}><Text component="div" size="sm" className="markdown"><Markdown remarkPlugins={[remarkGfm]}>{panel.content ?? ""}</Markdown></Text></ScrollArea>;
   else if (!result) body = <Text size="sm" c="dimmed">Loading…</Text>;
   else if (result.status === "error") body = <Text size="sm" c="danger">{result.message ?? "This panel could not run."}</Text>;
   else if (panel.viz === "inbox" && host.prompts?.length) body = <Inbox frame={result.frame ?? { columns: [], rows: [] }} act={act} prompts={host.prompts} answer={host.answer} />;
@@ -40,9 +40,11 @@ export function PanelView({ panel, result, act: given, fill }: { panel: Panel; r
   else if (chart && asTable) body = <DataTable frame={chartTable(result.frame, panel)} source={panel.source} />;
   else body = <Body panel={panel} result={result} frame={result.frame} height={height} act={act} />;
   const said = chart && result?.frame ? summary(result.frame, panel) : "";
-  return <Card component="section" aria-labelledby={`panel-${panel.id}`} h={fill ? "100%" : undefined} style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
+  // An article, not a section: a board and a Chat card can both hold a
+  // "Sessions" panel, and labelled sections are landmarks that must differ.
+  return <Card component="article" aria-labelledby={`panel-${panel.id}`} h={fill ? "100%" : undefined} style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
     <Group gap={6} wrap="nowrap" mb={6} className="panel-handle">
-      <Title order={2} id={`panel-${panel.id}`} fz="md" fw={600} lineClamp={1} style={{ letterSpacing: "-0.01em", flex: "0 1 auto", maxWidth: "75%" }}>{result?.title || panel.title}</Title>
+      <Title order={2} id={`panel-${panel.id}`} fz="md" fw={600} lineClamp={1} style={{ letterSpacing: "-0.01em", flex: "0 1 auto", maxWidth: "75%" }} title={result?.title || panel.title}>{result?.title || panel.title}</Title>
       {panel.description && <Tooltip label={panel.description} multiline maw={320}>
         <ActionIcon size="xs" aria-label={`About ${panel.title}`}><Info size={14} /></ActionIcon>
       </Tooltip>}
@@ -170,7 +172,7 @@ function DataTable({ frame, source, act }: { frame: Frame; source?: string; act?
   const table = useTable({ features, data, columns, state: { sorting }, onSortingChange: setSorting });
   const actionsFor = (r: Row): ActionKind[] => act ? rowActions(source, r, local) : [];
   const anyActions = !!act && data.some(r => actionsFor(r).length > 0);
-  return <ScrollArea style={{ flex: 1 }} type="auto" aria-label="Table">
+  return <ScrollArea style={{ flex: 1 }} type="auto" aria-label="Table" viewportProps={scrollable}>
     <Table miw={420}>
       <Table.Thead>{table.getHeaderGroups().map(group => <Table.Tr key={group.id}>
         {group.headers.map(header => {
@@ -200,6 +202,10 @@ function rowLabel(r: Row): string {
   return String(r.title || r.signature || r.project || r.path || r.id || "this row");
 }
 
+// A panel's scroll area is reachable by keyboard, so its rows can be read
+// with the arrow keys even when none of them is a control.
+const scrollable = { tabIndex: 0 } as const;
+
 function rowOf(columns: Column[], r: Frame["rows"][number]): Row {
   return Object.fromEntries(columns.map((c, i) => [c.name, r[i] ?? null]));
 }
@@ -208,10 +214,10 @@ function List({ frame, source, act }: { frame: Frame; source?: string; act?: Act
   const { local } = useHost();
   const shown = frame.columns.filter(c => !c.hidden);
   const [first, ...rest] = shown;
-  return <ScrollArea style={{ flex: 1 }} type="auto"><Stack gap={0}>{rows(frame).map((r, k) => {
+  return <ScrollArea style={{ flex: 1 }} type="auto" viewportProps={scrollable}><Stack gap={0}>{rows(frame).map((r, k) => {
     const kinds = act ? rowActions(source, r, local) : [];
     return <Group key={k} justify="space-between" wrap="nowrap" py={6} px={4} style={{ borderBottom: "1px solid var(--driga-border-soft)" }} {...rowProps(kinds, r, act)} className={`row-hover ${rowProps(kinds, r, act).className ?? ""}`}>
-      <Text size="sm" fw={500} truncate>{first ? cell(r[first.name], first) : ""}</Text>
+      <Text size="sm" fw={500} truncate style={{ minWidth: 0 }} title={first ? cell(r[first.name], first) : undefined}>{first ? cell(r[first.name], first) : ""}</Text>
       <Group gap="xs" wrap="nowrap">
         <Text size="xs" c="dimmed" ff="monospace">{rest.map(c => cell(r[c.name], c)).join(" · ")}</Text>
         {kinds.length > 0 && <RowMenu kinds={kinds} row={r} act={act!} label={rowLabel(r)} />}
@@ -241,7 +247,7 @@ function Inbox({ frame, act, prompts, answer }: { frame: Frame; act?: Act; promp
           </Group>
           {r.summary && <Text size="xs" style={{ overflowWrap: "anywhere" }}>{String(r.summary)}</Text>}
         </Stack>
-        {act && !r.ack_pending && <Button size="compact-xs" variant="default" onClick={() => void act({ kind: "ack", row: r })}>Dismiss</Button>}
+        {act && !r.ack_pending && <Button size="compact-xs" variant="default" style={{ flex: "none" }} onClick={() => void act({ kind: "ack", row: r })}>Dismiss</Button>}
       </Group>
     </Paper>;
   };
@@ -252,15 +258,16 @@ function Inbox({ frame, act, prompts, answer }: { frame: Frame; act?: Act; promp
     const name = String(r.title || r.summary || "Session " + r.session_id);
     const where = [r.project, r.agent, r.machine].filter(Boolean).join(" · ");
     const props = rowProps(kinds, r, act);
+    const facts = [where, r.branch, typeof r.turns === "number" && r.turns > 1 ? `${r.turns} turns` : "", r.summary && r.summary !== "turn finished" ? r.summary : r.last_commit ? `last commit: ${r.last_commit}` : ""].filter(Boolean).join(" · ");
     // A finished turn is one line with what there is to review; a wait keeps
     // a second line for what it waits on.
     if (!waiting) return <Group key={String(r.id)} gap={8} wrap="nowrap" px={6} py={4} {...props} className={`row-hover ${props.className ?? ""}`} style={{ borderRadius: "var(--mantine-radius-sm)" }}>
       <CheckCircle size={14} aria-hidden style={{ color: "var(--driga-muted)", flex: "none" }} />
-      <Text size="sm" fw={500} truncate style={{ flex: "0 1 auto" }}>{name}</Text>
-      <Text size="xs" c="dimmed" truncate style={{ flex: 1 }}>{[where, r.branch, typeof r.turns === "number" && r.turns > 1 ? `${r.turns} turns` : "", r.summary && r.summary !== "turn finished" ? r.summary : r.last_commit ? `last commit: ${r.last_commit}` : ""].filter(Boolean).join(" · ")}</Text>
+      <Text size="sm" fw={500} truncate style={{ flex: "0 1 auto", minWidth: 0 }} title={name}>{name}</Text>
+      <Text size="xs" c="dimmed" truncate style={{ flex: "1 1 0", minWidth: 0 }} title={facts}>{facts}</Text>
       <Review row={r} />
       {typeof r.age === "number" && <Text size="xs" c="dimmed" style={{ whiteSpace: "nowrap" }}>{duration(r.age)} ago</Text>}
-      {act && !r.ack_pending && <Button size="compact-xs" variant="subtle" color="gray" leftSection={<Check size={12} />} aria-label={`Mark ${name} reviewed`} onClick={e => { e.stopPropagation(); void act({ kind: "ack", row: r }); }}>Reviewed</Button>}
+      {act && !r.ack_pending && <Button size="compact-xs" variant="subtle" color="gray" style={{ flex: "none" }} leftSection={<Check size={12} />} aria-label={`Mark ${name} reviewed`} onClick={e => { e.stopPropagation(); void act({ kind: "ack", row: r }); }}>Reviewed</Button>}
       {act && <RowMenu kinds={kinds} row={r} act={act} label={name} />}
     </Group>;
     return <Paper key={String(r.id)} p="xs" radius="sm" withBorder {...props} className={`row-hover ${props.className ?? ""}`} style={{ background: "var(--driga-inset)", borderLeft: "3px solid var(--mantine-color-warning-filled)" }}>
@@ -268,7 +275,7 @@ function Inbox({ frame, act, prompts, answer }: { frame: Frame; act?: Act; promp
         <Stack gap={2} style={{ minWidth: 0 }}>
           <Group gap={6} wrap="nowrap">
             <StatusBadge tone="warning">{`waiting ${typeof r.waited === "number" ? duration(r.waited) : ""}`.trim()}</StatusBadge>
-            <Text size="sm" fw={500} truncate>{name}</Text>
+            <Text size="sm" fw={500} truncate style={{ minWidth: 0 }} title={name}>{name}</Text>
           </Group>
           <Text size="xs" ff={r.tool || r.detail ? "monospace" : undefined} c="dimmed" style={{ overflowWrap: "anywhere" }}>{why}</Text>
           <Text size="xs" c="dimmed">{where}</Text>
@@ -280,7 +287,7 @@ function Inbox({ frame, act, prompts, answer }: { frame: Frame; act?: Act; promp
   const section = (title: string, n: number, children: ReactNode) => n > 0 && <Stack gap={6}>
     <Text size="xs" fw={600} c="dimmed">{title} · {n}</Text>{children}
   </Stack>;
-  return <ScrollArea style={{ flex: 1 }} type="auto"><Stack gap="sm">
+  return <ScrollArea style={{ flex: 1 }} type="auto" viewportProps={scrollable}><Stack gap="sm">
     {section("Permission prompts", prompts?.length ?? 0, prompts?.map(p => <PromptItem key={p.id} prompt={p} answer={answer} />))}
     {section("Needs you", waits.length, waits.map(item))}
     {section("Machines", warnings.length, warnings.map(warning))}
@@ -299,13 +306,13 @@ function Review({ row }: { row: Row }) {
   // With nothing edited and nothing left over, say which: a clean checkout,
   // or no checkout Driga knows to look at.
   if (!files && !dirty && !unpushed) return checkout
-    ? <Tooltip label={<Text size="xs" ff="monospace">{checkout}</Text>} withinPortal><Badge size="xs" variant="light" color="gray">clean</Badge></Tooltip>
-    : <Text size="xs" c="dimmed" style={{ whiteSpace: "nowrap" }}>no checkout</Text>;
+    ? <Tooltip label={<Text size="xs" ff="monospace">{checkout}</Text>} withinPortal><Badge size="xs" variant="light" color="gray" style={{ flex: "none" }}>clean</Badge></Tooltip>
+    : <Text size="xs" c="dimmed" style={{ whiteSpace: "nowrap", flex: "none" }}>no checkout</Text>;
   const edited = typeof row.edited === "string" && row.edited ? row.edited.split("\n") : [];
   const tip = <Stack gap={2} maw={420}>
     {checkout && <Text size="xs" ff="monospace">{checkout}</Text>}
     {typeof row.last_commit === "string" && row.last_commit && <Text size="xs">Last commit: {row.last_commit}</Text>}
-    {edited.slice(0, 8).map(f => <Text key={f} size="xs" ff="monospace" truncate>{checkout && f.startsWith(checkout + "/") ? f.slice(checkout.length + 1) : f}</Text>)}
+    {edited.slice(0, 8).map(f => <Text key={f} size="xs" ff="monospace" truncate title={f}>{checkout && f.startsWith(checkout + "/") ? f.slice(checkout.length + 1) : f}</Text>)}
     {edited.length > 8 && <Text size="xs" c="dimmed">and {edited.length - 8} more</Text>}
   </Stack>;
   return <Tooltip label={tip} multiline withinPortal>
@@ -325,18 +332,18 @@ function Cards({ frame, source, act }: { frame: Frame; source?: string; act?: Ac
   const { local } = useHost();
   const shown = frame.columns.filter(c => !c.hidden);
   const [first, ...rest] = shown;
-  return <ScrollArea style={{ flex: 1 }} type="auto">
+  return <ScrollArea style={{ flex: 1 }} type="auto" viewportProps={scrollable}>
     <Box style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 10 }}>{rows(frame).map((r, k) => {
       const kinds = act ? rowActions(source, r, local) : [];
       return <Paper key={k} p="sm" withBorder style={{ background: "var(--driga-inset)" }}>
-        <Text size="sm" fw={600} truncate mb={6}>{first ? cell(r[first.name], first) : ""}</Text>
+        <Text size="sm" fw={600} truncate mb={6} title={first ? cell(r[first.name], first) : undefined}>{first ? cell(r[first.name], first) : ""}</Text>
         <SimpleGrid cols={2} spacing={12} verticalSpacing={2}>{rest.map(c => {
           const v = r[c.name];
           if (v === null || v === "" || v === undefined) return null;
           const busy = typeof v === "number" && v > 0 && c.unit === "count";
           return <Group key={c.name} justify="space-between" gap={6} wrap="nowrap">
-            <Text size="xs" c="dimmed" truncate>{label(c.name)}</Text>
-            <Text size="xs" ff="monospace" c={busy ? "warning" : undefined} truncate>{cell(v, c)}</Text>
+            <Text size="xs" c="dimmed" truncate title={label(c.name)}>{label(c.name)}</Text>
+            <Text size="xs" ff="monospace" c={busy ? "warning" : undefined} truncate title={cell(v, c)}>{cell(v, c)}</Text>
           </Group>;
         })}</SimpleGrid>
         {kinds.length > 0 && <Group justify="flex-end" mt={4}><RowMenu kinds={kinds} row={r} act={act!} label={rowLabel(r)} /></Group>}
@@ -358,7 +365,7 @@ function Timeline({ frame, act }: { frame: Frame; act?: Act }) {
   const pos = (t: number) => `${Math.max(0, Math.min(100, ((t - from) / span) * 100))}%`;
   const end = (r: Row) => Date.parse(String(r.ended_at ?? "")) || now;
   const ticks = [0, 0.25, 0.5, 0.75, 1].map(f => from + f * span);
-  return <ScrollArea style={{ flex: 1 }} type="auto"><div className="timeline">
+  return <ScrollArea style={{ flex: 1 }} type="auto" viewportProps={scrollable}><div className="timeline">
     <div className="tl-axis" aria-hidden="true">{ticks.map(t => <span key={t} style={{ left: pos(t) }}>{new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>)}</div>
     <ul>{items.map(r => {
       const start = Date.parse(String(r.started_at));
@@ -367,8 +374,8 @@ function Timeline({ frame, act }: { frame: Frame; act?: Act }) {
       const waiting = r.label === "waiting";
       return <li key={String(r.id)} className="tl-row">
         <UnstyledButton className="tl-label" disabled={!act} onClick={() => act && void act({ kind: "jump", row: { ...r, session_id: r.id } })} title={String(r.title ?? "")}>
-          <Text size="xs" fw={500} truncate>{String(r.title || `Session ${r.id}`)}</Text>
-          <Text size="xs" c="dimmed" truncate>{[r.agent, r.project].filter(Boolean).join(" · ")}</Text>
+          <Text size="xs" fw={500} truncate title={String(r.title || `Session ${r.id}`)}>{String(r.title || `Session ${r.id}`)}</Text>
+          <Text size="xs" c="dimmed" truncate title={[r.agent, r.project].filter(Boolean).join(" · ")}>{[r.agent, r.project].filter(Boolean).join(" · ")}</Text>
         </UnstyledButton>
         <div className="tl-track" role="img" aria-label={`${r.title}: ${r.label}, ${waits.length} waits`}>
           <span className={`tl-bar ${waiting ? "waiting" : r.ended_at ? "ended" : ""}`} style={{ left: pos(start), width: `calc(${pos(finish)} - ${pos(start)})` }} />
@@ -392,9 +399,9 @@ function PromptItem({ prompt, answer }: { prompt: Prompt; answer?: (p: Prompt, a
   return <Paper p="xs" radius="sm" withBorder style={{ background: "var(--driga-inset)", borderLeft: "3px solid var(--mantine-color-warning-filled)" }}>
     <Group justify="space-between" wrap="nowrap" align="flex-start" gap="sm">
       <Stack gap={2} style={{ minWidth: 0 }}>
-        <Group gap={6}><Badge color="warning">{prompt.tool}</Badge><Text size="sm" fw={500} truncate>{prompt.session}</Text></Group>
+        <Group gap={6}><Badge color="warning">{prompt.tool}</Badge><Text size="sm" fw={500} truncate style={{ minWidth: 0 }} title={prompt.session}>{prompt.session}</Text></Group>
         {detail && <Text size="xs" ff="monospace" style={{ overflowWrap: "anywhere" }}>{detail}</Text>}
-        <Text size="xs" c="dimmed" truncate>{prompt.cwd}</Text>
+        <Text size="xs" c="dimmed" truncate title={prompt.cwd}>{prompt.cwd}</Text>
       </Stack>
       {answer && <Group gap={4} wrap="nowrap">
         <Button disabled={!armed} loading={busy} onClick={() => void respond(true)}>Allow</Button>

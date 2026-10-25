@@ -108,7 +108,7 @@ export function ChatCard({ text, open: initiallyOpen, onOpen }: {
         <Group gap={6} wrap="nowrap">
           {expanded ? <CaretDown size={14} aria-hidden /> : <CaretRight size={14} aria-hidden />}
           {saved ? <FloppyDisk size={16} aria-hidden /> : <ChartBar size={16} aria-hidden />}
-          <Text size="sm" fw={600} truncate>{saved ? `Saved ${d.name}` : d.name}</Text>
+          <Text size="sm" fw={600} truncate title={saved ? `Saved ${d.name}` : d.name}>{saved ? `Saved ${d.name}` : d.name}</Text>
           <Text size="xs" c="dimmed" style={{ whiteSpace: "nowrap" }}>{saved && (card.saved?.version ?? fragment.version) ? `version ${card.saved?.version ?? fragment.version} · ` : ""}{lines.length} {lines.length === 1 ? "panel" : "panels"}</Text>
         </Group>
       </UnstyledButton>
@@ -117,8 +117,8 @@ export function ChatCard({ text, open: initiallyOpen, onOpen }: {
         {lines.slice(0, 6).map(p => {
           const r = results.get(p.id);
           return <Group component="li" key={p.id} gap={8} wrap="nowrap" justify="space-between">
-            <Text size="xs" truncate>{r?.title || p.title}</Text>
-            <Text size="xs" c={r?.status === "error" ? "danger" : "dimmed"} ff="monospace" truncate ta="right" style={{ maxWidth: "55%" }}>{reading(p, r)}</Text>
+            <Text size="xs" truncate title={r?.title || p.title}>{r?.title || p.title}</Text>
+            <Text size="xs" c={r?.status === "error" ? "danger" : "dimmed"} ff="monospace" truncate ta="right" style={{ maxWidth: "55%" }} title={reading(p, r)}>{reading(p, r)}</Text>
           </Group>;
         })}
         {lines.length > 6 && <Text component="li" size="xs" c="dimmed">and {lines.length - 6} more</Text>}
