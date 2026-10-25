@@ -31,9 +31,14 @@ export const dashboards = {
     post<Fragment>("/app/api/edit", { id, operations, base_version: base, vars, message }).then(normalize),
 };
 
-/** confirm asks the app's native dialog; without one nothing is confirmed. */
+/** confirm asks the app's native dialog. In a browser, under driga dev
+ * serve, there is none, and the browser's own asks instead; any other
+ * failure confirms nothing. */
 export async function confirm(message: string): Promise<boolean> {
-  try { return (await post<{ confirmed: boolean }>("/app/confirm", { message })).confirmed === true; } catch { return false; }
+  const response = await fetch("/app/confirm", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message }) }).catch(() => null);
+  if (response?.status === 404) return window.confirm(message);
+  if (!response?.ok) return false;
+  return ((await response.json()) as { confirmed?: boolean }).confirmed === true;
 }
 
 /** action runs a local action through the app's checks. */

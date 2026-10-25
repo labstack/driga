@@ -96,6 +96,21 @@ ui-deps:
 # Typecheck and build the app's dashboard host and the panels MCP App into
 # internal/web/app and internal/mcp/apps. Both are committed, so a Go build
 # needs no JavaScript toolchain; rebuild after changing ui/.
+# Develop the app's UI in a browser at http://127.0.0.1:5173/app/: Vite
+# hot-reloads the UI and sends the API to driga dev serve, which restarts when
+# Go files change (with watchexec on PATH). It reads the data directory the
+# environment names, as every driga command does.
+dev: ui-deps
+    #!/usr/bin/env bash
+    set -euo pipefail
+    trap 'kill 0' EXIT
+    if command -v watchexec >/dev/null; then
+      watchexec --restart --exts go --watch cmd --watch internal -- go run ./cmd/driga dev serve &
+    else
+      go run ./cmd/driga dev serve &
+    fi
+    cd ui && bun --bun vite
+
 ui: ui-deps
     cd ui && bun run build
 

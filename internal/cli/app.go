@@ -89,27 +89,32 @@ func (AppCmd) Run(g *Globals) error {
 			source, _, closeSource, err := openAppViewer(ctx, g, cfg, view.Filter{})
 			return source, closeSource, err
 		},
-		// The page's buttons run Chat's local actions. Acknowledgements
-		// reach other machines' items too, as the TUI's do.
-		Web: web.Options{Action: func(ctx context.Context, name string, args json.RawMessage) error {
-			actionGlobals := local
-			if name == "ack_inbox" {
-				actionGlobals.Machine = g.Machine
-			}
-			actionGlobals.Stdout = io.Discard
-			return runChatAction(ctx, &actionGlobals, name, args)
-		}, Activity: pageActivity, Dashboards: dashboard.New(config.DataDir()), CleanupList: func(ctx context.Context) ([]cleanup.Candidate, error) {
-			envelope, err := cleanupRead(ctx, &local, "", false, true)
-			if err != nil {
-				return nil, err
-			}
-			return envelope.Data.([]cleanup.Candidate), nil
-		}},
+		Web:               pageOptions(g, &local),
 		ServiceExecutable: serviceExecutable,
 		Config:            cfg,
 		ConfigErr:         configErr,
 		Version:           g.Version,
 	})
+}
+
+// pageOptions are the page's handlers, the same in the app and in driga dev
+// serve. The page's buttons run Chat's local actions on this machine;
+// acknowledgements reach other machines' items too, as the TUI's do.
+func pageOptions(g, local *Globals) web.Options {
+	return web.Options{Action: func(ctx context.Context, name string, args json.RawMessage) error {
+		actionGlobals := *local
+		if name == "ack_inbox" {
+			actionGlobals.Machine = g.Machine
+		}
+		actionGlobals.Stdout = io.Discard
+		return runChatAction(ctx, &actionGlobals, name, args)
+	}, Activity: pageActivity, Dashboards: dashboard.New(config.DataDir()), CleanupList: func(ctx context.Context) ([]cleanup.Candidate, error) {
+		envelope, err := cleanupRead(ctx, local, "", false, true)
+		if err != nil {
+			return nil, err
+		}
+		return envelope.Data.([]cleanup.Candidate), nil
+	}}
 }
 
 // appLogging writes the app's log to the Driga service's log, which driga

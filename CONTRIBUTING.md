@@ -50,6 +50,12 @@ The app's page and the panels MCP App are built from `ui/` with [Bun](https://bu
 `internal/web/app` and `internal/mcp/apps`. The bundles are committed, so a Go
 build needs no JavaScript toolchain. Run `cd ui && bun run test` for the UI tests.
 
+`just dev` develops the UI in a browser at http://127.0.0.1:5173/app/: Vite
+hot-reloads it, and `driga dev serve` answers the API on 127.0.0.1:47801 from
+the data directory your environment names, restarting on Go changes when
+`watchexec` is installed. It is the app without its window: no native dialogs,
+menus, tray or notifications, and the browser's own confirm instead.
+
 The UI follows LabStack's Canon: Mantine components themed through
 `ui/src/theme`, Phosphor icons, TanStack Table for tables and one ECharts
 wrapper for charts. Its colors come from the console palette: after changing a
