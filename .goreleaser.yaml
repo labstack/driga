@@ -192,7 +192,8 @@ homebrew_casks:
     caveats: |
       Driga.app is in /Applications, and driga links to the CLI inside it.
       Open Driga from Finder, Spotlight or with driga app. The app collects in
-      the background and starts at login.
+      the background and starts at login. After upgrading from an earlier
+      release, open Driga once: it replaces the old background service.
     url:
       template: "https://github.com/labstack/driga/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
     commit_msg_template: "chore: update driga to {{ .Tag }}"
