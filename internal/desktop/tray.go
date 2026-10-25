@@ -78,9 +78,6 @@ func (s *shell) drawTray(force bool) {
 	if icon, err := assets.ReadFile("assets/" + l.Icon); err == nil {
 		_ = tray.SetIcon(icon, l.Template)
 	}
-	if s.goos == "darwin" {
-		tray.SetTitle(l.Title)
-	}
 	tray.SetToolTip(l.ToolTip)
 	tray.SetMenu(s.menu(model))
 }
