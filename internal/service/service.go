@@ -115,6 +115,15 @@ func New(binPath string) (Controller, error) {
 	return controller, nil
 }
 
+// Installed reports whether the per-user service is registered, running or not.
+func Installed(c Controller) (bool, error) {
+	_, err := c.Status()
+	if errors.Is(err, ks.ErrNotInstalled) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
 type controlOnly struct{}
 
 func (controlOnly) Start(ks.Service) error {

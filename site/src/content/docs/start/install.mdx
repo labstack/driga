@@ -24,12 +24,8 @@ runs the collector, sends [desktop notifications](/guides/notifications) and
 starts at login. After `brew upgrade`, a running app relaunches itself on the
 new version.
 
-If an earlier release installed the collector service, remove it so the app
-collects:
-
-```sh
-driga service uninstall
-```
+If an earlier release installed the collector service, the app removes it on
+its first launch, says so once, and collects itself.
 
 </TabItem>
 <TabItem label="Linux">
@@ -68,7 +64,8 @@ Scoop installs the app, `Driga.exe`, with a Start menu shortcut, and puts the
 CLI, `bin\driga.exe`, on `PATH` as `driga`. Archives with both are also on
 [GitHub Releases](https://github.com/labstack/driga/releases). Keep them at a
 stable path without shell metacharacters before installing hooks or the
-service.
+service. The app's first launch removes a collector task installed earlier and
+says so once.
 
 </TabItem>
 <TabItem label="From source">

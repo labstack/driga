@@ -68,7 +68,13 @@ func TestDoctorNoDaemon(t *testing.T) {
 	d, _ := doctorFixture(t)
 	d.Store = nil
 	d.LockProbe = func(string) (collector.Owner, bool, error) { return collector.Owner{}, false, nil }
+	d.OS = "linux"
 	requireCheck(t, Doctor(context.Background(), d), "collector", "warn", "driga service install")
+	d.OS = "darwin"
+	d.NotificationStatus = func() (string, error) { return "fixture", nil }
+	requireCheck(t, Doctor(context.Background(), d), "collector", "warn", "driga app")
+	d.DataDir = filepath.Join(d.DataDir, "missing")
+	requireCheck(t, Doctor(context.Background(), d), "data_permissions", "warn", "driga app")
 }
 
 func TestDoctorCollectorOwner(t *testing.T) {
@@ -319,7 +325,7 @@ func TestDoctorCommandWarningsAndFailures(t *testing.T) {
 	if err := json.Unmarshal(out.Bytes(), &checks); err != nil {
 		t.Fatal(err)
 	}
-	requireCheck(t, checks, "collector", "warn", "driga service install")
+	requireCheck(t, checks, "collector", "warn", collectorHint(runtime.GOOS))
 	if _, err := os.Stat(config.DataDir()); !os.IsNotExist(err) {
 		t.Fatalf("doctor wrote data directory: %v", err)
 	}

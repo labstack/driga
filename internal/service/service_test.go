@@ -1,12 +1,15 @@
 package service
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
 	"runtime"
 	"strings"
 	"testing"
+
+	ks "github.com/kardianos/service"
 )
 
 func TestServiceConfig(t *testing.T) {
@@ -103,6 +106,33 @@ func TestServiceCarriesPath(t *testing.T) {
 		c := configForOS("/opt/tools/bin/driga", goos)
 		if c.EnvVars["PATH"] != "/opt/tools/bin:/usr/bin:/bin" || c.EnvVars["TMUX_TMPDIR"] != "/run/user/tmux" {
 			t.Fatalf("%s env = %v", goos, c.EnvVars)
+		}
+	}
+}
+
+type statusController struct {
+	Controller
+	status ks.Status
+	err    error
+}
+
+func (c statusController) Status() (ks.Status, error) { return c.status, c.err }
+
+func TestInstalled(t *testing.T) {
+	failed := errors.New("launchctl failed")
+	for _, tc := range []struct {
+		c       statusController
+		want    bool
+		wantErr error
+	}{
+		{statusController{status: ks.StatusRunning}, true, nil},
+		{statusController{status: ks.StatusStopped}, true, nil},
+		{statusController{status: ks.StatusUnknown, err: ks.ErrNotInstalled}, false, nil},
+		{statusController{status: ks.StatusUnknown, err: failed}, false, failed},
+	} {
+		got, err := Installed(tc.c)
+		if got != tc.want || !errors.Is(err, tc.wantErr) {
+			t.Errorf("Installed(%v, %v) = %t, %v; want %t, %v", tc.c.status, tc.c.err, got, err, tc.want, tc.wantErr)
 		}
 	}
 }

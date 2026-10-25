@@ -175,6 +175,15 @@ func (c serviceControl) Run(g *Globals) error {
 	return err
 }
 
+// collectorHint is the command that starts background collection: the app on
+// macOS and Windows desktops, the service on Linux and headless machines.
+func collectorHint(goos string) string {
+	if goos == "darwin" || goos == "windows" {
+		return "driga app"
+	}
+	return "driga service install"
+}
+
 func serviceBinaryPath(bin string) (string, error) {
 	if runtime.GOOS == "windows" {
 		// Keep Scoop's stable current junction. The OS can execute this path

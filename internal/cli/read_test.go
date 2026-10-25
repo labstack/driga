@@ -154,7 +154,7 @@ func TestReadFallsBackToSnapshot(t *testing.T) {
 		if e.Mode != "snapshot" {
 			t.Fatal(out)
 		}
-		if strings.Contains(errout, "run 'driga service install'") != (i == 0) {
+		if strings.Contains(errout, "run '"+collectorHint(runtime.GOOS)+"'") != (i == 0) {
 			t.Fatal(errout)
 		}
 	}

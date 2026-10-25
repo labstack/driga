@@ -157,6 +157,36 @@ func TestInitDeclinesOverwrite(t *testing.T) {
 	}
 }
 
+func TestCollectorSetup(t *testing.T) {
+	for _, tc := range []struct {
+		goos, hint, text string
+		ask              bool
+	}{
+		{"darwin", "driga app", "The Driga app collects", false},
+		{"windows", "driga app", "The Driga app collects", false},
+		{"linux", "driga service install", "per-user systemd unit", true},
+	} {
+		if got := collectorHint(tc.goos); got != tc.hint {
+			t.Errorf("collectorHint(%q) = %q; want %q", tc.goos, got, tc.hint)
+		}
+		text, ask := collectorSetup(tc.goos)
+		if !strings.Contains(text, tc.text) || ask != tc.ask {
+			t.Errorf("collectorSetup(%q) = %q, %t; want %q, %t", tc.goos, text, ask, tc.text, tc.ask)
+		}
+	}
+}
+
+func TestInitRecommendsTheAppOnDesktops(t *testing.T) {
+	g, out := initFixture(t, "\n\n\n\n\n")
+	if err := (InitCmd{}).Run(g); err != nil {
+		t.Fatal(err)
+	}
+	text, ask := collectorSetup(runtime.GOOS)
+	if !strings.Contains(out.String(), text) || strings.Contains(out.String(), "Install and start the collector service?") != ask {
+		t.Fatal(out.String())
+	}
+}
+
 func TestConfigCommentedRoundTrip(t *testing.T) {
 	initFixture(t, "")
 	cfg := config.Default()

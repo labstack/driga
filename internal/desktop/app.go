@@ -128,6 +128,9 @@ func Run(opts Options) error {
 		s.stopCancel = supCancel
 		go func() {
 			defer close(s.stopped)
+			// The service's collector holds the lock until it stops; the
+			// supervisor then starts the app's own.
+			s.replaceService(dataDir, exe)
 			if err := opts.Supervisor.Run(supCtx); err != nil {
 				slog.Warn("collector did not stop cleanly", "event", "collector_stop_failed", "err", err.Error())
 			}
@@ -177,6 +180,24 @@ func (s *shell) prepareSupervisor(dataDir string) (string, error) {
 	sup.Notify = s.notes.post
 	sup.Status = s.setStatus
 	return sup.Executable, nil
+}
+
+// replaceService removes the background service the app replaces, and says
+// so once.
+func (s *shell) replaceService(dataDir, exe string) {
+	removed, err := replaceService(s.goos, dataDir, openUserService(exe))
+	if err != nil {
+		slog.Warn("could not remove the collector service", "event", "service_replace_failed", "err", err.Error())
+	}
+	if !removed {
+		return
+	}
+	slog.Info("removed the collector service; the app collects", "event", "service_replaced")
+	// The notice waits for OK; the collector does not.
+	go func() {
+		_, _ = mygo.Dialog.Message(mygo.MessageOptions{Parent: s.mainWindow(), Type: mygo.MessageInfo,
+			Message: serviceReplacedMessage, Buttons: []string{"OK"}})
+	}()
 }
 
 // stopCollector stops the supervisor and waits for its child to exit.

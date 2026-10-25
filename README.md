@@ -47,8 +47,8 @@ sends notifications under its own name. Hooks keep using the stable Homebrew
 `driga` link. After `brew upgrade`, a running app restarts itself on
 the new version.
 
-If you installed the collector service with an earlier release, run
-`driga service uninstall` so the app runs the collector itself.
+If you installed the collector service with an earlier release, the app
+removes it on its first launch, says so once, and runs the collector itself.
 
 On Windows (experimental), use Scoop:
 
@@ -126,8 +126,9 @@ Without a collector, Driga takes a disposable snapshot and shows
 `snapshot · no history`. That collection writes no persistent database. One
 agent in one repository works without configuring roots or a service.
 
-For guided setup, run `driga init`. Repository roots, text capture, hooks, and
-service installation are optional steps. Session working directories also
+For guided setup, run `driga init`. Repository roots, text capture, and hooks
+are optional steps. On macOS and Windows it points to the app for collection;
+on Linux it offers to install the service. Session working directories also
 contribute to repository discovery; there are no default scanning roots.
 
 The collector's first import marks older events as already seen. Reading an

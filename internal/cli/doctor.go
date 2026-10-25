@@ -142,7 +142,7 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 	case err != nil:
 		add("collector", "fail", err.Error(), "check access to "+d.DataDir+"/driga.lock")
 	case !held:
-		add("collector", "warn", "not running; snapshot mode has no history", "driga service install")
+		add("collector", "warn", "not running; snapshot mode has no history", collectorHint(goos))
 	case d.Store == nil:
 		add("collector", "warn", "lock held but database unavailable", "driga service restart")
 	default:
@@ -368,7 +368,7 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 	info, err := os.Stat(d.DataDir)
 	switch {
 	case errors.Is(err, os.ErrNotExist):
-		add("data_permissions", "warn", "data directory does not exist", "driga service install")
+		add("data_permissions", "warn", "data directory does not exist", collectorHint(goos))
 	case err != nil:
 		add("data_permissions", "fail", err.Error(), "check access to "+d.DataDir)
 	case !info.IsDir():
@@ -646,7 +646,7 @@ func (DoctorCmd) Run(g *Globals) error {
 	if openErr != nil {
 		status, fix := "fail", "check database permissions and driga service logs"
 		if _, err := os.Stat(filepath.Join(dataDir, "driga.db")); errors.Is(err, os.ErrNotExist) {
-			status, fix = "warn", "driga service install"
+			status, fix = "warn", collectorHint(runtime.GOOS)
 		}
 		var schemaErr *store.SchemaError
 		if errors.As(openErr, &schemaErr) {

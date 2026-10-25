@@ -213,9 +213,9 @@ which installs the bundle into `/Applications`. The `binaries` setting emits
 Ruby cask generation, not GoReleaser's Pro `app`/DMG feature. The caveats
 describe opening the app and no longer mention `driga service install`: the
 app collects in the background and registers its own login item on first
-launch. A launchd service from an earlier release keeps the collector lock; the
-app shows it as the collector until `driga service uninstall` hands collection
-to the app.
+launch. A launchd service from an earlier release is removed by the app's
+first launch, which says so once and then starts its own collector when the
+service's collector has released the lock.
 
 A real signed release and macOS installation are still needed to qualify
 Gatekeeper, offline staple validation, Homebrew upgrade and app relaunch, and

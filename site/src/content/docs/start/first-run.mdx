@@ -31,9 +31,9 @@ directories are enough to discover repositories.
    driga init
    ```
 
-   It covers repository roots, text capture, hooks and the service. You can do
-   each one by hand instead, as below. On a desktop, answer no to the service:
-   the app collects instead.
+   It covers repository roots, text capture and hooks, and how to collect: on
+   macOS and Windows it points to the app, on Linux it offers the service. You
+   can do each one by hand instead, as below.
 
 2. **Start collecting** for history, the inbox and alerts. On a desktop, open
    Driga from Finder, the Start menu or your launcher, or from a terminal:
@@ -45,7 +45,8 @@ directories are enough to discover repositories.
 
    The app runs the collector as its own child process, sends notifications
    and starts at login. Closing its window keeps it collecting in the menu bar
-   or tray; Quit stops the collector.
+   or tray; Quit stops the collector. On macOS and Windows its first launch
+   removes a collector service installed earlier and says so once.
 
    On a headless machine, install the collector service instead:
 
