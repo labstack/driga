@@ -202,7 +202,7 @@ func handler(b *Broker) http.Handler {
 			}
 			if err == nil {
 				if r.URL.Path == "/wait" {
-					ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+					ctx, cancel := context.WithTimeout(r.Context(), brokerWait)
 					out, err = b.Wait(ctx, r.URL.Query().Get("id"), seq)
 					cancel()
 					if errors.Is(err, context.DeadlineExceeded) && r.Context().Err() == nil {
@@ -288,6 +288,10 @@ func (c *Remote) callOnce(ctx context.Context, method, path string, in, out any,
 	timeout := 10 * time.Second
 	if path == "/approve" || path == "/hook-prompt" {
 		timeout = ApprovalTTL + time.Minute
+	} else if strings.HasPrefix(path, "/wait?") {
+		// The broker answers a quiet wait with the current state once
+		// brokerWait passes; the request must last until then.
+		timeout = brokerWait + 10*time.Second
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
@@ -490,6 +494,10 @@ func (b *Broker) ensureSocket() error {
 	b.closeSocket = func() { closeSocket(); _ = os.RemoveAll(dir) }
 	return nil
 }
+
+// brokerWait bounds one long poll at the broker, which then answers with the
+// current state.
+const brokerWait = 15 * time.Second
 
 func (c *Remote) Wait(ctx context.Context, id string, after uint64) (State, error) {
 	var out State

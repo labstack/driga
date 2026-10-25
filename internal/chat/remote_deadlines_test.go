@@ -58,3 +58,21 @@ func TestRemoteRequestTimeouts(t *testing.T) {
 		})
 	}
 }
+
+// A long poll must outlive the broker's wait, which answers "no change" once
+// it ends; a shorter client deadline would turn every quiet poll into an error.
+func TestRemoteWaitOutlivesBrokerWait(t *testing.T) {
+	c := &Remote{http: &http.Client{}, transport: &http.Transport{}}
+	want := brokerWait + 10*time.Second
+	c.http.Transport = deadlineTransport(func(r *http.Request) (*http.Response, error) {
+		deadline, ok := r.Context().Deadline()
+		remaining := time.Until(deadline)
+		if !ok || remaining > want || remaining < want-time.Second {
+			t.Errorf("deadline %v; want %v", remaining, want)
+		}
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{}`)), Header: make(http.Header)}, nil
+	})
+	if _, err := c.Wait(context.Background(), "id", 3); err != nil {
+		t.Fatal(err)
+	}
+}

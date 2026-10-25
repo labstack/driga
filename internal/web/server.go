@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -192,25 +193,75 @@ func (s *Server) newRoutes() *http.ServeMux {
 	return mux
 }
 
-// tailMark is the newest tail row a page holds, in the tail's (time, key) order.
+// seenKeys bounds the tail keys a cursor remembers.
+const seenKeys = 64
+
+// shortKey is the part of a tail key a cursor keeps: tail keys are SHA-256
+// hex, and sixteen digits tell a page's rows apart.
+func shortKey(key string) string { return key[:min(len(key), 16)] }
+
+// tailMark is what a page holds of the tail: the newest row in the tail's
+// (time, key) order, and the keys of the newest rows at or before it. A row
+// at or after floor that the page has not seen is sent even when it is older
+// than the newest, as when a machine's events arrive late; older rows count
+// as seen, which keeps the remembered keys bounded.
 type tailMark struct {
-	at  int64
-	key string // Empty before the first row.
+	at    int64
+	key   string // Empty before the first row.
+	floor int64
+	seen  []string // Short keys, oldest first.
 }
 
-func (m tailMark) before(row view.TailEvent) bool {
+func (m tailMark) newer(row view.TailEvent) bool {
 	at := row.TS.UnixNano()
 	return m.key == "" || at > m.at || at == m.at && row.Key > m.key
 }
 
-// The cursor is opaque to the page: refresh generation and tail mark.
+// unseen reports whether the page lacks row.
+func (m tailMark) unseen(row view.TailEvent) bool {
+	if m.newer(row) {
+		return true
+	}
+	return row.TS.UnixNano() >= m.floor && !slices.Contains(m.seen, shortKey(row.Key))
+}
+
+// covering returns the mark once the page holds tail up to newest: every row
+// of tail not newer than newest is then sent or deliberately skipped.
+func (m tailMark) covering(tail []view.TailEvent, newest tailMark) tailMark {
+	held := []view.TailEvent{}
+	for _, row := range tail {
+		if !newest.newer(row) {
+			held = append(held, row)
+		}
+	}
+	next := tailMark{at: newest.at, key: newest.key, floor: m.floor}
+	if len(held) > seenKeys {
+		cut := len(held) - seenKeys
+		floor := held[cut].TS.UnixNano()
+		if held[cut-1].TS.UnixNano() == floor {
+			// A forgotten row shares the oldest kept time: start after it.
+			floor++
+		}
+		next.floor = max(next.floor, floor)
+		held = held[cut:]
+	}
+	for _, row := range held {
+		if row.TS.UnixNano() >= next.floor {
+			next.seen = append(next.seen, shortKey(row.Key))
+		}
+	}
+	return next
+}
+
+// The cursor is opaque to the page: refresh generation and tail mark. The
+// key goes last, so any character in it survives.
 func encodeCursor(generation uint64, mark tailMark) string {
-	return fmt.Sprintf("%d.%d.%s", generation, mark.at, mark.key)
+	return fmt.Sprintf("%d.%d.%d.%s.%s", generation, mark.at, mark.floor, strings.Join(mark.seen, ","), mark.key)
 }
 
 func decodeCursor(raw string) (uint64, tailMark, error) {
-	parts := strings.SplitN(raw, ".", 3)
-	if len(parts) != 3 {
+	parts := strings.SplitN(raw, ".", 5)
+	if len(parts) != 5 {
 		return 0, tailMark{}, fmt.Errorf("invalid cursor")
 	}
 	generation, err := strconv.ParseUint(parts[0], 10, 64)
@@ -221,7 +272,18 @@ func decodeCursor(raw string) (uint64, tailMark, error) {
 	if err != nil {
 		return 0, tailMark{}, fmt.Errorf("invalid cursor")
 	}
-	return generation, tailMark{at: at, key: parts[2]}, nil
+	floor, err := strconv.ParseInt(parts[2], 10, 64)
+	if err != nil {
+		return 0, tailMark{}, fmt.Errorf("invalid cursor")
+	}
+	mark := tailMark{at: at, key: parts[4], floor: floor}
+	if parts[3] != "" {
+		mark.seen = strings.Split(parts[3], ",")
+		if len(mark.seen) > seenKeys {
+			return 0, tailMark{}, fmt.Errorf("invalid cursor")
+		}
+	}
+	return generation, mark, nil
 }
 
 type update struct {
@@ -307,15 +369,16 @@ func (s *Server) tailSince(r *http.Request, mark tailMark) ([]view.TailEvent, ta
 		return []view.TailEvent{}, mark
 	} // Keep refreshes alive through a transient read failure.
 	rows := []view.TailEvent{}
-	next := mark
+	newest := mark
 	for _, row := range page.Tail {
-		if mark.before(row) {
+		if mark.unseen(row) {
 			rows = append(rows, row)
-			if next.before(row) {
-				next = tailMark{at: row.TS.UnixNano(), key: row.Key}
+			if newest.newer(row) {
+				newest = tailMark{at: row.TS.UnixNano(), key: row.Key}
 			}
 		}
 	}
+	next := mark.covering(page.Tail, newest)
 	// Flood policy: retain the newest twenty per answer; no unbounded page queue.
 	if len(rows) > 20 {
 		rows = rows[len(rows)-20:]

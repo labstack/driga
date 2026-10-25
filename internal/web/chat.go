@@ -172,7 +172,9 @@ func (s *Server) chatWait(r *http.Request) (chat.State, int, error) {
 	} else {
 		waitCtx, cancel := context.WithTimeout(ctx, s.pollTimeout)
 		state, err = s.opts.Chat.Wait(waitCtx, id, after)
-		timedOut := waitCtx.Err() != nil && ctx.Err() == nil
+		// The client may give up first, on a deadline of its own: either
+		// way nothing changed, and the poll answers with the current state.
+		timedOut := ctx.Err() == nil && (waitCtx.Err() != nil || errors.Is(err, context.DeadlineExceeded))
 		cancel()
 		if err != nil && timedOut {
 			state, err = s.opts.Chat.Read(ctx, id, after)
