@@ -5,6 +5,7 @@ package cli
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"syscall"
 	"testing"
 	"time"
@@ -27,6 +28,15 @@ func (emptyPlatform) Alive(int32, time.Time) bool                             { 
 // A running collector whose parent goes away, closing the write end of its
 // lifeline pipe, exits cleanly instead of running on as an orphan.
 func TestCollectExitsWhenParentGone(t *testing.T) {
+	// Run against private files, whatever environment the suite runs in.
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(configPath, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("DRIGA_CONFIG", configPath)
+	t.Setenv("DRIGA_DATA_DIR", filepath.Join(dir, "data"))
+	t.Setenv("DRIGA_SPOOL_DIR", filepath.Join(dir, "spool"))
 	// Collect from an empty machine: the run must read no real process table.
 	defer func(previous func(config.Config, attention.Notifier) (collector.Deps, error)) {
 		newCollectDeps = previous
