@@ -31,6 +31,8 @@ func TestReplaceService(t *testing.T) {
 
 type fakeService struct {
 	installed    bool
+	dataDir      string
+	dirErr       error
 	statusErr    error
 	uninstallErr error
 	queried      int
@@ -42,6 +44,8 @@ func (f *fakeService) Installed() (bool, error) {
 	return f.installed, f.statusErr
 }
 
+func (f *fakeService) DataDir() (string, error) { return f.dataDir, f.dirErr }
+
 func (f *fakeService) Uninstall() error {
 	f.uninstalled++
 	return f.uninstallErr
@@ -49,7 +53,7 @@ func (f *fakeService) Uninstall() error {
 
 func TestReplaceInstalledService(t *testing.T) {
 	dataDir := filepath.Join(t.TempDir(), "data")
-	svc := &fakeService{installed: true}
+	svc := &fakeService{installed: true, dataDir: dataDir}
 	open := func() (installedService, error) { return svc, nil }
 	removed, err := replaceService("darwin", dataDir, open)
 	if err != nil || !removed || svc.uninstalled != 1 {
@@ -80,12 +84,22 @@ func TestReplaceServiceLeavesOthersAlone(t *testing.T) {
 		"not installed":    {"darwin", &fakeService{}, nil},
 		"status failed":    {"windows", &fakeService{statusErr: failed}, failed},
 		"uninstall failed": {"darwin", &fakeService{installed: true, uninstallErr: failed}, failed},
+		"unreadable":       {"darwin", &fakeService{installed: true, dirErr: failed}, failed},
+		// Another data directory's service, as an app run with
+		// DRIGA_DATA_DIR sees the user's own.
+		"other data dir": {"darwin", &fakeService{installed: true, dataDir: "/elsewhere/driga"}, nil},
 	} {
 		t.Run(name, func(t *testing.T) {
 			dataDir := t.TempDir()
+			if tc.svc.dataDir == "" {
+				tc.svc.dataDir = dataDir
+			}
 			removed, err := replaceService(tc.goos, dataDir, func() (installedService, error) { return tc.svc, nil })
 			if removed || !errors.Is(err, tc.err) {
 				t.Fatalf("removed=%t err=%v; want false, %v", removed, err, tc.err)
+			}
+			if tc.svc.uninstalled != 0 && tc.svc.uninstallErr == nil {
+				t.Fatal("uninstalled")
 			}
 			if tc.goos == "linux" && tc.svc.queried != 0 {
 				t.Fatal("queried the Linux service")
@@ -94,5 +108,17 @@ func TestReplaceServiceLeavesOthersAlone(t *testing.T) {
 				t.Fatalf("marker written: %v", err)
 			}
 		})
+	}
+}
+
+// The default data directory on both sides is the same directory, however
+// each spells it.
+func TestReplaceServiceSameDataDir(t *testing.T) {
+	root := t.TempDir()
+	dataDir := filepath.Join(root, "data")
+	svc := &fakeService{installed: true, dataDir: filepath.Join(root, "x", "..", "data") + string(filepath.Separator)}
+	removed, err := replaceService("windows", dataDir, func() (installedService, error) { return svc, nil })
+	if err != nil || !removed || svc.uninstalled != 1 {
+		t.Fatalf("removed=%t err=%v uninstalled=%d", removed, err, svc.uninstalled)
 	}
 }

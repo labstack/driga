@@ -61,6 +61,19 @@ func (s *taskService) action(action string) error {
 	_, err = s.run("schtasks.exe", args...)
 	return err
 }
+
+// recordedDataDir is the data directory the registered task collects into.
+func (s *taskService) recordedDataDir() (string, error) {
+	args, err := taskArgs("xml", s.name, "")
+	if err != nil {
+		return "", err
+	}
+	b, err := s.run("schtasks.exe", args...)
+	if err != nil {
+		return "", err
+	}
+	return taskDataDir(b)
+}
 func (s *taskService) Install() error {
 	if err := secfile.MkdirPrivate(s.dataDir); err != nil {
 		return err

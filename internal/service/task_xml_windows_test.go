@@ -104,3 +104,19 @@ func TestTaskEscapeArgEquivalent(t *testing.T) {
 		}
 	}
 }
+
+func TestTaskDataDir(t *testing.T) {
+	b, err := taskXML(`C:\driga.exe`, "S-1-5-21-123", `C:\data & dir`, `DRIGA_SPOOL_DIR=C:\spool`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := &taskService{name: `\Driga\test`, run: func(_ string, args ...string) ([]byte, error) {
+		if !reflect.DeepEqual(args, []string{"/Query", "/TN", `\Driga\test`, "/XML"}) {
+			t.Fatalf("args %q", args)
+		}
+		return taskFile(b), nil
+	}}
+	if got, err := DataDir(s); err != nil || got != `C:\data & dir` {
+		t.Fatalf("DataDir = %q, %v", got, err)
+	}
+}

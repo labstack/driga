@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	ks "github.com/kardianos/service"
+	"github.com/labstack/driga/internal/config"
 )
 
 type fakeLaunchd struct {
@@ -87,5 +88,34 @@ func TestLaunchdInstallRepairsAndIsIdempotent(t *testing.T) {
 	}
 	if controller.stops != 2 {
 		t.Fatal("association wasn't repaired")
+	}
+}
+
+func TestLaunchdDataDir(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "collector.plist")
+	s := &launchdController{Controller: &fakeLaunchd{}, binPath: "/usr/local/bin/driga", plistPath: path}
+	// A service installed without DRIGA_DATA_DIR collects where an app
+	// started without it does.
+	t.Setenv("DRIGA_DATA_DIR", "")
+	for _, tc := range []struct {
+		env  map[string]string
+		want string
+	}{
+		{map[string]string{"PATH": "/usr/bin"}, config.DataDir()},
+		{map[string]string{"DRIGA_DATA_DIR": filepath.Join(root, "data")}, filepath.Join(root, "data")},
+	} {
+		c := configForOS(s.binPath, "darwin")
+		c.EnvVars = tc.env
+		data, err := renderLaunchd(c)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if got, err := DataDir(s); err != nil || got != tc.want {
+			t.Fatalf("DataDir with %v = %q, %v; want %q", tc.env, got, err, tc.want)
+		}
 	}
 }

@@ -128,10 +128,17 @@ func configPath() string {
 // DataDir holds driga.db, driga.lock and viewer.heartbeat (env DRIGA_DATA_DIR overrides).
 func DataDir() string { return absolutePath(dataDirForOS(runtime.GOOS)) }
 
+// DefaultDataDir is the data directory when DRIGA_DATA_DIR is unset.
+func DefaultDataDir() string { return absolutePath(defaultDataDirForOS(runtime.GOOS)) }
+
 func dataDirForOS(goos string) string {
 	if p := os.Getenv("DRIGA_DATA_DIR"); p != "" {
 		return p
 	}
+	return defaultDataDirForOS(goos)
+}
+
+func defaultDataDirForOS(goos string) string {
 	if goos == "windows" {
 		return filepath.Join(windowsAppDir("LOCALAPPDATA", "Local"), "driga")
 	}

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/labstack/driga/internal/pathx"
 	"github.com/labstack/driga/internal/secfile"
 	"github.com/labstack/driga/internal/service"
 )
@@ -27,6 +28,8 @@ func ReplaceService(goos string, installed, done bool) bool {
 // installedService is the per-user collector service as the app sees it.
 type installedService interface {
 	Installed() (bool, error)
+	// DataDir is the data directory the service collects into.
+	DataDir() (string, error)
 	Uninstall() error
 }
 
@@ -35,6 +38,7 @@ type installedService interface {
 type userService struct{ service.Controller }
 
 func (s userService) Installed() (bool, error) { return service.Installed(s.Controller) }
+func (s userService) DataDir() (string, error) { return service.DataDir(s.Controller) }
 
 // openUserService opens the service registered for the executable exe.
 func openUserService(exe string) func() (installedService, error) {
@@ -49,7 +53,9 @@ func openUserService(exe string) func() (installedService, error) {
 
 // replaceService uninstalls the per-user service when ReplaceService says so,
 // the way driga service uninstall does, and records it. It reports whether it
-// removed one.
+// removed one. The service manager knows one service per user, so a service
+// that collects into another data directory, as the user's own does for an
+// app run with DRIGA_DATA_DIR, is left alone.
 func replaceService(goos, dataDir string, open func() (installedService, error)) (bool, error) {
 	marker := filepath.Join(dataDir, replacedMarker)
 	_, err := os.Stat(marker)
@@ -68,6 +74,13 @@ func replaceService(goos, dataDir string, open func() (installedService, error))
 	installed, err := svc.Installed()
 	if err != nil || !ReplaceService(goos, installed, done) {
 		return false, err
+	}
+	serviceDir, err := svc.DataDir()
+	if err != nil {
+		return false, err
+	}
+	if !pathx.Equal(serviceDir, dataDir) {
+		return false, nil
 	}
 	if err := svc.Uninstall(); err != nil {
 		return false, err

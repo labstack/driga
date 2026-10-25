@@ -26,6 +26,10 @@ func TestDataDirLinuxPaths(t *testing.T) {
 	if got := dataDirForOS("linux"); got != filepath.Join(home, "override") {
 		t.Fatal(got)
 	}
+	// The default is the directory without the override.
+	if got := defaultDataDirForOS("linux"); got != filepath.Join(home, "xdg/driga") {
+		t.Fatal(got)
+	}
 }
 
 func TestRelativePathsAreAbsolute(t *testing.T) {

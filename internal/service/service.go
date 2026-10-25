@@ -124,6 +124,23 @@ func Installed(c Controller) (bool, error) {
 	return err == nil, err
 }
 
+// DataDir is the data directory the installed service collects into: the
+// one its definition records, or the default when it records none.
+func DataDir(c Controller) (string, error) {
+	r, ok := c.(interface{ recordedDataDir() (string, error) })
+	if !ok {
+		return "", errors.New("the service does not record its data directory here")
+	}
+	dir, err := r.recordedDataDir()
+	if err != nil {
+		return "", err
+	}
+	if dir == "" {
+		return config.DefaultDataDir(), nil
+	}
+	return filepath.Abs(config.ExpandHome(dir))
+}
+
 type controlOnly struct{}
 
 func (controlOnly) Start(ks.Service) error {
