@@ -169,3 +169,22 @@ func TestRunningReadsLockOwner(t *testing.T) {
 		t.Fatal("exited owner reported running")
 	}
 }
+
+// A collector cancelled while it starts, as by SIGTERM or its parent going
+// away, stops cleanly at whatever step it was. The cancellations land at
+// spread points of the startup.
+func TestRunCancelledDuringStartupStopsCleanly(t *testing.T) {
+	d, _, _, a := setup(t)
+	dir := config.DataDir()
+	a.collect = func(ctx context.Context) { <-ctx.Done() }
+	for delay := time.Duration(0); delay < 20*time.Millisecond; delay += 100 * time.Microsecond {
+		ctx, cancel := context.WithCancel(context.Background())
+		timer := time.AfterFunc(delay, cancel)
+		err := Run(ctx, d, dir)
+		timer.Stop()
+		cancel()
+		if err != nil {
+			t.Fatalf("cancelled after %v: %v", delay, err)
+		}
+	}
+}

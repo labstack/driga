@@ -213,7 +213,18 @@ func (s *schedule) wait(_ time.Time, _ Intervals) time.Duration {
 }
 
 // Run collects until cancellation while holding the exclusive writer lock.
+// Cancellation, by a signal or the parent going away, is a clean stop at
+// whatever step it lands, startup included: whatever a step returned then
+// is the cancellation, not a failure.
 func Run(ctx context.Context, d Deps, dataDir string) error {
+	err := run(ctx, d, dataDir)
+	if ctx.Err() != nil {
+		return nil
+	}
+	return err
+}
+
+func run(ctx context.Context, d Deps, dataDir string) error {
 	if ctx.Err() != nil {
 		return nil
 	}
@@ -241,9 +252,6 @@ func Run(ctx context.Context, d Deps, dataDir string) error {
 		_, err := configurePassFeed(d, tx, enabled)
 		return err
 	}); err != nil {
-		if ctx.Err() != nil {
-			return nil
-		}
 		return err
 	}
 	broker, err := chat.New(ctx, st, &chat.Claude{DataDir: dataDir}, chat.Options{Snippets: d.Cfg.CaptureSnippets(), DataDir: dataDir})
@@ -278,9 +286,6 @@ func Run(ctx context.Context, d Deps, dataDir string) error {
 		defer stopFleet()
 	}
 	if err := recordGap(ctx, d, st); err != nil {
-		if ctx.Err() != nil {
-			return nil
-		}
 		return err
 	}
 	if d.State == nil {
@@ -326,9 +331,6 @@ func Run(ctx context.Context, d Deps, dataDir string) error {
 				}
 				return nil
 			}); err != nil {
-				if ctx.Err() != nil {
-					return nil
-				}
 				return err
 			}
 		default:
@@ -346,9 +348,6 @@ func Run(ctx context.Context, d Deps, dataDir string) error {
 			fleetErr = pullers.applyReady(ctx, d, st)
 		}
 		if fleetErr != nil {
-			if ctx.Err() != nil {
-				return nil
-			}
 			return fleetErr
 		}
 		intervals := cadence(age)
@@ -386,9 +385,6 @@ func Run(ctx context.Context, d Deps, dataDir string) error {
 			}
 		} else if spoolChanged {
 			if err := drainOnly(ctx, d, st); err != nil {
-				if ctx.Err() != nil {
-					return nil
-				}
 				return err
 			}
 			if server != nil {
@@ -400,15 +396,9 @@ func Run(ctx context.Context, d Deps, dataDir string) error {
 		}
 		if clock.Now().Sub(lastPrune) >= time.Hour {
 			if err := st.Tx(ctx, func(tx *store.Tx) error { return tx.Prune(d.now()) }); err != nil {
-				if ctx.Err() != nil {
-					return nil
-				}
 				return err
 			}
 			if err := st.ReclaimSpace(ctx); err != nil {
-				if ctx.Err() != nil {
-					return nil
-				}
 				return err
 			}
 			if err := spool.Prune(d.SpoolDir, d.now()); err != nil {
@@ -432,9 +422,6 @@ func Run(ctx context.Context, d Deps, dataDir string) error {
 					if req.reply != nil {
 						req.reply <- intakeResult{err: err}
 					}
-					if ctx.Err() != nil {
-						return nil
-					}
 					return err
 				}
 				if req.reply == nil {
@@ -446,9 +433,6 @@ func Run(ctx context.Context, d Deps, dataDir string) error {
 			}
 			if req.failure != nil {
 				if err := recordIntakeError(ctx, d, st, req.failure); err != nil {
-					if ctx.Err() != nil {
-						return nil
-					}
 					return err
 				}
 				if server != nil {
@@ -459,9 +443,6 @@ func Run(ctx context.Context, d Deps, dataDir string) error {
 			unmatched, err := applyIntake(ctx, d, st, req.batch)
 			req.reply <- intakeResult{unmatched: unmatched, err: err}
 			if err != nil {
-				if ctx.Err() != nil {
-					return nil
-				}
 				return err
 			}
 			if server != nil {
