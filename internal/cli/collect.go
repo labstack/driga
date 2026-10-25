@@ -3,7 +3,6 @@ package cli
 import (
 	"context"
 	"fmt"
-	"github.com/labstack/driga/internal/attention"
 	"io"
 	"log/slog"
 	"os"
@@ -11,6 +10,7 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/labstack/driga/internal/attention"
 	"github.com/labstack/driga/internal/collector"
 	"github.com/labstack/driga/internal/config"
 	"github.com/labstack/driga/internal/fleet"
@@ -22,6 +22,7 @@ import (
 // CollectCmd runs the daemon, or one persistent pass with --once.
 type CollectCmd struct {
 	Owner          string        `hidden:"" default:"manual" enum:"app,service,manual"`
+	NotifyFD       *int          `hidden:""`
 	Serve          *bool         `help:"Enable fleet serving alongside collection (overrides fleet.serve)."`
 	Listen         string        `help:"Fleet private IP or interface and port (requires serving)."`
 	Scheduled      bool          `hidden:""`
@@ -34,6 +35,9 @@ type CollectCmd struct {
 
 // Run loads collection sources and handles graceful termination signals.
 func (c CollectCmd) Run(g *Globals) error {
+	if c.NotifyFD != nil && *c.NotifyFD < 0 {
+		return invalidUsage("--notify-fd must be non-negative")
+	}
 	if c.Once && c.Serve != nil && *c.Serve {
 		return invalidUsage("--once and --serve cannot be combined")
 	}
@@ -68,7 +72,16 @@ func (c CollectCmd) Run(g *Globals) error {
 			return err
 		}
 	}
-	d, err := NewDeps(cfg)
+	var notifier attention.Notifier
+	if c.NotifyFD != nil {
+		f := os.NewFile(uintptr(*c.NotifyFD), "notify")
+		if f == nil {
+			return invalidUsage("--notify-fd is invalid")
+		}
+		defer f.Close()
+		notifier = &attention.PipeNotifier{W: f}
+	}
+	d, err := newDeps(cfg, notifier)
 	if err != nil {
 		return err
 	}
@@ -76,7 +89,7 @@ func (c CollectCmd) Run(g *Globals) error {
 	if g != nil {
 		d.Owner.Version = g.Version
 	}
-	if runtime.GOOS == "darwin" {
+	if runtime.GOOS == "darwin" && c.NotifyFD == nil {
 		// Record what macOS reports, so a silent notification problem shows in the log.
 		if status, err := attention.MacNotificationStatus(); err != nil {
 			slog.Warn("macOS notifications unavailable", "event", "notifications_unavailable", "err", err.Error())

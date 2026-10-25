@@ -20,13 +20,17 @@ var nativeToast = attention.WindowsToast
 
 // NewDeps builds the production sources shared by collector and snapshot commands.
 func NewDeps(cfg config.Config) (collector.Deps, error) {
+	return newDeps(cfg, nil)
+}
+
+func newDeps(cfg config.Config, notifier attention.Notifier) (collector.Deps, error) {
 	sigs, err := signatures.Load(cfg.ExtraSignatures)
 	if err != nil {
 		return collector.Deps{}, err
 	}
 	runner := newInboxRunner()
-	var notifier attention.Notifier // nil: leave alerts unconsumed for a process that can post
-	if attention.DesktopNotificationsReady() {
+	// Without a notifier, leave alerts unconsumed for a process that can post.
+	if notifier == nil && attention.DesktopNotificationsReady() {
 		notifier = attention.DesktopNotifier{Runner: runner, Toast: nativeToast, Mac: attention.MacDesktopNotifier()}
 	}
 	return collector.Deps{Cfg: cfg, Plat: platform.New(), Adapters: []adapter.Adapter{claude.New(), codex.New(), gemini.New()}, Sigs: sigs, Git: gitscan.NewScanner(4), SpoolDir: config.SpoolDir(), Now: time.Now, State: collector.NewState(), InboxRunner: runner, Notifier: notifier}, nil
