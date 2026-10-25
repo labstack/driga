@@ -6,13 +6,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/labstack/driga/internal/secfile"
-	"github.com/labstack/driga/internal/self"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
+
+	"github.com/labstack/driga/internal/scrub"
+	"github.com/labstack/driga/internal/secfile"
+	"github.com/labstack/driga/internal/self"
 
 	"github.com/labstack/driga/internal/config"
 	"github.com/labstack/driga/internal/llm"
@@ -177,7 +179,9 @@ type stream struct {
 	// gap is set when a new model message starts after text was shown, so
 	// its text begins a new paragraph rather than running on.
 	gap bool
-	err error
+	// cards are panel tool calls waiting for their result, by tool use id.
+	cards map[string]card
+	err   error
 }
 
 // text emits reply text, starting a new paragraph after an earlier message.
@@ -304,6 +308,9 @@ func (s *stream) line(line []byte) error {
 				if err := s.emit(Delta{ToolUseID: content.ToolUseID, ToolResult: string(content.Content), Failed: content.IsError}); err != nil {
 					return err
 				}
+				if err := s.settle(content.ToolUseID, content.Content, content.IsError); err != nil {
+					return err
+				}
 			}
 		}
 
@@ -317,7 +324,7 @@ func (s *stream) line(line []byte) error {
 				if err := s.tool(content.ID, content.Name); err != nil {
 					return err
 				}
-				if err := s.panel(content.Name, content.Input); err != nil {
+				if err := s.panel(content.ID, content.Name, content.Input); err != nil {
 					return err
 				}
 			}
@@ -345,6 +352,12 @@ func (s *stream) line(line []byte) error {
 			return errors.New("bad claude output: missing result text")
 		}
 		s.done = true
+		// A card whose result never came still shows what was asked.
+		for id := range s.cards {
+			if err := s.settle(id, nil, false); err != nil {
+				return err
+			}
+		}
 		if !s.printed {
 			if err := s.emit(Delta{Text: *e.Result}); err != nil {
 				return err
@@ -391,20 +404,80 @@ var panelTools = []string{"show_panels", "open_dashboard", "create_dashboard", "
 // maxPanelInput bounds a card's spec; a larger one stays a tool line.
 const maxPanelInput = 128 << 10
 
-// panel records a panel tool's input so the app can run it again as a card.
-func (s *stream) panel(name string, input json.RawMessage) error {
+// card is what the app shows for a panel tool call: the tool and its input,
+// which the app runs again for live data, and what came of it. Saved names
+// the dashboard a write saved; Error is why the call failed, such as a
+// rejected draft.
+type card struct {
+	Tool  string          `json:"tool"`
+	Input json.RawMessage `json:"input"`
+	Saved *struct {
+		ID      string `json:"id"`
+		Version int    `json:"version"`
+	} `json:"saved,omitempty"`
+	Error string `json:"error,omitempty"`
+}
+
+// panel holds a panel tool call until its result says what came of it.
+func (s *stream) panel(id, name string, input json.RawMessage) error {
 	tool, ok := strings.CutPrefix(name, "mcp__driga__")
 	if !ok || !slices.Contains(panelTools, tool) || len(input) == 0 || len(input) > maxPanelInput || !json.Valid(input) {
 		return nil
 	}
-	card, err := json.Marshal(struct {
-		Tool  string          `json:"tool"`
-		Input json.RawMessage `json:"input"`
-	}{tool, input})
+	if s.cards == nil {
+		s.cards = map[string]card{}
+	}
+	s.cards[id] = card{Tool: tool, Input: input}
+	return nil
+}
+
+// settle emits a held card with its result.
+func (s *stream) settle(id string, result json.RawMessage, failed bool) error {
+	c, ok := s.cards[id]
+	if !ok {
+		return nil
+	}
+	delete(s.cards, id)
+	text := resultText(result)
+	if failed {
+		c.Error = scrub.Snippet(text)
+	} else if c.Tool != "show_panels" && c.Tool != "open_dashboard" {
+		// claude passes the tool's structured result, the saved dashboard's
+		// fragment, as the result text.
+		var f struct {
+			ID      string `json:"id"`
+			Version int    `json:"version"`
+		}
+		if json.Unmarshal([]byte(text), &f) == nil && f.ID != "" {
+			c.Saved = &struct {
+				ID      string `json:"id"`
+				Version int    `json:"version"`
+			}{f.ID, f.Version}
+		}
+	}
+	b, err := json.Marshal(c)
 	if err != nil {
 		return err
 	}
-	return s.emit(Delta{Panel: card})
+	return s.emit(Delta{Panel: b})
+}
+
+// resultText is a tool result's text: claude sends it as a string or as
+// content blocks.
+func resultText(raw json.RawMessage) string {
+	var text string
+	if json.Unmarshal(raw, &text) == nil {
+		return text
+	}
+	var blocks []struct{ Type, Text string }
+	_ = json.Unmarshal(raw, &blocks)
+	var b strings.Builder
+	for _, block := range blocks {
+		if block.Type == "text" {
+			b.WriteString(block.Text)
+		}
+	}
+	return b.String()
 }
 
 func (s *stream) validTool(name string) bool {

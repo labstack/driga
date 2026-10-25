@@ -39,11 +39,10 @@ function Brief({ inbox, act, ask }: { inbox?: { panel: Panel; result?: Result; l
   </Stack>;
 }
 
-export function Chat({ inbox, act, ask, pinLabel, onPin, onSave, onShow, onOpen, onClose }: {
+export function Chat({ inbox, act, ask, onShow, onOpen, onClose }: {
   inbox?: { panel: Panel; result?: Result; listed: boolean }; act?: Act;
   /** ask puts a question in the compose box for the user to send. */
   ask: { text: string; at: number } | null;
-  pinLabel: string; onPin: (panels: Panel[]) => void; onSave: (panels: Panel[], name: string) => void;
   onShow: (f: Fragment) => void; onOpen: (id: string) => void; onClose?: () => void;
 }) {
   const [id, setId] = useState<string | null>(null);
@@ -129,7 +128,7 @@ export function Chat({ inbox, act, ask, pinLabel, onPin, onSave, onShow, onOpen,
             if (i !== firstDropped) return null;
             return <Text key={m.id} size="xs" c="dimmed">Earlier messages aren't kept. Set <Text span ff="monospace" fz="inherit">capture_text = "snippets"</Text> to keep Chat history.</Text>;
           }
-          if (m.role === "panel") return m.text ? <ChatCard key={m.id} text={m.text} pinLabel={pinLabel} onShow={onShow} onOpen={onOpen} onPin={onPin} onSave={onSave} /> : null;
+          if (m.role === "panel") return m.text ? <ChatCard key={m.id} text={m.text} onShow={onShow} onOpen={onOpen} /> : null;
           if (m.role === "tool") return <Group key={m.id} gap={4} c="dimmed"><Check size={12} /><Text size="xs" ff="monospace">{m.text.replace(/^mcp__driga__/, "")}</Text></Group>;
           if (m.role === "action") { const a = actions.get(m.id); return a && id ? <ActionCard key={m.id} conversation={id} action={a} /> : null; }
           if (m.role === "user") return <Paper key={m.id} px="sm" py={6} radius="lg" maw="85%" style={{ alignSelf: "flex-end", background: "var(--driga-hover)", whiteSpace: "pre-wrap" }}><Text size="sm">{m.text}</Text></Paper>;

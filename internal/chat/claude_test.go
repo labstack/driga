@@ -356,3 +356,37 @@ echo '{"type":"result","result":"It was declined."}'`)
 		t.Fatalf("text = %q", got)
 	}
 }
+
+// A dashboard write's card waits for its result: a save names the
+// dashboard and version it saved, a rejected draft says why.
+func TestPanelCardsCarryWhatTheWriteDid(t *testing.T) {
+	help := flags + "\n  --permission-prompts <mode>  Host prompts\n  --permission-prompt-tool <tool>  Prompt tool"
+	a, _ := fakeCLI(t, help, `echo '{"type":"system","subtype":"init","mcp_servers":[{"name":"driga","status":"connected"}]}'
+echo '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1","name":"mcp__driga__create_dashboard","input":{"dashboard":{"name":"Memory","panels":[]}}},{"type":"tool_use","id":"t2","name":"mcp__driga__edit_dashboard","input":{"id":"home","operations":[]}}]}}'
+echo '{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":"{\"dashboard\":{\"name\":\"Memory\",\"panels\":[]},\"id\":\"memory-0e6be9\",\"version\":1,\"results\":[]}"},{"type":"tool_result","tool_use_id":"t2","is_error":true,"content":"invalid_spec: panels[0].source: unknown source"}]}}'
+echo '{"type":"result","result":"done"}'`)
+	var cards []card
+	r := Request{Socket: "private.sock", Conversation: "conv", Token: "random-token"}
+	if err := a.Run(context.Background(), r, func(d Delta) error {
+		if len(d.Panel) > 0 {
+			var c card
+			if err := json.Unmarshal(d.Panel, &c); err != nil {
+				return err
+			}
+			cards = append(cards, c)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if len(cards) != 2 {
+		t.Fatalf("cards = %+v", cards)
+	}
+	byTool := map[string]card{cards[0].Tool: cards[0], cards[1].Tool: cards[1]}
+	if c := byTool["create_dashboard"]; c.Saved == nil || c.Saved.ID != "memory-0e6be9" || c.Saved.Version != 1 || c.Error != "" {
+		t.Fatalf("create card = %+v", c)
+	}
+	if c := byTool["edit_dashboard"]; c.Saved != nil || !strings.Contains(c.Error, "unknown source") {
+		t.Fatalf("edit card = %+v", c)
+	}
+}

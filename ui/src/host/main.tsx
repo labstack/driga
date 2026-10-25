@@ -5,11 +5,11 @@ import "@mantine/notifications/styles.css";
 import { ActionIcon, AppShell, Badge, Box, Button, Group, Select, Text, Title, Tooltip } from "@mantine/core";
 import { Notifications, notifications } from "@mantine/notifications";
 import { spotlight } from "@mantine/spotlight";
-import { ChatCircle, FloppyDisk, PencilSimple, PushPin, X } from "@phosphor-icons/react";
+import { ChatCircle, PencilSimple, X } from "@phosphor-icons/react";
 import { StrictMode, useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { HostContext, type Act, type Host } from "../panels/host";
-import type { Dashboard as Spec, Fragment, Panel, Prompt } from "../panels/types";
+import type { Dashboard as Spec, Fragment, Prompt } from "../panels/types";
 import { Provider } from "../theme/Provider";
 import "../panels/panels.css";
 import "./host.css";
@@ -140,27 +140,6 @@ function App() {
     try { await chat.answer(prompt.id, allow); setPrompts(ps => ps.filter(p => p.id !== prompt.id)); say(allow ? `Allowed ${prompt.tool}` : `Denied ${prompt.tool}`); }
     catch (e) { say((e as Error).message); }
   };
-  // A chat card's panels join the open dashboard, or become a new one.
-  const pin = async (panels: Panel[]) => {
-    if (fragment?.id) {
-      const taken = new Set(fragment.dashboard.panels.map(p => p.id));
-      const ops: Operation[] = panels.map(p => {
-        let pid = p.id, n = 2;
-        while (taken.has(pid)) pid = `${p.id}_${n++}`;
-        taken.add(pid);
-        return { op: "add", panel: { ...p, id: pid, grid: undefined } };
-      });
-      await edit(fragment.id, fragment.version ?? 0, ops, "Added from Chat");
-      say(`Added to ${fragment.dashboard.name}`);
-    }
-  };
-  const save = async (panels: Panel[], name: string) => {
-    try {
-      const created = await dashboards.create({ name, panels: panels.map(p => ({ ...p, grid: undefined })) }, "Saved from Chat");
-      if (created.id) open(created.id);
-      say(`Saved ${name}`);
-    } catch (e) { say((e as Error).message); }
-  };
   const remove = async () => {
     if (!fragment?.id) return;
     const name = fragment.dashboard.name;
@@ -212,8 +191,7 @@ function App() {
           </Box>
           {preview ? <Group gap="xs" wrap="nowrap">
             <Badge variant="light" color="brand" tt="none">Preview from Chat</Badge>
-            {fragment?.id && <Button variant="default" leftSection={<PushPin />} onClick={() => void pin(preview.dashboard.panels).then(() => setPreview(null))}>Add to {fragment.dashboard.name}</Button>}
-            <Button variant="default" leftSection={<FloppyDisk />} onClick={() => void save(preview.dashboard.panels, preview.dashboard.name)}>Save as dashboard</Button>
+            <Text size="xs" c="dimmed" visibleFrom="lg">Ask Chat to save it or add it to a dashboard.</Text>
             <Button variant="subtle" color="gray" leftSection={<X />} onClick={() => setPreview(null)}>Close</Button>
           </Group> : <Group gap="xs" wrap="nowrap">
             {d?.variables?.map(v => <Select key={v.name} size="xs" w={140} aria-label={v.name} placeholder={`All ${v.name}s`} clearable
@@ -232,7 +210,7 @@ function App() {
       </AppShell.Main>
       <AppShell.Aside style={{ borderColor: "var(--driga-border)", background: "var(--driga-inset)" }}>
         {/* Chat stays mounted while hidden, so a draft and the conversation survive. */}
-        <Box display={chatOpen ? "contents" : "none"}><Chat inbox={brief} act={act} ask={ask} pinLabel={`Add to ${fragment?.dashboard.name ?? "dashboard"}`} onPin={pin} onSave={save} onShow={show} onOpen={open} onClose={() => setChatOpen(false)} /></Box>
+        <Box display={chatOpen ? "contents" : "none"}><Chat inbox={brief} act={act} ask={ask} onShow={show} onOpen={open} onClose={() => setChatOpen(false)} /></Box>
       </AppShell.Aside>
     </AppShell>
   </HostContext.Provider>;

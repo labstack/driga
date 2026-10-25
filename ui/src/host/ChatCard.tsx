@@ -1,15 +1,22 @@
 // A chat card says in a few lines what a panel tool showed or changed. The
 // panels themselves need the room of the main area, so Open shows them
-// there; the narrow Chat column never draws a table or a chart.
+// there; the narrow Chat column never draws a table or a chart. Keeping a
+// view is something you ask Chat for, whose saved card then says so.
 import { Badge, Button, Group, Paper, Stack, Text } from "@mantine/core";
-import { ArrowSquareOut, ChartBar, FloppyDisk, PushPin, SquaresFour } from "@phosphor-icons/react";
+import { ArrowSquareOut, ChartBar, FloppyDisk, SquaresFour } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
 import { summary } from "../panels/charts";
 import { value } from "../panels/format";
 import type { Dashboard, Fragment, Panel, Result } from "../panels/types";
 import { dashboards, type Operation } from "./api";
 
-export type Card = { tool: string; input: { id?: string; dashboard?: Dashboard; vars?: Record<string, string>; operations?: Operation[]; version?: number; message?: string } };
+/** Card is a panel tool call: its input, and what came of it, which the
+ * service reads from the tool's result: the dashboard a write saved, or why
+ * the call failed. */
+export type Card = {
+  tool: string; input: { id?: string; dashboard?: Dashboard; vars?: Record<string, string>; operations?: Operation[]; version?: number; message?: string };
+  saved?: { id: string; version: number }; error?: string;
+};
 
 // Tools whose card is a saved dashboard rather than a one-off view.
 const saves = new Set(["create_dashboard", "edit_dashboard", "replace_dashboard", "restore_dashboard_version"]);
@@ -49,11 +56,10 @@ export function changes(card: Card, before?: Dashboard): string[] {
   });
 }
 
-export function ChatCard({ text, pinLabel, onShow, onOpen, onPin, onSave }: {
-  text: string; pinLabel: string;
+export function ChatCard({ text, onShow, onOpen }: {
+  text: string;
   /** onShow puts a one-off view in the main area; onOpen opens a saved dashboard there. */
   onShow: (f: Fragment) => void; onOpen: (id: string) => void;
-  onPin: (panels: Panel[]) => void; onSave: (panels: Panel[], name: string) => void;
 }) {
   const [card, setCard] = useState<Card | null>(null);
   const [fragment, setFragment] = useState<Fragment | null>(null);
@@ -62,17 +68,25 @@ export function ChatCard({ text, pinLabel, onShow, onOpen, onPin, onSave }: {
     let c: Card;
     try { c = JSON.parse(text) as Card; } catch { setProblem("This card could not be read."); return; }
     setCard(c);
+    if (c.error) return;
     const spec = c.input?.dashboard;
-    const id = c.input?.id;
+    const id = c.saved?.id ?? c.input?.id;
     if (!spec && !id) { setProblem("This card names no dashboard."); return; }
     // A saved dashboard opens as it is now; a one-off view runs again.
     const run = id && (saves.has(c.tool) || c.tool === "open_dashboard") ? dashboards.open(id, c.input?.vars) : dashboards.run(spec!, c.input?.vars);
     run.then(setFragment, (e: Error) => setProblem(e.message));
   }, [text]);
   if (problem) return <Text size="sm" c="danger">{problem}</Text>;
+  // A write that failed saved nothing; say so and why, as a rejected draft.
+  if (card?.error) return <Paper withBorder radius="md" p="sm" style={{ background: "var(--driga-raised)" }}>
+    <Stack gap={4}>
+      <Text size="sm" fw={600}>{saves.has(card.tool) ? `Draft rejected: ${card.input.dashboard?.name ?? card.input.id ?? "dashboard"}` : "These panels could not run"}</Text>
+      <Text size="xs" c="dimmed" style={{ overflowWrap: "anywhere" }}>{card.error}</Text>
+    </Stack>
+  </Paper>;
   if (!card || !fragment) return <Text size="sm" c="dimmed">Loading panels…</Text>;
   const d = fragment.dashboard;
-  const saved = saves.has(card.tool) && !!fragment.id;
+  const saved = saves.has(card.tool) && !!(card.saved ?? fragment.id);
   const results = new Map(fragment.results.map(r => [r.id, r]));
   const lines = d.panels.filter(p => p.viz !== "text");
   const done = saved ? changes(card) : [];
@@ -81,7 +95,7 @@ export function ChatCard({ text, pinLabel, onShow, onOpen, onPin, onSave }: {
       <Group gap={6} wrap="nowrap">
         {saved ? <FloppyDisk size={16} aria-hidden /> : <ChartBar size={16} aria-hidden />}
         <Text size="sm" fw={600} truncate>{saved ? `Saved ${d.name}` : d.name}</Text>
-        <Text size="xs" c="dimmed" style={{ whiteSpace: "nowrap" }}>{saved && fragment.version ? `version ${fragment.version} · ` : ""}{lines.length} {lines.length === 1 ? "panel" : "panels"}</Text>
+        <Text size="xs" c="dimmed" style={{ whiteSpace: "nowrap" }}>{saved && (card.saved?.version ?? fragment.version) ? `version ${card.saved?.version ?? fragment.version} · ` : ""}{lines.length} {lines.length === 1 ? "panel" : "panels"}</Text>
       </Group>
       {done.length > 0 && <Group gap={4}>{done.map(c => <Badge key={c} size="sm" variant="light" color="gray" tt="none">{c}</Badge>)}</Group>}
       <Stack gap={2} component="ul" m={0} p={0} style={{ listStyle: "none" }}>
@@ -96,8 +110,6 @@ export function ChatCard({ text, pinLabel, onShow, onOpen, onPin, onSave }: {
       </Stack>
       <Group gap={4} mt={2}>
         <Button size="compact-sm" variant="light" leftSection={saved ? <SquaresFour size={14} /> : <ArrowSquareOut size={14} />} onClick={() => saved ? onOpen(fragment.id!) : onShow(fragment)}>{saved ? "Open dashboard" : "Open"}</Button>
-        {!saved && <Button size="compact-sm" variant="subtle" color="gray" leftSection={<PushPin size={14} />} onClick={() => onPin(d.panels)}>{pinLabel}</Button>}
-        {!saved && <Button size="compact-sm" variant="subtle" color="gray" leftSection={<FloppyDisk size={14} />} onClick={() => onSave(d.panels, d.name)}>Save</Button>}
       </Group>
     </Stack>
   </Paper>;
