@@ -167,38 +167,44 @@ func registerPanels(s *sdk.Server, o Options) {
 		return &sdk.CallToolResult{Content: []sdk.Content{&sdk.TextContent{Text: fmt.Sprintf("%d versions.", len(versions))}}}, out, nil
 	})
 	agent := dashboard.Author{Kind: "agent"}
-	sdk.AddTool(s, &sdk.Tool{Name: "create_dashboard", Title: "Create dashboard", Annotations: write, Meta: appMeta(),
-		Description: "Save a new dashboard the user can open in the Driga app and edit. Returns it with live data." + specGuide,
-	}, func(ctx context.Context, _ *sdk.CallToolRequest, in createInput) (*sdk.CallToolResult, panel.Fragment, error) {
-		r, err := o.Dashboards.Create(in.Dashboard, agent, in.Message)
-		return saved(ctx, "Created", r, err, nil)
-	})
-	sdk.AddTool(s, &sdk.Tool{Name: "edit_dashboard", Title: "Edit dashboard", Annotations: write, Meta: appMeta(),
-		Description: "Change a saved dashboard with typed operations: add, update (merge fields), remove, move, layout, variables, rename. Edits apply in order, all or none, as a new version." + specGuide,
-	}, func(ctx context.Context, _ *sdk.CallToolRequest, in editInput) (*sdk.CallToolResult, panel.Fragment, error) {
-		r, err := o.Dashboards.Edit(in.ID, in.Operations, in.BaseVersion, agent, in.Message)
-		return saved(ctx, "Updated", r, err, nil)
-	})
-	sdk.AddTool(s, &sdk.Tool{Name: "replace_dashboard", Title: "Replace dashboard", Annotations: write, Meta: appMeta(),
-		Description: "Save a whole new spec for a dashboard as a new version; dragged positions of panels it keeps are preserved." + specGuide,
-	}, func(ctx context.Context, _ *sdk.CallToolRequest, in replaceInput) (*sdk.CallToolResult, panel.Fragment, error) {
-		r, err := o.Dashboards.Replace(in.ID, in.Dashboard, in.BaseVersion, agent, in.Message)
-		return saved(ctx, "Replaced", r, err, nil)
-	})
-	sdk.AddTool(s, &sdk.Tool{Name: "restore_dashboard_version", Title: "Restore dashboard version", Annotations: write, Meta: appMeta(),
-		Description: "Save an earlier version of a dashboard as its newest version. Nothing is lost: the replaced version stays in history.",
-	}, func(ctx context.Context, _ *sdk.CallToolRequest, in restoreInput) (*sdk.CallToolResult, panel.Fragment, error) {
-		r, err := o.Dashboards.Restore(in.ID, in.Version, agent)
-		return saved(ctx, "Restored", r, err, nil)
-	})
-	sdk.AddTool(s, &sdk.Tool{Name: "delete_dashboard", Title: "Delete dashboard", Annotations: &sdk.ToolAnnotations{DestructiveHint: boolPtr(true), OpenWorldHint: boolPtr(false)},
-		Description: "Delete a saved dashboard and its history. Deleting header restores the default metrics. Only when the user asks.",
-	}, func(_ context.Context, _ *sdk.CallToolRequest, in idInput) (*sdk.CallToolResult, struct{}, error) {
-		if err := o.Dashboards.Delete(in.ID); err != nil {
-			return nil, struct{}{}, dashboardError(err)
-		}
-		return &sdk.CallToolResult{Content: []sdk.Content{&sdk.TextContent{Text: "Deleted " + in.ID + "."}}}, struct{}{}, nil
-	})
+	// Chat gets dashboard writes only with its actions, and never delete:
+	// it checks that the server offers no tool beyond those (chat.Claude).
+	if !o.ChatServer || o.Chat {
+		sdk.AddTool(s, &sdk.Tool{Name: "create_dashboard", Title: "Create dashboard", Annotations: write, Meta: appMeta(),
+			Description: "Save a new dashboard the user can open in the Driga app and edit. Returns it with live data." + specGuide,
+		}, func(ctx context.Context, _ *sdk.CallToolRequest, in createInput) (*sdk.CallToolResult, panel.Fragment, error) {
+			r, err := o.Dashboards.Create(in.Dashboard, agent, in.Message)
+			return saved(ctx, "Created", r, err, nil)
+		})
+		sdk.AddTool(s, &sdk.Tool{Name: "edit_dashboard", Title: "Edit dashboard", Annotations: write, Meta: appMeta(),
+			Description: "Change a saved dashboard with typed operations: add, update (merge fields), remove, move, layout, variables, rename. Edits apply in order, all or none, as a new version." + specGuide,
+		}, func(ctx context.Context, _ *sdk.CallToolRequest, in editInput) (*sdk.CallToolResult, panel.Fragment, error) {
+			r, err := o.Dashboards.Edit(in.ID, in.Operations, in.BaseVersion, agent, in.Message)
+			return saved(ctx, "Updated", r, err, nil)
+		})
+		sdk.AddTool(s, &sdk.Tool{Name: "replace_dashboard", Title: "Replace dashboard", Annotations: write, Meta: appMeta(),
+			Description: "Save a whole new spec for a dashboard as a new version; dragged positions of panels it keeps are preserved." + specGuide,
+		}, func(ctx context.Context, _ *sdk.CallToolRequest, in replaceInput) (*sdk.CallToolResult, panel.Fragment, error) {
+			r, err := o.Dashboards.Replace(in.ID, in.Dashboard, in.BaseVersion, agent, in.Message)
+			return saved(ctx, "Replaced", r, err, nil)
+		})
+		sdk.AddTool(s, &sdk.Tool{Name: "restore_dashboard_version", Title: "Restore dashboard version", Annotations: write, Meta: appMeta(),
+			Description: "Save an earlier version of a dashboard as its newest version. Nothing is lost: the replaced version stays in history.",
+		}, func(ctx context.Context, _ *sdk.CallToolRequest, in restoreInput) (*sdk.CallToolResult, panel.Fragment, error) {
+			r, err := o.Dashboards.Restore(in.ID, in.Version, agent)
+			return saved(ctx, "Restored", r, err, nil)
+		})
+	}
+	if !o.ChatServer {
+		sdk.AddTool(s, &sdk.Tool{Name: "delete_dashboard", Title: "Delete dashboard", Annotations: &sdk.ToolAnnotations{DestructiveHint: boolPtr(true), OpenWorldHint: boolPtr(false)},
+			Description: "Delete a saved dashboard and its history. Deleting header restores the default metrics. Only when the user asks.",
+		}, func(_ context.Context, _ *sdk.CallToolRequest, in idInput) (*sdk.CallToolResult, struct{}, error) {
+			if err := o.Dashboards.Delete(in.ID); err != nil {
+				return nil, struct{}{}, dashboardError(err)
+			}
+			return &sdk.CallToolResult{Content: []sdk.Content{&sdk.TextContent{Text: "Deleted " + in.ID + "."}}}, struct{}{}, nil
+		})
+	}
 	addAppResource(s)
 }
 

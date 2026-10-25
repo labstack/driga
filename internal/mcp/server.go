@@ -42,8 +42,11 @@ type Options struct {
 	Cleanup     func(context.Context, string, bool) (view.Envelope, error)
 	Prompts     func(context.Context) ([]chat.Prompt, error)
 	Chat        bool
-	Action      func(context.Context, string, json.RawMessage) (string, error)
-	Approve     func(context.Context, json.RawMessage) (json.RawMessage, error)
+	// ChatServer serves Chat, read-only or with actions (Chat), rather than
+	// an outside MCP client.
+	ChatServer bool
+	Action     func(context.Context, string, json.RawMessage) (string, error)
+	Approve    func(context.Context, json.RawMessage) (json.RawMessage, error)
 	// Panels runs a dashboard over a fresh snapshot; with Dashboards it
 	// enables the panel and dashboard tools.
 	Panels     func(context.Context, panel.RunRequest) (panel.Fragment, error)
