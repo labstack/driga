@@ -17,6 +17,16 @@ function failsAfterFirstLoad(): Service {
   };
 }
 
+/** A service whose Home is slow to open, so the app is caught loading. */
+function slowHome(): Service {
+  const service = fakeService();
+  return (input, init) => {
+    const body = init?.body ? JSON.parse(String(init.body)) as { id?: string } : {};
+    if (String(input).includes("/app/api/open") && body.id === "home") return new Promise(() => undefined);
+    return service(input, init);
+  };
+}
+
 /** The app: the header's numbers, Home's board and Chat beside it, over
  * the fictional fleet, served by a fake service. */
 const meta = {
@@ -93,6 +103,15 @@ export const Search: Story = {
 export const Stale: Story = {
   parameters: { makeService: failsAfterFirstLoad },
   play: async ({ canvas }) => { await expect(await canvas.findByText(/Not updated since/, {}, { timeout: 15_000 })).toBeVisible(); },
+};
+export const LoadingHome: Story = {
+  parameters: { makeService: slowHome },
+  play: async ({ canvas }) => {
+    // Until Home arrives Chat cannot know whether Home lists the inbox, so it
+    // shows none rather than a copy that vanishes when Home does.
+    await expect(await canvas.findByText(/2 sessions need you/)).toBeVisible();
+    await expect(canvas.queryByRole("article", { name: "Inbox" })).toBeNull();
+  },
 };
 export const ServiceUnreachable: Story = {
   parameters: { service: fakeService({ down: true }) },

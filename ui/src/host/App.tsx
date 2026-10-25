@@ -168,7 +168,9 @@ export function App() {
 
   // The brief lists the inbox only when the dashboard does not.
   const inboxPanel = inbox?.dashboard.panels[0];
-  const listed = fragment?.dashboard.panels.some(p => p.viz === "inbox");
+  // Until the open dashboard arrives, whether it lists the inbox is unknown;
+  // the brief then shows no copy of it rather than one that vanishes.
+  const listed = fragment ? fragment.dashboard.panels.some(p => p.viz === "inbox") : true;
   const brief = inboxPanel ? { panel: inboxPanel, result: inbox!.results[0], listed: !!listed } : undefined;
   const d = fragment?.dashboard;
   return <HostContext.Provider value={host}>
