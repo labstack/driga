@@ -167,8 +167,9 @@ func registerPanels(s *sdk.Server, o Options) {
 		return &sdk.CallToolResult{Content: []sdk.Content{&sdk.TextContent{Text: fmt.Sprintf("%d versions.", len(versions))}}}, out, nil
 	})
 	agent := dashboard.Author{Kind: "agent"}
-	// Chat gets dashboard writes only with its actions, and never delete:
-	// it checks that the server offers no tool beyond those (chat.Claude).
+	// Chat gets dashboard writes only with its actions; it checks that the
+	// server offers no tool beyond those (chat.Claude). Delete is not
+	// pre-allowed there, so each one waits on the person's approval.
 	if !o.ChatServer || o.Chat {
 		sdk.AddTool(s, &sdk.Tool{Name: "create_dashboard", Title: "Create dashboard", Annotations: write, Meta: appMeta(),
 			Description: "Save a new dashboard the user can open in the Driga app and edit. Returns it with live data." + specGuide,
@@ -195,7 +196,7 @@ func registerPanels(s *sdk.Server, o Options) {
 			return saved(ctx, "Restored", r, err, nil)
 		})
 	}
-	if !o.ChatServer {
+	if !o.ChatServer || o.Chat {
 		sdk.AddTool(s, &sdk.Tool{Name: "delete_dashboard", Title: "Delete dashboard", Annotations: &sdk.ToolAnnotations{DestructiveHint: boolPtr(true), OpenWorldHint: boolPtr(false)},
 			Description: "Delete a saved dashboard and its history. Deleting header restores the default metrics. Only when the user asks.",
 		}, func(_ context.Context, _ *sdk.CallToolRequest, in idInput) (*sdk.CallToolResult, struct{}, error) {

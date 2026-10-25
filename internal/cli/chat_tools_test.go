@@ -12,7 +12,8 @@ import (
 
 // Chat refuses to start when its MCP server offers a tool it does not
 // expect (chat.Claude), so the server must offer exactly what each Chat mode
-// accepts: read-only Chat only the read tools, Chat with actions no delete.
+// accepts: read-only Chat only the read tools, Chat with actions every
+// dashboard tool, delete included, which waits on approval.
 // An outside MCP client keeps every dashboard tool.
 func TestChatServerOffersOnlyWhatChatAccepts(t *testing.T) {
 	list := func(forChat, actions bool) []string {
@@ -50,7 +51,7 @@ func TestChatServerOffersOnlyWhatChatAccepts(t *testing.T) {
 		}
 	}
 	withActions := list(true, true)
-	if slices.Contains(withActions, "delete_dashboard") || !slices.Contains(withActions, "edit_dashboard") {
+	if !slices.Contains(withActions, "delete_dashboard") || !slices.Contains(withActions, "edit_dashboard") {
 		t.Errorf("Chat with actions is offered %v", withActions)
 	}
 	if outside := list(false, false); !slices.Contains(outside, "delete_dashboard") || !slices.Contains(outside, "create_dashboard") {

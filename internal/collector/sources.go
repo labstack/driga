@@ -216,8 +216,7 @@ func collectSources(ctx context.Context, d Deps, st *store.Store, p Plan, state 
 			if o.Adapter == "" {
 				o.Adapter = result.name
 			}
-			// Driga's own Chat runs claude too; it is not one of the person's agents.
-			if strings.HasPrefix(o.Title, model.ChatPreamble) || strings.HasPrefix(o.LastPrompt, model.ChatPreamble) {
+			if ownChat(o) {
 				continue
 			}
 			r.observations = append(r.observations, o)
@@ -615,4 +614,20 @@ func collectSocketPeers(ctx context.Context, d Deps, st *store.Store, state *Sta
 		return nil, err
 	}
 	return peers, nil
+}
+
+// ownChat reports whether an observed session is Driga's own Chat, which
+// runs claude too and is not one of the person's agents. Its prompts open
+// with model.ChatPreamble, and it runs in the chat directory beside a Driga
+// data directory's chat key, which tells it apart before its first prompt
+// is read.
+func ownChat(o model.SessionObs) bool {
+	if strings.HasPrefix(o.Title, model.ChatPreamble) || strings.HasPrefix(o.LastPrompt, model.ChatPreamble) {
+		return true
+	}
+	if o.Cwd == "" || filepath.Base(o.Cwd) != "chat" {
+		return false
+	}
+	_, err := os.Stat(filepath.Join(filepath.Dir(o.Cwd), "chat.key"))
+	return err == nil
 }

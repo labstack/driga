@@ -2,10 +2,10 @@
 // under the few numbers that say whether anything needs you. Every action
 // goes through the app's own checks and dialogs.
 import "@mantine/notifications/styles.css";
-import { ActionIcon, AppShell, Badge, Box, Button, Group, Select, Text, Title, Tooltip } from "@mantine/core";
+import { ActionIcon, AppShell, Box, Button, Group, Select, Text, Title, Tooltip } from "@mantine/core";
 import { Notifications, notifications } from "@mantine/notifications";
 import { spotlight } from "@mantine/spotlight";
-import { ChatCircle, PencilSimple, X } from "@phosphor-icons/react";
+import { ChatCircle, PencilSimple } from "@phosphor-icons/react";
 import { StrictMode, useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { HostContext, type Act, type Host } from "../panels/host";
@@ -59,8 +59,6 @@ function App() {
   const [fragment, setFragment] = useState<Fragment | null>(null);
   const [vars, setVars] = useState<Record<string, string>>({});
   const [editing, setEditing] = useState(false);
-  // preview is a view Chat made, shown in the main area until closed.
-  const [preview, setPreview] = useState<Fragment | null>(null);
   const [chatOpen, setChatOpen] = useState(() => remembered("driga-chat-open") !== "false");
   // When the board last refreshed, and whether the latest try failed.
   const [fresh, setFresh] = useState<{ at: number; failed: boolean }>({ at: 0, failed: false });
@@ -93,8 +91,7 @@ function App() {
   useEffect(() => { remember("driga-chat-open", String(chatOpen)); }, [chatOpen]);
   useEffect(() => { history.replaceState(null, "", id === homeID ? "/app/" : `/app/?dashboard=${encodeURIComponent(id)}`); }, [id]);
 
-  const open = (next: string) => { setPreview(null); setEditing(false); setVars({}); setId(next); };
-  const show = (f: Fragment) => { setEditing(false); setPreview(f); };
+  const open = (next: string) => { setEditing(false); setVars({}); setId(next); };
   const edit = async (target: string, base: number, operations: Operation[], message?: string) => {
     try {
       const next = await dashboards.edit(target, operations, base, target === headerID ? undefined : vars, message);
@@ -164,8 +161,7 @@ function App() {
   const inboxPanel = inbox?.dashboard.panels[0];
   const listed = fragment?.dashboard.panels.some(p => p.viz === "inbox");
   const brief = inboxPanel ? { panel: inboxPanel, result: inbox!.results[0], listed: !!listed } : undefined;
-  const d = (preview ?? fragment)?.dashboard;
-  const shown = preview ?? fragment;
+  const d = fragment?.dashboard;
   return <HostContext.Provider value={host}>
     <AppShell header={{ height: 56 }} aside={{ width: 400, breakpoint: "md", collapsed: { desktop: !chatOpen, mobile: !chatOpen } }} padding={0}>
       <AppShell.Header px="md" style={{ background: "color-mix(in srgb, var(--driga-ground) 88%, transparent)", backdropFilter: "blur(10px)", borderColor: "var(--driga-border)" }}>
@@ -189,28 +185,24 @@ function App() {
               : fresh.failed ? <Text size="xs" c="warning" role="status">Driga can't reach its service. Retrying every {refreshMs / 1000}s.</Text>
               : d?.description && <Text size="xs" c="dimmed" truncate>{d.description}</Text>}
           </Box>
-          {preview ? <Group gap="xs" wrap="nowrap">
-            <Badge variant="light" color="brand" tt="none">Preview from Chat</Badge>
-            <Text size="xs" c="dimmed" visibleFrom="lg">Ask Chat to save it or add it to a dashboard.</Text>
-            <Button variant="subtle" color="gray" leftSection={<X />} onClick={() => setPreview(null)}>Close</Button>
-          </Group> : <Group gap="xs" wrap="nowrap">
+          <Group gap="xs" wrap="nowrap">
             {d?.variables?.map(v => <Select key={v.name} size="xs" w={140} aria-label={v.name} placeholder={`All ${v.name}s`} clearable
               data={fragment?.options?.[v.name] ?? []} value={vars[v.name] || null} onChange={next => setVars(prev => ({ ...prev, [v.name]: next ?? "" }))} />)}
             {list.length > 1 && <Select size="xs" w={170} aria-label="Dashboard" allowDeselect={false} data={list.map(x => ({ value: x.id, label: x.name }))} value={id} onChange={next => next && open(next)} />}
             {editing && <Button variant="light" color="danger" onClick={() => void remove()}>{id === homeID ? "Reset Home" : "Delete dashboard"}</Button>}
             <Button variant={editing ? "filled" : "default"} leftSection={<PencilSimple />} aria-pressed={editing} onClick={() => setEditing(e => !e)}>{editing ? "Done" : "Edit"}</Button>
-          </Group>}
+          </Group>
         </Group>
         {editing && <Text size="xs" c="dimmed" px="md" pb={6}>Drag panels by their title, resize from the corner, remove a header metric with its ×, or ask Chat to change any of it.</Text>}
         <Box px="md" pb="md" style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
-          {shown ? <Dashboard key={preview ? "preview" : shown.id} fragment={shown} editing={editing && !preview} act={act}
-            onLayout={grids => { if (!preview && fragment) void edit(fragment.id!, fragment.version ?? 0, [{ op: "layout", grids }], "Moved panels"); }}
-            onRemove={pid => { if (!preview && fragment) void edit(fragment.id!, fragment.version ?? 0, [{ op: "remove", id: pid }], "Removed a panel"); }} /> : <Text size="sm" c="dimmed">Loading…</Text>}
+          {fragment ? <Dashboard fragment={fragment} editing={editing} act={act}
+            onLayout={grids => { if (fragment) void edit(fragment.id!, fragment.version ?? 0, [{ op: "layout", grids }], "Moved panels"); }}
+            onRemove={pid => { if (fragment) void edit(fragment.id!, fragment.version ?? 0, [{ op: "remove", id: pid }], "Removed a panel"); }} /> : <Text size="sm" c="dimmed">Loading…</Text>}
         </Box>
       </AppShell.Main>
       <AppShell.Aside style={{ borderColor: "var(--driga-border)", background: "var(--driga-inset)" }}>
         {/* Chat stays mounted while hidden, so a draft and the conversation survive. */}
-        <Box display={chatOpen ? "contents" : "none"}><Chat inbox={brief} act={act} ask={ask} onShow={show} onOpen={open} onClose={() => setChatOpen(false)} /></Box>
+        <Box display={chatOpen ? "contents" : "none"}><Chat inbox={brief} act={act} ask={ask} onOpen={open} onClose={() => setChatOpen(false)} /></Box>
       </AppShell.Aside>
     </AppShell>
   </HostContext.Provider>;

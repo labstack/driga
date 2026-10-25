@@ -14,6 +14,11 @@ describe("reading", () => {
     expect(reading(panel("table"), { id: "p", status: "ok", frame: { columns: [{ name: "x", type: "string" }], rows: [["a"], ["b"]] } })).toBe("2 rows");
     expect(reading(panel("inbox"), { id: "p", status: "empty", message: "No turns finished today." })).toBe("No turns finished today.");
   });
+  it("says what a text panel holds", () => {
+    const table = { ...panel("text"), content: "| Project | Total |\n|---|---|\n| monk | 30 GB |\n| driga | 5 GB |\n\nDisk free: 111 GB." };
+    expect(reading(table)).toBe("table, 2 rows");
+    expect(reading({ ...panel("text"), content: "Measured with du." })).toBe("note");
+  });
   it("says why a panel failed", () => {
     expect(reading(panel("bar"), { id: "p", status: "error", message: "unknown column" })).toBe("unknown column");
   });
@@ -27,6 +32,7 @@ describe("changes", () => {
   });
   it("says what a create or restore did", () => {
     expect(changes({ tool: "create_dashboard", input: { dashboard: { name: "monk", panels: [panel("stat"), panel("table")] } } })).toEqual(["Created with 2 panels"]);
+    expect(changes({ tool: "create_dashboard", input: { dashboard: { name: "x", panels: [panel("stat")] } } })).toEqual(["Created with 1 panel"]);
     expect(changes({ tool: "restore_dashboard_version", input: { id: "home", version: 3 } })).toEqual(["Restored version 3"]);
   });
 });

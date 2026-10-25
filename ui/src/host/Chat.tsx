@@ -3,15 +3,22 @@ import { Check, Sparkle, X } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 import { useHost } from "../panels/host";
 import { PanelView, type Act } from "../panels/PanelView";
-import type { Fragment, Panel, Result } from "../panels/types";
+import type { Panel, Result } from "../panels/types";
 import { chat, type ChatAction, type ChatMessage, type ChatState } from "./api";
 import { ChatCard } from "./ChatCard";
+
+/** said is whether an action's result says anything; an empty JSON value,
+ * as a tool returns when it has nothing to add, does not. */
+function said(result?: string): boolean {
+  const text = (result ?? "").trim();
+  return text !== "" && !["{}", "[]", "null", '""', '"{}"', '"[]"'].includes(text);
+}
 
 function ActionCard({ conversation, action }: { conversation: string; action: ChatAction }) {
   const pending = action.status === "pending";
   return <Paper withBorder p="xs" radius="md" style={{ background: "var(--driga-raised)", borderColor: pending ? "var(--mantine-color-warning-filled)" : undefined }}>
     <Text size="sm" fw={600}>{action.title} <Text span size="xs" c="dimmed" fw={400}>· {action.status}</Text></Text>
-    {action.result && <Text size="xs" c="dimmed" mt={2}>{action.result}</Text>}
+    {said(action.result) && <Text size="xs" c="dimmed" mt={2}>{action.result}</Text>}
     {pending && <Group gap={6} mt="xs">
       <Button onClick={() => void chat.decide(conversation, action.id, true)}>Allow</Button>
       <Button variant="default" onClick={() => void chat.decide(conversation, action.id, false)}>Deny</Button>
@@ -39,11 +46,25 @@ function Brief({ inbox, act, ask }: { inbox?: { panel: Panel; result?: Result; l
   </Stack>;
 }
 
-export function Chat({ inbox, act, ask, onShow, onOpen, onClose }: {
+/** answerLast moves each reply after the tool rows and cards of its turn,
+ * up to the next question. */
+export function answerLast(messages: ChatMessage[]): ChatMessage[] {
+  const out: ChatMessage[] = [];
+  let reply: ChatMessage | null = null;
+  for (const m of messages) {
+    if (m.role === "user") { if (reply) out.push(reply); reply = null; out.push(m); continue; }
+    if (m.role === "assistant") { if (reply) out.push(reply); reply = m; continue; }
+    out.push(m);
+  }
+  if (reply) out.push(reply);
+  return out;
+}
+
+export function Chat({ inbox, act, ask, onOpen, onClose }: {
   inbox?: { panel: Panel; result?: Result; listed: boolean }; act?: Act;
   /** ask puts a question in the compose box for the user to send. */
   ask: { text: string; at: number } | null;
-  onShow: (f: Fragment) => void; onOpen: (id: string) => void; onClose?: () => void;
+  onOpen: (id: string) => void; onClose?: () => void;
 }) {
   const [id, setId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -107,9 +128,15 @@ export function Chat({ inbox, act, ask, onShow, onOpen, onClose }: {
   };
   const retry = sent && !active ? <Button size="compact-xs" variant="default" onClick={() => void send(sent)}>Retry</Button> : null;
 
+  // A turn's reply streams into one message made when the turn began, while
+  // its tool rows and cards are made as they happen. The reply is shown
+  // after them, as the answer that ends the turn.
+  const ordered = answerLast(messages);
   const dropped = (m: ChatMessage) => (m.role === "user" || m.role === "assistant") && !m.text.trim() && m.status !== "streaming" && m.status !== "queued";
-  const firstDropped = messages.findIndex(dropped);
-  const lastReply = messages.map(m => m.role).lastIndexOf("assistant");
+  const firstDropped = ordered.findIndex(dropped);
+  const lastReply = ordered.map(m => m.role).lastIndexOf("assistant");
+  // The newest card opens expanded; earlier ones stay a summary.
+  const lastCard = ordered.map(m => m.role).lastIndexOf("panel");
   return <Stack component="section" aria-label="Chat" h="100%" gap={0}>
     <Group justify="space-between" px="md" py="sm" style={{ borderBottom: "1px solid var(--driga-border)" }}>
       <Group gap={8} align="baseline"><Title order={2} fz="sm" fw={600}>Chat</Title><Text size="xs" c="dimmed">through your Claude Code login</Text></Group>
@@ -118,7 +145,7 @@ export function Chat({ inbox, act, ask, onShow, onOpen, onClose }: {
     <ScrollArea viewportRef={log} style={{ flex: 1 }} type="auto">
       <Stack gap="sm" p="md">
         {messages.every(dropped) && <Brief inbox={inbox} act={act} ask={text => void send(text)} />}
-        {messages.map((m, i) => {
+        {ordered.map((m, i) => {
           // Under capture_text = "titles" a turn's text is not kept: earlier
           // turns come back empty. One note stands for all of them; only
           // the latest reply says it failed.
@@ -128,7 +155,7 @@ export function Chat({ inbox, act, ask, onShow, onOpen, onClose }: {
             if (i !== firstDropped) return null;
             return <Text key={m.id} size="xs" c="dimmed">Earlier messages aren't kept. Set <Text span ff="monospace" fz="inherit">capture_text = "snippets"</Text> to keep Chat history.</Text>;
           }
-          if (m.role === "panel") return m.text ? <ChatCard key={m.id} text={m.text} onShow={onShow} onOpen={onOpen} /> : null;
+          if (m.role === "panel") return m.text ? <ChatCard key={m.id} text={m.text} open={i === lastCard} onOpen={onOpen} /> : null;
           if (m.role === "tool") return <Group key={m.id} gap={4} c="dimmed"><Check size={12} /><Text size="xs" ff="monospace">{m.text.replace(/^mcp__driga__/, "")}</Text></Group>;
           if (m.role === "action") { const a = actions.get(m.id); return a && id ? <ActionCard key={m.id} conversation={id} action={a} /> : null; }
           if (m.role === "user") return <Paper key={m.id} px="sm" py={6} radius="lg" maw="85%" style={{ alignSelf: "flex-end", background: "var(--driga-hover)", whiteSpace: "pre-wrap" }}><Text size="sm">{m.text}</Text></Paper>;

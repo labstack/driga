@@ -3,6 +3,7 @@ import { CaretDown, CaretUp, ChartLine, Check, CheckCircle, Info, Table as Table
 import { createSortedRowModel, rowSortingFeature, sortFn_alphanumeric, sortFn_basic, tableFeatures, useTable, type ColumnDef, type SortingState } from "@tanstack/react-table";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import Markdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { Chart } from "./Chart";
 import { bar, sparkline as sparklineOption, summary, timeseries } from "./charts";
 import { cell, duration, exact, label, value } from "./format";
@@ -31,7 +32,7 @@ export function PanelView({ panel, result, act: given, fill }: { panel: Panel; r
   const [asTable, setAsTable] = useState(false);
   const chart = (panel.viz === "bar" || panel.viz === "timeseries") && result?.status !== "error" && !!result?.frame?.rows.length;
   let body: ReactNode;
-  if (panel.viz === "text") body = <Text component="div" size="sm" className="markdown"><Markdown>{panel.content ?? ""}</Markdown></Text>;
+  if (panel.viz === "text") body = <Text component="div" size="sm" className="markdown"><Markdown remarkPlugins={[remarkGfm]}>{panel.content ?? ""}</Markdown></Text>;
   else if (!result) body = <Text size="sm" c="dimmed">Loading…</Text>;
   else if (result.status === "error") body = <Text size="sm" c="danger">{result.message ?? "This panel could not run."}</Text>;
   else if (panel.viz === "inbox" && host.prompts?.length) body = <Inbox frame={result.frame ?? { columns: [], rows: [] }} act={act} prompts={host.prompts} answer={host.answer} />;

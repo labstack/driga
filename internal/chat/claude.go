@@ -491,7 +491,7 @@ func (s *stream) validTool(name string) bool {
 		return true
 	}
 	switch name {
-	case "mcp__driga__create_dashboard", "mcp__driga__edit_dashboard", "mcp__driga__replace_dashboard", "mcp__driga__restore_dashboard_version":
+	case "mcp__driga__create_dashboard", "mcp__driga__edit_dashboard", "mcp__driga__replace_dashboard", "mcp__driga__restore_dashboard_version", "mcp__driga__delete_dashboard":
 		return true
 	case "mcp__driga__list_prompts", "mcp__driga__answer_prompt", "mcp__driga__ack_inbox", "mcp__driga__jump", "mcp__driga__kill", "mcp__driga__cleanup", "mcp__driga__summarize", "mcp__driga__approve":
 		return true

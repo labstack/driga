@@ -1,9 +1,10 @@
-// A chat card says in a few lines what a panel tool showed or changed. The
-// panels themselves need the room of the main area, so Open shows them
-// there; the narrow Chat column never draws a table or a chart. Keeping a
-// view is something you ask Chat for, whose saved card then says so.
-import { Badge, Button, Group, Paper, Stack, Text } from "@mantine/core";
-import { ArrowSquareOut, ChartBar, FloppyDisk, SquaresFour } from "@phosphor-icons/react";
+// A chat card says in a few lines what a panel tool showed or changed, and
+// expands in place to the panels, stacked to fit the Chat column, or to a
+// full-screen view, as Fanout's chat does. Keeping a view is something you
+// ask Chat for, whose saved card then says so.
+import { Badge, Button, Group, Modal, Paper, Stack, Text, UnstyledButton } from "@mantine/core";
+import { ArrowsOut, CaretDown, CaretRight, ChartBar, FloppyDisk, SquaresFour } from "@phosphor-icons/react";
+import { Board } from "../panels/Board";
 import { useEffect, useState } from "react";
 import { summary } from "../panels/charts";
 import { value } from "../panels/format";
@@ -24,6 +25,11 @@ const saves = new Set(["create_dashboard", "edit_dashboard", "replace_dashboard"
 /** reading is one panel's result in a few words: a stat's value, a chart's
  * summary, how many rows a list holds, or why it failed. */
 export function reading(panel: Panel, result?: Result): string {
+  // A text panel is written, not run: say what it holds.
+  if (panel.viz === "text") {
+    const rows = (panel.content ?? "").split("\n").filter(l => /^\s*\|/.test(l) && !/^\s*\|[\s:|-]+\|\s*$/.test(l)).length;
+    return rows > 1 ? `table, ${rows - 1} rows` : "note";
+  }
   if (!result) return "loading";
   if (result.status === "error") return result.message ?? "failed";
   if (result.status === "empty" || !result.frame?.rows.length) return result.message ?? "nothing right now";
@@ -35,15 +41,15 @@ export function reading(panel: Panel, result?: Result): string {
     return typeof result.total === "number" ? `${value(n, unit)} of ${value(result.total, unit)}` : value(n, unit);
   }
   if (panel.viz === "bar" || panel.viz === "timeseries") return summary(frame, panel) || `${frame.rows.length} points`;
-  if (panel.viz === "text") return "";
   return `${frame.rows.length} ${frame.rows.length === 1 ? "row" : "rows"}`;
 }
 
 /** changes lists what an edit did, in the words of its operations. */
 export function changes(card: Card, before?: Dashboard): string[] {
   const title = (id: string) => before?.panels.find(p => p.id === id)?.title ?? id;
-  if (card.tool === "create_dashboard") return [`Created with ${card.input.dashboard?.panels.length ?? 0} panels`];
-  if (card.tool === "replace_dashboard") return [`Replaced with ${card.input.dashboard?.panels.length ?? 0} panels`];
+  const panels = (n: number) => `${n} ${n === 1 ? "panel" : "panels"}`;
+  if (card.tool === "create_dashboard") return [`Created with ${panels(card.input.dashboard?.panels.length ?? 0)}`];
+  if (card.tool === "replace_dashboard") return [`Replaced with ${panels(card.input.dashboard?.panels.length ?? 0)}`];
   if (card.tool === "restore_dashboard_version") return [`Restored version ${card.input.version ?? "?"}`];
   return (card.input.operations ?? []).map(op => {
     switch (op.op) {
@@ -56,11 +62,15 @@ export function changes(card: Card, before?: Dashboard): string[] {
   });
 }
 
-export function ChatCard({ text, onShow, onOpen }: {
+export function ChatCard({ text, open: initiallyOpen, onOpen }: {
   text: string;
-  /** onShow puts a one-off view in the main area; onOpen opens a saved dashboard there. */
-  onShow: (f: Fragment) => void; onOpen: (id: string) => void;
+  /** open starts the card expanded, as the newest card does. */
+  open?: boolean;
+  /** onOpen opens a saved dashboard in the main area. */
+  onOpen: (id: string) => void;
 }) {
+  const [expanded, setExpanded] = useState(!!initiallyOpen);
+  const [full, setFull] = useState(false);
   const [card, setCard] = useState<Card | null>(null);
   const [fragment, setFragment] = useState<Fragment | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
@@ -88,17 +98,20 @@ export function ChatCard({ text, onShow, onOpen }: {
   const d = fragment.dashboard;
   const saved = saves.has(card.tool) && !!(card.saved ?? fragment.id);
   const results = new Map(fragment.results.map(r => [r.id, r]));
-  const lines = d.panels.filter(p => p.viz !== "text");
+  const lines = d.panels;
   const done = saved ? changes(card) : [];
   return <Paper withBorder radius="md" p="sm" style={{ background: "var(--driga-raised)" }}>
     <Stack gap={6}>
-      <Group gap={6} wrap="nowrap">
-        {saved ? <FloppyDisk size={16} aria-hidden /> : <ChartBar size={16} aria-hidden />}
-        <Text size="sm" fw={600} truncate>{saved ? `Saved ${d.name}` : d.name}</Text>
-        <Text size="xs" c="dimmed" style={{ whiteSpace: "nowrap" }}>{saved && (card.saved?.version ?? fragment.version) ? `version ${card.saved?.version ?? fragment.version} · ` : ""}{lines.length} {lines.length === 1 ? "panel" : "panels"}</Text>
-      </Group>
+      <UnstyledButton aria-expanded={expanded} onClick={() => setExpanded(e => !e)}>
+        <Group gap={6} wrap="nowrap">
+          {expanded ? <CaretDown size={14} aria-hidden /> : <CaretRight size={14} aria-hidden />}
+          {saved ? <FloppyDisk size={16} aria-hidden /> : <ChartBar size={16} aria-hidden />}
+          <Text size="sm" fw={600} truncate>{saved ? `Saved ${d.name}` : d.name}</Text>
+          <Text size="xs" c="dimmed" style={{ whiteSpace: "nowrap" }}>{saved && (card.saved?.version ?? fragment.version) ? `version ${card.saved?.version ?? fragment.version} · ` : ""}{lines.length} {lines.length === 1 ? "panel" : "panels"}</Text>
+        </Group>
+      </UnstyledButton>
       {done.length > 0 && <Group gap={4}>{done.map(c => <Badge key={c} size="sm" variant="light" color="gray" tt="none">{c}</Badge>)}</Group>}
-      <Stack gap={2} component="ul" m={0} p={0} style={{ listStyle: "none" }}>
+      {expanded ? <Board fragment={fragment} compact stacked bare /> : <Stack gap={2} component="ul" m={0} p={0} style={{ listStyle: "none" }}>
         {lines.slice(0, 6).map(p => {
           const r = results.get(p.id);
           return <Group component="li" key={p.id} gap={8} wrap="nowrap" justify="space-between">
@@ -107,10 +120,14 @@ export function ChatCard({ text, onShow, onOpen }: {
           </Group>;
         })}
         {lines.length > 6 && <Text component="li" size="xs" c="dimmed">and {lines.length - 6} more</Text>}
-      </Stack>
+      </Stack>}
       <Group gap={4} mt={2}>
-        <Button size="compact-sm" variant="light" leftSection={saved ? <SquaresFour size={14} /> : <ArrowSquareOut size={14} />} onClick={() => saved ? onOpen(fragment.id!) : onShow(fragment)}>{saved ? "Open dashboard" : "Open"}</Button>
+        <Button size="compact-sm" variant="subtle" color="gray" leftSection={<ArrowsOut size={14} />} onClick={() => setFull(true)}>Full screen</Button>
+        {saved && <Button size="compact-sm" variant="subtle" color="gray" leftSection={<SquaresFour size={14} />} onClick={() => onOpen(fragment.id!)}>Open dashboard</Button>}
       </Group>
     </Stack>
+    <Modal opened={full} onClose={() => setFull(false)} fullScreen title={saved ? `Saved ${d.name}` : d.name} radius={0}>
+      <Board fragment={fragment} />
+    </Modal>
   </Paper>;
 }
