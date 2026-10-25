@@ -57,7 +57,7 @@ def write(name, width, height, children):
 
 
 def generate_icns(renderer, portable=False):
-    """Render the unchanged Murmur master at Apple's 1x and 2x icon sizes."""
+    """Render the macOS app icon (Murmur on its tile) at Apple's 1x and 2x sizes."""
     iconutil = shutil.which("iconutil")
     if not portable and not iconutil:
         raise SystemExit("macOS iconutil is required to regenerate Driga.icns")
@@ -70,7 +70,7 @@ def generate_icns(renderer, portable=False):
                 subprocess.run([
                     renderer, "--width", str(size * scale), "--height", str(size * scale),
                     "--output", str(iconset / f"icon_{size}x{size}{suffix}.png"),
-                    str(ASSETS / "murmur.svg"),
+                    str(ASSETS / "app-icon.svg"),
                 ], check=True)
         if portable:
             # PNG-backed ICNS elements retain every Apple 1x/2x representation.
@@ -166,6 +166,12 @@ def main():
         "width": "64", "height": "64", "rx": "14", "fill": primary,
     })
     write("favicon.svg", 64, 64, [tile, placed(symbol, 3, 3, scale=58 / 128, color=white)])
+    # macOS app icon grid: an 824 px tile with a 185 px corner radius centred on
+    # a 1024 px canvas, so the Dock shows Driga's own tile rather than a gray one.
+    plate = ET.Element(f"{{{NS}}}rect", {
+        "x": "100", "y": "100", "width": "824", "height": "824", "rx": "185", "fill": primary,
+    })
+    write("app-icon.svg", 1024, 1024, [plate, placed(symbol, 192, 192, scale=640 / 128, color=white)])
 
     if not args.svg_only:
         # Render each size directly from the master, never from a scaled PNG.
