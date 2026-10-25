@@ -2,7 +2,9 @@ package mcp_test
 
 import (
 	"context"
+	drigamcp "github.com/labstack/driga/internal/mcp"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
+	"slices"
 	"testing"
 )
 
@@ -33,6 +35,9 @@ func TestCollectionLimitsAndEnums(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, tool := range listing.Tools {
+		if slices.Contains(drigamcp.DashboardTools, tool.Name) {
+			continue // Panels bound their own rows with limit.
+		}
 		schema := tool.InputSchema.(map[string]any)
 		props := schema["properties"].(map[string]any)
 		if props["limit"] == nil {

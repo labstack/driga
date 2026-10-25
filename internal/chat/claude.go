@@ -16,7 +16,11 @@ import (
 	"github.com/labstack/driga/internal/llm"
 )
 
-var ReadTools = []string{"get_flow", "get_activity", "get_summary", "list_agents", "get_agent", "list_projects", "inspect_project", "list_inbox", "list_conflicts", "list_orphans", "get_machine", "list_machines", "inspect_setup", "list_cleanup_candidates"}
+var ReadTools = []string{"get_flow", "get_activity", "get_summary", "list_agents", "get_agent", "list_projects", "inspect_project", "list_inbox", "list_conflicts", "list_orphans", "get_machine", "list_machines", "inspect_setup", "list_cleanup_candidates", "describe_panels", "show_panels", "open_dashboard", "list_dashboards", "list_dashboard_versions"}
+
+// DashboardWrites change only the user's dashboards, each save a version that
+// can be restored, so Chat runs them without an approval card.
+var DashboardWrites = []string{"create_dashboard", "edit_dashboard", "replace_dashboard", "restore_dashboard_version"}
 
 func readTool(name string) bool {
 	for _, t := range ReadTools {
@@ -107,6 +111,9 @@ func (a *Claude) Run(ctx context.Context, r Request, emit func(Delta) error) err
 		// Claude permits reads in cwd itself; pre-allowing read tools would
 		// also bypass the permission bridge for paths outside that directory.
 		tools = append(tools, "TodoWrite", "mcp__driga__list_prompts")
+		for _, t := range DashboardWrites {
+			tools = append(tools, "mcp__driga__"+t)
+		}
 	}
 	// --safe-mode also drops --mcp-config servers; empty setting sources keep
 	// user hooks, plugins and MCP out while the explicit driga collect --server loads.
@@ -372,6 +379,8 @@ func (s *stream) validTool(name string) bool {
 		return true
 	}
 	switch name {
+	case "mcp__driga__create_dashboard", "mcp__driga__edit_dashboard", "mcp__driga__replace_dashboard", "mcp__driga__restore_dashboard_version":
+		return true
 	case "mcp__driga__list_prompts", "mcp__driga__answer_prompt", "mcp__driga__ack_inbox", "mcp__driga__jump", "mcp__driga__kill", "mcp__driga__cleanup", "mcp__driga__summarize", "mcp__driga__approve":
 		return true
 	}

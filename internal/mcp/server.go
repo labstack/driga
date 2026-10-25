@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/labstack/driga/internal/chat"
+	"github.com/labstack/driga/internal/dashboard"
+	"github.com/labstack/driga/internal/panel"
 	"github.com/labstack/driga/internal/view"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -42,6 +44,10 @@ type Options struct {
 	Chat        bool
 	Action      func(context.Context, string, json.RawMessage) (string, error)
 	Approve     func(context.Context, json.RawMessage) (json.RawMessage, error)
+	// Panels runs a dashboard over a fresh snapshot; with Dashboards it
+	// enables the panel and dashboard tools.
+	Panels     func(context.Context, panel.RunRequest) (panel.Fragment, error)
+	Dashboards *dashboard.Store
 }
 
 type machineInput struct {
@@ -201,6 +207,9 @@ func NewServer(o Options) *sdk.Server {
 			}
 			return &sdk.CallToolResult{Content: []sdk.Content{&sdk.TextContent{Text: string(raw)}}}, value, err
 		})
+	}
+	if o.Panels != nil && o.Dashboards != nil {
+		registerPanels(s, o)
 	}
 	if o.Chat {
 		registerActions(s, o)

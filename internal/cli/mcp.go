@@ -11,7 +11,9 @@ import (
 	"github.com/labstack/driga/internal/chat"
 	"github.com/labstack/driga/internal/collector"
 	"github.com/labstack/driga/internal/config"
+	"github.com/labstack/driga/internal/dashboard"
 	drigamcp "github.com/labstack/driga/internal/mcp"
+	"github.com/labstack/driga/internal/panel"
 	"github.com/labstack/driga/internal/view"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -127,5 +129,7 @@ func newMCPServer(g *Globals, actions bool, capture ...string) *sdk.Server {
 	// Neither the SDK logger nor snapshot hints may write to protocol stdout.
 	return drigamcp.NewServer(drigamcp.Options{Prompts: prompts, Chat: actions, Action: chatAction(&base), Approve: chatApprove, CaptureText: policy, Version: base.Version, Logger: slog.New(slog.NewTextHandler(stderr, nil)), Read: read, Doctor: doctor, Cleanup: func(ctx context.Context, kind string, sizes bool) (view.Envelope, error) {
 		return cleanupRead(ctx, &base, kind, sizes, false)
-	}})
+	}, Panels: func(ctx context.Context, req panel.RunRequest) (panel.Fragment, error) {
+		return runPanels(ctx, &base, req)
+	}, Dashboards: dashboard.New(config.DataDir())})
 }
