@@ -25,9 +25,9 @@ func find(menu []MenuSpec, label string) (MenuSpec, bool) {
 
 func TestMenuModelTopLevel(t *testing.T) {
 	for goos, want := range map[string][]string{
-		"darwin":  {"Driga", "Edit", "View", "Window", "Help"},
-		"windows": {"Driga", "Edit", "View", "Window", "Help"},
-		"linux":   {"Driga", "Edit", "View", "Window", "Help"},
+		"darwin":  {"Driga", "File", "Edit", "View", "Window", "Help"},
+		"windows": {"Driga", "File", "Edit", "View", "Window", "Help"},
+		"linux":   {"Driga", "File", "Edit", "View", "Window", "Help"},
 	} {
 		var got []string
 		for _, item := range MenuModel(goos) {
@@ -47,7 +47,12 @@ func TestMenuModelAccelerators(t *testing.T) {
 			"Flow":               {mod + "+1", "view:flow"},
 			"Projects":           {mod + "+2", "view:projects"},
 			"Machines":           {mod + "+3", "view:machines"},
+			"Inbox":              {mod + "+4", "go:/inbox"},
+			"Reclaim Processes":  {"", "go:/machines?reclaim=processes"},
+			"Reclaim Disk":       {"", "go:/machines?reclaim=disk"},
 			"Chat":               {mod + "+K", "view:chat"},
+			"Back":               {mod + "+[", CommandBack},
+			"Forward":            {mod + "+]", CommandForward},
 			"Reload":             {mod + "+R", CommandReload},
 			"Find":               {mod + "+F", CommandFind},
 			"Keyboard Shortcuts": {"", CommandKeys},
@@ -116,7 +121,7 @@ func TestTrayMenuModel(t *testing.T) {
 			labels = append(labels, item.Label)
 		}
 	}
-	want := []string{"Open Driga", "7 need you", "session 1", "session 2", "session 3", "session 4", "session 5", "Collecting", "Quit"}
+	want := []string{"Open Driga", "7 need you", "session 1", "session 2", "session 3", "session 4", "session 5", "Collecting", "Settings…", "About Driga", "Quit"}
 	if strings.Join(labels, "|") != strings.Join(want, "|") {
 		t.Fatalf("tray menu %q; want %q", labels, want)
 	}
@@ -130,7 +135,7 @@ func TestTrayMenuModel(t *testing.T) {
 		t.Error("Quit has no quit role")
 	}
 	empty := TrayMenuModel(nil, Status{})
-	if _, ok := find(empty, "0 need you"); ok || len(empty) != 5 {
+	if _, ok := find(empty, "0 need you"); ok || len(empty) != 8 {
 		t.Errorf("empty tray menu %+v", empty)
 	}
 }

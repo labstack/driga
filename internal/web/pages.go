@@ -32,6 +32,8 @@ type projectCard struct {
 	States        []view.StateCount
 }
 type pageData struct {
+	// Actions shows the buttons that run local actions.
+	Actions                bool
 	Reclaim                string
 	Prompts                []chat.Prompt
 	ChatEphemeral          bool
@@ -64,7 +66,7 @@ type pageData struct {
 }
 
 func (s *Server) loadPage(r *http.Request) (pageData, int, error) {
-	p := pageData{ChatEphemeral: s.opts.ChatEphemeral, Nav: navigation, Page: r.URL.Path, Scope: r.URL.Query().Get("machine"), All: r.URL.Query().Get("all") == "1", Theme: "system"}
+	p := pageData{ChatEphemeral: s.opts.ChatEphemeral, Nav: navigation, Page: r.URL.Path, Scope: r.URL.Query().Get("machine"), All: r.URL.Query().Get("all") == "1", Theme: "system", Actions: s.opts.Action != nil}
 	if s.opts.Theme == "light" || s.opts.Theme == "dark" {
 		p.Theme = s.opts.Theme
 	}
@@ -514,11 +516,11 @@ func templateFuncs() template.FuncMap {
 		},
 		"inboxTable": func(rows []view.InboxRow, p pageData, recent bool) any {
 			return struct {
-				Rows        []view.InboxRow
-				Scope       string
-				All, Recent bool
-				ObservedAt  time.Time
-			}{rows, p.Scope, p.All, recent, p.ObservedAt}
+				Rows                 []view.InboxRow
+				Scope                string
+				All, Recent, Actions bool
+				ObservedAt           time.Time
+			}{rows, p.Scope, p.All, recent, p.Actions, p.ObservedAt}
 		},
 		"waitingHeader": view.AgentWaitingHeader,
 		"dollars": func(v *float64) string {

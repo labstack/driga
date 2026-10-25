@@ -2,7 +2,6 @@ package web
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http/httptest"
@@ -98,24 +97,6 @@ func TestBoardClientLogic(t *testing.T) {
 	cmd := exec.Command(node, "-e", string(js)+"\n"+string(test))
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatal(err, string(out))
-	}
-}
-
-func TestBoardLocalActionConfirmation(t *testing.T) {
-	s, st, id, _ := fixture(t)
-	calls := 0
-	s.opts.SessionAction = func(context.Context, string, int64) error { calls++; return nil }
-	body := fmt.Sprintf(`{"action":"kill","session_id":%d,"machine":%q,"confirmed":false}`, id, st.MachineID())
-	if w := postChat(s, "/chat/api/flow-action", body); w.Code == 200 || calls != 0 {
-		t.Fatal("unconfirmed kill dispatched")
-	}
-	body = strings.Replace(body, `"confirmed":false`, `"confirmed":true`, 1)
-	if w := postChat(s, "/chat/api/flow-action", body); w.Code != 200 || calls != 1 {
-		t.Fatal(w.Code, w.Body.String(), calls)
-	}
-	body = strings.Replace(body, st.MachineID(), "remote-only", 1)
-	if w := postChat(s, "/chat/api/flow-action", body); w.Code == 200 || calls != 1 {
-		t.Fatal("remote session dispatched locally")
 	}
 }
 

@@ -10,7 +10,7 @@ import (
 
 func TestChatActionPOSTs(t *testing.T) {
 	s, b, id := chatFixture(t)
-	for _, route := range []string{"mode", "decide", "flow-action"} {
+	for _, route := range []string{"mode", "decide"} {
 		if w := request(s, "GET", "/chat/api/"+route); w.Code != 405 {
 			t.Fatal(w.Code)
 		}

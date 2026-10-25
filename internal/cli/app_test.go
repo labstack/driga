@@ -120,7 +120,7 @@ func TestAppCommandRunsDesktop(t *testing.T) {
 		t.Fatalf("open source: %v, %v, opened %d", source, err, opened)
 	}
 	closeSource()
-	if got.Web.SessionAction == nil || got.Web.CleanupList == nil || got.Web.Activity == nil || got.Web.Machine != "all" {
+	if got.Web.Action == nil || got.Web.CleanupList == nil || got.Web.Activity == nil || got.Web.Machine != "all" {
 		t.Fatalf("page handlers: %+v", got.Web)
 	}
 }

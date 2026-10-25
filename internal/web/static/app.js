@@ -302,9 +302,34 @@
   async function jumpTo(button) {
     button.disabled = true;
     try {
-      const response = await fetch("/chat/api/flow-action", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({action: "jump", session_id: Number(button.dataset.session), machine: button.dataset.machine})});
+      const response = await fetch("/app/action", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({action: "jump", session_id: Number(button.dataset.session), machine: button.dataset.machine})});
       if (!response.ok) throw new Error(await response.text());
       notice("Opened terminal");
+    } catch (e) { notice(e.message); } finally { button.disabled = false; }
+  }
+  // A button with data-action runs a local action: data-confirm asks the
+  // app's dialog first, and the page refreshes once it ran.
+  async function confirmed(message) {
+    try {
+      const response = await fetch("/app/confirm", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({message})});
+      return response.ok && (await response.json()).confirmed === true;
+    } catch (_) { return false; }
+  }
+  async function runAction(button) {
+    const d = button.dataset;
+    if (d.confirm && !await confirmed(d.confirm)) return;
+    const body = {action: d.action, machine: d.machine || "", confirmed: Boolean(d.confirm)};
+    if (d.id) body.id = d.id;
+    if (d.session) body.session_id = Number(d.session);
+    if (d.project) body.project = d.project;
+    if (d.all === "true") body.all = true;
+    if (d.force === "true") body.force = true;
+    button.disabled = true;
+    try {
+      const response = await fetch("/app/action", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
+      if (!response.ok) throw new Error(await response.text());
+      notice(d.done || "Done");
+      if (window.htmx) htmx.trigger(document.getElementById("main"), "console:refresh");
     } catch (e) { notice(e.message); } finally { button.disabled = false; }
   }
   // The app's menus and notifications drive the page through the same
@@ -324,7 +349,13 @@
     if (document.querySelector('[data-flow-board] [data-session="' + id + '"]')) { document.dispatchEvent(new CustomEvent("driga:select-session", {detail: {id: Number(id)}})); return; }
     window.location.assign("/flow?" + new URLSearchParams({id, machine: document.querySelector(".status").dataset.scope || "all"}));
   }
-  const commandsByName = {view: openView, find: focusFind, reload: () => window.location.reload(), openSession: showSession};
+  // A page the menu opens keeps the machine scope.
+  function goTo(path) {
+    const url = new URL(path, window.location.origin); if (url.origin !== window.location.origin) return;
+    const scope = document.querySelector(".status")?.dataset.scope; if (scope) url.searchParams.set("machine", scope);
+    window.location.assign(url.pathname + url.search);
+  }
+  const commandsByName = {view: openView, go: goTo, find: focusFind, reload: () => window.location.reload(), back: () => window.history.back(), forward: () => window.history.forward(), openSession: showSession};
   window.drigaCommand = (name, arg) => { if (Object.hasOwn(commandsByName, name)) commandsByName[name](arg); };
   document.querySelector("[data-close-help]").addEventListener("click", closeHelp);
   document.addEventListener("click", event => {
@@ -332,6 +363,8 @@
     if(promptButton){event.preventDefault();answerPrompt(promptButton);return;}
     const jump = event.target.closest("[data-inbox-jump]");
     if (jump) { event.preventDefault(); jumpTo(jump); return; }
+    const action = event.target.closest("[data-action]");
+    if (action) { event.preventDefault(); runAction(action); return; }
     if (event.target.closest("[data-inbox-older]")) { inboxUI.showOlder(); return; }
     if (!event.target.closest(".cmd")) closeMenu();
     if (event.target.closest("[data-pause-tail]")) pauseTail();

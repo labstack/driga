@@ -143,7 +143,9 @@
 <h2>{{.Status.Repo.Name}}
 </h2>
 <p class="muted">{{.MachineName}}{{if .Stale}} · stale cache{{end}} · {{.Status.Repo.Path}}
-</p>{{range .Status.Where}}
+</p>{{if and $.Actions (eq .MachineID $.LocalMachineID)}}
+<p><button type="button" data-action="summarize" data-project="{{.Status.Repo.Path}}" data-machine="{{.MachineID}}" data-done="Summary queued for collection">Summarize</button>
+</p>{{end}}{{range .Status.Where}}
 <article data-row tabindex="-1" class="item"><small>{{.Source}} · {{stamp .At}}{{if .Stale}} · stale{{end}}</small>
 <p>{{.Text}}
 </p>
@@ -194,7 +196,7 @@
 {{if not .InboxWaiting}}<p class="empty">Nothing needs you.</p>{{end}}
 </section>
 <section data-pane tabindex="0" class="pane inbox-pane" data-inbox-section="recent" aria-labelledby="inbox-recent">
-<div class="pt"><h2 id="inbox-recent">recent · {{len .InboxRecent}}</h2><span>Acknowledgements stay in the CLI / TUI</span></div>
+<div class="pt"><h2 id="inbox-recent">recent · {{len .InboxRecent}}</h2>{{if .Actions}}{{if or .InboxWaiting .InboxRecent}}<button type="button" data-action="ack_inbox" data-all="true" data-confirm="Acknowledge every inbox item?" data-done="Acknowledged all">Ack all</button>{{end}}{{else}}<span>Acknowledgements stay in the CLI / TUI</span>{{end}}</div>
 {{template "inboxTable" (inboxTable .InboxRecent . true)}}
 {{if gt (len .InboxRecent) 50}}<button type="button" class="inbox-older" data-inbox-older>show older · next 50</button>{{end}}
 {{if not .InboxRecent}}<p class="empty">No recent completions.</p>{{end}}
@@ -219,7 +221,7 @@
 <div class="inbox-detail">
 <p>{{if .Title}}{{.Title}} · {{end}}{{.Summary}}{{if .Detail}} · {{.Detail}}{{end}}{{if .Stale}} · stale{{end}}{{if .AckPendingAt}} · acknowledgement pending{{end}}</p>
 {{with .Jump}}{{if eq .Kind "machine"}}<a href="{{link "/machines" $p.Scope $p.All}}">Open Machine</a>{{end}}{{if .Cwd}}<dl class="inbox-cwd"><dt>cwd</dt><dd>{{.Cwd}}</dd></dl>{{end}}{{if and .Command $row.SessionID}}<button type="button" class="inbox-jump" data-inbox-jump data-session="{{$row.SessionID}}" data-machine="{{$row.MachineID}}">Jump</button>{{end}}{{if .URL}}<a href="{{.URL}}" rel="noopener noreferrer">Open agent</a>{{end}}{{end}}
-{{if .SessionID}}<a href="{{link (agentPath .SessionID) $p.Scope $p.All}}">Agent detail</a>{{end}}
+{{if .SessionID}}<a href="{{link (agentPath .SessionID) $p.Scope $p.All}}">Agent detail</a>{{end}}{{if and $p.Actions (not .AckPendingAt)}} <button type="button" data-action="ack_inbox" data-id="{{.ID}}" data-machine="{{.MachineID}}" data-done="Acknowledged">Ack</button>{{end}}
 </div>
 </details>{{end}}
 </div>
@@ -240,7 +242,15 @@
 <p class="muted" title="{{.Cwd}}">{{.Cwd}}
 </p>{{range .Evidence}}
 <p>{{.}}
-</p>{{end}}
+</p>{{end}}{{if $.Actions}}{{if ne .MachineID $.LocalMachineID}}
+<p class="muted">On {{.MachineName}}: run driga orphans kill {{.ID}} there.
+</p>{{else if .Young}}
+<p class="muted">Too young to kill.
+</p>{{else if not .Verified}}
+<p class="muted">Unverified: run driga orphans kill {{.ID}}, which checks it stays idle first.
+</p>{{else}}
+<p><button type="button" data-action="kill" data-id="{{.ID}}" data-machine="{{.MachineID}}" data-confirm="Kill process tree {{.Signature}} (PID {{.RootPID}}, {{.ProcCount}} processes)? Driga checks it is still the same idle tree first." data-done="Process tree killed">Kill</button> <button type="button" data-action="kill" data-id="{{.ID}}" data-machine="{{.MachineID}}" data-force="true" data-confirm="Force kill process tree {{.Signature}} (PID {{.RootPID}})? Processes that ignore the request to stop are killed." data-done="Process tree killed">Force kill</button>
+</p>{{end}}{{end}}
 </article>{{else}}
 <p class="empty">No orphan process trees.
 </p>{{end}}
@@ -306,8 +316,8 @@
 <div class="pt">
 <b>cleanup candidates</b><span class="muted">Local inspection · includes --why reasons</span>
 </div>
-<p>Review candidates here. Run <code>driga cleanup remove &lt;candidate-id&gt;</code> in your terminal to act.
-</p>{{if .CleanupError}}
+{{if not .Actions}}<p>Review candidates here. Run <code>driga cleanup remove &lt;candidate-id&gt;</code> in your terminal to act.
+</p>{{end}}{{if .CleanupError}}
 <p class="notice">Cleanup unavailable: {{.CleanupError}}
 </p>{{end}}{{range .Cleanup}}
 <article data-row tabindex="-1" class="item stripe {{stateClass .Status}}">
@@ -320,7 +330,11 @@
 <p>{{.}}
 </p>{{end}}{{range .Ignored}}
 <p class="muted">Ignored: {{.Path}} · {{if .Regenerable}}regenerable{{else}}non-regenerable{{end}}
-</p>{{end}}
+</p>{{end}}{{if $.Actions}}{{if eq .Status "ready"}}
+<p><button type="button" data-action="cleanup" data-id="{{.ID}}" data-machine="{{$.LocalMachineID}}" data-confirm="Remove {{.Kind}} {{.Path}}? It moves to the Trash after Driga checks it again." data-done="Removed">Remove</button>
+</p>{{else}}
+<p class="muted">Needs review: run driga cleanup remove {{.ID}} --include-ignored.
+</p>{{end}}{{end}}
 </article>{{else}}
 <p class="empty">No cleanup candidates available in this scope.
 </p>{{end}}

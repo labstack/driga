@@ -12,7 +12,7 @@ import (
 )
 
 func isChatPOST(path string) bool {
-	return path == "/chat/api/flow-action" || path == "/chat/api/prompt-answer" || path == "/chat/api/send" || path == "/chat/api/stop" || path == "/chat/api/new" || path == "/chat/api/mode" || path == "/chat/api/decide"
+	return path == "/chat/api/prompt-answer" || path == "/chat/api/send" || path == "/chat/api/stop" || path == "/chat/api/new" || path == "/chat/api/mode" || path == "/chat/api/decide"
 }
 func (s *Server) chatAPI(w http.ResponseWriter, r *http.Request) {
 	if isChatPOST(r.URL.Path) {
@@ -29,7 +29,7 @@ func (s *Server) chatAPI(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", 405)
 		return
 	}
-	if s.opts.Chat == nil && r.URL.Path != "/chat/api/flow-action" {
+	if s.opts.Chat == nil {
 		http.Error(w, "Chat unavailable", 503)
 		return
 	}
@@ -37,40 +37,6 @@ func (s *Server) chatAPI(w http.ResponseWriter, r *http.Request) {
 	var out any
 	var err error
 	switch r.URL.Path {
-	case "/chat/api/flow-action":
-		var in struct {
-			Action    string `json:"action"`
-			SessionID int64  `json:"session_id"`
-			Machine   string `json:"machine"`
-			Confirmed bool   `json:"confirmed"`
-		}
-		decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096))
-		decoder.DisallowUnknownFields()
-		err = decoder.Decode(&in)
-		if err == nil {
-			if s.opts.SessionAction == nil {
-				err = errors.New("Local actions unavailable")
-			} else if in.SessionID <= 0 || (in.Action != "jump" && in.Action != "kill") || in.Action == "kill" && !in.Confirmed {
-				err = errors.New("Invalid action or missing confirmation")
-			} else {
-				snap, e := s.cachedLoad(ctx, store.Scope{}, false)
-				err = e
-				local := false
-				for _, n := range snap.BoardData.Nodes {
-					if n.ID == in.SessionID && n.MachineID == snap.LocalMachineID && in.Machine == n.MachineID {
-						local = true
-						break
-					}
-				}
-				if err == nil && !local {
-					err = errors.New("Select a local session")
-				}
-				if err == nil {
-					err = s.opts.SessionAction(ctx, in.Action, in.SessionID)
-				}
-			}
-		}
-		out = map[string]bool{"ok": err == nil}
 	case "/chat/api/prompts":
 		if client, ok := s.opts.Chat.(chat.PromptClient); ok {
 			out, err = client.Prompts(ctx)
