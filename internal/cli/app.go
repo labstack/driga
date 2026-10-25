@@ -88,11 +88,15 @@ func (AppCmd) Run(g *Globals) error {
 			source, _, closeSource, err := openAppViewer(ctx, g, cfg, view.Filter{})
 			return source, closeSource, err
 		},
-		Web: web.Options{SessionAction: func(ctx context.Context, action string, id int64) error {
-			raw, _ := json.Marshal(map[string]any{"session_id": id})
+		// The page's buttons run Chat's local actions. Acknowledgements
+		// reach other machines' items too, as the TUI's do.
+		Web: web.Options{Action: func(ctx context.Context, name string, args json.RawMessage) error {
 			actionGlobals := local
+			if name == "ack_inbox" {
+				actionGlobals.Machine = g.Machine
+			}
 			actionGlobals.Stdout = io.Discard
-			return runChatAction(ctx, &actionGlobals, action, raw)
+			return runChatAction(ctx, &actionGlobals, name, args)
 		}, Machine: g.Machine, Activity: pageActivity, CleanupList: func(ctx context.Context) ([]cleanup.Candidate, error) {
 			envelope, err := cleanupRead(ctx, &local, "", false, true)
 			if err != nil {

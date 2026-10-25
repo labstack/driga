@@ -7,14 +7,16 @@ import (
 	"github.com/labstack/driga/internal/view"
 )
 
-// Commands a menu item can carry. "view:<name>" switches the page's view and
-// "session:<id>" opens a session.
+// Commands a menu item can carry. "view:<name>" switches the page's view,
+// "go:<path>" opens one of its pages and "session:<id>" opens a session.
 const (
 	CommandAbout    = "about"
 	CommandSettings = "settings"
 	CommandOpen     = "open"
 	CommandFind     = "find"
 	CommandReload   = "reload"
+	CommandBack     = "back"
+	CommandForward  = "forward"
 	CommandKeys     = "keys"
 	CommandDocs     = "docs"
 )
@@ -83,12 +85,20 @@ func MenuModel(goos string) []MenuSpec {
 		separator,
 		{Label: "Find", Accelerator: key("F"), Command: CommandFind},
 	}}
+	file := MenuSpec{Label: "File", Submenu: []MenuSpec{
+		{Label: "Close Window", Role: "close", Accelerator: key("W")},
+	}}
 	viewMenu := MenuSpec{Label: "View", Submenu: []MenuSpec{
 		{Label: "Flow", Accelerator: key("1"), Command: "view:flow"},
 		{Label: "Projects", Accelerator: key("2"), Command: "view:projects"},
 		{Label: "Machines", Accelerator: key("3"), Command: "view:machines"},
+		{Label: "Inbox", Accelerator: key("4"), Command: "go:/inbox"},
+		{Label: "Reclaim Processes", Command: "go:/machines?reclaim=processes"},
+		{Label: "Reclaim Disk", Command: "go:/machines?reclaim=disk"},
 		{Label: "Chat", Accelerator: key("K"), Command: "view:chat"},
 		separator,
+		{Label: "Back", Accelerator: key("["), Command: CommandBack},
+		{Label: "Forward", Accelerator: key("]"), Command: CommandForward},
 		{Label: "Reload", Accelerator: key("R"), Command: CommandReload},
 		separator,
 		{Role: "resetZoom"},
@@ -104,11 +114,12 @@ func MenuModel(goos string) []MenuSpec {
 	if goos == "darwin" {
 		help.Role = "help"
 	}
-	return []MenuSpec{app, edit, viewMenu, {Label: "Window", Role: "windowMenu"}, help}
+	return []MenuSpec{app, file, edit, viewMenu, {Label: "Window", Role: "windowMenu"}, help}
 }
 
 // TrayMenuModel is the tray icon's menu: Open Driga, the count and the first
-// needs, each opening its session, the collector's status, and Quit.
+// needs, each opening its session, the collector's status, Settings, About
+// and Quit.
 func TrayMenuModel(needs []view.BoardRow, status Status) []MenuSpec {
 	menu := []MenuSpec{{Label: "Open Driga", Command: CommandOpen}, separator}
 	if len(needs) > 0 {
@@ -118,7 +129,9 @@ func TrayMenuModel(needs []view.BoardRow, status Status) []MenuSpec {
 		}
 		menu = append(menu, separator)
 	}
-	return append(menu, MenuSpec{Label: StatusLine(status), Disabled: true}, separator, MenuSpec{Label: "Quit", Role: "quit"})
+	return append(menu, MenuSpec{Label: StatusLine(status), Disabled: true}, separator,
+		MenuSpec{Label: "Settings…", Command: CommandSettings}, MenuSpec{Label: "About Driga", Command: CommandAbout}, separator,
+		MenuSpec{Label: "Quit", Role: "quit"})
 }
 
 func needLabel(n int) string {

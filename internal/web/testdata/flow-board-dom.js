@@ -32,7 +32,7 @@ async function runFlowDOMTests(){
  assert.equal(document.activeElement,rows.timeline[1],'refresh lost focus');assert(rows.timeline[1].classList.contains('selected'),'refresh lost identity');assert.equal(surfaces.timeline.hidden,false);assert.equal(surfaces.timeline.scrollTop,170);assert.equal(panel.scrollTop,60);
  search.focus();search.value='session 2';search.selectionStart=2;search.selectionEnd=7;await event('input',search);await event('htmx:beforeSwap',main);search.value='';document.activeElement=body;await event('htmx:afterSwap',main);assert.equal(search.value,'session 2');assert.equal(document.activeElement,search);assert.deepEqual([search.selectionStart,search.selectionEnd],[2,7]);assert(rows.timeline[0].hidden);assert(!rows.timeline[1].hidden);
  await event('click',allow);assert.equal(requests.length,0,'unarmed prompt submitted');now+=700;timer();await event('click',allow);assert.equal(requests.length,1);assert.deepEqual(requests[0].body,{id:'p1',allow:true});assert.equal(document.activeElement,search,'answer stole focus');
- const kills=()=>requests.filter(r=>r.path==='/chat/api/flow-action');
+ const kills=()=>requests.filter(r=>r.path==='/app/action');
  await event('click',stop);assert.equal(kills().length,0,'stopped without an app to confirm');
  confirmReply={ok:true,json:async()=>({confirmed:false})};await event('click',stop);assert.equal(kills().length,0,'stopped after Cancel');
  confirmReply={ok:true,json:async()=>({confirmed:true})};await event('click',stop);assert.deepEqual(kills().map(r=>r.body),[{action:'kill',session_id:2,machine:'local',confirmed:true}]);

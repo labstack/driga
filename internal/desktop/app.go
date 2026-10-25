@@ -602,6 +602,8 @@ func (s *shell) do(command string) {
 		s.host.Command("find", nil)
 	case CommandReload:
 		s.host.Command("reload", nil)
+	case CommandBack, CommandForward:
+		s.host.Command(command, nil)
 	case CommandKeys:
 		s.host.Navigate("/help/keys")
 	case CommandDocs:
@@ -609,6 +611,8 @@ func (s *shell) do(command string) {
 	default:
 		if name, ok := strings.CutPrefix(command, "view:"); ok {
 			s.host.Command("view", name)
+		} else if path, ok := strings.CutPrefix(command, "go:"); ok {
+			s.host.Command("go", path)
 		} else if raw, ok := strings.CutPrefix(command, "session:"); ok {
 			if id, err := strconv.ParseInt(raw, 10, 64); err == nil {
 				s.host.Command("openSession", id)

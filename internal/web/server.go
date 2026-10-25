@@ -37,7 +37,10 @@ type Source interface {
 }
 
 type Options struct {
-	SessionAction func(context.Context, string, int64) error
+	// Action runs a local action, as Chat's driga tools do: jump, kill,
+	// cleanup, ack_inbox or summarize, with their JSON arguments. Without it
+	// the page shows no action buttons.
+	Action        func(ctx context.Context, name string, args json.RawMessage) error
 	Chat          chat.Client
 	ChatEphemeral bool
 	Machine       string
@@ -175,10 +178,11 @@ func (s *Server) newRoutes() *http.ServeMux {
 	mux.HandleFunc("GET /static", s.page)
 	mux.HandleFunc("GET /chat/api", s.page)
 	mux.HandleFunc("GET /chat/api/", s.chatAPI)
-	for _, path := range []string{"/chat/api/flow-action", "/chat/api/prompt-answer", "/chat/api/new", "/chat/api/send", "/chat/api/stop", "/chat/api/mode", "/chat/api/decide"} {
+	for _, path := range []string{"/chat/api/prompt-answer", "/chat/api/new", "/chat/api/send", "/chat/api/stop", "/chat/api/mode", "/chat/api/decide"} {
 		mux.HandleFunc("POST "+path, s.chatAPI)
 	}
 	mux.HandleFunc("POST /app/confirm", s.appConfirm)
+	mux.HandleFunc("POST /app/action", s.appAction)
 	mux.HandleFunc("POST /app/open-external", s.appOpenExternal)
 	mux.HandleFunc("GET /static/theme.css", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/css; charset=utf-8")
@@ -395,7 +399,9 @@ func writeUpdate(w http.ResponseWriter, u update) {
 	_, _ = w.Write(raw)
 }
 
-func isAppPOST(path string) bool { return path == "/app/confirm" || path == "/app/open-external" }
+func isAppPOST(path string) bool {
+	return path == "/app/confirm" || path == "/app/action" || path == "/app/open-external"
+}
 
 // decodeAppJSON reads one small JSON object from the page.
 func decodeAppJSON(w http.ResponseWriter, r *http.Request, v any) bool {
