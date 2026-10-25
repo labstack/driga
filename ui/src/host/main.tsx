@@ -7,6 +7,7 @@ import { Notifications, notifications } from "@mantine/notifications";
 import { spotlight } from "@mantine/spotlight";
 import { ChatCircle, PencilSimple } from "@phosphor-icons/react";
 import { StrictMode, useCallback, useEffect, useRef, useState } from "react";
+import { Panel as Pane, Group as Split, Separator, useDefaultLayout, usePanelRef } from "react-resizable-panels";
 import { createRoot } from "react-dom/client";
 import { HostContext, type Act, type Host } from "../panels/host";
 import type { Dashboard as Spec, Fragment, Prompt } from "../panels/types";
@@ -89,6 +90,16 @@ function App() {
   }, [load, editing]);
   useEffect(() => { dashboards.list().then(l => setList(l.filter(d => d.id !== headerID)), () => undefined); }, [fragment?.version, fragment?.id]);
   useEffect(() => { remember("driga-chat-open", String(chatOpen)); }, [chatOpen]);
+  // Chat and the board share the window; dragging the line between them
+  // sets Chat's width, which is remembered. Hiding Chat collapses its pane.
+  const chatPane = usePanelRef();
+  const split = useDefaultLayout({ id: "driga-split", panelIds: ["board", "chat"], onlySaveAfterUserInteractions: true });
+  useEffect(() => {
+    const pane = chatPane.current;
+    if (!pane) return;
+    if (chatOpen && pane.isCollapsed()) pane.expand();
+    if (!chatOpen && !pane.isCollapsed()) pane.collapse();
+  }, [chatOpen, chatPane]);
   useEffect(() => { history.replaceState(null, "", id === homeID ? "/app/" : `/app/?dashboard=${encodeURIComponent(id)}`); }, [id]);
 
   const open = (next: string) => { setEditing(false); setVars({}); setId(next); };
@@ -163,7 +174,7 @@ function App() {
   const brief = inboxPanel ? { panel: inboxPanel, result: inbox!.results[0], listed: !!listed } : undefined;
   const d = fragment?.dashboard;
   return <HostContext.Provider value={host}>
-    <AppShell header={{ height: 56 }} aside={{ width: 400, breakpoint: "md", collapsed: { desktop: !chatOpen, mobile: !chatOpen } }} padding={0}>
+    <AppShell header={{ height: 56 }} padding={0}>
       <AppShell.Header px="md" style={{ background: "color-mix(in srgb, var(--driga-ground) 88%, transparent)", backdropFilter: "blur(10px)", borderColor: "var(--driga-border)" }}>
         <Group h="100%" gap="md" wrap="nowrap">
           <Brand />
@@ -176,7 +187,9 @@ function App() {
           </Tooltip>
         </Group>
       </AppShell.Header>
-      <AppShell.Main style={{ height: "100dvh", display: "flex", flexDirection: "column" }}>
+      <AppShell.Main style={{ height: "100dvh", display: "flex" }}>
+       <Split orientation="horizontal" id="driga-split" defaultLayout={split.defaultLayout} onLayoutChanged={split.onLayoutChanged} style={{ flex: 1, minWidth: 0 }}>
+       <Pane id="board" minSize={360} style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
         <Group justify="space-between" wrap="nowrap" gap="sm" px="md" pt="sm" pb={8}>
           <Box style={{ minWidth: 0 }}>
             <Title order={1} fz={28} fw={650} lh={1.2} style={{ letterSpacing: "-0.02em" }}>{d?.name ?? "Loading…"}</Title>
@@ -199,11 +212,16 @@ function App() {
             onLayout={grids => { if (fragment) void edit(fragment.id!, fragment.version ?? 0, [{ op: "layout", grids }], "Moved panels"); }}
             onRemove={pid => { if (fragment) void edit(fragment.id!, fragment.version ?? 0, [{ op: "remove", id: pid }], "Removed a panel"); }} /> : <Text size="sm" c="dimmed">Loading…</Text>}
         </Box>
+       </Pane>
+       <Separator className="split-handle" aria-label="Resize Chat" />
+       <Pane id="chat" panelRef={chatPane} defaultSize={400} minSize={300} maxSize="65" collapsible collapsedSize={0}
+         onResize={size => { const shown = size.inPixels > 0; if (shown !== chatOpen) setChatOpen(shown); }}
+         style={{ background: "var(--driga-inset)", borderLeft: "1px solid var(--driga-border)", minWidth: 0 }}>
+        {/* Chat stays mounted while collapsed, so a draft and the conversation survive. */}
+        <Chat inbox={brief} act={act} ask={ask} onOpen={open} onClose={() => setChatOpen(false)} />
+       </Pane>
+       </Split>
       </AppShell.Main>
-      <AppShell.Aside style={{ borderColor: "var(--driga-border)", background: "var(--driga-inset)" }}>
-        {/* Chat stays mounted while hidden, so a draft and the conversation survive. */}
-        <Box display={chatOpen ? "contents" : "none"}><Chat inbox={brief} act={act} ask={ask} onOpen={open} onClose={() => setChatOpen(false)} /></Box>
-      </AppShell.Aside>
     </AppShell>
   </HostContext.Provider>;
 }

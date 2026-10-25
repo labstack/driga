@@ -35,3 +35,6 @@ tr:hover .row-menu, tr:focus-within .row-menu, .row-hover:hover .row-menu, .row-
 .search-button:hover { background: var(--driga-hover); }
 .mantine-Spotlight-action[data-selected] { background: var(--driga-hover); color: inherit; }
 .mantine-Spotlight-action:not([data-selected]):not(:hover) .search-hint { visibility: hidden; }
+
+.split-handle { width: 6px; margin: 0 -3px; position: relative; z-index: 2; cursor: col-resize; background: transparent; transition: background-color 120ms ease-out; outline: none; }
+.split-handle:hover, .split-handle[data-separator="active"], .split-handle:focus-visible { background: var(--mantine-color-brand-filled); }
