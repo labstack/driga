@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Add release metadata and the committed Murmur icon to a built CLI bundle."""
+"""Add release metadata and the committed Murmur icon to a built Driga.app bundle."""
 
 import plistlib
 import re
@@ -32,7 +32,11 @@ def assemble(app, version):
         "CFBundleVersion": match[1],
         "DrigaReleaseVersion": version,
         "CFBundleIconFile": "Driga.icns",
-        "LSUIElement": True,
+        # Finder, Dock, Spotlight and login-item launches reach app mode only
+        # through this variable; the app unsets it after reading. There is no
+        # LSUIElement: the app picks its activation policy at run time.
+        "LSEnvironment": {"DRIGA_APP": "1"},
+        "NSHighResolutionCapable": True,
     }
     with (contents / "Info.plist").open("wb") as output:
         plistlib.dump(info, output, sort_keys=True)

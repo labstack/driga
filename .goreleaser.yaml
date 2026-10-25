@@ -14,7 +14,9 @@ release:
 builds:
   - id: driga
     main: ./cmd/driga
-    binary: '{{ if eq .Os "darwin" }}Driga.app/Contents/MacOS/{{ end }}driga'
+    # macOS: the one binary is the bundle's executable (the app and the CLI).
+    # Windows: the CLI is bin/driga.exe beside the Driga.exe GUI.
+    binary: '{{ if eq .Os "darwin" }}Driga.app/Contents/MacOS/{{ end }}{{ if eq .Os "windows" }}bin/{{ end }}driga'
     env:
       - CGO_ENABLED=0
     goos:
@@ -38,10 +40,34 @@ builds:
         - cmd: 'bash scripts/build-macos-app.sh "{{ .Path }}" "{{ .Os }}" "{{ .Version }}" "{{ .IsSnapshot }}"'
           output: true
 
+  # Driga.exe, the Windows desktop app: a GUI-subsystem binary that supervises
+  # the CLI next to it. Other platforms have a single binary.
+  - id: driga-app
+    main: ./cmd/driga-app
+    binary: Driga
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - >-
+        -s -w -H=windowsgui
+        -X main.version={{ .Version }}
+        -X main.commit={{ .FullCommit }}
+        -X main.date={{ .CommitDate }}
+
 archives:
   - id: driga
     ids:
       - driga
+      - driga-app
+    # Only the Windows archive holds Driga.exe beside the CLI.
+    allow_different_binary_count: true
     name_template: "driga_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     formats:
       - tar.gz
@@ -101,6 +127,28 @@ nfpms:
     formats:
       - deb
       - rpm
+    # Best effort on Linux desktops: the CLI works without these, so they are
+    # recommended, not required. Package names differ per format.
+    overrides:
+      deb:
+        recommends:
+          - libgtk-3-0 | libgtk-3-0t64
+          - libwebkit2gtk-4.1-0
+          - libayatana-appindicator3-1
+      rpm:
+        recommends:
+          - gtk3
+          - webkit2gtk4.1
+          - libayatana-appindicator-gtk3
+    contents:
+      - src: packaging/linux/driga.desktop
+        dst: /usr/share/applications/driga.desktop
+        file_info:
+          mode: 0644
+      - src: internal/web/static/brand/icon-512.png
+        dst: /usr/share/icons/hicolor/512x512/apps/run.driga.png
+        file_info:
+          mode: 0644
 
 checksum:
   name_template: "driga_{{ .Version }}_checksums.txt"
@@ -112,18 +160,16 @@ homebrew_casks:
     ids:
       - driga-macos
     binaries:
-      - '#{caskroom_path}/Driga.app/Contents/MacOS/driga'
-    # The OSS custom Ruby block uses Homebrew's normal app artifact with an
-    # explicit stable Caskroom destination, avoiding /Applications and the
-    # Pro-only GoReleaser `app` (DMG) integration.
+      - '#{appdir}/Driga.app/Contents/MacOS/driga'
+    # The OSS custom Ruby block uses Homebrew's normal app artifact, which
+    # installs Driga.app into /Applications, and avoids the Pro-only GoReleaser
+    # `app` (DMG) integration.
     custom_block: |
-      app "Driga.app", target: "#{caskroom_path}/Driga.app"
+      app "Driga.app"
     caveats: |
-      Driga.app stays in the Homebrew Caskroom; driga links to its CLI executable.
-      If upgrading from a bare-binary release, run driga service install once
-      to repair the collector's bundle path and background-item association.
-      The bundle path stays stable across later brew upgrades. Restart a running
-      collector with driga service restart to use the upgraded executable.
+      Driga.app is in /Applications, and driga links to the CLI inside it.
+      Open Driga from Finder, Spotlight or with driga app. The app collects in
+      the background and starts at login.
     url:
       template: "https://github.com/labstack/driga/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
     commit_msg_template: "chore: update driga to {{ .Tag }}"
@@ -149,6 +195,8 @@ scoops:
     homepage: https://github.com/labstack/driga
     description: "Watch every AI coding agent session on a machine: state, project, branch, memory, an attention inbox, and file conflicts."
     license: Apache-2.0
+    shortcuts:
+      - [Driga.exe, Driga]
     repository:
       owner: labstack
       name: scoop-bucket

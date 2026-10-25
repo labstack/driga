@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Driga
+Comment=Watch every AI coding agent session on this machine
+Exec=driga app
+Icon=run.driga
+Terminal=false
+Categories=Development;
+StartupWMClass=run.driga

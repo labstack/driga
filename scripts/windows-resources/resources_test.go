@@ -131,7 +131,7 @@ func TestReleaseResources(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer z.Close()
-			f, err := z.Open("driga.exe")
+			f, err := z.Open("bin/driga.exe")
 			if err != nil {
 				t.Fatal(err)
 			}

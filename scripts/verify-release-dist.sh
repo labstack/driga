@@ -91,7 +91,7 @@ done
 for platform in windows_amd64 windows_arm64; do
   archive="${dist_dir}/driga_${release_version}_${platform}.zip"
   entries=$(unzip -Z1 "$archive" | LC_ALL=C sort)
-  if [ "$entries" != $'LICENSE\nNOTICE\nREADME.md\ndriga.exe\nthird-party/fonts-LICENSE.txt\nthird-party/vendor-LICENSES.txt' ]; then
+  if [ "$entries" != $'Driga.exe\nLICENSE\nNOTICE\nREADME.md\nbin/driga.exe\nthird-party/fonts-LICENSE.txt\nthird-party/vendor-LICENSES.txt' ]; then
     echo "unexpected contents in $(basename "$archive"):" >&2
     printf '%s\n' "$entries" >&2
     exit 1
@@ -128,8 +128,8 @@ for architecture in 64bit:amd64 arm64:arm64; do
     echo "Scoop ${scoop_arch} URL = ${actual_url}, want ${expected_url}." >&2
     exit 1
   fi
-  if ! jq -e --arg arch "$scoop_arch" '.architecture[$arch].bin == ["driga.exe"]' "$scoop_manifest" >/dev/null; then
-    echo "Scoop ${scoop_arch} entry does not install driga.exe." >&2
+  if ! jq -e --arg arch "$scoop_arch" '.architecture[$arch].bin | index("bin/driga.exe") != null' "$scoop_manifest" >/dev/null; then
+    echo "Scoop ${scoop_arch} entry does not install bin/driga.exe." >&2
     exit 1
   fi
   expected_hash=$(artifact_hash "driga_${release_version}_windows_${artifact_arch}.zip")
@@ -145,16 +145,20 @@ if [ ! -f "$cask" ]; then
   echo "Homebrew Cask is missing: ${cask}" >&2
   exit 1
 fi
-if ! grep -Fq 'cask "driga" do' "$cask" || ! grep -Fq 'binary "#{caskroom_path}/Driga.app/Contents/MacOS/driga"' "$cask"; then
+if ! grep -Fq 'cask "driga" do' "$cask" || ! grep -Fq 'binary "#{appdir}/Driga.app/Contents/MacOS/driga"' "$cask"; then
   echo "Homebrew Cask does not install driga." >&2
   exit 1
 fi
-if ! grep -Fq 'app "Driga.app", target: "#{caskroom_path}/Driga.app"' "$cask"; then
-  echo "Homebrew Cask does not keep the app at a stable Caskroom path." >&2
+if ! grep -Fqx '  app "Driga.app"' "$cask"; then
+  echo "Homebrew Cask does not install Driga.app into /Applications." >&2
   exit 1
 fi
 if ! grep -Fqx "  version \"${release_version}\"" "$cask"; then
   echo "Homebrew Cask version does not match ${release_version}." >&2
+  exit 1
+fi
+if grep -Eq 'service install|caskroom_path' "$cask"; then
+  echo "Homebrew Cask still references Caskroom paths or driga service install." >&2
   exit 1
 fi
 if grep -Eq '^[[:space:]]+verified:' "$cask"; then
