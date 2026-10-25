@@ -43,7 +43,7 @@ func doctorFixture(t *testing.T) (DoctorDeps, *store.Store) {
 	if err := os.WriteFile(filepath.Join(dir, "driga.lock"), []byte(`{"pid":1,"kind":"manual","executable":"/opt/driga","version":"test"}`), 0600); err != nil {
 		t.Fatal(err)
 	}
-	return DoctorDeps{ProcessAlive: func(pid int32, _ time.Time) bool { return pid == 1 }, DataDir: dir, Store: st, Config: config.Default(), Home: home, Now: now, LockProbe: func(string) (bool, error) { return true, nil }}, st
+	return DoctorDeps{ProcessAlive: func(pid int32, _ time.Time) bool { return pid == 1 }, DataDir: dir, Store: st, Config: config.Default(), Home: home, Now: now, LockProbe: func(string) (collector.Owner, bool, error) { return collector.Owner{PID: 1, Kind: "manual"}, true, nil }}, st
 }
 
 func requireCheck(t *testing.T, checks []Check, name, status, fix string) Check {
@@ -67,7 +67,7 @@ func TestDoctorNoDaemon(t *testing.T) {
 
 	d, _ := doctorFixture(t)
 	d.Store = nil
-	d.LockProbe = func(string) (bool, error) { return false, nil }
+	d.LockProbe = func(string) (collector.Owner, bool, error) { return collector.Owner{}, false, nil }
 	requireCheck(t, Doctor(context.Background(), d), "collector", "warn", "driga service install")
 }
 
@@ -80,7 +80,7 @@ func TestDoctorCollectorOwner(t *testing.T) {
 	defer lock.Close()
 	d.LockProbe = nil
 	c := requireCheck(t, Doctor(context.Background(), d), "collector", "ok", "")
-	want := fmt.Sprintf("running (app, pid %d)", os.Getpid())
+	want := fmt.Sprintf("running (app, pid %d); last pass 0s ago", os.Getpid())
 	if c.Detail != want {
 		t.Fatalf("collector detail: %q; want %q", c.Detail, want)
 	}
@@ -241,7 +241,7 @@ func TestDoctorPermissionsAndLockProbe(t *testing.T) {
 		t.Fatal(err)
 	}
 	requireCheck(t, Doctor(context.Background(), d), "data_permissions", "fail", "chmod 700 "+d.DataDir)
-	held, err := probeCollectorLock(d.DataDir)
+	_, held, err := collector.ReadOwner(d.DataDir)
 	if err != nil || held {
 		t.Fatalf("missing lock: %v %v", held, err)
 	}
@@ -252,14 +252,14 @@ func TestDoctorPermissionsAndLockProbe(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	held, err = probeCollectorLock(d.DataDir)
+	_, held, err = collector.ReadOwner(d.DataDir)
 	if err != nil || !held {
 		t.Fatalf("held lock: %v %v", held, err)
 	}
 	if err := lock.Close(); err != nil {
 		t.Fatal(err)
 	}
-	held, err = probeCollectorLock(d.DataDir)
+	_, held, err = collector.ReadOwner(d.DataDir)
 	if err != nil || held {
 		t.Fatalf("released lock: %v %v", held, err)
 	}

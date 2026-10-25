@@ -69,6 +69,30 @@ func TestReadOwnerWithoutHolder(t *testing.T) {
 	lock.Close()
 }
 
+func TestReadOwnerHolderRecordNotWritten(t *testing.T) {
+	dir := t.TempDir()
+	lock, err := Lock(dir, Owner{Kind: "app"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lock.Close()
+	path := filepath.Join(dir, "driga.lock")
+	for name, content := range map[string]string{"empty": "", "partial": `{"pid":12,"ki`} {
+		t.Run(name, func(t *testing.T) {
+			if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+				t.Fatal(err)
+			}
+			got, ok, err := ReadOwner(dir)
+			if err != nil || !ok || got != (Owner{Kind: "unknown"}) {
+				t.Fatalf("owner: %+v, %v, %v; want held unknown owner", got, ok, err)
+			}
+			if _, err := Lock(dir, Owner{Kind: "manual"}); !errors.Is(err, ErrAlreadyRunning) || !strings.Contains(err.Error(), "(unknown, pid 0)") {
+				t.Fatalf("busy lock: %v", err)
+			}
+		})
+	}
+}
+
 func TestLockBusyNamesOwner(t *testing.T) {
 	if dir := os.Getenv("DRIGA_COLLECTOR_LOCK_CHILD"); dir != "" {
 		lock, err := Lock(dir, Owner{Kind: "manual"})

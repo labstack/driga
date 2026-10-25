@@ -65,7 +65,7 @@ type DoctorDeps struct {
 	CopilotHome        string // Optional override; defaults to Home/.copilot.
 	Now                time.Time
 	ProcessAlive       func(int32, time.Time) bool // Optional PID/start validation for fixtures.
-	LockProbe          func(dataDir string) (held bool, err error)
+	LockProbe          func(dataDir string) (owner collector.Owner, held bool, err error)
 	ServicePlistStale  func() (bool, error)   // macOS plist path, read-only.
 	ServiceState       func() (string, error) // Windows Task Scheduler, read-only.
 	NotificationStatus func() (string, error) // Native API status, no authorization/registration/display.
@@ -133,21 +133,11 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 	if info, err := os.Stat(filepath.Join(d.DataDir, "viewer.heartbeat")); err == nil {
 		intervals = collector.Cadence(d.Now.Sub(info.ModTime()))
 	}
-	var owner collector.Owner
-	var held bool
-	var err error
-	if d.LockProbe == nil {
-		owner, held, err = collector.ReadOwner(d.DataDir)
-	} else {
-		held, err = d.LockProbe(d.DataDir)
-		if held && err == nil {
-			var data []byte
-			data, err = os.ReadFile(filepath.Join(d.DataDir, "driga.lock"))
-			if err == nil {
-				err = json.Unmarshal(data, &owner)
-			}
-		}
+	probe := d.LockProbe
+	if probe == nil {
+		probe = collector.ReadOwner
 	}
+	owner, held, err := probe(d.DataDir)
 	switch {
 	case err != nil:
 		add("collector", "fail", err.Error(), "check access to "+d.DataDir+"/driga.lock")
@@ -161,7 +151,7 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 		if err != nil || parseErr != nil || last.After(d.Now) || d.Now.Sub(last) > 3*intervals.Procs {
 			add("collector", "warn", "lock held but last pass is missing or stale", "driga service restart")
 		} else {
-			add("collector", "ok", fmt.Sprintf("running (%s, pid %d)", owner.Kind, owner.PID), "")
+			add("collector", "ok", fmt.Sprintf("running (%s, pid %d); last pass %s ago", owner.Kind, owner.PID, d.Now.Sub(last).Round(time.Second)), "")
 		}
 	}
 	if d.Store != nil {
@@ -603,12 +593,6 @@ func isCollectorProc(p model.Proc) bool {
 	}
 	args := p.Argv
 	return len(args) >= 2 && (filepath.Base(args[0]) == "driga" || strings.EqualFold(filepath.Base(args[0]), "driga.exe")) && args[1] == "collect"
-}
-
-// probeCollectorLock does not create a file or modify its contents/permissions.
-func probeCollectorLock(dir string) (bool, error) {
-	_, held, err := collector.ReadOwner(dir)
-	return held, err
 }
 
 // runtimeDoctor gives CLI and MCP diagnostics the same read-only probes.

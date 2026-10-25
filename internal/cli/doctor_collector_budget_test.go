@@ -2,12 +2,11 @@ package cli
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/labstack/driga/internal/collector"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/store"
 )
@@ -15,8 +14,8 @@ import (
 func TestDoctorCollectorBudgetUsesLockOwner(t *testing.T) {
 	d, st := doctorFixture(t)
 	start := d.Now.Add(-time.Hour)
-	if err := os.WriteFile(filepath.Join(d.DataDir, "driga.lock"), []byte(`{"pid":42,"kind":"service","executable":"/opt/driga","version":"test"}`), 0600); err != nil {
-		t.Fatal(err)
+	d.LockProbe = func(string) (collector.Owner, bool, error) {
+		return collector.Owner{PID: 42, Kind: "service", Executable: "/opt/driga", Version: "test"}, true, nil
 	}
 	d.ProcessAlive = func(pid int32, at time.Time) bool { return pid == 42 && at.Equal(start) }
 	if err := st.Tx(context.Background(), func(tx *store.Tx) error {

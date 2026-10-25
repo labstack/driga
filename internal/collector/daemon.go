@@ -90,11 +90,18 @@ func ReadOwner(dataDir string) (Owner, bool, error) {
 	if !filelock.Busy(err) {
 		return Owner{}, false, err
 	}
+	return readHolder(f), true, nil
+}
+
+// readHolder decodes the owner of a lock that is held. A holder that has taken
+// the lock but not yet written its record leaves the file empty or partial, so
+// an unreadable record yields the "unknown" kind rather than an error.
+func readHolder(f *os.File) Owner {
 	var owner Owner
 	if err := json.NewDecoder(f).Decode(&owner); err != nil {
-		return Owner{}, false, err
+		return Owner{Kind: "unknown"}
 	}
-	return owner, true, nil
+	return owner
 }
 
 // Lock takes the nonblocking collector writer lock and writes its owner as JSON.
@@ -132,8 +139,7 @@ func Lock(dataDir string, owner Owner) (*os.File, error) {
 	}
 	if err := filelock.Lock(f, true); err != nil {
 		if filelock.Busy(err) {
-			var holder Owner
-			_ = json.NewDecoder(f).Decode(&holder)
+			holder := readHolder(f)
 			return failed(fmt.Errorf("another driga collector is running (%s, pid %d): %w", holder.Kind, holder.PID, ErrAlreadyRunning))
 		}
 		return failed(err)

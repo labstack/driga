@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/labstack/driga/internal/attention"
+	"github.com/labstack/driga/internal/collector"
 )
 
 func TestWindowsActionCapabilities(t *testing.T) {
@@ -18,7 +19,7 @@ func TestWindowsActionCapabilities(t *testing.T) {
 	for key, value := range map[string]string{"HOME": root, "USERPROFILE": root, "APPDATA": root, "LOCALAPPDATA": root, "DRIGA_CONFIG": filepath.Join(root, "config.toml"), "DRIGA_DATA_DIR": filepath.Join(root, "data"), "DRIGA_SPOOL_DIR": filepath.Join(root, "events")} {
 		t.Setenv(key, value)
 	}
-	checks := Doctor(context.Background(), DoctorDeps{OS: "windows", Home: root, DataDir: filepath.Join(root, "data"), Now: time.Now(), LockProbe: func(string) (bool, error) { return false, nil }})
+	checks := Doctor(context.Background(), DoctorDeps{OS: "windows", Home: root, DataDir: filepath.Join(root, "data"), Now: time.Now(), LockProbe: func(string) (collector.Owner, bool, error) { return collector.Owner{}, false, nil }})
 	for _, name := range []string{"Claude scratch"} {
 		found := false
 		for _, c := range checks {
