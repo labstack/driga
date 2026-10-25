@@ -35,13 +35,13 @@ export function PanelView({ panel, result, act: given, fill }: { panel: Panel; r
   else if (!result) body = <Text size="sm" c="dimmed">Loading…</Text>;
   else if (result.status === "error") body = <Text size="sm" c="danger">{result.message ?? "This panel could not run."}</Text>;
   else if (panel.viz === "inbox" && host.prompts?.length) body = <Inbox frame={result.frame ?? { columns: [], rows: [] }} act={act} prompts={host.prompts} answer={host.answer} />;
-  else if (!result.frame || result.status === "empty") body = <Text size="sm" c="dimmed">{panel.viz === "inbox" ? "Nothing needs you right now." : result.message ?? "Nothing matches right now."}</Text>;
+  else if (!result.frame || result.status === "empty") body = <Text size="sm" c="dimmed">{result.message ?? (panel.viz === "inbox" ? "Nothing needs you right now." : "Nothing matches right now.")}</Text>;
   else if (chart && asTable) body = <DataTable frame={chartTable(result.frame, panel)} source={panel.source} />;
   else body = <Body panel={panel} result={result} frame={result.frame} height={height} act={act} />;
   const said = chart && result?.frame ? summary(result.frame, panel) : "";
   return <Card component="section" aria-labelledby={`panel-${panel.id}`} h={fill ? "100%" : undefined} style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
     <Group gap={6} wrap="nowrap" mb={6} className="panel-handle">
-      <Title order={2} id={`panel-${panel.id}`} fz="md" fw={600} lineClamp={1} style={{ letterSpacing: "-0.01em", flex: "0 1 auto", maxWidth: "75%" }}>{panel.title}</Title>
+      <Title order={2} id={`panel-${panel.id}`} fz="md" fw={600} lineClamp={1} style={{ letterSpacing: "-0.01em", flex: "0 1 auto", maxWidth: "75%" }}>{result?.title || panel.title}</Title>
       {panel.description && <Tooltip label={panel.description} multiline maw={320}>
         <ActionIcon size="xs" aria-label={`About ${panel.title}`}><Info size={14} /></ActionIcon>
       </Tooltip>}

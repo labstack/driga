@@ -44,6 +44,8 @@ type Result struct {
 	Trend []any `json:"trend,omitempty"`
 	// Total is what a stat is out of, when its panel names one.
 	Total any `json:"total,omitempty"`
+	// Title is the panel's title with its $variables filled in, when it has any.
+	Title string `json:"title,omitempty"`
 }
 
 // Fragment is a dashboard with its results: what a tool returns and an MCP
@@ -122,7 +124,7 @@ func options(d Dashboard, rows func(string) [][]any) map[string][]string {
 }
 
 func runPanel(p Panel, vars map[string]string, rows func(string) [][]any) Result {
-	r := Result{ID: p.ID, Status: StatusOK}
+	r := Result{ID: p.ID, Status: StatusOK, Title: fill(p.Title, vars)}
 	if p.Viz == "text" {
 		return r
 	}
@@ -157,7 +159,7 @@ func runPanel(p Panel, vars map[string]string, rows func(string) [][]any) Result
 	if len(frame.Rows) == 0 {
 		// An empty frame is [] on the wire, never null.
 		frame.Rows = [][]any{}
-		r.Status, r.Message = StatusEmpty, cmp.Or(p.Empty, "Nothing matches right now.")
+		r.Status, r.Message = StatusEmpty, cmp.Or(p.Empty, emptyFor(p.Viz))
 	}
 	r.Frame = &frame
 	return r
@@ -191,6 +193,32 @@ func filter(s schema, rows [][]any, where []Filter, vars map[string]string) [][]
 	return out
 }
 
+// emptyFor is what a panel with no rows says when its spec says nothing.
+func emptyFor(viz string) string {
+	if viz == "inbox" {
+		return "Nothing needs you right now."
+	}
+	return "Nothing matches right now."
+}
+
+// fill writes each $variable in text as its value, or as "all <name>s" when
+// it has none, which is what an empty variable selects.
+func fill(text string, vars map[string]string) string {
+	if !strings.Contains(text, "$") {
+		return ""
+	}
+	// Longer names first, so $project_path is not read as $project.
+	names := make([]string, 0, len(vars))
+	for name := range vars {
+		names = append(names, name)
+	}
+	slices.SortFunc(names, func(a, b string) int { return cmp.Compare(len(b), len(a)) })
+	for _, name := range names {
+		text = strings.ReplaceAll(text, "$"+name, cmp.Or(vars[name], "all "+name+"s"))
+	}
+	return text
+}
+
 func match(cell any, op, value string) bool {
 	text := fmt.Sprint(cell)
 	if cell == nil {
@@ -209,7 +237,16 @@ func match(cell any, op, value string) bool {
 		n, ok := cell.(float64)
 		v, err := strconv.ParseFloat(value, 64)
 		if !ok || err != nil {
-			return false
+			// Times compare as times: occurred_at gt 2026-10-25T00:00:00Z.
+			at, errA := time.Parse(time.RFC3339, text)
+			than, errB := time.Parse(time.RFC3339, value)
+			if errA != nil || errB != nil {
+				return false
+			}
+			if op == "gt" {
+				return at.After(than)
+			}
+			return at.Before(than)
 		}
 		if op == "gt" {
 			return n > v

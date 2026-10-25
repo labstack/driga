@@ -174,7 +174,19 @@ type stream struct {
 	tools                             map[string]bool
 	actions                           bool
 	connected, partial, printed, done bool
-	err                               error
+	// gap is set when a new model message starts after text was shown, so
+	// its text begins a new paragraph rather than running on.
+	gap bool
+	err error
+}
+
+// text emits reply text, starting a new paragraph after an earlier message.
+func (s *stream) text(t string) error {
+	if s.gap {
+		t, s.gap = "\n\n"+t, false
+	}
+	s.printed = true
+	return s.emit(Delta{Text: t})
 }
 
 const maxLine = 1 << 20
@@ -273,6 +285,7 @@ func (s *stream) line(line []byte) error {
 		if e.Event.Type == "message_start" {
 			s.partial = false
 			s.partialText = ""
+			s.gap = s.printed
 		}
 		if e.Event.Type == "content_block_start" && e.Event.ContentBlock.Type == "tool_use" {
 			if !s.validTool(e.Event.ContentBlock.Name) {
@@ -283,8 +296,7 @@ func (s *stream) line(line []byte) error {
 		if e.Event.Type == "content_block_delta" && e.Event.Delta.Type == "text_delta" {
 			s.partial = true
 			s.partialText += e.Event.Delta.Text
-			s.printed = true
-			return s.emit(Delta{Text: e.Event.Delta.Text})
+			return s.text(e.Event.Delta.Text)
 		}
 	case "user":
 		for _, content := range e.Message.Content {
@@ -319,8 +331,7 @@ func (s *stream) line(line []byte) error {
 			}
 		}
 		if full != "" {
-			s.printed = true
-			if err := s.emit(Delta{Text: full}); err != nil {
+			if err := s.text(full); err != nil {
 				return err
 			}
 		}

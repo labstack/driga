@@ -318,3 +318,29 @@ func TestSessionsOrderedByUrgency(t *testing.T) {
 		t.Fatalf("order = %v, want %v", ids, want)
 	}
 }
+
+// A title's $variables are filled in, and a time compares as a time: Chat
+// writes "Finished in $project" and occurred_at gt a day's start.
+func TestTitlesFillVariablesAndTimesCompare(t *testing.T) {
+	snap := snapshot()
+	at := snap.ObservedAt
+	snap.Inbox.Rows = []view.InboxRow{
+		{InboxItem: model.InboxItem{ID: "new", Kind: "finished", SessionID: 1, TS: at}, Project: "monk"},
+		{InboxItem: model.InboxItem{ID: "old", Kind: "finished", SessionID: 2, TS: at.Add(-48 * time.Hour)}, Project: "monk"},
+	}
+	since := at.Add(-time.Hour).UTC().Format(time.RFC3339)
+	d := Dashboard{Name: "x", Variables: []Variable{{Name: "project", Field: "project", Default: "monk"}}, Panels: []Panel{
+		{ID: "f", Title: "Finished in $project", Viz: "table", Source: "inbox", Columns: []string{"id"}, Where: []Filter{{Column: "project", Value: "$project"}, {Column: "occurred_at", Op: "gt", Value: since}}},
+	}}
+	f, err := Run(snap, RunRequest{Dashboard: d})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := f.Results[0]
+	if r.Title != "Finished in monk" || len(r.Frame.Rows) != 1 || r.Frame.Rows[0][0] != "new" {
+		t.Fatalf("result = %q %v", r.Title, r.Frame.Rows)
+	}
+	if f, _ = Run(snap, RunRequest{Dashboard: d, Vars: map[string]string{"project": ""}}); f.Results[0].Title != "Finished in all projects" {
+		t.Fatalf("empty variable title = %q", f.Results[0].Title)
+	}
+}

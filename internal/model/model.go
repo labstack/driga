@@ -27,6 +27,10 @@ type Machine struct {
 	LastSeen      time.Time `json:"last_seen_at"`
 }
 
+// ChatPreamble opens every prompt Driga's Chat sends to claude, so the
+// collector can tell Chat's own claude sessions from the person's agents.
+const ChatPreamble = "You are driga Chat."
+
 // Proc is one process in a snapshot.
 type Proc struct {
 	// Partial means one or more live Windows process queries were denied.

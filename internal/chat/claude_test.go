@@ -336,3 +336,23 @@ echo '{"type":"result","result":"ok"}'`
 		})
 	}
 }
+
+// Text from a second model message, after a tool call, starts a new
+// paragraph instead of running on from the first: "gate.I didn't".
+func TestClaudeSeparatesConsecutiveMessages(t *testing.T) {
+	a, _ := fakeCLI(t, flags, `echo '{"type":"system","subtype":"init","mcp_servers":[{"name":"driga","status":"connected"}]}'
+echo '{"type":"stream_event","event":{"type":"message_start"}}'
+echo '{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"Sending it through the gate."}}}'
+echo '{"type":"assistant","message":{"content":[{"type":"text","text":"Sending it through the gate."}]}}'
+echo '{"type":"stream_event","event":{"type":"message_start"}}'
+echo '{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"It was declined."}}}'
+echo '{"type":"assistant","message":{"content":[{"type":"text","text":"It was declined."}]}}'
+echo '{"type":"result","result":"It was declined."}'`)
+	var text strings.Builder
+	if err := a.Run(context.Background(), Request{}, func(d Delta) error { text.WriteString(d.Text); return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if got := text.String(); got != "Sending it through the gate.\n\nIt was declined." {
+		t.Fatalf("text = %q", got)
+	}
+}

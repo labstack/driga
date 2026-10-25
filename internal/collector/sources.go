@@ -216,6 +216,10 @@ func collectSources(ctx context.Context, d Deps, st *store.Store, p Plan, state 
 			if o.Adapter == "" {
 				o.Adapter = result.name
 			}
+			// Driga's own Chat runs claude too; it is not one of the person's agents.
+			if strings.HasPrefix(o.Title, model.ChatPreamble) || strings.HasPrefix(o.LastPrompt, model.ChatPreamble) {
+				continue
+			}
 			r.observations = append(r.observations, o)
 		}
 	}
