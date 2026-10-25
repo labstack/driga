@@ -10,13 +10,13 @@ import (
 
 func TestThemeControlAndStylesheet(t *testing.T) {
 	s, _, _, _ := fixture(t)
-	body := request(s, "GET", "/", s.token).Body.String()
+	body := request(s, "GET", "/").Body.String()
 	for _, want := range []string{`/static/theme.css`, `id="theme"`, `value="system"`, `value="light"`, `value="dark"`, `system`, `light`, `dark`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("missing %s", want)
 		}
 	}
-	css := request(s, "GET", "/static/theme.css", s.token)
+	css := request(s, "GET", "/static/theme.css")
 	if css.Code != 200 || css.Body.String() != view.ThemeCSS() {
 		t.Fatal("theme endpoint differs from shared source")
 	}
@@ -28,7 +28,7 @@ func TestThemeControlAndStylesheet(t *testing.T) {
 func TestFooterDescribesChatActions(t *testing.T) {
 	s, _, _, _ := fixture(t)
 	for _, page := range []string{"/", "/chat", "/flow"} {
-		body := request(s, "GET", page, s.token).Body.String()
+		body := request(s, "GET", page).Body.String()
 		if strings.Contains(body, "Read-only dashboard") || !strings.Contains(body, "Local actions in Chat") {
 			t.Fatal(page, "footer misrepresents available actions")
 		}
@@ -61,7 +61,7 @@ func TestRailCountsRefresh(t *testing.T) {
 func TestRailCountsOnEveryPage(t *testing.T) {
 	s, _, _, _ := fixture(t)
 	for _, path := range []string{"/", "/agents", "/projects", "/inbox", "/orphans", "/machines", "/cleanup", "/agents/1", "/projects/1"} {
-		body := request(s, "GET", path, s.token).Body.String()
+		body := request(s, "GET", path).Body.String()
 		for _, want := range []string{`data-window="0"`, `data-window="1"`, `data-window="2"`} {
 			if !strings.Contains(body, want) {
 				t.Errorf("%s missing count %s", path, want)

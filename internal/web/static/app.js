@@ -4,7 +4,7 @@
     const row=button.closest("[data-prompt]"), status=row.querySelector('[role="status"]');
     row.querySelectorAll("button").forEach(el=>el.disabled=true);
     try {
-      const response=await fetch("/chat/api/prompt-answer",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json","X-CSRF-Token":document.querySelector('meta[name="chat-csrf"]').content},body:JSON.stringify({id:button.dataset.promptId,allow:button.dataset.promptAnswer==="allow"})});
+      const response=await fetch("/chat/api/prompt-answer",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:button.dataset.promptId,allow:button.dataset.promptAnswer==="allow"})});
       if(!response.ok)throw new Error(await response.text());
       row.remove();
     } catch(error) {status.textContent=error.message;row.querySelectorAll("button").forEach(el=>el.disabled=false);}
@@ -122,7 +122,7 @@
       }
     };
   }
-  function connectionText(connected,closed) { return connected?"● live":closed?"○ disconnected · authenticate the new web URL, then reload":"○ reconnecting…"; }
+  function connectionText(connected) { return connected?"● live":"○ reconnecting…"; }
   globalThis.DrigaConsole = Object.freeze({answerPrompt,connectionText,parseCommand, createInboxController, createMachineController});
   if (typeof document === "undefined") return;
 
@@ -134,8 +134,6 @@
   const css = name => getComputedStyle(root).getPropertyValue("--" + name).trim();
   let preference = "system", history = [], historyIndex = 0, draft = "";
   try {
-    const saved = localStorage.getItem("driga-theme");
-    if (["light", "dark", "system"].includes(saved)) preference = saved;
     const stored = JSON.parse(localStorage.getItem("driga-command-history") || "[]");
     if (Array.isArray(stored)) history = stored.filter(s => typeof s === "string" && s.length <= 500).slice(-100);
   } catch (_) { /* Storage is optional. */ }
@@ -145,7 +143,6 @@
   }
   function setTheme(choice) {
     applyTheme(choice);
-    try { localStorage.setItem("driga-theme", choice); } catch (_) { /* Keep this visit's preference. */ }
     charts.draw();
   }
   applyTheme();
@@ -390,25 +387,41 @@
   if (document.fonts) document.fonts.ready.then(() => charts.draw());
   system.addEventListener("change", () => { if (preference === "system") charts.draw(); });
   phone.addEventListener("change", () => charts.draw());
-  function connection(connected) { document.querySelectorAll(".connection").forEach(el => { el.textContent = connectionText(connected,stream.readyState===EventSource.CLOSED); el.classList.toggle("working", connected); el.classList.toggle("waiting", !connected); }); }
-  const stream = new EventSource("/events" + window.location.search);
-  stream.addEventListener("open", () => connection(true)); stream.addEventListener("error", () => connection(false));
+  function connection(connected) { document.querySelectorAll(".connection").forEach(el => { el.textContent = connectionText(connected); el.classList.toggle("working", connected); el.classList.toggle("waiting", !connected); }); }
   const refresh = () => { const main = document.getElementById("main"); if (window.htmx) htmx.trigger(main, "console:refresh"); };
+  // One long poll at a time: the first answer refreshes and fills the tail,
+  // later answers carry data changes and new tail rows.
+  const updates = new AbortController();
+  (async () => {
+    let cursor = "";
+    while (!updates.signal.aborted) {
+      try {
+        const query = new URLSearchParams(location.search); if (cursor) query.set("after", cursor);
+        const response = await fetch("/updates?" + query, {signal: updates.signal});
+        if (!response.ok) throw new Error(response.statusText);
+        const update = await response.json();
+        connection(true);
+        if (!cursor || update.refresh) refresh();
+        cursor = update.cursor; if (update.tail.length) ingestTail(update.tail);
+      } catch (_) {
+        if (updates.signal.aborted) return;
+        connection(false); await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    }
+  })();
   let promptPolling=false;
   setInterval(async()=>{
     const container=document.querySelector("[data-prompts]");
     if(!container||promptPolling)return;
     promptPolling=true;
     try {
-      const response=await fetch("/chat/api/prompts",{credentials:"same-origin"});
+      const response=await fetch("/chat/api/prompts");
       if(!response.ok)return;
       const prompts=await response.json();
       const shown=Array.from(container.querySelectorAll("[data-prompt]"),row=>row.dataset.prompt).sort();
       if(JSON.stringify(shown)!==JSON.stringify(prompts.map(prompt=>prompt.id).sort()))refresh();
     } catch(_) { /* The next poll retries. */ } finally {promptPolling=false;}
   },1000);
-  stream.addEventListener("ready", refresh); stream.addEventListener("change", refresh);
-  stream.addEventListener("tail", event => { try { ingestTail(JSON.parse(event.data)); } catch (_) { /* A reconnect will refresh the tail. */ } });
   const clock = setInterval(() => { document.querySelectorAll("[data-clock]").forEach(el => { el.textContent = new Date().toLocaleTimeString([], {hour12: false}); }); }, 1000);
-  window.addEventListener("pagehide", () => { stream.close(); charts.dispose(); clearInterval(clock); });
+  window.addEventListener("pagehide", () => { updates.abort(); charts.dispose(); clearInterval(clock); });
 })();

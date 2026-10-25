@@ -82,14 +82,14 @@ func TestInboxDenseSectionsAndCap(t *testing.T) {
 
 func TestInboxReadOnlyCSPAndRefresh(t *testing.T) {
 	s, _, _, _ := fixture(t)
-	w := request(s, "GET", "/inbox", s.token)
-	if w.Header().Get("Content-Security-Policy") != request(s, "GET", "/", s.token).Header().Get("Content-Security-Policy") {
+	w := request(s, "GET", "/inbox")
+	if w.Header().Get("Content-Security-Policy") != request(s, "GET", "/").Header().Get("Content-Security-Policy") {
 		t.Error("inbox changed CSP")
 	}
 	if !strings.Contains(w.Body.String(), `hx-trigger="console:refresh"`) {
 		t.Error("lost live refresh")
 	}
-	if request(s, "POST", "/inbox", s.token).Code != 405 {
+	if request(s, "POST", "/inbox").Code != 405 {
 		t.Error("inbox accepts POST")
 	}
 }

@@ -70,7 +70,7 @@ func TestDefaultVisibilityAndAll(t *testing.T) {
 				t.Errorf("%s all=%v: project idle count %d, want %d", path, all, projectIdle, want-1)
 			}
 
-			w := request(s, "GET", path+query, s.token)
+			w := request(s, "GET", path+query)
 			body := w.Body.String()
 			if !strings.Contains(body, "Show all sessions") && !strings.Contains(body, "Show default sessions") {
 				t.Error("missing visibility toggle")
@@ -112,7 +112,7 @@ func TestNeedsYouDedupeCapAndIdentity(t *testing.T) {
 	if len(p.Board.Needs) != 1 || p.Board.Pulse["waiting"] != 1 {
 		t.Fatal("completion events entered live Needs you", len(p.Board.Needs), p.Board.Pulse)
 	}
-	body := request(s, "GET", "/flow", s.token).Body.String()
+	body := request(s, "GET", "/flow").Body.String()
 	if !strings.Contains(body, "Activity · notifications") || !strings.Contains(body, "Session title 8") {
 		t.Fatal("history lost")
 	}
@@ -134,7 +134,7 @@ func TestProjectAggregatedStates(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	body := request(s, "GET", "/projects", s.token).Body.String()
+	body := request(s, "GET", "/projects").Body.String()
 	for _, text := range []string{"1 working", "1 waiting", "2 idle"} {
 		if !strings.Contains(body, text) {
 			t.Errorf("missing aggregate %q", text)
@@ -157,7 +157,7 @@ func TestFreshnessCompactAndActivityEmpty(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	body := request(s, "GET", "/", s.token).Body.String()
+	body := request(s, "GET", "/").Body.String()
 	if !strings.Contains(body, "Stale: cwds") || !strings.Contains(body, `class="seg intake-status"`) || !strings.Contains(body, "last successful reading") {
 		t.Error("missing compact stale line with hover details")
 	}
@@ -192,11 +192,11 @@ func TestAllSessionDetailLinksKeepFilter(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	body := request(s, "GET", "/agents?all=1", s.token).Body.String()
+	body := request(s, "GET", "/agents?all=1").Body.String()
 	if !strings.Contains(body, fmt.Sprintf(`/agents/%d?all=1&amp;machine=all`, id)) {
 		t.Error("ended session link loses all filter")
 	}
-	if w := request(s, "GET", fmt.Sprintf("/agents/%d?all=1", id), s.token); w.Code != 200 {
+	if w := request(s, "GET", fmt.Sprintf("/agents/%d?all=1", id)); w.Code != 200 {
 		t.Fatalf("ended detail status: %d", w.Code)
 	}
 }

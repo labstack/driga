@@ -4,18 +4,15 @@ package web
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
-	"crypto/subtle"
 	"embed"
-	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"html/template"
 	"io/fs"
-	"net"
 	"net/http"
+	"net/url"
 	"path"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -31,7 +28,6 @@ import (
 var assets embed.FS
 
 const csp = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'"
-const cookieName = "driga_token" // prefix; each server appends its port
 
 // Source shares the TUI's consistent view transaction and live snapshot source.
 type Source interface {
@@ -43,25 +39,28 @@ type Options struct {
 	SessionAction func(context.Context, string, int64) error
 	Chat          chat.Client
 	ChatEphemeral bool
-	Host          string
 	Machine       string
 	CleanupList   func(context.Context) ([]cleanup.Candidate, error)
 	Activity      func(bool)
+	// Confirm and OpenExternal are the host's native dialog and browser
+	// opener; without them their endpoints answer 404.
+	Confirm      func(ctx context.Context, message string) bool
+	OpenExternal func(url string)
 }
 
+// Server is a transport-free handler: pages, their JSON endpoints and long polls.
 type Server struct {
 	routes          *http.ServeMux
-	origin          http.CrossOriginProtection
 	source          Source
 	opts            Options
-	token           string
-	csrf            string
-	chatStreams     chan struct{}
 	templates       *template.Template
 	static          http.Handler
 	themeCSS        string
 	mu              sync.Mutex
-	clients         map[chan struct{}]bool // Value records a pending data refresh.
+	generation      uint64        // Advances on every page refresh.
+	tick            chan struct{} // Closed and replaced on every watch tick.
+	waiters         int
+	polled          time.Time
 	ready           chan struct{}
 	cacheMu         sync.Mutex
 	cache           map[snapshotKey]cachedSnapshot
@@ -69,35 +68,12 @@ type Server struct {
 	cleanupAt       time.Time
 	cleanupRows     []cleanup.Candidate
 	cleanupErr      error
-	cookieName      string
-	sseWriteTimeout time.Duration
 	watchInterval   time.Duration
 	refreshInterval time.Duration
-}
-
-// Listen validates before binding; hostnames other than localhost never resolve.
-func Listen(address string) (net.Listener, error) {
-	host, _, err := net.SplitHostPort(address)
-	if err != nil {
-		return nil, fmt.Errorf("listen requires a loopback address and port: %w", err)
-	}
-	if host != "localhost" {
-		ip := net.ParseIP(host)
-		if ip == nil || !ip.IsLoopback() {
-			return nil, fmt.Errorf("listen requires a loopback address: %q", host)
-		}
-	}
-	return net.Listen("tcp", address)
+	pollTimeout     time.Duration
 }
 
 func New(source Source, opts Options) (*Server, error) {
-	if _, _, err := net.SplitHostPort(opts.Host); err != nil {
-		return nil, err
-	}
-	token := make([]byte, 64)
-	if _, err := rand.Read(token); err != nil {
-		return nil, err
-	}
 	t, err := template.New("dashboard").Funcs(templateFuncs()).ParseFS(assets, "templates/*.html")
 	if err != nil {
 		return nil, err
@@ -107,18 +83,17 @@ func New(source Source, opts Options) (*Server, error) {
 		return nil, err
 	}
 	s := &Server{
-		source: source, opts: opts, token: base64.RawURLEncoding.EncodeToString(token[:32]), csrf: base64.RawURLEncoding.EncodeToString(token[32:]), chatStreams: make(chan struct{}, 32),
-		themeCSS: view.ThemeCSS(), templates: t, static: http.StripPrefix("/static/", http.FileServer(http.FS(static))),
-		clients: map[chan struct{}]bool{}, ready: make(chan struct{}),
-		cache: map[snapshotKey]cachedSnapshot{}, cookieName: instanceCookie(opts.Host), sseWriteTimeout: 10 * time.Second, watchInterval: time.Second, refreshInterval: 15 * time.Second,
+		source: source, opts: opts, themeCSS: view.ThemeCSS(), templates: t, static: http.StripPrefix("/static/", http.FileServer(http.FS(static))),
+		// A cursor from an earlier server never matches this one's generation.
+		generation: uint64(time.Now().UnixNano()), tick: make(chan struct{}), ready: make(chan struct{}),
+		cache: map[snapshotKey]cachedSnapshot{}, watchInterval: time.Second, refreshInterval: 15 * time.Second, pollTimeout: 25 * time.Second,
 	}
 	s.routes = s.newRoutes()
 	return s, nil
 }
 
-func (s *Server) URL() string { return "http://" + s.opts.Host + "/?token=" + s.token }
-
-// Watch checks one connection once a second, regardless of browser count.
+// Watch checks one connection once a second, regardless of page count, and
+// wakes every waiting poll.
 func (s *Server) Watch(ctx context.Context) {
 	version, err := s.source.DataVersion(ctx)
 	close(s.ready)
@@ -133,7 +108,9 @@ func (s *Server) Watch(ctx context.Context) {
 		case <-ticker.C:
 			next, err := s.source.DataVersion(ctx)
 			s.mu.Lock()
-			active := len(s.clients) > 0
+			// A page polls again as soon as an answer arrives; the grace
+			// period keeps that gap from reading as the page leaving.
+			active := s.waiters > 0 || time.Since(s.polled) < 2*s.watchInterval
 			s.mu.Unlock()
 			if activity, ok := s.source.(interface{ SetActive(bool) }); ok {
 				activity.SetActive(active)
@@ -147,15 +124,11 @@ func (s *Server) Watch(ctx context.Context) {
 				lastRefresh = time.Now()
 			}
 			s.mu.Lock()
-			for ch := range s.clients {
-				// Keep a refresh pending if a slow client still has an earlier
-				// tick queued. Every tick also schedules that client's tail.
-				s.clients[ch] = s.clients[ch] || refresh
-				select {
-				case ch <- struct{}{}:
-				default:
-				}
+			if refresh {
+				s.generation++
 			}
+			close(s.tick)
+			s.tick = make(chan struct{})
 			s.mu.Unlock()
 		}
 	}
@@ -167,43 +140,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	w.Header().Set("Cache-Control", "no-store")
-	if r.Method != http.MethodGet && r.Method != http.MethodHead && !(r.Method == http.MethodPost && isChatPOST(r.URL.Path)) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead && !(r.Method == http.MethodPost && (isChatPOST(r.URL.Path) || isAppPOST(r.URL.Path))) {
 		w.Header().Set("Allow", "GET, HEAD")
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	_, port, _ := net.SplitHostPort(s.opts.Host)
-	if r.Host != s.opts.Host && r.Host != "localhost:"+port {
-		http.Error(w, "host not allowed", http.StatusForbidden)
-		return
-	}
-	if r.URL.Query().Has("token") {
-		if r.Method != http.MethodGet && r.Method != http.MethodHead {
-			http.Error(w, "unauthorized", 401)
-			return
-		}
-		if !s.validToken(r.URL.Query().Get("token")) {
-			http.Error(w, "unauthorized", 401)
-			return
-		}
-		http.SetCookie(w, &http.Cookie{Name: s.cookieName, Value: s.token, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode})
-		clean := *r.URL
-		q := clean.Query()
-		q.Del("token")
-		clean.RawQuery = q.Encode()
-		// Redirect only to an origin-relative path, including for unusual request targets.
-		clean.Scheme = ""
-		clean.Host = ""
-		clean.User = nil
-		if strings.HasPrefix(clean.Path, "//") {
-			clean.Path = "/"
-		}
-		http.Redirect(w, r, clean.String(), http.StatusSeeOther)
-		return
-	}
-	cookie, err := r.Cookie(s.cookieName)
-	if err != nil || !s.validToken(cookie.Value) {
-		http.Error(w, "unauthorized", 401)
 		return
 	}
 	// Match the decoded path, as the dashboard routes have always done.
@@ -236,6 +175,8 @@ func (s *Server) newRoutes() *http.ServeMux {
 	for _, path := range []string{"/chat/api/flow-action", "/chat/api/prompt-answer", "/chat/api/new", "/chat/api/send", "/chat/api/stop", "/chat/api/mode", "/chat/api/decide"} {
 		mux.HandleFunc("POST "+path, s.chatAPI)
 	}
+	mux.HandleFunc("POST /app/confirm", s.appConfirm)
+	mux.HandleFunc("POST /app/open-external", s.appOpenExternal)
 	mux.HandleFunc("GET /static/theme.css", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/css; charset=utf-8")
 		if r.Method != http.MethodHead {
@@ -244,109 +185,207 @@ func (s *Server) newRoutes() *http.ServeMux {
 	})
 	mux.Handle("GET /static/", s.static)
 	mux.HandleFunc("GET /flow.json", s.flowJSON)
-	mux.HandleFunc("GET /events", s.events)
+	mux.HandleFunc("GET /updates", s.updates)
 	mux.HandleFunc("GET /", s.page)
 	return mux
 }
 
-func (s *Server) validToken(token string) bool {
-	return subtle.ConstantTimeCompare([]byte(token), []byte(s.token)) == 1
+// tailMark is the newest tail row a page holds, in the tail's (time, key) order.
+type tailMark struct {
+	at  int64
+	key string // Empty before the first row.
 }
 
-func (s *Server) events(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/event-stream")
+func (m tailMark) before(row view.TailEvent) bool {
+	at := row.TS.UnixNano()
+	return m.key == "" || at > m.at || at == m.at && row.Key > m.key
+}
+
+// The cursor is opaque to the page: refresh generation and tail mark.
+func encodeCursor(generation uint64, mark tailMark) string {
+	return fmt.Sprintf("%d.%d.%s", generation, mark.at, mark.key)
+}
+
+func decodeCursor(raw string) (uint64, tailMark, error) {
+	parts := strings.SplitN(raw, ".", 3)
+	if len(parts) != 3 {
+		return 0, tailMark{}, fmt.Errorf("invalid cursor")
+	}
+	generation, err := strconv.ParseUint(parts[0], 10, 64)
+	if err != nil {
+		return 0, tailMark{}, fmt.Errorf("invalid cursor")
+	}
+	at, err := strconv.ParseInt(parts[1], 10, 64)
+	if err != nil {
+		return 0, tailMark{}, fmt.Errorf("invalid cursor")
+	}
+	return generation, tailMark{at: at, key: parts[2]}, nil
+}
+
+type update struct {
+	Cursor  string           `json:"cursor"`
+	Refresh bool             `json:"refresh"`
+	Tail    []view.TailEvent `json:"tail"`
+}
+
+// updates answers one long poll. A first call returns the cursor and current
+// tail at once. Later calls return when the page should refresh, when a watch
+// tick finds tail rows past the cursor, or empty after pollTimeout. Ticks pace
+// the answers, so a page receives at most one tail batch per watch interval.
+func (s *Server) updates(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	if r.Method == http.MethodHead {
 		return
+	}
+	var generation uint64
+	var mark tailMark
+	first := !r.URL.Query().Has("after")
+	if !first {
+		var err error
+		if generation, mark, err = decodeCursor(r.URL.Query().Get("after")); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 	}
 	select {
 	case <-s.ready:
 	case <-r.Context().Done():
 		return
 	}
-	ch := make(chan struct{}, 1)
 	s.mu.Lock()
-	s.clients[ch] = false
+	s.waiters++
 	s.mu.Unlock()
-	defer func() { s.mu.Lock(); delete(s.clients, ch); s.mu.Unlock() }()
-	writePayload := func(event, payload string) error {
-		rc := http.NewResponseController(w)
-		if err := rc.SetWriteDeadline(time.Now().Add(s.sseWriteTimeout)); err != nil && !errors.Is(err, http.ErrNotSupported) {
-			return err
-		}
-		if _, err := fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event, payload); err != nil {
-			return err
-		}
-		return rc.Flush()
-	}
-	writeEvent := func(event string) error { return writePayload(event, "refresh") }
-	seen := map[string]bool{}
-	var lastTail time.Time
-	sendTail := func() error {
-		if !lastTail.IsZero() && time.Since(lastTail) < s.watchInterval {
-			return nil
-		}
-		clone := r.Clone(r.Context())
-		u := *r.URL
-		u.Path = "/"
-		clone.URL = &u
-		page, _, err := s.loadPage(clone)
-		if err != nil {
-			return nil
-		} // Keep refreshes alive through a transient read failure.
-		pending := []view.TailEvent{}
-		nextSeen := map[string]bool{}
-		for _, row := range page.Tail {
-			nextSeen[row.Key] = true
-			if !seen[row.Key] {
-				pending = append(pending, row)
-			}
-		}
-		seen = nextSeen
-		// Flood policy: retain the newest twenty per second; no unbounded client queue.
-		if len(pending) > 20 {
-			pending = pending[len(pending)-20:]
-		}
-		if len(pending) == 0 {
-			return nil
-		}
-		data, err := json.Marshal(pending)
-		if err != nil {
-			return err
-		}
-		if err := writePayload("tail", string(data)); err != nil {
-			return err
-		}
-		lastTail = time.Now()
-		return nil
-	}
-	if err := writeEvent("ready"); err != nil {
-		return
-	}
-	if err := sendTail(); err != nil {
-		return
-	}
+	defer func() {
+		s.mu.Lock()
+		s.waiters--
+		s.polled = time.Now()
+		s.mu.Unlock()
+	}()
+	timeout := time.NewTimer(s.pollTimeout)
+	defer timeout.Stop()
 	for {
+		s.mu.Lock()
+		current, tick := s.generation, s.tick
+		s.mu.Unlock()
+		if first || current != generation {
+			rows, next := s.tailSince(r, mark)
+			writeUpdate(w, update{Cursor: encodeCursor(current, next), Refresh: !first, Tail: rows})
+			return
+		}
 		select {
 		case <-r.Context().Done():
 			return
-		case <-ch:
+		case <-timeout.C:
+			writeUpdate(w, update{Cursor: encodeCursor(generation, mark), Tail: []view.TailEvent{}})
+			return
+		case <-tick:
 			s.mu.Lock()
-			refresh := s.clients[ch]
-			s.clients[ch] = false
+			current = s.generation
 			s.mu.Unlock()
-			if refresh {
-				if err := writeEvent("refresh"); err != nil {
-					return
-				}
-				if err := writeEvent("change"); err != nil {
-					return
-				}
+			if current != generation {
+				continue
 			}
-			if err := sendTail(); err != nil {
+			if rows, next := s.tailSince(r, mark); len(rows) > 0 {
+				writeUpdate(w, update{Cursor: encodeCursor(generation, next), Tail: rows})
 				return
 			}
 		}
 	}
+}
+
+// tailSince reads the overview tail in the page's scope and returns the rows
+// past mark, with the mark that covers them.
+func (s *Server) tailSince(r *http.Request, mark tailMark) ([]view.TailEvent, tailMark) {
+	clone := r.Clone(r.Context())
+	u := *r.URL
+	u.Path = "/"
+	clone.URL = &u
+	page, _, err := s.loadPage(clone)
+	if err != nil {
+		return []view.TailEvent{}, mark
+	} // Keep refreshes alive through a transient read failure.
+	rows := []view.TailEvent{}
+	next := mark
+	for _, row := range page.Tail {
+		if mark.before(row) {
+			rows = append(rows, row)
+			if next.before(row) {
+				next = tailMark{at: row.TS.UnixNano(), key: row.Key}
+			}
+		}
+	}
+	// Flood policy: retain the newest twenty per answer; no unbounded page queue.
+	if len(rows) > 20 {
+		rows = rows[len(rows)-20:]
+	}
+	return rows, next
+}
+
+func writeUpdate(w http.ResponseWriter, u update) {
+	raw, err := json.Marshal(u)
+	if err != nil {
+		http.Error(w, "could not encode update", 500)
+		return
+	}
+	_, _ = w.Write(raw)
+}
+
+func isAppPOST(path string) bool { return path == "/app/confirm" || path == "/app/open-external" }
+
+// decodeAppJSON reads one small JSON object from the page.
+func decodeAppJSON(w http.ResponseWriter, r *http.Request, v any) bool {
+	if r.Header.Get("Content-Type") != "application/json" {
+		http.Error(w, "expected application/json", http.StatusUnsupportedMediaType)
+		return false
+	}
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(v); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return false
+	}
+	return true
+}
+
+func writeJSON(w http.ResponseWriter, v any) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_ = json.NewEncoder(w).Encode(v)
+}
+
+// appConfirm asks the host's native dialog in place of the page's confirm().
+func (s *Server) appConfirm(w http.ResponseWriter, r *http.Request) {
+	if s.opts.Confirm == nil {
+		http.NotFound(w, r)
+		return
+	}
+	var in struct {
+		Message string `json:"message"`
+	}
+	if !decodeAppJSON(w, r, &in) {
+		return
+	}
+	writeJSON(w, map[string]bool{"confirmed": s.opts.Confirm(r.Context(), in.Message)})
+}
+
+// appOpenExternal hands a web link to the default browser.
+func (s *Server) appOpenExternal(w http.ResponseWriter, r *http.Request) {
+	if s.opts.OpenExternal == nil {
+		http.NotFound(w, r)
+		return
+	}
+	var in struct {
+		URL string `json:"url"`
+	}
+	if !decodeAppJSON(w, r, &in) {
+		return
+	}
+	u, err := url.Parse(in.URL)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		http.Error(w, "expected an http or https URL", http.StatusBadRequest)
+		return
+	}
+	s.opts.OpenExternal(u.String())
+	writeJSON(w, map[string]bool{"ok": true})
 }
 
 func (s *Server) page(w http.ResponseWriter, r *http.Request) {
@@ -369,11 +408,6 @@ func (s *Server) page(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodHead {
 		_, _ = w.Write(buf.Bytes())
 	}
-}
-
-func instanceCookie(host string) string {
-	_, port, _ := net.SplitHostPort(host)
-	return cookieName + "_" + port
 }
 
 type headerWriter struct {

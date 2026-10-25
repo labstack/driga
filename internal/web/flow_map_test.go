@@ -3,17 +3,18 @@ package web
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/labstack/driga/internal/view"
 	"testing"
+
+	"github.com/labstack/driga/internal/view"
 )
 
-func TestFlowJSONAuthAndShape(t *testing.T) {
+func TestFlowJSONShape(t *testing.T) {
 	s, _, id, _ := fixture(t)
 	for _, tc := range []struct {
-		method, path, token string
-		status              int
-	}{{"GET", "/flow.json", "", 401}, {"POST", "/flow.json", s.token, 405}, {"GET", "/flow.json?id=bad", s.token, 400}, {"GET", "/flow.json?minutes=3", s.token, 400}, {"GET", fmt.Sprintf("/flow.json?id=%d", id), s.token, 200}, {"HEAD", "/flow.json", s.token, 200}} {
-		w := request(s, tc.method, tc.path, tc.token)
+		method, path string
+		status       int
+	}{{"POST", "/flow.json", 405}, {"GET", "/flow.json?id=bad", 400}, {"GET", "/flow.json?minutes=3", 400}, {"GET", fmt.Sprintf("/flow.json?id=%d", id), 200}, {"HEAD", "/flow.json", 200}} {
+		w := request(s, tc.method, tc.path)
 		if w.Code != tc.status {
 			t.Fatalf("%+v: %d %s", tc, w.Code, w.Body)
 		}

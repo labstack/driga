@@ -5,10 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/labstack/driga/internal/boardtest"
-	"github.com/labstack/driga/internal/flowtest"
-	"github.com/labstack/driga/internal/view"
-	"github.com/labstack/driga/internal/viewer"
 	"net/http/httptest"
 	"os"
 	"os/exec"
@@ -16,6 +12,11 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/labstack/driga/internal/boardtest"
+	"github.com/labstack/driga/internal/flowtest"
+	"github.com/labstack/driga/internal/view"
+	"github.com/labstack/driga/internal/viewer"
 )
 
 func TestBoardRoutes(t *testing.T) {
@@ -25,14 +26,14 @@ func TestBoardRoutes(t *testing.T) {
 		if err != nil || code != 200 || !p.IsBoard {
 			t.Fatal(path, code, err)
 		}
-		body := request(s, "GET", path, s.token).Body.String()
+		body := request(s, "GET", path).Body.String()
 		for _, want := range []string{"data-flow-board", "fb-map", "role=\"tree\"", "Needs you ·", "morph:innerHTML"} {
 			if !strings.Contains(body, want) {
 				t.Error(path, "missing", want)
 			}
 		}
 	}
-	w := request(s, "GET", "/flow.json?view=board", s.token)
+	w := request(s, "GET", "/flow.json?view=board")
 	var e struct{ Data view.BoardView }
 	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &e) != nil || len(e.Data.Groups) == 0 {
 		t.Fatal(w.Code, w.Body.String())
@@ -58,7 +59,7 @@ func TestBoardFixturePages(t *testing.T) {
 			prompts[b.Needs[0].Key] = "synthetic-prompt"
 		}
 		b.WithPrompts(prompts)
-		p := pageData{IsBoard: true, Board: b, Page: "/flow", Title: "Flow", Scope: "all", Nav: navigation, CSRF: "synthetic-only", Snapshot: viewer.Snapshot{LocalMachineID: "local", Hostname: "Synthetic studio", Envelope: view.Envelope{ObservedAt: flowtest.Now, Mode: "snapshot"}}}
+		p := pageData{IsBoard: true, Board: b, Page: "/flow", Title: "Flow", Scope: "all", Nav: navigation, Snapshot: viewer.Snapshot{LocalMachineID: "local", Hostname: "Synthetic studio", Envelope: view.Envelope{ObservedAt: flowtest.Now, Mode: "snapshot"}}}
 		p.AgentRows = boardFixtureRows(b)
 		var out bytes.Buffer
 		if err := s.templates.ExecuteTemplate(&out, "page", p); err != nil {
@@ -105,15 +106,15 @@ func TestBoardLocalActionConfirmation(t *testing.T) {
 	calls := 0
 	s.opts.SessionAction = func(context.Context, string, int64) error { calls++; return nil }
 	body := fmt.Sprintf(`{"action":"kill","session_id":%d,"machine":%q,"confirmed":false}`, id, st.MachineID())
-	if w := postChat(s, "/chat/api/flow-action", body, "http://127.0.0.1:4321", s.csrf, s.token); w.Code == 200 || calls != 0 {
+	if w := postChat(s, "/chat/api/flow-action", body); w.Code == 200 || calls != 0 {
 		t.Fatal("unconfirmed kill dispatched")
 	}
 	body = strings.Replace(body, `"confirmed":false`, `"confirmed":true`, 1)
-	if w := postChat(s, "/chat/api/flow-action", body, "http://127.0.0.1:4321", s.csrf, s.token); w.Code != 200 || calls != 1 {
+	if w := postChat(s, "/chat/api/flow-action", body); w.Code != 200 || calls != 1 {
 		t.Fatal(w.Code, w.Body.String(), calls)
 	}
 	body = strings.Replace(body, st.MachineID(), "remote-only", 1)
-	if w := postChat(s, "/chat/api/flow-action", body, "http://127.0.0.1:4321", s.csrf, s.token); w.Code == 200 || calls != 1 {
+	if w := postChat(s, "/chat/api/flow-action", body); w.Code == 200 || calls != 1 {
 		t.Fatal("remote session dispatched locally")
 	}
 }

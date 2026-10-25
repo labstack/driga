@@ -1,10 +1,8 @@
 package web
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
-	"net/http"
 	"net/http/httptest"
 	"strconv"
 	"strings"
@@ -34,44 +32,34 @@ func chatFixture(t *testing.T) (*Server, *chat.Broker, string) {
 	}
 	return s, b, c.ID
 }
-func postChat(s *Server, path, body, origin, csrf, token string) *httptest.ResponseRecorder {
-	r := httptest.NewRequest("POST", "http://127.0.0.1:4321"+path, strings.NewReader(body))
-	r.Header.Set("Origin", origin)
-	r.Header.Set("X-CSRF-Token", csrf)
+func postChat(s *Server, path, body string) *httptest.ResponseRecorder {
+	r := httptest.NewRequest("POST", path, strings.NewReader(body))
 	r.Header.Set("Content-Type", "application/json")
-	if token != "" {
-		r.AddCookie(&http.Cookie{Name: s.cookieName, Value: token})
-	}
 	w := httptest.NewRecorder()
 	s.ServeHTTP(w, r)
 	return w
 }
-func TestChatSecurity(t *testing.T) {
+func TestChatPOST(t *testing.T) {
 	s, _, id := chatFixture(t)
 	body := `{"id":"` + id + `","text":"hello","context":{"page":"flow"}}`
-	for _, tc := range []struct {
-		origin, csrf, token string
-		code                int
-	}{
-		{"http://127.0.0.1:4321", s.csrf, "", 401},
-		{"https://evil.test", s.csrf, s.token, 403},
-		{"", s.csrf, s.token, 403},
-		{"null", s.csrf, s.token, 403},
-		{"http://127.0.0.1:4321", "wrong", s.token, 403},
-		{"http://127.0.0.1:4321", s.csrf, s.token, 200},
-	} {
-		if w := postChat(s, "/chat/api/send", body, tc.origin, tc.csrf, tc.token); w.Code != tc.code {
-			t.Fatalf("%+v: %d %s", tc, w.Code, w.Body)
-		}
+	if w := postChat(s, "/chat/api/send", body); w.Code != 200 {
+		t.Fatal(w.Code, w.Body)
 	}
-	if w := request(s, "GET", "/chat/api/send", s.token); w.Code != 405 {
+	r := httptest.NewRequest("POST", "/chat/api/send", strings.NewReader(body))
+	r.Header.Set("Content-Type", "text/plain")
+	w := httptest.NewRecorder()
+	s.ServeHTTP(w, r)
+	if w.Code != 415 {
 		t.Fatal(w.Code)
 	}
-	if w := request(s, "GET", "/chat", s.token); w.Code != 200 || !strings.Contains(w.Body.String(), `id="chat-mode-confirm"`) || strings.Contains(w.Body.String(), "actions arrive in the next release") {
+	if w := request(s, "GET", "/chat/api/send"); w.Code != 405 {
+		t.Fatal(w.Code)
+	}
+	if w := request(s, "GET", "/chat"); w.Code != 200 || !strings.Contains(w.Body.String(), `id="chat-mode-confirm"`) || strings.Contains(w.Body.String(), "actions arrive in the next release") {
 		t.Fatal(w.Code, w.Body)
 	}
 }
-func TestChatSSEReplayAndEscaping(t *testing.T) {
+func TestChatWaitReplayAndEscaping(t *testing.T) {
 	s, b, id := chatFixture(t)
 	if err := b.Send(context.Background(), id, "hello", chat.Context{}); err != nil {
 		t.Fatal(err)
@@ -84,40 +72,17 @@ func TestChatSSEReplayAndEscaping(t *testing.T) {
 		}
 		time.Sleep(time.Millisecond)
 	}
-	server := httptest.NewServer(s)
-	defer server.Close()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	r, _ := http.NewRequestWithContext(ctx, "GET", server.URL+"/chat/api/events?id="+id, nil)
-	r.Host = s.opts.Host
-	r.AddCookie(&http.Cookie{Name: s.cookieName, Value: s.token})
-	r.Header.Set("Last-Event-ID", strconv.FormatUint(state.Cursor-1, 10))
-	res, err := server.Client().Do(r)
-	if err != nil {
-		t.Fatal(err)
+	w := request(s, "GET", "/chat/api/wait?id="+id+"&after="+strconv.FormatUint(state.Cursor-1, 10))
+	var got chatHTMLState
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil || len(got.Events) != 1 || got.Events[0].Seq != state.Cursor {
+		t.Fatal(w.Body, err)
 	}
-	defer res.Body.Close()
-	scanner := bufio.NewScanner(res.Body)
-	var payload string
-	for scanner.Scan() {
-		line := scanner.Text()
-		if strings.HasPrefix(line, "data: ") {
-			payload = strings.TrimPrefix(line, "data: ")
-			break
-		}
+	if strings.Contains(w.Body.String(), "<script>") {
+		t.Fatal("wait must JSON-escape HTML")
 	}
-	var event chat.Event
-	if err := json.Unmarshal([]byte(payload), &event); err != nil || event.Seq != state.Cursor {
-		t.Fatal(payload, err)
-	}
-	cancel()
-	js := request(s, "GET", "/static/chat.js", s.token).Body.String()
+	js := request(s, "GET", "/static/chat.js").Body.String()
 	if !strings.Contains(js, "body.innerHTML=m.html") || strings.Contains(js, "function markdown(") || strings.Contains(js, "function inline(") {
 		t.Fatal("assistant HTML must come from the server renderer")
-	}
-	raw, _ := json.Marshal(state)
-	if strings.Contains(string(raw), "<script>") {
-		t.Fatal("SSE must JSON-escape HTML")
 	}
 }
 
@@ -137,7 +102,7 @@ func (a partialWebAgent) Run(ctx context.Context, _ chat.Request, emit func(chat
 	}
 }
 
-func TestChatSSEPartialsAndOrderedReplay(t *testing.T) {
+func TestChatWaitPartialsAndOrderedReplay(t *testing.T) {
 	s, st, _, _ := fixture(t)
 	release := make(chan struct{})
 	b, err := chat.New(context.Background(), st, partialWebAgent{release}, chat.Options{DataDir: t.TempDir()})
@@ -146,6 +111,7 @@ func TestChatSSEPartialsAndOrderedReplay(t *testing.T) {
 	}
 	defer b.Close()
 	s.opts.Chat = b
+	s.pollTimeout = 5 * time.Second
 	c, err := b.Create(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -154,82 +120,41 @@ func TestChatSSEPartialsAndOrderedReplay(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	server := httptest.NewServer(s)
-	defer server.Close()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	connect := func(after uint64) *http.Response {
-		t.Helper()
-		r, _ := http.NewRequestWithContext(ctx, "GET", server.URL+"/chat/api/events?id="+c.ID, nil)
-		r.Host = s.opts.Host
-		r.AddCookie(&http.Cookie{Name: s.cookieName, Value: s.token})
-		r.Header.Set("Last-Event-ID", strconv.FormatUint(after, 10))
-		res, err := server.Client().Do(r)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if res.StatusCode != 200 {
-			res.Body.Close()
-			t.Fatal(res.Status)
-		}
-		return res
-	}
-	res := connect(initial.Cursor)
-	defer res.Body.Close()
-	if err := b.Send(ctx, c.ID, "question", chat.Context{}); err != nil {
+	if err := b.Send(context.Background(), c.ID, "question", chat.Context{}); err != nil {
 		t.Fatal(err)
 	}
-	scan := bufio.NewScanner(res.Body)
 	after := initial.Cursor
 	var deltas []chatHTMLEvent
-	for scan.Scan() {
-		if !strings.HasPrefix(scan.Text(), "data: ") {
-			continue
+	for len(deltas) < 2 {
+		got := waitChat(t, s, c.ID, after)
+		if got.Reset || got.Cursor == after {
+			t.Fatal("partials buffered", got.State)
 		}
-		var e chatHTMLEvent
-		if err := json.Unmarshal([]byte(strings.TrimPrefix(scan.Text(), "data: ")), &e); err != nil {
-			t.Fatal(err)
-		}
-		if e.Seq == 0 {
-			continue
-		} // Unsequenced status updates.
-		if e.Seq != after+1 {
-			t.Fatal("unordered SSE", after, e)
-		}
-		after = e.Seq
-		if e.Kind == "delta" {
-			deltas = append(deltas, e)
-			if e.HTML != "" {
-				t.Fatalf("stream included Markdown HTML: %q", e.HTML)
+		for _, e := range got.Events {
+			if e.Seq != after+1 {
+				t.Fatal("unordered events", after, e)
+			}
+			after = e.Seq
+			if e.Kind == "delta" {
+				deltas = append(deltas, e)
+				if e.HTML != "" {
+					t.Fatalf("stream included Markdown HTML: %q", e.HTML)
+				}
 			}
 		}
-		if len(deltas) == 2 {
-			break
-		}
 	}
-	if len(deltas) != 2 {
-		t.Fatal("partials buffered", scan.Err())
-	}
-	state, err := b.Read(ctx, c.ID, 0)
+	state, err := b.Read(context.Background(), c.ID, 0)
 	if err != nil || !state.Active || len(state.Result) > 0 {
 		t.Fatal("client text arrived after result", state, err)
 	}
-	res.Body.Close()
-	// Reconnect from the first delta: replay the second delta exactly once.
-	replay := connect(deltas[0].Seq)
-	defer replay.Body.Close()
-	scan = bufio.NewScanner(replay.Body)
-	var got chatHTMLEvent
-	for scan.Scan() {
-		if strings.HasPrefix(scan.Text(), "data: ") {
-			if err := json.Unmarshal([]byte(strings.TrimPrefix(scan.Text(), "data: ")), &got); err != nil {
-				t.Fatal(err)
-			}
-			break
-		}
+	// Resume from the first delta: replay the second delta exactly once.
+	replay := waitChat(t, s, c.ID, deltas[0].Seq)
+	if len(replay.Events) == 0 {
+		t.Fatal("no replay")
 	}
+	got := replay.Events[0]
 	if got.Seq != deltas[1].Seq || got.Kind != "delta" || got.HTML != "" {
-		t.Fatal(got, scan.Err())
+		t.Fatal(got)
 	}
 	raw, _ := json.Marshal(got)
 	if !strings.Contains(string(raw), `"text":"second"`) || !strings.Contains(string(raw), `"message_id":`) {

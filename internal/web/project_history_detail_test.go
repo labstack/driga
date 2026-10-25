@@ -25,7 +25,7 @@ func TestProjectDetailAll(t *testing.T) {
 		if all {
 			path += "?all=1"
 		}
-		w := request(s, "GET", path, s.token)
+		w := request(s, "GET", path)
 		if w.Code != 200 || strings.Contains(w.Body.String(), "Hosted old work") != all {
 			t.Fatalf("all=%v: %d %s", all, w.Code, w.Body)
 		}

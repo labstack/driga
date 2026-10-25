@@ -8,10 +8,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"io"
-	"net/http"
-	"net/http/cookiejar"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -278,54 +274,14 @@ func TestSmoke(t *testing.T) {
 	}
 }
 
+// webSmoke checks that the retired browser server refuses before listening.
 func (n node) webSmoke() {
 	n.t.Helper()
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	var out, errout logBuffer
-	cmd := n.cmd(ctx, "web", "--listen", "127.0.0.1:0")
-	cmd.Stdout, cmd.Stderr = &out, &errout
-	if err := cmd.Start(); err != nil {
-		n.t.Fatal(err)
-	}
-	defer func() { cancel(); _ = cmd.Wait() }()
-	var address string
-	eventually(n.t, 10*time.Second, func() bool {
-		for _, line := range strings.Fields(out.String()) {
-			if strings.HasPrefix(line, "http://") {
-				address = line
-				return true
-			}
-		}
-		return false
-	}, func() string { return out.String() + errout.String() })
-	u, err := url.Parse(address)
-	if err != nil || u.Query().Get("token") == "" {
-		n.t.Fatalf("tokenized URL: %s %v", address, err)
-	}
-	jar, _ := cookiejar.New(nil)
-	client := &http.Client{Jar: jar, Timeout: 30 * time.Second}
-	// The transcript fixture has completed, so its title belongs to --all.
-	// Check default pages render too, then exercise the explicit history toggle.
-	for _, target := range []struct {
-		url     string
-		history bool
-	}{
-		{address, false}, {"http://" + u.Host + "/agents", false},
-		{"http://" + u.Host + "/?all=1", true}, {"http://" + u.Host + "/agents?all=1", true},
-	} {
-		resp, err := client.Get(target.url)
-		if err != nil {
-			n.t.Fatal(err)
-		}
-		body, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		if err != nil || resp.StatusCode != 200 || target.history && !strings.Contains(string(body), "Smoke title") {
-			n.t.Fatalf("web: %d %v %s", resp.StatusCode, err, body)
-		}
-		if resp.Request.URL.Query().Has("token") {
-			n.t.Fatal("token was not removed")
-		}
+	out, err := n.cmd(ctx, "web", "--listen", "127.0.0.1:0").CombinedOutput()
+	if err == nil || !strings.Contains(string(out), "driga web was replaced by the desktop app; run driga app") || strings.Contains(string(out), "http://") {
+		n.t.Fatalf("web: %v %s", err, out)
 	}
 }
 

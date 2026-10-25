@@ -41,7 +41,7 @@ func TestMachineMCPLeakMarker(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	w := request(s, "GET", "/machines", s.token)
+	w := request(s, "GET", "/machines")
 	for _, want := range []string{"observed growth ↑ 0.75/h since 08:12", "started 2", "ended 0", "net &#43;2", "Observed: " + at.Format(time.RFC3339) + " to " + at.Add(160*time.Minute).Format(time.RFC3339)} {
 		if !strings.Contains(w.Body.String(), want) {
 			t.Fatalf("missing %q: %s", want, w.Body)
@@ -66,7 +66,7 @@ func TestMachineExpandableAppsAndEscaping(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	w := request(s, "GET", "/machines", s.token)
+	w := request(s, "GET", "/machines")
 	if w.Code != 200 {
 		t.Fatal(w.Code, w.Body)
 	}
@@ -118,7 +118,7 @@ func TestMachineMCPServers(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	w := request(s, "GET", "/machines", s.token)
+	w := request(s, "GET", "/machines")
 	for _, want := range []string{"MCP servers", "maestro mcp", "2 processes", "1 hosts", "codex app-server", "PID 10", "31h", "oldest", "newest", "Restart", "per project", "/projects/&lt;fixture&gt;"} {
 		if !strings.Contains(w.Body.String(), want) {
 			t.Fatalf("missing %q: %s", want, w.Body)
@@ -134,7 +134,7 @@ func TestMachineMCPLauncherSummaryAndEvidence(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	w := request(s, "GET", "/machines", s.token)
+	w := request(s, "GET", "/machines")
 	for _, want := range []string{"firecrawl-mcp  1 servers · 30.0M · 1 hosts · 0 duplicates", "includes launcher", "Installs:", "node exec firecrawl-mcp", "/cache/node_modules/.bin/firecrawl-mcp", "&lt;fixture&gt;"} {
 		if !strings.Contains(w.Body.String(), want) {
 			t.Errorf("missing %q: %s", want, w.Body)
@@ -147,7 +147,7 @@ func TestMachineMCPLauncherSummaryAndEvidence(t *testing.T) {
 
 func TestMachinePageAgentsFirst(t *testing.T) {
 	s, _, _, _ := fixture(t)
-	w := request(s, "GET", "/machines", s.token)
+	w := request(s, "GET", "/machines")
 	text := w.Body.String()
 	summary, other := strings.Index(text, "agents "), strings.Index(text, "<summary>Other apps")
 	if summary < 0 || other < summary || !strings.Contains(text, "Sessions by cost") {

@@ -32,7 +32,6 @@ if (DrigaConsole.parseCommand("flow").url !== "/flow?machine=all") throw Error("
 
 (() => {
  const text=globalThis.DrigaConsole.connectionText;
- if(text(false,false)!=="○ reconnecting…")throw new Error("retry status");
- if(!text(false,true).includes("authenticate the new web URL, then reload"))throw new Error("terminal stream recovery missing");
- if(text(true,false)!=="● live")throw new Error("live status");
+ if(text(false)!=="○ reconnecting…")throw new Error("retry status");
+ if(text(true)!=="● live")throw new Error("live status");
 })();

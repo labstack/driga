@@ -29,7 +29,7 @@ func TestOverviewAndCleanupCaches(t *testing.T) {
 	cleanups := 0
 	s.opts.CleanupList = func(context.Context) ([]cleanup.Candidate, error) { cleanups++; return nil, nil }
 	for i := 0; i < 2; i++ {
-		p, code, err := s.loadPage(httptest.NewRequest("GET", "http://"+s.opts.Host+"/", nil))
+		p, code, err := s.loadPage(httptest.NewRequest("GET", "/", nil))
 		if err != nil || code != 200 {
 			t.Fatal(code, err)
 		}

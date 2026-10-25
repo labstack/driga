@@ -1,15 +1,15 @@
 package web
 
 import (
-	"bufio"
 	"context"
-	"github.com/labstack/driga/internal/chat"
-	"net/http"
-	"net/http/httptest"
+	"encoding/json"
+	"fmt"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/labstack/driga/internal/chat"
 )
 
 type countingChat struct {
@@ -25,51 +25,58 @@ func (c *countingChat) Wait(ctx context.Context, id string, after uint64) (chat.
 	c.waits.Add(1)
 	return c.Client.Wait(ctx, id, after)
 }
-func TestChatSSEWaitsForBrokerEvents(t *testing.T) {
+func waitChat(t *testing.T, s *Server, id string, after uint64) chatHTMLState {
+	t.Helper()
+	w := request(s, "GET", fmt.Sprintf("/chat/api/wait?id=%s&after=%d", id, after))
+	if w.Code != 200 {
+		t.Fatalf("wait: %d %s", w.Code, w.Body)
+	}
+	var state chatHTMLState
+	if err := json.Unmarshal(w.Body.Bytes(), &state); err != nil {
+		t.Fatal(err)
+	}
+	return state
+}
+
+func TestChatWaitReturnsNewerSequence(t *testing.T) {
 	s, b, id := chatFixture(t)
 	client := &countingChat{Client: b}
 	s.opts.Chat = client
-	server := httptest.NewServer(s)
-	defer server.Close()
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-	r, _ := http.NewRequestWithContext(ctx, "GET", server.URL+"/chat/api/events?id="+id, nil)
-	r.Host = s.opts.Host
-	r.AddCookie(&http.Cookie{Name: s.cookieName, Value: s.token})
-	res, err := server.Client().Do(r)
-	if err != nil {
-		t.Fatal(err)
+	s.pollTimeout = time.Hour
+	ctx := context.Background()
+	initial := waitChat(t, s, id, 0)
+	if !initial.Reset || client.waits.Load() != 0 {
+		t.Fatalf("first wait must return the whole conversation at once: %+v waits=%d", initial.State, client.waits.Load())
 	}
-	defer res.Body.Close()
-	scanner := bufio.NewScanner(res.Body)
-	next := func() string {
-		for scanner.Scan() {
-			if strings.HasPrefix(scanner.Text(), "event: ") {
-				return strings.TrimPrefix(scanner.Text(), "event: ")
-			}
-		}
-		t.Fatal(scanner.Err())
-		return ""
+	time.AfterFunc(100*time.Millisecond, func() { _ = b.SetMode(ctx, id, chat.Auto) })
+	start := time.Now()
+	next := waitChat(t, s, id, initial.Cursor)
+	if next.Cursor <= initial.Cursor || next.Reset || len(next.Events) == 0 || next.Events[0].Seq != initial.Cursor+1 {
+		t.Fatalf("newer sequence: %+v", next.State)
 	}
-	if got := next(); got != "reset" {
-		t.Fatal(got)
+	if time.Since(start) < 50*time.Millisecond || client.waits.Load() != 1 {
+		t.Fatalf("wait returned before the change: %v waits=%d", time.Since(start), client.waits.Load())
 	}
-	if got := next(); got != "status" {
-		t.Fatal(got)
-	}
+}
 
-	time.Sleep(350 * time.Millisecond)
-	if client.reads.Load() != 1 || client.waits.Load() != 1 {
-		t.Fatalf("idle reads=%d waits=%d", client.reads.Load(), client.waits.Load())
-	}
-	t.Logf("350ms idle: reads=%d waits=%d", client.reads.Load(), client.waits.Load())
-	if err := b.SetMode(ctx, id, chat.Auto); err != nil {
+func TestChatWaitTimesOutWithStatus(t *testing.T) {
+	s, b, id := chatFixture(t)
+	s.pollTimeout = 50 * time.Millisecond
+	if err := b.SetMode(context.Background(), id, chat.Auto); err != nil {
 		t.Fatal(err)
 	}
-	if got := next(); got != "change" {
-		t.Fatal(got)
+	initial := waitChat(t, s, id, 0)
+	start := time.Now()
+	got := waitChat(t, s, id, initial.Cursor)
+	if got.Cursor != initial.Cursor || got.Reset || len(got.Events) != 0 || time.Since(start) > time.Second {
+		t.Fatalf("timeout: %+v after %v", got.State, time.Since(start))
 	}
-	cancel()
+	if w := request(s, "GET", "/chat/api/wait?id="+id+"&after=x"); w.Code != 400 {
+		t.Errorf("bad cursor: %d", w.Code)
+	}
+	if w := request(s, "GET", "/chat/api/wait?id=missing&after=0"); w.Code != 404 {
+		t.Errorf("missing conversation: %d", w.Code)
+	}
 }
 
 func TestWebChatSurvivesCollectorBrokerRestart(t *testing.T) {
@@ -97,7 +104,7 @@ func TestWebChatSurvivesCollectorBrokerRestart(t *testing.T) {
 	}
 	defer remote.Close()
 	s.opts.Chat = remote
-	if w := request(s, "GET", "/chat/api/history", s.token); w.Code != 200 || !strings.Contains(w.Body.String(), row.ID) {
+	if w := request(s, "GET", "/chat/api/history"); w.Code != 200 || !strings.Contains(w.Body.String(), row.ID) {
 		t.Fatal(w.Code, w.Body)
 	}
 	first.Close()
@@ -112,7 +119,7 @@ func TestWebChatSurvivesCollectorBrokerRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer stop()
-	if w := request(s, "GET", "/chat/api/history", s.token); w.Code != 200 || !strings.Contains(w.Body.String(), row.ID) {
+	if w := request(s, "GET", "/chat/api/history"); w.Code != 200 || !strings.Contains(w.Body.String(), row.ID) {
 		t.Fatal(w.Code, w.Body)
 	}
 }

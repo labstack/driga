@@ -24,7 +24,7 @@ func TestInboxHistoryPageBoundsHTML(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, path := range []string{"/inbox", "/inbox?all=1", "/inbox?all=1&page=2"} {
-		w := request(s, "GET", path, s.token)
+		w := request(s, "GET", path)
 		if w.Code != 200 {
 			t.Fatalf("%s: %d %s", path, w.Code, w.Body)
 		}

@@ -34,7 +34,6 @@ type projectCard struct {
 type pageData struct {
 	Reclaim                string
 	Prompts                []chat.Prompt
-	CSRF                   string
 	ChatEphemeral          bool
 	Flow                   view.FlowView
 	Board                  view.BoardView
@@ -64,7 +63,7 @@ type pageData struct {
 }
 
 func (s *Server) loadPage(r *http.Request) (pageData, int, error) {
-	p := pageData{CSRF: s.csrf, ChatEphemeral: s.opts.ChatEphemeral, Nav: navigation, Page: r.URL.Path, Scope: r.URL.Query().Get("machine"), All: r.URL.Query().Get("all") == "1"}
+	p := pageData{ChatEphemeral: s.opts.ChatEphemeral, Nav: navigation, Page: r.URL.Path, Scope: r.URL.Query().Get("machine"), All: r.URL.Query().Get("all") == "1"}
 	if p.Page == "/" {
 		p.Page = "/flow"
 	}

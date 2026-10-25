@@ -7,11 +7,10 @@
  const pending=()=>[...actions.values()].find(a=>a.status==="pending");
  function putAction(a){if(a.status==="pending"&&!appeared.has(a.id))appeared.set(a.id,Date.now());actions.set(a.id,a);}
  let returnFocus=null;
- let id="",source=null,messages=new Map(),cursor=0,removed=new Set(),drafts=[],draftIndex=0,selectedSession=0,opening=null,active=false,started=0,replyID="",tool="",timer=null,stickToBottom=true,rendered=new Map();
+ let id="",poll=null,messages=new Map(),cursor=0,removed=new Set(),drafts=[],draftIndex=0,selectedSession=0,opening=null,active=false,started=0,replyID="",tool="",timer=null,stickToBottom=true,rendered=new Map();
  try{id=sessionStorage.getItem("driga-chat-conversation")||"";}catch(_){}
  const remember=()=>{try{sessionStorage.setItem("driga-chat-conversation",id);}catch(_){}};
- const csrf=document.querySelector('meta[name="chat-csrf"]').content;
- async function api(path,body){const res=await fetch("/chat/api/"+path,{method:body===undefined?"GET":"POST",headers:body===undefined?{}:{"Content-Type":"application/json","X-CSRF-Token":csrf},body:body===undefined?undefined:JSON.stringify(body),credentials:"same-origin",keepalive:body!==undefined});if(!res.ok)throw new Error(await res.text());return res.json();}
+ async function api(path,body,signal){const res=await fetch("/chat/api/"+path,{method:body===undefined?"GET":"POST",headers:body===undefined?{}:{"Content-Type":"application/json"},body:body===undefined?undefined:JSON.stringify(body),keepalive:body!==undefined,signal});if(!res.ok)throw new Error(await res.text());return res.json();}
  function note(text){status.textContent=text;}
  const stopButton=document.getElementById("chat-stop");
  stopButton.hidden=true;
@@ -144,14 +143,12 @@
    if(replyID!==m.id){replyID=m.id;tool="";started=Date.parse(m.created_at)||Date.now();}
   }
  }
- function connect(){
-  if(source)source.close();
-  source=new EventSource("/chat/api/events?id="+encodeURIComponent(id)+"&after="+cursor);
-  source.addEventListener("reset",event=>{
-   const s=JSON.parse(event.data);cursor=s.cursor;resetActivity(false);setMode(s.mode,s.until);for(const a of s.actions||[])putAction(a);messages.clear();s.messages.forEach(apply);setActive(s.active===undefined?[...messages.values()].some(m=>m.status==="streaming"):!!s.active);render();document.getElementById("chat-lifetime").hidden=!s.ephemeral;
-  });
-  source.addEventListener("change",event=>{
-   const e=JSON.parse(event.data);if(e.seq<=cursor)return;cursor=e.seq;
+ function receive(s){
+  if(s.reset){
+   cursor=s.cursor;resetActivity(false);setMode(s.mode,s.until);for(const a of s.actions||[])putAction(a);messages.clear();s.messages.forEach(apply);setActive(s.active===undefined?[...messages.values()].some(m=>m.status==="streaming"):!!s.active);render();document.getElementById("chat-lifetime").hidden=!s.ephemeral;return;
+  }
+  for(const e of s.events||[]){
+   if(e.seq<=cursor)continue;cursor=e.seq;
    if(e.kind==="mode")setMode(e.mode,e.until);
    if(e.action){putAction(e.action);setActive(active);if(!e.message)apply({id:e.action.id,role:"action",status:e.action.status,text:e.action.title});render();}
    if(e.kind==="idle"){setActive(false);render();}
@@ -159,13 +156,28 @@
     const m=messages.get(e.message_id);if(m){apply({...m,text:(m.text||"")+e.text,html:""});tool="";render();}
    }
    if(e.message){apply(e.message);if(e.message.role==="assistant"&&e.message.id===replyID&&e.message.status!=="streaming")setActive(false);render();}
-  });
-  source.addEventListener("status",event=>{const s=JSON.parse(event.data),changed=active!==!!s.active;setActive(!!s.active);if(changed)render();});
-  source.onerror=()=>{setActive(false);render();if(timer!==null)clearInterval(timer);timer=null;note(source.readyState===EventSource.CLOSED?"Disconnected · authenticate the new web URL, then reload":"Reconnecting…");};
+  }
+  if(s.cursor>cursor)cursor=s.cursor;
+  if(s.active!==undefined){const changed=active!==!!s.active;setActive(!!s.active);if(changed)render();}
+ }
+ // One long poll at a time; switching conversations abandons the old one.
+ function connect(){
+  if(poll)poll.abort();
+  const control=new AbortController();poll=control;
+  (async()=>{
+   while(poll===control){
+    try{const s=await api("wait?id="+encodeURIComponent(id)+"&after="+cursor,undefined,control.signal);if(poll===control)receive(s);}
+    catch(_){
+     if(poll!==control)return;
+     setActive(false);render();if(timer!==null)clearInterval(timer);timer=null;note("Reconnecting…");
+     await new Promise(resolve=>setTimeout(resolve,1000));
+    }
+   }
+  })();
  }
  async function loadHistory(){const rows=await api("history");history.replaceChildren();for(const row of rows){const option=document.createElement("option");option.value=row.id;option.textContent="Driga · "+new Date(row.updated_at).toLocaleString();history.append(option);}history.value=id;}
  async function fresh(){await leaveConversation();const row=await api("new",{});id=row.id;remember();cursor=0;resetActivity();messages.clear();connect();await loadHistory();}
- async function open(text){if(panel.hidden)returnFocus=document.activeElement;try{sessionStorage.setItem("driga-chat-open","1");}catch(_){}panel.hidden=false;document.body.classList.add("chat-open");contextChips();if(text!==undefined)input.value=text;input.focus();if(!source&&!opening){opening=(async()=>{if(id){const rows=await api("history");if(rows.some(row=>row.id===id)){connect();await loadHistory();return;}}await fresh();})().catch(e=>note(e.message)).finally(()=>opening=null);}await opening;}
+ async function open(text){if(panel.hidden)returnFocus=document.activeElement;try{sessionStorage.setItem("driga-chat-open","1");}catch(_){}panel.hidden=false;document.body.classList.add("chat-open");contextChips();if(text!==undefined)input.value=text;input.focus();if(!poll&&!opening){opening=(async()=>{if(id){const rows=await api("history");if(rows.some(row=>row.id===id)){connect();await loadHistory();return;}}await fresh();})().catch(e=>note(e.message)).finally(()=>opening=null);}await opening;}
  async function leaveConversation(){if(id&&mode==="full auto")await api("mode",{id,mode:"confirm"});}
  function close(){leaveConversation().catch(e=>note(e.message));panel.hidden=true;document.body.classList.remove("chat-open");returnFocus?.focus?.({preventScroll:true});try{sessionStorage.setItem("driga-chat-open","0");}catch(_){}}
  window.drigaChat={open,toggle:()=>panel.hidden?open():close()};
@@ -180,5 +192,5 @@
  document.body.addEventListener("htmx:afterSwap",contextChips);
  document.addEventListener("driga:session-selected",event=>{selectedSession=Number(event.detail.id);contextChips();});
  if(location.pathname==="/chat"){document.body.classList.add("chat-page");open();}else{try{if(sessionStorage.getItem("driga-chat-open")==="1")open();}catch(_){}}
- window.addEventListener("pagehide",()=>{leaveConversation().catch(()=>{});if(source)source.close();if(timer!==null)clearInterval(timer);});
+ window.addEventListener("pagehide",()=>{leaveConversation().catch(()=>{});if(poll){poll.abort();poll=null;}if(timer!==null)clearInterval(timer);});
 })();

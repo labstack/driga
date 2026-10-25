@@ -18,14 +18,14 @@ func TestNeedsYouReadOnlyInbox(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	w := request(s, "GET", "/inbox", s.token)
+	w := request(s, "GET", "/inbox")
 	body := w.Body.String()
 	for _, want := range []string{"permission", "Bash", "claude --resume", "readonly", "/repo"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("missing %s", want)
 		}
 	}
-	if request(s, "POST", "/inbox", s.token).Code < 400 {
+	if request(s, "POST", "/inbox").Code < 400 {
 		t.Fatal("inbox accepted POST")
 	}
 }

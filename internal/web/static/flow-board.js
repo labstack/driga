@@ -32,7 +32,7 @@
   const order=Array.from(host.querySelectorAll("[data-prompt]"),n=>n.dataset.prompt).join(" ");if(order!==promptOrder){promptOrder=order;armed.clear();}
   for(const n of host.querySelectorAll("[data-prompt]")){const id=n.dataset.prompt;if(!armed.has(id))armed.set(id,Date.now()+600);for(const b of n.querySelectorAll("button"))b.disabled=Date.now()<armed.get(id)||inFlight.has(id);}
  }
- async function post(path,body){const response=await fetch(path,{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json","X-CSRF-Token":document.querySelector('meta[name="chat-csrf"]').content},body:JSON.stringify(body)});if(!response.ok)throw Error(await response.text());return response;}
+ async function post(path,body){const response=await fetch(path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});if(!response.ok)throw Error(await response.text());return response;}
  // The refresh morphs #main, so feedback lives in a notice outside it.
  const note=text=>{const n=document.getElementById("app-notice");if(!n)return;n.textContent=text;n.classList.add("show");clearTimeout(noticeTimer);noticeTimer=setTimeout(()=>n.classList.remove("show"),4000);};
  document.addEventListener("click",async event=>{const host=root();if(!host||!host.contains(event.target))return;const t=event.target;
