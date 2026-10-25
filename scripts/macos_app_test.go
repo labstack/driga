@@ -1,6 +1,7 @@
 package scripts_test
 
 import (
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -125,5 +126,45 @@ func TestMacOSAppMetadataRejectsInvalidVersion(t *testing.T) {
 	command.Env = releaseTestEnv(t)
 	if out, err := command.CombinedOutput(); err == nil {
 		t.Fatalf("invalid version accepted: %s", out)
+	}
+}
+
+// Finder, Dock, Spotlight and login-item launches reach app mode only through
+// LSEnvironment, and the app switches its own activation policy, so the plist
+// must not carry LSUIElement.
+func TestMacOSAppPlistLaunchesInAppMode(t *testing.T) {
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 unavailable")
+	}
+	app := filepath.Join(t.TempDir(), "Driga.app")
+	dir := filepath.Join(app, "Contents", "MacOS")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	writeFixtureFile(t, filepath.Join(dir, "driga"), "fixture", 0o700)
+	command := exec.CommandContext(t.Context(), "python3", "macos-app.py", app, "2026.10.5-alpha")
+	command.Env = releaseTestEnv(t)
+	if out, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("assemble app: %v: %s", err, out)
+	}
+	dump := exec.CommandContext(t.Context(), "python3", "-c", "import json,plistlib,sys; print(json.dumps(plistlib.load(open(sys.argv[1],'rb'))))", filepath.Join(app, "Contents", "Info.plist"))
+	dump.Env = releaseTestEnv(t)
+	out, err := dump.Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var info map[string]any
+	if err := json.Unmarshal(out, &info); err != nil {
+		t.Fatal(err)
+	}
+	if _, present := info["LSUIElement"]; present {
+		t.Error("Info.plist still sets LSUIElement")
+	}
+	env, _ := info["LSEnvironment"].(map[string]any)
+	if len(env) != 1 || env["DRIGA_APP"] != "1" {
+		t.Errorf("LSEnvironment = %v, want only DRIGA_APP=1", info["LSEnvironment"])
+	}
+	if info["NSHighResolutionCapable"] != true {
+		t.Errorf("NSHighResolutionCapable = %v, want true", info["NSHighResolutionCapable"])
 	}
 }

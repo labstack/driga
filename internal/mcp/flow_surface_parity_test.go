@@ -62,16 +62,11 @@ func TestFlowSnapshotMatchesAllSurfaces(t *testing.T) {
 
 	source := viewer.NewStoreSource(st, t.TempDir(), view.Filter{All: true})
 	source.Now = func() time.Time { return flowtest.Now.Add(5 * time.Second) }
-	server, err := web.New(source, web.Options{Host: "127.0.0.1:4321", CleanupList: func(context.Context) ([]cleanup.Candidate, error) { return nil, nil }})
+	server, err := web.New(source, web.Options{CleanupList: func(context.Context) ([]cleanup.Candidate, error) { return nil, nil }})
 	if err != nil {
 		t.Fatal(err)
 	}
-	login := httptest.NewRecorder()
-	server.ServeHTTP(login, httptest.NewRequest("GET", server.URL(), nil))
-	r := httptest.NewRequest("GET", fmt.Sprintf("http://127.0.0.1:4321/flow/%d", id), nil)
-	for _, c := range login.Result().Cookies() {
-		r.AddCookie(c)
-	}
+	r := httptest.NewRequest("GET", fmt.Sprintf("/flow/%d", id), nil)
 	response := httptest.NewRecorder()
 	server.ServeHTTP(response, r)
 	if response.Code != 200 {

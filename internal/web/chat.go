@@ -2,13 +2,10 @@ package web
 
 import (
 	"context"
-	"crypto/subtle"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/labstack/driga/internal/chat"
 	"github.com/labstack/driga/internal/store"
@@ -22,10 +19,6 @@ func (s *Server) chatAPI(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			w.Header().Set("Allow", "POST")
 			http.Error(w, "method not allowed", 405)
-			return
-		}
-		if s.origin.Check(r) != nil || r.Header.Get("Origin") != "http://"+r.Host || subtle.ConstantTimeCompare([]byte(r.Header.Get("X-CSRF-Token")), []byte(s.csrf)) != 1 {
-			http.Error(w, "Origin or CSRF token rejected", 403)
 			return
 		}
 		if r.Header.Get("Content-Type") != "application/json" {
@@ -139,9 +132,13 @@ func (s *Server) chatAPI(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		out = map[string]bool{"ok": err == nil}
-	case "/chat/api/events":
-		s.chatEvents(w, r)
-		return
+	case "/chat/api/wait":
+		state, status, waitErr := s.chatWait(r)
+		if waitErr != nil {
+			http.Error(w, waitErr.Error(), status)
+			return
+		}
+		out = renderChatState(state)
 	default:
 		http.NotFound(w, r)
 		return
@@ -155,97 +152,39 @@ func (s *Server) chatAPI(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(out)
 	}
 }
-func (s *Server) chatEvents(w http.ResponseWriter, r *http.Request) {
-	if r.Method == "HEAD" {
-		w.Header().Set("Content-Type", "text/event-stream")
-		return
-	}
-	select {
-	case s.chatStreams <- struct{}{}:
-		defer func() { <-s.chatStreams }()
-	default:
-		http.Error(w, "too many Chat streams", 429)
-		return
-	}
-	raw := r.Header.Get("Last-Event-ID")
-	if raw == "" {
-		raw = r.URL.Query().Get("after")
-	}
+
+// chatWait answers one long poll: the whole conversation at once for a page
+// that has none, otherwise the events past after, or the current status when
+// pollTimeout passes without any.
+func (s *Server) chatWait(r *http.Request) (chat.State, int, error) {
 	var after uint64
+	if raw := r.URL.Query().Get("after"); raw != "" {
+		var err error
+		if after, err = strconv.ParseUint(raw, 10, 64); err != nil {
+			return chat.State{}, 400, errors.New("invalid replay cursor")
+		}
+	}
+	id, ctx := r.URL.Query().Get("id"), r.Context()
+	var state chat.State
 	var err error
-	if raw != "" {
-		after, err = strconv.ParseUint(raw, 10, 64)
-		if err != nil {
-			http.Error(w, "invalid replay cursor", 400)
-			return
-		}
-	}
-	state, err := s.opts.Chat.Read(r.Context(), r.URL.Query().Get("id"), after)
-	if err != nil {
-		http.Error(w, "conversation not found", 404)
-		return
-	}
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("X-Accel-Buffering", "no")
-	write := func(id uint64, kind string, data any) error {
-		rc := http.NewResponseController(w)
-		if err := rc.SetWriteDeadline(time.Now().Add(s.sseWriteTimeout)); err != nil && !errors.Is(err, http.ErrNotSupported) {
-			return err
-		}
-		raw, err := json.Marshal(data)
-		if err != nil {
-			return err
-		}
-		if _, err = fmt.Fprintf(w, "id: %d\nevent: %s\ndata: %s\n\n", id, kind, raw); err != nil {
-			return err
-		}
-		return rc.Flush()
-	}
-	var active bool
-	queued := -1
-	for {
-		if state.Reset {
-			if err := write(state.Cursor, "reset", renderChatState(state)); err != nil {
-				return
-			}
-		} else {
-			for _, e := range renderChatEvents(state) {
-				if err := write(e.Seq, "change", e); err != nil {
-					return
-				}
-			}
-		}
-		after = state.Cursor
-		state.Reset, state.Events = false, nil
-		if state.Active != active || state.Queued != queued {
-			active, queued = state.Active, state.Queued
-			if err := write(after, "status", map[string]any{"active": active, "queued": queued}); err != nil {
-				return
-			}
-		}
-		waitCtx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
-		next, waitErr := s.opts.Chat.Wait(waitCtx, r.URL.Query().Get("id"), after)
+	if after == 0 {
+		state, err = s.opts.Chat.Read(ctx, id, 0)
+	} else {
+		waitCtx, cancel := context.WithTimeout(ctx, s.pollTimeout)
+		state, err = s.opts.Chat.Wait(waitCtx, id, after)
+		timedOut := waitCtx.Err() != nil && ctx.Err() == nil
 		cancel()
-		if errors.Is(waitErr, context.DeadlineExceeded) && r.Context().Err() == nil {
-			if err := write(after, "status", map[string]any{"active": active, "queued": queued}); err != nil {
-				return
-			}
-			continue
-		}
-		if waitErr == nil && next.Cursor == after {
-			if err := write(after, "status", map[string]any{"active": next.Active, "queued": next.Queued}); err != nil {
-				return
-			}
-			continue
-		}
-		state, err = next, waitErr
-		if err != nil {
-			return
+		if err != nil && timedOut {
+			state, err = s.opts.Chat.Read(ctx, id, after)
 		}
 	}
+	if err != nil {
+		return chat.State{}, 404, errors.New("conversation not found")
+	}
+	return state, 200, nil
 }
 
-// HTML belongs to the browser transport, never persisted chat history or deltas.
+// HTML belongs to the page, never persisted chat history or deltas.
 type chatHTMLMessage struct {
 	store.ChatMessage
 	HTML string `json:"html,omitempty"`

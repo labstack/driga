@@ -24,11 +24,11 @@ func TestBranchColumnDoesNotWrap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	body := request(s, "GET", "/projects", s.token).Body.String()
+	body := request(s, "GET", "/projects").Body.String()
 	if !strings.Contains(body, `class="mono branch ag" title="feature/a-long-branch-name-with-many-segments"`) {
 		t.Fatal("branch lacks full title")
 	}
-	css := request(s, "GET", "/static/app.css", s.token).Body.String()
+	css := request(s, "GET", "/static/app.css").Body.String()
 	if !strings.Contains(css, ".branch") || !strings.Contains(css, "white-space: nowrap") || !strings.Contains(css, "text-overflow: ellipsis") {
 		t.Fatal("missing truncation styles")
 	}

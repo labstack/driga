@@ -42,7 +42,7 @@ confirmation exits `2` when stdin is not a terminal unless `--yes` is passed.
 | [`driga machines`](#driga-machines) | List known machines and their connection health. |
 | [`driga cleanup`](#driga-cleanup) | Inspect and explicitly clean local agent disk candidates. |
 | [`driga top`](#driga-top) | Open the interactive session viewer. |
-| [`driga web`](#driga-web) | Serve the interactive browser dashboard on loopback. |
+| [`driga app`](#driga-app) | Open the Driga desktop app, or focus it. |
 | [`driga ask`](#driga-ask) | Ask a one-shot Chat question through Claude and driga's read-only tools. |
 | [`driga mcp`](#driga-mcp) | Serve read-only MCP tools over stdio. |
 | [`driga doctor`](#driga-doctor) | Check setup and collection health. |
@@ -476,22 +476,13 @@ driga top [flags]
 | `--theme=<theme>` |  | TUI theme: system, light or dark (overrides ui.theme). |
 | `--tab=<tab>` | `flow` | Initial tab: flow, projects or machines. |
 
-## driga web
+## driga app
 
-Serve the interactive browser dashboard on loopback.
+Open the Driga desktop app, or focus it.
 
 ```sh
-driga web [flags]
+driga app
 ```
-
-| Flag | Default | Description |
-|---|---|---|
-| `--machine=<machine>` | `all` | Scope to a machine name, ID, device-ID prefix, local, or all. |
-| `--project=<project>` |  | Scope to one project (path, name, or dot). |
-| `--since=<since>` |  | Only show items since a duration ago or yesterday. |
-| `--snapshot` |  | Force one-shot snapshot collection without history. |
-| `--listen=<listen>` | `127.0.0.1:0` | Loopback address and port for the dashboard. |
-| `--open` |  | Open the dashboard in your browser. |
 
 ## driga ask
 

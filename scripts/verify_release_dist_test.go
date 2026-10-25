@@ -128,8 +128,8 @@ func releaseDistFixture(t *testing.T, version, tag string) (string, string) {
 	scoop := fmt.Sprintf(`{
   "version": %q,
   "architecture": {
-    "64bit": {"url": "https://github.com/labstack/driga/releases/download/%s/driga_%s_windows_amd64.zip", "bin": ["driga.exe"], "hash": %q},
-    "arm64": {"url": "https://github.com/labstack/driga/releases/download/%s/driga_%s_windows_arm64.zip", "bin": ["driga.exe"], "hash": %q}
+    "64bit": {"url": "https://github.com/labstack/driga/releases/download/%s/driga_%s_windows_amd64.zip", "bin": ["bin/driga.exe"], "hash": %q},
+    "arm64": {"url": "https://github.com/labstack/driga/releases/download/%s/driga_%s_windows_arm64.zip", "bin": ["bin/driga.exe"], "hash": %q}
   }
 }
 `, version, tag, version, hashes[fmt.Sprintf("driga_%s_windows_amd64.zip", version)], tag, version, hashes[fmt.Sprintf("driga_%s_windows_arm64.zip", version)])
@@ -149,8 +149,8 @@ func releaseDistFixture(t *testing.T, version, tag string) (string, string) {
     end
   end
 
-  app "Driga.app", target: "#{caskroom_path}/Driga.app"
-  binary "#{caskroom_path}/Driga.app/Contents/MacOS/driga"
+  app "Driga.app"
+  binary "#{appdir}/Driga.app/Contents/MacOS/driga"
 end
 `, version, hashes[fmt.Sprintf("driga_%s_darwin_amd64.tar.gz", version)], hashes[fmt.Sprintf("driga_%s_darwin_arm64.tar.gz", version)])
 	writeFixtureFile(t, filepath.Join(dist, "homebrew", "Casks", "driga.rb"), cask, 0o600)
@@ -278,7 +278,7 @@ func writeZipFixture(t *testing.T, path string) {
 		t.Fatal(err)
 	}
 	writer := zip.NewWriter(file)
-	for _, name := range []string{"LICENSE", "NOTICE", "README.md", "driga.exe", "third-party/fonts-LICENSE.txt", "third-party/vendor-LICENSES.txt"} {
+	for _, name := range []string{"Driga.exe", "LICENSE", "NOTICE", "README.md", "bin/driga.exe", "third-party/fonts-LICENSE.txt", "third-party/vendor-LICENSES.txt"} {
 		entry, err := writer.Create(name)
 		if err != nil {
 			t.Fatal(err)
@@ -367,7 +367,7 @@ func TestReleaseDistVerifierRejectsMissingBundledNotices(t *testing.T) {
 		t.Fatal(err)
 	}
 	writer := zip.NewWriter(file)
-	for _, name := range []string{"LICENSE", "NOTICE", "README.md", "driga.exe", "third-party/fonts-LICENSE.txt"} {
+	for _, name := range []string{"Driga.exe", "LICENSE", "NOTICE", "README.md", "bin/driga.exe", "third-party/fonts-LICENSE.txt"} {
 		entry, err := writer.Create(name)
 		if err != nil {
 			t.Fatal(err)
@@ -455,5 +455,34 @@ func TestReleaseDistVerifierRejectsBrokenApp(t *testing.T) {
 				t.Fatalf("accepted broken app: %s", outputText)
 			}
 		})
+	}
+}
+
+func TestReleaseDistVerifierRequiresDrigaExeInWindowsArchive(t *testing.T) {
+	requireArtifactVerifierTools(t)
+	dist, binDir := releaseDistFixture(t, "2026.10.5-alpha", "v2026.10.5-alpha")
+	// A Windows archive with only the CLI is the pre-desktop layout.
+	archive := filepath.Join(dist, "driga_2026.10.5-alpha_windows_amd64.zip")
+	cli := exec.CommandContext(t.Context(), "zip", "-q", "-d", archive, "Driga.exe")
+	if out, err := cli.CombinedOutput(); err != nil {
+		t.Skipf("zip unavailable: %v: %s", err, out)
+	}
+	hash := fixtureSHA256(t, archive)
+	checksums := filepath.Join(dist, "driga_2026.10.5-alpha_checksums.txt")
+	body, err := os.ReadFile(checksums)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rewritten []string
+	for _, line := range strings.Split(strings.TrimSpace(string(body)), "\n") {
+		if strings.HasSuffix(line, "windows_amd64.zip") {
+			line = hash + "  driga_2026.10.5-alpha_windows_amd64.zip"
+		}
+		rewritten = append(rewritten, line)
+	}
+	writeFixtureFile(t, checksums, strings.Join(rewritten, "\n")+"\n", 0o600)
+	output, err := runArtifactVerifier(t, dist, binDir)
+	if err == nil || !strings.Contains(output, "unexpected contents in driga_2026.10.5-alpha_windows_amd64.zip") {
+		t.Fatalf("verifier accepted a Windows archive without Driga.exe: %v\n%s", err, output)
 	}
 }

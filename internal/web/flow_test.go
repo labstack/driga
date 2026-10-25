@@ -3,15 +3,16 @@ package web
 import (
 	"context"
 	"fmt"
-	"github.com/labstack/driga/internal/flowtest"
-	"github.com/labstack/driga/internal/model"
-	"github.com/labstack/driga/internal/store"
-	"github.com/labstack/driga/internal/view"
 	"net/http/httptest"
 	"regexp"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/labstack/driga/internal/flowtest"
+	"github.com/labstack/driga/internal/model"
+	"github.com/labstack/driga/internal/store"
+	"github.com/labstack/driga/internal/view"
 )
 
 func TestFlowSharedDefault(t *testing.T) {
@@ -30,7 +31,7 @@ func TestFlowSharedDefault(t *testing.T) {
 
 func TestFlowMapLayoutParts(t *testing.T) {
 	s, _, id, _ := fixture(t)
-	body := request(s, "GET", fmt.Sprint("/flow?id=", id), s.token).Body.String()
+	body := request(s, "GET", fmt.Sprint("/flow?id=", id)).Body.String()
 	for _, part := range []string{"Needs you", "Selected family", "data-flow-surface=\"map\"", "data-flow-surface=\"timeline\"", "fb-legend", "/static/flow-board.js", "/static/flow-board.css"} {
 		if !strings.Contains(body, part) {
 			t.Error("missing", part)
@@ -54,12 +55,12 @@ func TestFlowViewAndSelectionSurviveRefreshURL(t *testing.T) {
 
 func TestFlowPageCSP(t *testing.T) {
 	s, _, id, _ := fixture(t)
-	w := request(s, "GET", fmt.Sprint("/flow?id=", id), s.token)
+	w := request(s, "GET", fmt.Sprint("/flow?id=", id))
 	if w.Code != 200 {
 		t.Fatalf("%d %s", w.Code, w.Body.String())
 	}
 	body := w.Body.String()
-	for _, want := range []string{"Selected family", "fb-map", "data-flow-board", "data-window=\"0\"", "&lt;script&gt;alert(1)&lt;/script&gt;"} {
+	for _, want := range []string{"Selected family", "fb-map", "data-flow-board", "data-view=\"flow\"", "&lt;script&gt;alert(1)&lt;/script&gt;"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("missing %s", want)
 		}
@@ -74,12 +75,12 @@ func TestFlowPageCSP(t *testing.T) {
 
 func TestFlowEmptyAndBadID(t *testing.T) {
 	s, _, _, _ := fixture(t)
-	body := request(s, "GET", "/flow", s.token).Body.String()
+	body := request(s, "GET", "/flow").Body.String()
 	if !strings.Contains(body, "data-flow-board") {
 		t.Fatal(body)
 	}
 	for _, id := range []string{"0", "-1", "wrong"} {
-		if w := request(s, "GET", "/flow?id="+id, s.token); w.Code != 400 {
+		if w := request(s, "GET", "/flow?id="+id); w.Code != 400 {
 			t.Fatal(id, w.Code)
 		}
 	}

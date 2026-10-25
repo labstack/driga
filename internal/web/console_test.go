@@ -1,11 +1,9 @@
 package web
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"net/http/httptest"
 	"os"
 	"os/exec"
@@ -25,7 +23,7 @@ func TestConsoleStructureAndCSP(t *testing.T) {
 	s, _, agent, project := fixture(t)
 	inline := regexp.MustCompile(`(?i)<script[^>]*>\s*[^<\s]|\sstyle=|\son[a-z]+=`)
 	for _, path := range []string{"/", "/agents", fmt.Sprint("/agents/", agent), "/projects", fmt.Sprint("/projects/", project), "/inbox", "/orphans", "/machines", "/cleanup", "/activity"} {
-		w := request(s, "GET", path, s.token)
+		w := request(s, "GET", path)
 		if w.Code != 200 {
 			t.Errorf("%s: %d", path, w.Code)
 			continue
@@ -34,20 +32,20 @@ func TestConsoleStructureAndCSP(t *testing.T) {
 		if inline.MatchString(body) {
 			t.Errorf("%s has inline script/style/handler", path)
 		}
-		for _, want := range []string{`driga console`, `class="status"`, `class="wins"`, `data-pane`, `id="cmdline"`, `id="command-menu"`, `id="help"`, `/static/app.js`} {
+		for _, want := range []string{`aria-label="Driga"`, `class="status"`, `data-view="flow"`, `data-pane`, `id="cmdline"`, `id="command-menu"`, `id="help"`, `/static/app.js`} {
 			if !strings.Contains(body, want) {
 				t.Errorf("%s missing %s", path, want)
 			}
 		}
 	}
-	body := request(s, "GET", "/", s.token).Body.String()
-	for _, want := range []string{`tail -f events`, `aria-live="polite"`, `data-tail`, `data-window="2"`, `value="light"`, `value="dark"`} {
+	body := request(s, "GET", "/").Body.String()
+	for _, want := range []string{`tail -f events`, `aria-live="polite"`, `data-tail`, `data-view="machines"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("missing %s", want)
 		}
 	}
-	js := request(s, "GET", "/static/app.js", s.token).Body.String()
-	for _, want := range []string{`keydown`, `ArrowDown`, `ArrowUp`, `data-pane`, `data-row`, `parseCommand`, `localStorage`, `EventSource`, `textContent`, `200`} {
+	js := request(s, "GET", "/static/app.js").Body.String()
+	for _, want := range []string{`keydown`, `ArrowDown`, `ArrowUp`, `data-pane`, `data-row`, `parseCommand`, `localStorage`, `/updates`, `textContent`, `200`} {
 		if !strings.Contains(js, want) {
 			t.Errorf("keyboard/tail script missing %s", want)
 		}
@@ -58,7 +56,7 @@ func TestConsoleChartBundle(t *testing.T) {
 	s, _, _, _ := fixture(t)
 	old := "u" + "Plot"
 	for _, path := range []string{"/", "/static/app.js", "/static/app.css", "/static/vendor/LICENSES.txt"} {
-		if strings.Contains(strings.ToLower(request(s, "GET", path, s.token).Body.String()), strings.ToLower(old)) {
+		if strings.Contains(strings.ToLower(request(s, "GET", path).Body.String()), strings.ToLower(old)) {
 			t.Errorf("legacy chart reference in %s", path)
 		}
 	}
@@ -68,11 +66,11 @@ func TestConsoleChartBundle(t *testing.T) {
 			t.Errorf("legacy asset %s", e.Name())
 		}
 	}
-	w := request(s, "GET", "/static/vendor/echarts-6.1.0.common.min.js", s.token)
+	w := request(s, "GET", "/static/vendor/echarts-6.1.0.common.min.js")
 	if w.Code != 200 || w.Body.Len() < 100000 {
 		t.Fatal("ECharts bundle not served")
 	}
-	js := request(s, "GET", "/static/app.js", s.token).Body.String()
+	js := request(s, "GET", "/static/app.js").Body.String()
 	for _, want := range []string{"echarts.init", "markLine", "markArea", "dataZoom", "aria", "connectNulls: false", "dispose", "ResizeObserver", "richText"} {
 		if !strings.Contains(js, want) {
 			t.Errorf("chart wrapper missing %s", want)
@@ -111,7 +109,7 @@ func TestConsoleFilters(t *testing.T) {
 			t.Errorf("refresh loses filter: %s", p.RefreshURL)
 		}
 	}
-	w := request(s, "GET", "/projects?project=Fixture+project", s.token)
+	w := request(s, "GET", "/projects?project=Fixture+project")
 	if w.Code != 200 || !strings.Contains(w.Body.String(), "WHERE THINGS STAND") {
 		t.Error("where command does not open real project detail")
 	}
@@ -139,15 +137,15 @@ func TestConsoleTailBoundAndEscaping(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	local := request(s, "GET", "/?machine=local", s.token).Body.String()
+	local := request(s, "GET", "/?machine=local").Body.String()
 	if strings.Contains(local, "peer-only-secret") {
 		t.Error("tail leaked another machine's event")
 	}
-	peer := request(s, "GET", "/?machine=tail-peer", s.token).Body.String()
+	peer := request(s, "GET", "/?machine=tail-peer").Body.String()
 	if !strings.Contains(peer, "peer-only-secret") || strings.Contains(peer, "line-239") {
 		t.Error("tail does not respect peer scope")
 	}
-	body := request(s, "GET", "/", s.token).Body.String()
+	body := request(s, "GET", "/").Body.String()
 	if strings.Count(body, `<div data-row data-event-key=`) != 200 {
 		t.Error("tail lines are not wired to pane selection/filtering")
 	}
@@ -157,72 +155,32 @@ func TestConsoleTailBoundAndEscaping(t *testing.T) {
 	if strings.Contains(body, "<script>stored</script>") || !strings.Contains(body, "&lt;script&gt;stored&lt;/script&gt;") {
 		t.Error("tail is missing or unescaped")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { r.Host = s.opts.Host; s.ServeHTTP(w, r) }))
-	defer ts.Close()
-	req, _ := http.NewRequestWithContext(ctx, "GET", ts.URL+"/events", nil)
-	req.AddCookie(&http.Cookie{Name: s.cookieName, Value: s.token})
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
+	s.pollTimeout = 5 * time.Second
+	first := request(s, "GET", "/updates")
+	if strings.Contains(first.Body.String(), "<script>") {
+		t.Error("stored markup not JSON escaped")
+	}
+	var got updateResponse
+	if err := json.Unmarshal(first.Body.Bytes(), &got); err != nil {
 		t.Fatal(err)
 	}
-	defer resp.Body.Close()
-	scan := bufio.NewScanner(resp.Body)
-	tail := false
-	for scan.Scan() {
-		if scan.Text() == "event: tail" {
-			tail = true
-			continue
-		}
-		if tail && strings.HasPrefix(scan.Text(), "data: ") {
-			payload := strings.TrimPrefix(scan.Text(), "data: ")
-			var rows []json.RawMessage
-			if err := json.Unmarshal([]byte(payload), &rows); err != nil {
-				t.Fatal(err)
-			}
-			if len(rows) == 0 || len(rows) > 20 {
-				t.Fatalf("unbounded or empty tail: %d", len(rows))
-			}
-			if strings.Contains(payload, "<script>") {
-				t.Error("stored markup not JSON escaped")
-			}
-			first := time.Now()
-			if err := st.Tx(context.Background(), func(tx *store.Tx) error {
-				for i := 0; i < 60; i++ {
-					if err := tx.InsertEvent(model.Event{Adapter: "test", ExternalID: fmt.Sprint("burst", i), TS: time.Now(), Kind: "Notification", Summary: "burst"}); err != nil {
-						return err
-					}
-				}
-				return nil
-			}); err != nil {
-				t.Fatal(err)
-			}
-			tail = false
-			for scan.Scan() {
-				if scan.Text() == "event: tail" {
-					tail = true
-					continue
-				}
-				if tail && strings.HasPrefix(scan.Text(), "data: ") {
-					var burst []json.RawMessage
-					if err := json.Unmarshal([]byte(strings.TrimPrefix(scan.Text(), "data: ")), &burst); err != nil {
-						t.Fatal(err)
-					}
-					if len(burst) == 0 || len(burst) > 20 {
-						t.Fatalf("burst exceeds rate bound: %d", len(burst))
-					}
-					if time.Since(first) < 900*time.Millisecond {
-						t.Error("tail emitted more than one batch per second")
-					}
-					return
-				}
-			}
-			t.Fatal("no live tail after burst")
-			return
-		}
+	if len(got.Tail) == 0 || len(got.Tail) > 20 {
+		t.Fatalf("unbounded or empty tail: %d", len(got.Tail))
 	}
-	t.Fatalf("no tail payload: %v", scan.Err())
+	if err := st.Tx(context.Background(), func(tx *store.Tx) error {
+		for i := 0; i < 60; i++ {
+			if err := tx.InsertEvent(model.Event{Adapter: "test", ExternalID: fmt.Sprint("burst", i), TS: time.Now(), Kind: "Notification", Summary: "burst"}); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	burst := poll(t, s, got.Cursor)
+	if len(burst.Tail) == 0 || len(burst.Tail) > 20 {
+		t.Fatalf("burst exceeds rate bound: %d", len(burst.Tail))
+	}
 }
 
 func TestConsoleMachineProcessScope(t *testing.T) {

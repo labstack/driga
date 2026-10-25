@@ -17,13 +17,13 @@
  for (const state of ["working", "waiting", "stalled", "idle", "finished", "ended", "dead", "unknown"]) {
   assert(parse("agents --state " + state).url === "/agents?machine=all&state=" + encodeURIComponent(state), "state " + state);
  }
- for (const theme of ["light", "dark", "system"]) assert(parse("theme " + theme).theme === theme, "theme " + theme);
+ for (const theme of ["light", "dark", "system"]) assert(parse("theme " + theme).error, "theme belongs to the app: " + theme);
  assert(parse("agents", "peer&x").url === "/agents?machine=peer%26x", "scope is encoded");
  for (const command of ["inbox ack --all", "agents jump 12", "agents kill 12", "inbox jump item", "projects summarize app", "orphans kill 42", "cleanup remove", "hooks install"]) {
-  const result=parse(command); assert(result.error === "read-only in browser · use the CLI" && !result.url && !result.theme, command + " must not run");
+  const result=parse(command); assert(result.error === "read-only in browser · use the CLI" && !result.url, command + " must not run");
  }
  for (const command of ["", "unknown", "agents --state nope", "agents --state", "agents --all --all", "agents --project", "projects show", "theme mocha", "inbox trailing", "cleanup --why apply", 'projects show "unterminated', "agents; kill 42", "activity --window 6h", "x".repeat(501)]) {
-  const result=parse(command); assert(result.error && !result.url && !result.theme, "invalid " + command);
+  const result=parse(command); assert(result.error && !result.url, "invalid " + command);
  }
 })();
 
@@ -32,7 +32,6 @@ if (DrigaConsole.parseCommand("flow").url !== "/flow?machine=all") throw Error("
 
 (() => {
  const text=globalThis.DrigaConsole.connectionText;
- if(text(false,false)!=="○ reconnecting…")throw new Error("retry status");
- if(!text(false,true).includes("authenticate the new web URL, then reload"))throw new Error("terminal stream recovery missing");
- if(text(true,false)!=="● live")throw new Error("live status");
+ if(text(false)!=="○ reconnecting…")throw new Error("retry status");
+ if(text(true)!=="● live")throw new Error("live status");
 })();

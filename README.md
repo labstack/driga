@@ -7,9 +7,11 @@
 
 **See what your coding agents are doing, and what needs you.**
 
-Driga is a CLI, terminal UI, and local web dashboard for AI coding agent
-sessions on macOS and Linux. Windows: experimental, including orphan kill and
-worktree cleanup.
+Driga is a desktop app and a CLI for AI coding agent sessions, like Docker
+Desktop with `docker`. The app collects in the background, notifies you when an
+agent waits, and shows the dashboard; the `driga` CLI comes with it and opens
+the terminal UI. It runs on macOS and Linux. Windows: experimental, including
+orphan kill and worktree cleanup.
 It brings agent activity, project status, an attention inbox, orphaned helpers, and machine health into one place.
 
 Driga is **alpha**. Agent formats and behavior can change; unknown or incomplete
@@ -28,7 +30,7 @@ Pre-release databases must be reset; `driga doctor` prints the reset command.
 | Leftovers | Orphan helper process candidates and local disk cleanup candidates, with evidence and confirmation before removal. |
 | Machine health | Memory, CPU, pressure, disk, and agent process attribution. |
 | Multiple machines | Optional fleet views over pinned mutual TLS, with explicit pairing and sharing controls. |
-| Other interfaces | Versioned JSON, read-only MCP tools, a loopback web dashboard, and opt-in summaries and Chat through Claude. |
+| Other interfaces | Versioned JSON, read-only MCP tools, the terminal UI, and opt-in summaries and Chat through Claude. |
 
 ## Install
 
@@ -38,15 +40,15 @@ On macOS, install the signed and notarized release with Homebrew:
 brew install --cask labstack/tap/driga
 ```
 
-Homebrew keeps the background-only `Driga.app` in Caskroom and links `driga`
-to `Driga.app/Contents/MacOS/driga`. The app contains the Murmur icon and the
-same CLI used by hooks and the collector; it has no Dock icon. When upgrading
-from a bare-binary release, run `driga service install` once if you use the
-collector. It repairs the plist's bundle path and attribution in System
-Settings > General > Login Items & Extensions. Later `brew upgrade` operations
-keep that path stable; use `driga service restart` to restart a running collector
-with the new version. `driga doctor` warns about a
-stale service path. Hooks keep using the stable Homebrew `driga` link.
+The cask installs `/Applications/Driga.app` and links `driga` to the CLI
+inside it, `Driga.app/Contents/MacOS/driga`. Open Driga from Finder or
+Spotlight, or run `driga app`. From its first launch it starts at login and
+sends notifications under its own name. Hooks keep using the stable Homebrew
+`driga` link. After `brew upgrade`, a running app restarts itself on
+the new version.
+
+If you installed the collector service with an earlier release, the app
+removes it on its first launch, says so once, and runs the collector itself.
 
 On Windows (experimental), use Scoop:
 
@@ -58,7 +60,9 @@ scoop install labstack/driga
 Debian `.deb` and RPM `.rpm` packages, plus archives for macOS, Linux, and
 Windows on amd64 and arm64, are available from
 [GitHub Releases](https://github.com/labstack/driga/releases). Windows archives
-contain `driga.exe`; macOS and Linux use tar.gz archives. Verify downloads
+contain the app, `Driga.exe`, and the CLI, `bin\driga.exe`; macOS and Linux use
+tar.gz archives. The Linux packages install `driga.desktop` and recommend GTK 3,
+WebKitGTK and an AppIndicator library for the app (best effort). Verify downloads
 against `driga_<version>_checksums.txt` before installing. The
 [release guide](docs/release.md#verify-and-install-a-release-archive) covers
 checksums, packages, and archive installation.
@@ -71,17 +75,22 @@ CGO_ENABLED=0 go build ./cmd/driga
 ```
 
 Keep Git on PATH and the installed binary at a stable absolute path before
-setting up hooks or a service. CalVer tags use the year as their major number;
-Go module major-version rules prevent `go install ...@<tag>` with this module
-path. Use a package, archive, or source checkout.
+setting up hooks or a service. On a machine without a desktop, install the CLI
+alone and run the collector as a service with `driga service install`. CalVer
+tags use the year as their major number; Go module major-version rules prevent
+`go install ...@<tag>` with this module path. Use a package, archive, or source checkout.
 
 ## Windows (experimental)
 
 Windows 10 1809+ and Windows 11 have native snapshots, foreground collection,
-read commands, TUI/web/MCP, OTLP intake and fleet interfaces, plus:
+read commands, the TUI, MCP, OTLP intake and fleet interfaces, plus:
 
-- A per-user Task Scheduler collector at logon: `driga service install`,
-  `uninstall`, `start`, `stop`, `status`, `restart`, and `logs [-f]`; no elevation.
+- The `Driga.exe` app, which runs the collector, sits in the notification
+  area and starts at logon; Scoop adds a Start menu shortcut and puts the CLI,
+  `bin\driga.exe`, on PATH.
+- For a machine without the app, a per-user Task Scheduler collector at logon:
+  `driga service install`, `uninstall`, `start`, `stop`, `status`, `restart`,
+  and `logs [-f]`; no elevation.
 - Previewed Claude, Codex and Copilot hook installation with absolute executable paths.
 - Native plain toast alerts (no PowerShell); doctor reports availability.
 - Terminal jumps/open in Windows Terminal, falling back to a new Command Prompt.
@@ -98,29 +107,31 @@ stays refused because its Windows layout is unverified in repository fixtures. T
 terminal jumps open a new window. Real agent sessions, logon/restart, notifications,
 orphan shutdown and Recycle Bin restore still need verification on Windows hardware.
 A separate Windows end-to-end CI job builds the CLI and exercises attribution,
-collection, Task Scheduler, web assets, hooks, orphan kill and Recycle Bin cleanup
+collection, Task Scheduler, hooks, orphan kill and Recycle Bin cleanup
 on GitHub-hosted `windows-2025` runners.
 See [Windows setup details](docs/usage.md#windows-experimental).
 
 ## Quick start
 
 ```sh
-driga service install   # per-user collector: history, inbox and notifications
-driga                   # opens the terminal viewer (driga top)
-driga web               # the same views in your browser, on loopback
-driga doctor            # check setup
+driga app       # open the desktop app: collector, notifications, dashboard
+driga           # opens the terminal viewer (driga top)
+driga doctor    # check setup
 ```
+
+On a headless machine, `driga service install` runs the same collector as a
+per-user service instead of the app.
 
 Without a collector, Driga takes a disposable snapshot and shows
 `snapshot · no history`. That collection writes no persistent database. One
 agent in one repository works without configuring roots or a service.
 
-For guided setup, run `driga init`. Repository roots, text capture, hooks, and
-service installation are optional steps. Session working directories also
+For guided setup, run `driga init`. Repository roots, text capture, and hooks
+are optional steps. On macOS and Windows it points to the app for collection;
+on Linux it offers to install the service. Session working directories also
 contribute to repository discovery; there are no default scanning roots.
 
-Service installation starts a per-user collector and asks macOS for notification
-permission. The first import marks older events as already seen. Reading an
+The collector's first import marks older events as already seen. Reading an
 inbox item never acknowledges it; use the Flow Activity controls in the TUI or `driga inbox ack <item-id>`.
 
 ### Scripting and agents
@@ -154,8 +165,7 @@ scrubbing cannot guarantee privacy.
 
 Collection stays local unless you configure fleet peers. Fleet sharing defaults
 to metadata and titles; the serving peer controls text sharing. Optional OTLP
-intake listens on loopback. The web dashboard listens on loopback and requires
-a local access token.
+intake listens on loopback. The desktop app opens no network port.
 
 Optional summaries and Chat run Claude through your installed CLI and its
 existing vendor connection. Explicit questions and permitted context can leave
@@ -167,7 +177,7 @@ for paths, capture settings, and the fleet sharing table.
 
 - [Brand assets](docs/brand.html): Murmur logos, icons, and usage guidance.
 - [Usage and configuration](docs/usage.md): commands, hooks, service, fleet,
-  cleanup, Chat, web dashboard, MCP, and OTLP.
+  cleanup, Chat, the desktop app, MCP, and OTLP.
 - [Machine health](docs/machine-health.md): attribution, measurements, trends,
   and early warnings.
 - [Design](docs/specs/2026-10-18-driga-cli-tui-design.md): architecture and the

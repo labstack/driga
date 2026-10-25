@@ -2,10 +2,11 @@ package web
 
 import (
 	"encoding/json"
-	"github.com/labstack/driga/internal/chat"
 	"os"
 	"os/exec"
 	"testing"
+
+	"github.com/labstack/driga/internal/chat"
 )
 
 func TestChatDOM(t *testing.T) {

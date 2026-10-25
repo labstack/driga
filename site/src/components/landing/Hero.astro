@@ -1,20 +1,9 @@
 ---
 /* The landing page's opening: status line, headline, tagline, install and the
- * film. Rendered in place of Starlight's title on the one page with `hero`
- * frontmatter. */
+ * film's poster. Rendered in place of Starlight's title on the one page with
+ * `hero` frontmatter. */
 import InstallCommand from "./InstallCommand.astro";
 import Film from "./Film.astro";
-import cut from "../../../footage/film/cut.json";
-
-// The film's chapters come from the same cut list the film is rendered from.
-const { tui, web } = cut.takes;
-const browser = tui.answered - tui.typed;
-const ending = browser + web.selected - web.prompt;
-const chapters = [
-  { label: "Terminal", start: 0 },
-  { label: "Browser", start: browser },
-  { label: "Install", start: ending },
-];
 
 const { data } = Astro.locals.starlightRoute.entry;
 const { title = data.title, tagline, actions = [] } = data.hero ?? {};
@@ -35,7 +24,7 @@ const docs = actions.find((a) => !a.link.startsWith("#")) ?? actions[0];
       )
     }
   </div>
-  <Film name="hero" phone="needs" eager chapters={chapters} length={ending + cut.hero.end} label="A real-time screen recording of driga on demo sessions. In a terminal, driga is typed and opens; workers start under a session; that session asks permission to run pnpm prisma migrate deploy, and it is allowed with y. Then the same prompt is allowed in the browser dashboard, and a session that shares a file with another is opened. It ends on the install command." />
+  <Film name="hero" eager label="A screenshot of driga in a terminal on demo sessions. Its Flow view shows one session that needs you, Migrate billing to Stripe v3, asking permission to run pnpm prisma migrate deploy, with y to allow and n to deny; below it, the atlas project's sessions, with two workers running under the waiting one." />
   <p class="dg-hero-agents">
     <span>Works with</span>
     <span>Claude Code</span><span>Codex</span><span>GitHub Copilot CLI</span><span>Gemini CLI</span><span>Antigravity (process level)</span>

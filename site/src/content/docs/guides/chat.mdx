@@ -1,7 +1,7 @@
 ---
 title: Chat and actions
 description: Ask Driga about your sessions through your installed Claude Code CLI, and approve the actions it proposes with trust modes and action cards.
-summary: Chat in the TUI and web, driga ask, what Chat can do, the Confirm, Auto and Full auto trust modes, action cards and what is retained.
+summary: Chat in the TUI and the app, driga ask, what Chat can do, the Confirm, Auto and Full auto trust modes, action cards and what is retained.
 read_when:
   - You want to ask questions about your sessions in plain language.
   - You want to know what Chat may run without asking.
@@ -21,7 +21,7 @@ Copilot are listed as coming.
 - **Terminal UI:** press `c` anywhere for Chat with the current selection.
   Enter sends; Shift+Enter (or Alt+Enter) adds a line; Esc closes the panel and
   keeps the draft. Alt+0, Alt+1 and Alt+2 switch tabs while typing.
-- **Web:** press `c` on any page, or open the Chat page, to dock Chat on the
+- **App:** press `c` on any page, or choose View → Chat, to dock Chat on the
   right. Context chips describe the current page, selection and machine; remove
   a chip to leave it out.
 - **One shot:** `driga ask "which agents are waiting on me?"`. `driga ask` is
@@ -42,8 +42,8 @@ never types into a live agent terminal.
 
 ## Trust modes
 
-Each conversation starts in **Confirm**. Change mode with the web header
-buttons or `m` in the TUI's navigate mode.
+Each conversation starts in **Confirm**. Change mode with the Chat header
+buttons in the app or `m` in the TUI's navigate mode.
 
 | Mode | Runs without asking | Asks |
 | --- | --- | --- |
@@ -64,7 +64,7 @@ cannot.
 A card shows the tool, its exact input, the working directory, status, who
 decided and the result.
 
-- **Web:** click **Allow** or **Deny**.
+- **App:** click **Allow** or **Deny**.
 - **TUI:** in navigate mode `y` allows and `n` denies the oldest pending card;
   while typing use Alt+y and Alt+n. The status line says **action waiting**.
 

@@ -1,7 +1,7 @@
 ---
 title: Needs you and prompts
 description: See which sessions are waiting on you, acknowledge inbox items, and answer Claude Code permission prompts from Driga.
-summary: The Needs you shelf, the inbox, acknowledgment, and answering Claude permission prompts from the TUI or web.
+summary: The Needs you shelf, the inbox, acknowledgment, and answering Claude permission prompts from the TUI or the app.
 read_when:
   - You want to answer a Claude Code permission prompt without switching terminals.
   - An inbox item will not go away and you want to know why.
@@ -28,7 +28,8 @@ stay in the inbox and pending waits close.
 
 <Steps>
 
-1. Run the collector (`driga service install`).
+1. Run the collector: open the Driga app, or `driga service install` on a
+   headless machine.
 2. Install the Claude hooks, which include `PermissionRequest` with a
    660-second timeout:
 
@@ -45,8 +46,7 @@ tool and exact input.
 
 - **Terminal UI:** select the prompt and press `y` to allow or `n` to deny.
   Enter opens the full input. In Flow, Tab focuses the shelf first.
-- **Web:** use **Allow** or **Deny**. Browser decisions require the
-  authenticated session, Origin and CSRF token.
+- **App:** use **Allow** or **Deny**.
 
 The first answer wins, whether it comes from Driga or the terminal. A prompt
 answered in the terminal retires from Driga within about a second; session end,

@@ -10,13 +10,11 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
-	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
 
 	ks "github.com/kardianos/service"
-	"github.com/labstack/driga/internal/filelock"
 	"github.com/labstack/driga/internal/secfile"
 
 	"github.com/labstack/driga/internal/attention"
@@ -67,7 +65,7 @@ type DoctorDeps struct {
 	CopilotHome        string // Optional override; defaults to Home/.copilot.
 	Now                time.Time
 	ProcessAlive       func(int32, time.Time) bool // Optional PID/start validation for fixtures.
-	LockProbe          func(dataDir string) (held bool, err error)
+	LockProbe          func(dataDir string) (owner collector.Owner, held bool, err error)
 	ServicePlistStale  func() (bool, error)   // macOS plist path, read-only.
 	ServiceState       func() (string, error) // Windows Task Scheduler, read-only.
 	NotificationStatus func() (string, error) // Native API status, no authorization/registration/display.
@@ -137,14 +135,14 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 	}
 	probe := d.LockProbe
 	if probe == nil {
-		probe = probeCollectorLock
+		probe = collector.ReadOwner
 	}
-	held, err := probe(d.DataDir)
+	owner, held, err := probe(d.DataDir)
 	switch {
 	case err != nil:
 		add("collector", "fail", err.Error(), "check access to "+d.DataDir+"/driga.lock")
 	case !held:
-		add("collector", "warn", "not running; snapshot mode has no history", "driga service install")
+		add("collector", "warn", "not running; snapshot mode has no history", collectorHint(goos))
 	case d.Store == nil:
 		add("collector", "warn", "lock held but database unavailable", "driga service restart")
 	default:
@@ -153,7 +151,7 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 		if err != nil || parseErr != nil || last.After(d.Now) || d.Now.Sub(last) > 3*intervals.Procs {
 			add("collector", "warn", "lock held but last pass is missing or stale", "driga service restart")
 		} else {
-			add("collector", "ok", "running; last pass "+d.Now.Sub(last).Round(time.Second).String()+" ago", "")
+			add("collector", "ok", fmt.Sprintf("running (%s, pid %d); last pass %s ago", owner.Kind, owner.PID, d.Now.Sub(last).Round(time.Second)), "")
 		}
 	}
 	if d.Store != nil {
@@ -210,8 +208,6 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 			// also counts clean, shared code pages and swings with each GC.
 			var rss, footprint, budget uint64
 			found, measured := false, false
-			owner, _ := os.ReadFile(filepath.Join(d.DataDir, "driga.lock"))
-			ownerPID, _ := strconv.ParseInt(strings.TrimSpace(string(owner)), 10, 32)
 			alive := d.ProcessAlive
 			if alive == nil {
 				alive = platform.New().Alive
@@ -220,7 +216,7 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 			for _, p := range procs {
 				// The lock owner is this data directory's collector whatever its
 				// binary is called; other collectors are recognised by name.
-				owned := held && p.PID > 0 && int64(p.PID) == ownerPID && alive(p.PID, p.StartTime) && len(p.Argv) >= 2 && p.Argv[1] == "collect"
+				owned := held && p.PID > 0 && int(p.PID) == owner.PID && alive(p.PID, p.StartTime) && len(p.Argv) >= 2 && p.Argv[1] == "collect"
 				if !owned {
 					if isCollectorProc(p) {
 						others++
@@ -372,7 +368,7 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 	info, err := os.Stat(d.DataDir)
 	switch {
 	case errors.Is(err, os.ErrNotExist):
-		add("data_permissions", "warn", "data directory does not exist", "driga service install")
+		add("data_permissions", "warn", "data directory does not exist", collectorHint(goos))
 	case err != nil:
 		add("data_permissions", "fail", err.Error(), "check access to "+d.DataDir)
 	case !info.IsDir():
@@ -599,35 +595,11 @@ func isCollectorProc(p model.Proc) bool {
 	return len(args) >= 2 && (filepath.Base(args[0]) == "driga" || strings.EqualFold(filepath.Base(args[0]), "driga.exe")) && args[1] == "collect"
 }
 
-// probeCollectorLock does not create a file or modify its contents/permissions.
-func probeCollectorLock(dir string) (bool, error) {
-	flags := os.O_RDONLY
-	if runtime.GOOS == "windows" {
-		flags = os.O_RDWR
-	}
-	f, err := os.OpenFile(filepath.Join(dir, "driga.lock"), flags, 0)
-	if errors.Is(err, os.ErrNotExist) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	defer f.Close()
-	err = filelock.Lock(f, true)
-	if filelock.Busy(err) {
-		return true, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	return false, filelock.Unlock(f)
-}
-
 // runtimeDoctor gives CLI and MCP diagnostics the same read-only probes.
 // Creating a service handle and querying its state never installs a task;
 // notification status never registers an identity or displays an alert.
 func runtimeDoctor(ctx context.Context, cfg config.Config, now time.Time, reader DoctorReader) []Check {
-	d := DoctorDeps{DataDir: config.DataDir(), Config: cfg, Home: config.ExpandHome("~"), CodexHome: os.Getenv("CODEX_HOME"), CopilotHome: os.Getenv("COPILOT_HOME"), Now: now, Store: reader, LockProbe: probeCollectorLock}
+	d := DoctorDeps{DataDir: config.DataDir(), Config: cfg, Home: config.ExpandHome("~"), CodexHome: os.Getenv("CODEX_HOME"), CopilotHome: os.Getenv("COPILOT_HOME"), Now: now, Store: reader}
 	if runtime.GOOS == "darwin" {
 		d.ServicePlistStale = func() (bool, error) {
 			bin, err := os.Executable()
@@ -674,7 +646,7 @@ func (DoctorCmd) Run(g *Globals) error {
 	if openErr != nil {
 		status, fix := "fail", "check database permissions and driga service logs"
 		if _, err := os.Stat(filepath.Join(dataDir, "driga.db")); errors.Is(err, os.ErrNotExist) {
-			status, fix = "warn", "driga service install"
+			status, fix = "warn", collectorHint(runtime.GOOS)
 		}
 		var schemaErr *store.SchemaError
 		if errors.As(openErr, &schemaErr) {

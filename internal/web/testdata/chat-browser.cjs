@@ -43,8 +43,7 @@ const chatJS=fs.readFileSync(path.join(root,'internal/web/static/chat.js'),'utf8
   }
   // Real DOM event propagation must leave Escape available to the app handler.
   await page.evaluate(()=>{
-   window.fetch=async()=>({ok:true,json:async()=>[]});window.EventSource=class{constructor(){window.chatSource=this;this.handlers={};}addEventListener(k,f){this.handlers[k]=f;}close(){}};
-   const meta=document.createElement('meta');meta.name='chat-csrf';meta.content='fixture';document.head.append(meta);
+   window.fetch=path=>path.startsWith('/chat/api/wait')?new Promise(resolve=>{window.chatPoll=resolve;}):Promise.resolve({ok:true,json:async()=>[]});
    const help=document.createElement('dialog');help.id='help';document.body.append(help);
    const filter=document.createElement('label');filter.className='filter';filter.innerHTML='<input id="filter-test">';document.body.append(filter);
   });
@@ -55,9 +54,10 @@ const chatJS=fs.readFileSync(path.join(root,'internal/web/static/chat.js'),'utf8
   assert.equal(await page.locator('#chat').evaluate(e=>e.hidden),false,'testEscapeHelp');
   for(const [width,height]of [[375,600],[1280,900]]){
    await page.setViewportSize({width,height});
-   await page.evaluate(()=>{
+   await page.evaluate(async()=>{
     const card={id:'card',tool:'Bash',title:'Bash · check',input:{command:'echo > result',description:'Check output'},directory:'/project',status:'pending'};
-    window.chatSource.handlers.reset({data:JSON.stringify({cursor:10,active:true,actions:[card],messages:[{id:'answer',role:'assistant',text:'',status:'streaming'},{id:'card',role:'action',status:'pending'}]})});
+    const state={reset:true,cursor:10,active:true,actions:[card],messages:[{id:'answer',role:'assistant',text:'',status:'streaming'},{id:'card',role:'action',status:'pending'}]};
+    window.chatPoll({ok:true,json:async()=>state});await new Promise(resolve=>setTimeout(resolve,0));
    });
    assert.equal(await page.locator('#chat-approval button').first().evaluate(e=>document.activeElement===e),true,'testAllowFocused');
    assert.equal(await page.locator('#chat-log .assistant').count(),0,'testNoEmptyAssistant');

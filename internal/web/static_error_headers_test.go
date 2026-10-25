@@ -1,7 +1,6 @@
 package web
 
 import (
-	"net/http"
 	"net/http/httptest"
 	"testing"
 )
@@ -12,8 +11,7 @@ func TestStaticErrorsKeepHeaders(t *testing.T) {
 		path, rangeHeader string
 		code              int
 	}{{"/static/missing", "", 404}, {"/static/app.js", "bytes=999999999-", 416}} {
-		r := httptest.NewRequest("GET", "http://"+s.opts.Host+tc.path, nil)
-		r.AddCookie(&http.Cookie{Name: s.cookieName, Value: s.token})
+		r := httptest.NewRequest("GET", tc.path, nil)
 		r.Header.Set("Range", tc.rangeHeader)
 		w := httptest.NewRecorder()
 		s.ServeHTTP(w, r)

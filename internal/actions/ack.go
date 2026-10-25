@@ -110,7 +110,7 @@ func (c AckOptions) Ack(g Environment) error {
 	if len(ids) == 0 {
 		return nil
 	}
-	lock, err := collector.Lock(config.DataDir())
+	lock, err := collector.Lock(config.DataDir(), collector.Owner{Kind: "manual"})
 	if err == nil {
 		if err := lock.Close(); err != nil {
 			return err

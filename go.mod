@@ -14,6 +14,7 @@ require (
 	github.com/charmbracelet/x/ansi v0.11.9
 	github.com/charmbracelet/x/term v0.2.2
 	github.com/ebitengine/purego v0.11.1
+	github.com/egoist/mygo v0.6.3
 	github.com/go-json-experiment/json v0.0.0-20260820222146-c27c302e5fc3
 	github.com/google/go-cmp v0.7.0
 	github.com/google/jsonschema-go v0.4.3
@@ -43,6 +44,7 @@ require (
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
 	github.com/dustin/go-humanize v1.1.0 // indirect
 	github.com/go-ole/go-ole v1.2.6 // indirect
+	github.com/go-text/typesetting v0.3.5 // indirect
 	github.com/lrstanley/bubblezone/v2 v2.0.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.4.1 // indirect
 	github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect
@@ -63,7 +65,9 @@ require (
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
+	golang.org/x/image v0.46.0 // indirect
 	golang.org/x/oauth2 v0.35.0 // indirect
+	golang.org/x/text v0.43.0 // indirect
 	modernc.org/libc v1.78.0 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.12.1 // indirect

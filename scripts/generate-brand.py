@@ -16,6 +16,7 @@ from pathlib import Path
 from xml.etree import ElementTree as ET
 
 ASSETS = Path(__file__).resolve().parents[1] / "internal/web/static/brand"
+TRAY = Path(__file__).resolve().parents[1] / "internal/desktop/assets"
 NS = "http://www.w3.org/2000/svg"
 ET.register_namespace("", NS)
 
@@ -90,11 +91,41 @@ def generate_icns(renderer, portable=False):
         ], check=True)
 
 
+def generate_tray(renderer):
+    """Render the tray icons: a black template for the macOS menu bar, and ink
+    and white marks, each also with a dot for "something needs you", for
+    notification areas that show icons in color."""
+    symbol = ET.parse(ASSETS / "murmur.svg").getroot()
+    primary = symbol.find(f"{{{NS}}}g").get("fill")
+    variants = [("tray-template.png", "#000000", False)]
+    for tone, color in [("ink", "#1b1e21"), ("white", "#ffffff")]:
+        variants += [(f"tray-{tone}.png", color, False), (f"tray-{tone}-dot.png", color, True)]
+    TRAY.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="driga-tray-") as temporary:
+        for name, color, dot in variants:
+            root = ET.Element(f"{{{NS}}}svg", {"viewBox": "0 0 128 128", "width": "128", "height": "128"})
+            mark = ET.SubElement(root, f"{{{NS}}}g")
+            mark.extend(elements(symbol, color))
+            if dot:
+                # A gap around the dot keeps it apart from the mark at 16 points.
+                mask = ET.SubElement(ET.SubElement(root, f"{{{NS}}}defs"), f"{{{NS}}}mask", {"id": "gap"})
+                ET.SubElement(mask, f"{{{NS}}}rect", {"width": "128", "height": "128", "fill": "#ffffff"})
+                ET.SubElement(mask, f"{{{NS}}}circle", {"cx": "104", "cy": "24", "r": "34", "fill": "#000000"})
+                mark.set("mask", "url(#gap)")
+                ET.SubElement(root, f"{{{NS}}}circle", {"cx": "104", "cy": "24", "r": "24", "fill": primary})
+            source = Path(temporary) / (name + ".svg")
+            source.write_text(ET.tostring(root, encoding="unicode"))
+            subprocess.run([
+                renderer, "--width", "32", "--height", "32", "--output", str(TRAY / name), str(source),
+            ], check=True)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--svg-only", action="store_true")
     mode.add_argument("--icns-only", action="store_true", help="regenerate only Driga.icns (macOS)")
+    mode.add_argument("--tray-only", action="store_true", help="regenerate only the desktop app's tray icons")
     parser.add_argument("--portable-icns", action="store_true", help="encode PNG ICNS chunks when iconutil cannot run")
     args = parser.parse_args()
     if args.portable_icns and not args.icns_only:
@@ -105,6 +136,9 @@ def main():
 
     if args.icns_only:
         generate_icns(renderer, args.portable_icns)
+        return
+    if args.tray_only:
+        generate_tray(renderer)
         return
 
     symbol = ET.parse(ASSETS / "murmur.svg").getroot()
@@ -162,6 +196,7 @@ def main():
                 renderer, "--width", str(width), "--output",
                 str(ASSETS / destination), str(ASSETS / source),
             ], check=True)
+        generate_tray(renderer)
     print("Generated Murmur variants from the canonical symbol and wordmark SVGs.")
 
 

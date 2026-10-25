@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Re-records the website footage from the real binary: builds driga and
-# driga-demo, films the TUI with VHS and the web dashboard with Playwright in
-# both themes, and cuts the films with Remotion into out/media (posters into
-# src/assets/media). `just site-footage-publish` then uploads them to R2.
+# driga-demo, films the TUI with VHS in both themes, and cuts the films with
+# Remotion into out/media (posters into src/assets/media).
+# `just site-footage-publish` then uploads them to R2.
 # Needs vhs and ffmpeg on PATH.
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -14,7 +14,6 @@ cleanup() {
 trap cleanup EXIT
 (cd ../.. && go build -o "$work/driga" ./cmd/driga && go build -o "$work/driga-demo" ./cmd/driga-demo)
 npm ci --no-audit --no-fund
-npx playwright install chromium
 export FOOTAGE_DRIGA="$work/driga" FOOTAGE_DEMO="$work/driga-demo"
 mkdir -p out
 # Each theme twice: the full width for the film, 1440 wide for the Machines loop.
@@ -27,5 +26,4 @@ for theme in dark light; do
     FOOTAGE_DIR="$work/tui-$take-$theme" FOOTAGE_UI=$theme vhs "$work/$take-$theme.tape"
   done
 done
-FOOTAGE_DIR="$work/web" node web.mjs
 node render.mjs

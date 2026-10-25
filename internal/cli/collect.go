@@ -3,7 +3,6 @@ package cli
 import (
 	"context"
 	"fmt"
-	"github.com/labstack/driga/internal/attention"
 	"io"
 	"log/slog"
 	"os"
@@ -11,6 +10,7 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/labstack/driga/internal/attention"
 	"github.com/labstack/driga/internal/collector"
 	"github.com/labstack/driga/internal/config"
 	"github.com/labstack/driga/internal/fleet"
@@ -19,8 +19,15 @@ import (
 	"github.com/labstack/driga/internal/store"
 )
 
+// newCollectDeps builds the collector's sources; tests replace it so a full
+// collect run reads no real machine state.
+var newCollectDeps = newDeps
+
 // CollectCmd runs the daemon, or one persistent pass with --once.
 type CollectCmd struct {
+	Owner          string        `hidden:"" default:"manual" enum:"app,service,manual"`
+	NotifyFD       *int          `hidden:""`
+	ParentFD       *int          `hidden:""`
 	Serve          *bool         `help:"Enable fleet serving alongside collection (overrides fleet.serve)."`
 	Listen         string        `help:"Fleet private IP or interface and port (requires serving)."`
 	Scheduled      bool          `hidden:""`
@@ -33,6 +40,27 @@ type CollectCmd struct {
 
 // Run loads collection sources and handles graceful termination signals.
 func (c CollectCmd) Run(g *Globals) error {
+	if c.NotifyFD != nil && *c.NotifyFD < 0 {
+		return invalidUsage("--notify-fd must be non-negative")
+	}
+	if c.ParentFD != nil && *c.ParentFD < 0 {
+		return invalidUsage("--parent-fd must be non-negative")
+	}
+	// Take the inherited descriptors first, before anything can start a
+	// program that would inherit them too.
+	var notifyFile, parentFile *os.File
+	if c.NotifyFD != nil {
+		if notifyFile = inheritedFile(*c.NotifyFD, "notify"); notifyFile == nil {
+			return invalidUsage("--notify-fd is invalid")
+		}
+		defer notifyFile.Close()
+	}
+	if c.ParentFD != nil {
+		if parentFile = inheritedFile(*c.ParentFD, "parent"); parentFile == nil {
+			return invalidUsage("--parent-fd is invalid")
+		}
+		defer parentFile.Close()
+	}
 	if c.Once && c.Serve != nil && *c.Serve {
 		return invalidUsage("--once and --serve cannot be combined")
 	}
@@ -67,11 +95,19 @@ func (c CollectCmd) Run(g *Globals) error {
 			return err
 		}
 	}
-	d, err := NewDeps(cfg)
+	var notifier attention.Notifier
+	if notifyFile != nil {
+		notifier = &attention.PipeNotifier{W: notifyFile}
+	}
+	d, err := newCollectDeps(cfg, notifier)
 	if err != nil {
 		return err
 	}
-	if runtime.GOOS == "darwin" {
+	d.Owner = collector.Owner{Kind: c.Owner}
+	if g != nil {
+		d.Owner.Version = g.Version
+	}
+	if runtime.GOOS == "darwin" && c.NotifyFD == nil {
 		// Record what macOS reports, so a silent notification problem shows in the log.
 		if status, err := attention.MacNotificationStatus(); err != nil {
 			slog.Warn("macOS notifications unavailable", "event", "notifications_unavailable", "err", err.Error())
@@ -82,6 +118,12 @@ func (c CollectCmd) Run(g *Globals) error {
 	}
 	ctx, stop := notifyContext(context.Background())
 	defer stop()
+	if parentFile != nil {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithCancel(ctx)
+		defer cancel()
+		go watchParent(parentFile, cancel)
+	}
 	if c.CPUProfile != "" {
 		stopProfile, err := startCPUProfile(c.CPUProfile, c.ProfileFor)
 		if err != nil {
@@ -98,7 +140,7 @@ func (c CollectCmd) Run(g *Globals) error {
 		defer restore()
 		return collector.Run(ctx, d, dir)
 	}
-	lock, err := collector.Lock(dir)
+	lock, err := collector.Lock(dir, d.Owner)
 	if err != nil {
 		return err
 	}
@@ -118,6 +160,15 @@ func (c CollectCmd) Run(g *Globals) error {
 	}
 	_, err = fmt.Fprintf(out, "Collected %d sessions, %d processes, %d samples (%d source errors).\n", r.Sessions, r.Procs, r.Samples, len(r.SourceErrors))
 	return err
+}
+
+// watchParent stops the collector when its parent goes away. The parent holds
+// the write end of the pipe and never writes, so a read returns only once the
+// parent closes it or exits; the collector then shuts down as on SIGTERM.
+func watchParent(r io.Reader, cancel context.CancelFunc) {
+	_, _ = io.Copy(io.Discard, r)
+	slog.Info("parent process gone", "event", "parent_gone")
+	cancel()
 }
 
 func collectorLogging() (func(), error) {

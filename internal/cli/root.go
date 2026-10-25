@@ -54,7 +54,7 @@ type Root struct {
 	Machines   MachinesCmd `cmd:"" help:"List known machines and their connection health."`
 	Cleanup    CleanupCmd  `cmd:"" help:"Inspect and explicitly clean local agent disk candidates."`
 	Top        TopCmd      `cmd:"" help:"Open the interactive session viewer."`
-	Web        WebCmd      `cmd:"" help:"Serve the interactive browser dashboard on loopback."`
+	App        AppCmd      `cmd:"" help:"Open the Driga desktop app, or focus it."`
 	Ask        AskCmd      `cmd:"" help:"Ask a one-shot Chat question through Claude and driga's read-only tools."`
 	MCP        MCPCmd      `cmd:"" name:"mcp" help:"Serve read-only MCP tools over stdio."`
 	Doctor     DoctorCmd   `cmd:"" help:"Check setup and collection health."`

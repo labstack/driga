@@ -8,10 +8,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"io"
-	"net/http"
-	"net/http/cookiejar"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -230,7 +226,6 @@ func TestSmoke(t *testing.T) {
 			t.Fatalf("summary lacks %q: %s", part, summary)
 		}
 	}
-	local.webSmoke()
 
 	// Fleet: the local node serves on loopback; a viewer with an empty HOME
 	// pairs and must see the served session through the stream.
@@ -275,57 +270,6 @@ func TestSmoke(t *testing.T) {
 	}, func() string { return "serve:\n" + serveLog.String() + "\nviewer:\n" + viewerLog.String() })
 	if machines := viewer.data("machines"); !field(machines, "name", "smoke-peer") {
 		t.Fatalf("peer missing from machines: %s", machines)
-	}
-}
-
-func (n node) webSmoke() {
-	n.t.Helper()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	var out, errout logBuffer
-	cmd := n.cmd(ctx, "web", "--listen", "127.0.0.1:0")
-	cmd.Stdout, cmd.Stderr = &out, &errout
-	if err := cmd.Start(); err != nil {
-		n.t.Fatal(err)
-	}
-	defer func() { cancel(); _ = cmd.Wait() }()
-	var address string
-	eventually(n.t, 10*time.Second, func() bool {
-		for _, line := range strings.Fields(out.String()) {
-			if strings.HasPrefix(line, "http://") {
-				address = line
-				return true
-			}
-		}
-		return false
-	}, func() string { return out.String() + errout.String() })
-	u, err := url.Parse(address)
-	if err != nil || u.Query().Get("token") == "" {
-		n.t.Fatalf("tokenized URL: %s %v", address, err)
-	}
-	jar, _ := cookiejar.New(nil)
-	client := &http.Client{Jar: jar, Timeout: 30 * time.Second}
-	// The transcript fixture has completed, so its title belongs to --all.
-	// Check default pages render too, then exercise the explicit history toggle.
-	for _, target := range []struct {
-		url     string
-		history bool
-	}{
-		{address, false}, {"http://" + u.Host + "/agents", false},
-		{"http://" + u.Host + "/?all=1", true}, {"http://" + u.Host + "/agents?all=1", true},
-	} {
-		resp, err := client.Get(target.url)
-		if err != nil {
-			n.t.Fatal(err)
-		}
-		body, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		if err != nil || resp.StatusCode != 200 || target.history && !strings.Contains(string(body), "Smoke title") {
-			n.t.Fatalf("web: %d %v %s", resp.StatusCode, err, body)
-		}
-		if resp.Request.URL.Query().Has("token") {
-			n.t.Fatal("token was not removed")
-		}
 	}
 }
 

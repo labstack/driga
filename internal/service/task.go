@@ -2,7 +2,10 @@ package service
 
 import (
 	"bytes"
+	"encoding/xml"
+	"errors"
 	"fmt"
+	"io"
 	"unicode/utf16"
 )
 
@@ -19,6 +22,34 @@ func taskFile(b []byte) []byte {
 	return out
 }
 
+// taskArguments reads the collector command's arguments from a task
+// definition, as schtasks /Query /XML prints it: UTF-16 with a byte order mark,
+// or UTF-8.
+func taskArguments(b []byte) (string, error) {
+	if len(b) >= 2 && b[0] == 0xff && b[1] == 0xfe {
+		units := make([]uint16, (len(b)-2)/2)
+		for i := range units {
+			units[i] = uint16(b[2+2*i]) | uint16(b[3+2*i])<<8
+		}
+		b = []byte(string(utf16.Decode(units)))
+	}
+	var task struct {
+		Actions struct {
+			Exec []struct{ Arguments string }
+		}
+	}
+	decoder := xml.NewDecoder(bytes.NewReader(b))
+	// The text is UTF-8 by now, whatever the declaration says.
+	decoder.CharsetReader = func(_ string, input io.Reader) (io.Reader, error) { return input, nil }
+	if err := decoder.Decode(&task); err != nil {
+		return "", err
+	}
+	if len(task.Actions.Exec) != 1 {
+		return "", errors.New("collector task has no single command")
+	}
+	return task.Actions.Exec[0].Arguments, nil
+}
+
 func taskArgs(action, name, xmlPath string) ([]string, error) {
 	switch action {
 	case "install":
@@ -31,6 +62,8 @@ func taskArgs(action, name, xmlPath string) ([]string, error) {
 		return []string{"/End", "/TN", name}, nil
 	case "status":
 		return []string{"/Query", "/TN", name, "/FO", "CSV", "/NH"}, nil
+	case "xml":
+		return []string{"/Query", "/TN", name, "/XML"}, nil
 	default:
 		return nil, fmt.Errorf("unknown task action %q", action)
 	}

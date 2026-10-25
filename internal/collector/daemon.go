@@ -2,6 +2,7 @@ package collector
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/labstack/driga/internal/derive"
@@ -12,8 +13,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"strconv"
-	"strings"
+	"runtime"
 	"time"
 
 	"github.com/labstack/driga/internal/chat"
@@ -27,6 +27,14 @@ import (
 
 // ErrAlreadyRunning indicates that another collector holds the writer lock.
 var ErrAlreadyRunning = errors.New("collector already running")
+
+// Owner identifies the process holding the collector writer lock.
+type Owner struct {
+	PID        int    `json:"pid"`
+	Kind       string `json:"kind"`
+	Executable string `json:"executable"`
+	Version    string `json:"version"`
+}
 
 // Intervals contains the independent source polling intervals.
 type Intervals struct{ Procs, Git, Machine, GitFull, Cwds time.Duration }
@@ -53,17 +61,68 @@ func Running(dataDir string) bool {
 	if err != nil {
 		return false
 	}
-	pid, err := strconv.Atoi(strings.TrimSpace(string(b)))
-	if err != nil || pid <= 0 {
+	var owner Owner
+	if err := json.Unmarshal(b, &owner); err != nil || owner.PID <= 0 {
 		return false
 	}
-	start, err := platform.ProcessStart(int32(pid))
-	return err == nil && platform.New().Alive(int32(pid), start)
+	start, err := platform.ProcessStart(int32(owner.PID))
+	return err == nil && platform.New().Alive(int32(owner.PID), start)
 }
 
-// Lock takes the nonblocking collector writer lock and writes the owner's PID.
+// ReadOwner returns the recorded owner only while the writer lock is held.
+func ReadOwner(dataDir string) (Owner, bool, error) {
+	flags := os.O_RDONLY
+	if runtime.GOOS == "windows" {
+		flags = os.O_RDWR
+	}
+	f, err := os.OpenFile(filepath.Join(dataDir, "driga.lock"), flags, 0)
+	if errors.Is(err, os.ErrNotExist) {
+		return Owner{}, false, nil
+	}
+	if err != nil {
+		return Owner{}, false, err
+	}
+	defer f.Close()
+	err = filelock.Lock(f, true)
+	if err == nil {
+		return Owner{}, false, filelock.Unlock(f)
+	}
+	if !filelock.Busy(err) {
+		return Owner{}, false, err
+	}
+	return readHolder(f), true, nil
+}
+
+// readHolder decodes the owner of a lock that is held. A holder that has taken
+// the lock but not yet written its record leaves the file empty or partial, so
+// an unreadable record yields the "unknown" kind rather than an error.
+func readHolder(f *os.File) Owner {
+	var owner Owner
+	if err := json.NewDecoder(f).Decode(&owner); err != nil {
+		return Owner{Kind: "unknown"}
+	}
+	return owner
+}
+
+// Lock takes the nonblocking collector writer lock and writes its owner as JSON.
 // Closing the returned file releases it; the lock file must not be removed.
-func Lock(dataDir string) (*os.File, error) {
+func Lock(dataDir string, owner Owner) (*os.File, error) {
+	if owner.Kind == "" {
+		owner.Kind = "manual"
+	}
+	switch owner.Kind {
+	case "app", "service", "manual":
+	default:
+		return nil, fmt.Errorf("invalid collector owner kind %q", owner.Kind)
+	}
+	owner.PID = os.Getpid()
+	if owner.Executable == "" {
+		var err error
+		owner.Executable, err = os.Executable()
+		if err != nil {
+			return nil, err
+		}
+	}
 	if err := secfile.MkdirPrivate(dataDir); err != nil {
 		return nil, err
 	}
@@ -80,17 +139,15 @@ func Lock(dataDir string) (*os.File, error) {
 	}
 	if err := filelock.Lock(f, true); err != nil {
 		if filelock.Busy(err) {
-			var buf [32]byte
-			n, _ := f.ReadAt(buf[:], 0)
-			pid, _ := strconv.Atoi(strings.TrimSpace(string(buf[:n])))
-			return failed(fmt.Errorf("another driga collector is running (pid %d): %w", pid, ErrAlreadyRunning))
+			holder := readHolder(f)
+			return failed(fmt.Errorf("another driga collector is running (%s, pid %d): %w", holder.Kind, holder.PID, ErrAlreadyRunning))
 		}
 		return failed(err)
 	}
 	if err := f.Truncate(0); err != nil {
 		return failed(err)
 	}
-	if _, err := fmt.Fprintf(f, "%d\n", os.Getpid()); err != nil {
+	if err := json.NewEncoder(f).Encode(owner); err != nil {
 		return failed(err)
 	}
 	return f, nil
@@ -156,7 +213,18 @@ func (s *schedule) wait(_ time.Time, _ Intervals) time.Duration {
 }
 
 // Run collects until cancellation while holding the exclusive writer lock.
+// Cancellation, by a signal or the parent going away, is a clean stop at
+// whatever step it lands, startup included: whatever a step returned then
+// is the cancellation, not a failure.
 func Run(ctx context.Context, d Deps, dataDir string) error {
+	err := run(ctx, d, dataDir)
+	if ctx.Err() != nil {
+		return nil
+	}
+	return err
+}
+
+func run(ctx context.Context, d Deps, dataDir string) error {
 	if ctx.Err() != nil {
 		return nil
 	}
@@ -164,7 +232,7 @@ func Run(ctx context.Context, d Deps, dataDir string) error {
 	if clock == nil {
 		clock = realDaemonClock{}
 	}
-	lock, err := Lock(dataDir)
+	lock, err := Lock(dataDir, d.Owner)
 	if err != nil {
 		return err
 	}
@@ -184,9 +252,6 @@ func Run(ctx context.Context, d Deps, dataDir string) error {
 		_, err := configurePassFeed(d, tx, enabled)
 		return err
 	}); err != nil {
-		if ctx.Err() != nil {
-			return nil
-		}
 		return err
 	}
 	broker, err := chat.New(ctx, st, &chat.Claude{DataDir: dataDir}, chat.Options{Snippets: d.Cfg.CaptureSnippets(), DataDir: dataDir})
@@ -221,9 +286,6 @@ func Run(ctx context.Context, d Deps, dataDir string) error {
 		defer stopFleet()
 	}
 	if err := recordGap(ctx, d, st); err != nil {
-		if ctx.Err() != nil {
-			return nil
-		}
 		return err
 	}
 	if d.State == nil {
@@ -269,9 +331,6 @@ func Run(ctx context.Context, d Deps, dataDir string) error {
 				}
 				return nil
 			}); err != nil {
-				if ctx.Err() != nil {
-					return nil
-				}
 				return err
 			}
 		default:
@@ -289,9 +348,6 @@ func Run(ctx context.Context, d Deps, dataDir string) error {
 			fleetErr = pullers.applyReady(ctx, d, st)
 		}
 		if fleetErr != nil {
-			if ctx.Err() != nil {
-				return nil
-			}
 			return fleetErr
 		}
 		intervals := cadence(age)
@@ -329,9 +385,6 @@ func Run(ctx context.Context, d Deps, dataDir string) error {
 			}
 		} else if spoolChanged {
 			if err := drainOnly(ctx, d, st); err != nil {
-				if ctx.Err() != nil {
-					return nil
-				}
 				return err
 			}
 			if server != nil {
@@ -343,15 +396,9 @@ func Run(ctx context.Context, d Deps, dataDir string) error {
 		}
 		if clock.Now().Sub(lastPrune) >= time.Hour {
 			if err := st.Tx(ctx, func(tx *store.Tx) error { return tx.Prune(d.now()) }); err != nil {
-				if ctx.Err() != nil {
-					return nil
-				}
 				return err
 			}
 			if err := st.ReclaimSpace(ctx); err != nil {
-				if ctx.Err() != nil {
-					return nil
-				}
 				return err
 			}
 			if err := spool.Prune(d.SpoolDir, d.now()); err != nil {
@@ -375,9 +422,6 @@ func Run(ctx context.Context, d Deps, dataDir string) error {
 					if req.reply != nil {
 						req.reply <- intakeResult{err: err}
 					}
-					if ctx.Err() != nil {
-						return nil
-					}
 					return err
 				}
 				if req.reply == nil {
@@ -389,9 +433,6 @@ func Run(ctx context.Context, d Deps, dataDir string) error {
 			}
 			if req.failure != nil {
 				if err := recordIntakeError(ctx, d, st, req.failure); err != nil {
-					if ctx.Err() != nil {
-						return nil
-					}
 					return err
 				}
 				if server != nil {
@@ -402,9 +443,6 @@ func Run(ctx context.Context, d Deps, dataDir string) error {
 			unmatched, err := applyIntake(ctx, d, st, req.batch)
 			req.reply <- intakeResult{unmatched: unmatched, err: err}
 			if err != nil {
-				if ctx.Err() != nil {
-					return nil
-				}
 				return err
 			}
 			if server != nil {

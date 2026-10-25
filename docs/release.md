@@ -94,13 +94,17 @@ and notifications have been verified on hardware. Pre-release databases must be 
 - Six archives for linux/darwin/windows on amd64/arm64:
   `driga_<version>_<os>_<arch>.tar.gz`, with `.zip` for Windows.
 - Four Linux packages: `driga_<version>_linux_<arch>.deb` and `.rpm`, installing
-  `/usr/bin/driga` for amd64 and arm64.
+  `/usr/bin/driga`, `driga.desktop` and the application icon for amd64 and
+  arm64. They recommend (not require) GTK 3, WebKitGTK 4.1 and an AppIndicator
+  library: `libgtk-3-0`, `libwebkit2gtk-4.1-0` and `libayatana-appindicator3-1`
+  on Debian, `gtk3`, `webkit2gtk4.1` and `libayatana-appindicator-gtk3` on RPM.
 - `driga_<version>_checksums.txt`, a SHA-256 manifest of all ten downloads.
 - `Casks/driga.rb` in `labstack/homebrew-tap`, installing the signed and notarized
   macOS app bundles, and `driga.json` in `labstack/scoop-bucket` for Windows.
 
-Each archive contains `driga` (or `driga.exe`; macOS uses
-`Driga.app/Contents/MacOS/driga`), `README.md`, `LICENSE`, `NOTICE`,
+Each archive contains `driga` (macOS uses `Driga.app/Contents/MacOS/driga`; the
+Windows archive has `Driga.exe`, the GUI built from `cmd/driga-app` with
+`-H=windowsgui`, at its root and the CLI as `bin/driga.exe`), `README.md`, `LICENSE`, `NOTICE`,
 `third-party/vendor-LICENSES.txt`, and `third-party/fonts-LICENSE.txt`. The last
 two preserve the bundled web vendor and font license notices. Builds disable
 cgo, use `-trimpath`, and embed version, full commit, and commit date.
@@ -112,8 +116,9 @@ Changelogs sort ascending and omit `docs:` and `test:` entries.
 The global GoReleaser before hook runs `go run ./scripts/windows-resources
 -version <version>` once before parallel builds. It uses the pure-Go
 `github.com/tc-hib/go-winres` tool pinned to **v0.3.3**, so cross-builds require
-neither cgo nor a Windows SDK. It generates `cmd/driga/rsrc_windows_amd64.syso`
-and `rsrc_windows_arm64.syso`; Go's filename constraints include each object
+neither cgo nor a Windows SDK. It generates `rsrc_windows_amd64.syso` and
+`rsrc_windows_arm64.syso` in both `cmd/driga` and `cmd/driga-app`, so `Driga.exe`
+and `bin/driga.exe` share the icon and version resources; Go's filename constraints include each object
 only in its matching Windows build. These deterministic, version-specific
 objects are ignored rather than committed, avoiding stale release metadata.
 
@@ -141,8 +146,12 @@ SHA-256 manifests detect corruption but do not authenticate their own origin.
 Each Darwin architecture has a minimal `Driga.app` containing `Contents/Info.plist`,
 `Contents/MacOS/driga`, and `Contents/Resources/Driga.icns`. Its identifier is
 `run.driga`, name/display name is Driga, executable is `driga`, and package type
-is `APPL`. `LSUIElement=true` suppresses the Dock and Force Quit entry, as
-[Apple documents](https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/LaunchServicesKeys.html).
+is `APPL`. The one executable is both the app and the CLI. `LSEnvironment`
+sets `DRIGA_APP=1`, which is how Finder, Dock, Spotlight and login-item launches
+open the app (the CLI checks it; macOS has no other login detection), and
+`NSHighResolutionCapable` is true. There is no `LSUIElement`: the app switches
+its activation policy at run time. See Apple's
+[Launch Services keys](https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/LaunchServicesKeys.html).
 The structure follows Apple's
 [Bundle Programming Guide](https://developer.apple.com/library/archive/documentation/CoreFoundation/Conceptual/CFBundles/BundleTypes/BundleTypes.html).
 Both standard version keys use the tag's three numeric CalVer components;
@@ -159,14 +168,14 @@ Linux CI consumes the committed ICNS and validates every representation.
 
 [Apple's helper documentation](https://developer.apple.com/documentation/servicemanagement/updating-helper-executables-from-earlier-versions-of-macos)
 explains the organization-name fallback and `AssociatedBundleIdentifiers`.
-`service install` resolves a bundled executable, associates `run.driga`, registers
+On a headless Mac, `service install` resolves a bundled executable, associates `run.driga`, registers
 the app with Launch Services, and atomically repairs an existing stale plist.
 It stops a running collector before replacing its stale definition; the CLI
 then starts it. Reinstalling a current definition is harmless. Development
 binaries outside the app retain their ordinary path and have no association.
 The executable and app have the same signing team because the CLI is the app's
 main executable. Registration matters: Apple requires Launch Services to know
-the associated app, and Caskroom is outside the usual application directories.
+the associated app.
 
 The entire release job runs on GitHub-hosted `macos-15`. An OSS per-build post
 hook assembles the app, then `codesign --options runtime --timestamp` signs the
@@ -197,26 +206,19 @@ notarization, `app_bundles`, DMG packaging, `homebrew_casks.app`, archive hooks,
 and templated archive files are Pro-only and are not used here. A build hook
 creates the real plist instead of relying on Pro templated files.
 
-The OSS cask `custom_block` emits Homebrew's normal app artifact with an explicit
-stable destination: `app "Driga.app", target: "#{caskroom_path}/Driga.app"`.
-The `binaries` setting emits
-`binary "#{caskroom_path}/Driga.app/Contents/MacOS/driga"`.
-This is ordinary Ruby cask generation, not GoReleaser's Pro `app`/DMG feature.
-Homebrew's [app target](https://docs.brew.sh/Cask-Cookbook#target-may-contain-an-absolute-path)
-can be absolute; its [binary stanza](https://docs.brew.sh/Cask-Cookbook#stanza-binary)
-links the executable into `$(brew --prefix)/bin/driga`. The full app remains
-under `$(brew --caskroom)/driga/Driga.app`. A default `app` target would move it
-to `/Applications`; the explicit Caskroom target is functional, keeping this
-CLI-only background app managed by Homebrew without a Finder-launchable app
-in Applications. Homebrew manages the app move on upgrade and uninstall.
-The app destination, launchd path and PATH link stay stable across upgrades.
-Users with a service from a bare-binary release run `driga service install`
-once to repair it; subsequent upgrades only need `driga service restart` if
-they want a running collector to use the new version immediately. The cask
-caveat explains both. Hooks retain the same stable Homebrew link.
+The OSS cask `custom_block` emits Homebrew's normal app artifact, `app "Driga.app"`,
+which installs the bundle into `/Applications`. The `binaries` setting emits
+`binary "#{appdir}/Driga.app/Contents/MacOS/driga"`, linking the CLI into
+`$(brew --prefix)/bin/driga` from inside the installed app. This is ordinary
+Ruby cask generation, not GoReleaser's Pro `app`/DMG feature. The caveats
+describe opening the app and no longer mention `driga service install`: the
+app collects in the background and registers its own login item on first
+launch. A launchd service from an earlier release is removed by the app's
+first launch, which says so once and then starts its own collector when the
+service's collector has released the lock.
 
 A real signed release and macOS installation are still needed to qualify
-Gatekeeper, offline staple validation, Homebrew upgrade/service restart, and
+Gatekeeper, offline staple validation, Homebrew upgrade and app relaunch, and
 the actual Driga name/Murmur icon in Settings. macOS may retain older cached
 background entries; no automated BTM reset is performed.
 
@@ -264,6 +266,11 @@ scoop bucket add labstack https://github.com/labstack/scoop-bucket
 scoop install labstack/driga
 ```
 
+The manifest shims only `bin/driga.exe` and adds a Start menu shortcut to
+`Driga.exe`. The app is a plain archive file, not an archive binary, because a
+`Driga.exe` shim would collide with `driga.exe` on case-insensitive Windows and
+make `driga` open the app.
+
 For manual installation, download the archive or Linux package for your
 OS/architecture and `driga_<version>_checksums.txt` from
 [GitHub Releases](https://github.com/labstack/driga/releases). Check the expected
@@ -288,7 +295,8 @@ ln -s "$HOME/.local/lib/driga/Driga.app/Contents/MacOS/driga" "$HOME/.local/bin/
 If all ten artifacts are downloaded, `sha256sum -c driga_<version>_checksums.txt`
 (or `shasum -a 256 -c`) checks them together. On Windows, compare the ZIP with
 its exact checksum entry using `Get-FileHash -Algorithm SHA256`, then use
-`Expand-Archive` and place `driga.exe` in a stable directory on PATH.
+`Expand-Archive`, keep `Driga.exe` and its `bin` directory together in a stable
+directory, and put that `bin` directory on PATH.
 
 After verifying a Linux package, install it with
 `sudo dpkg -i driga_<version>_linux_<arch>.deb` or

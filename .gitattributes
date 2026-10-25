@@ -1,0 +1,2 @@
+# Desktop entries are parsed line by line on Linux; keep them LF on every checkout.
+*.desktop text eol=lf

@@ -45,7 +45,7 @@ func TestCopyrightMatchesRepository(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !strings.Contains(string(body), versionStrings("dev")["LegalCopyright"]) {
+		if !strings.Contains(string(body), versionStrings("dev", "driga.exe")["LegalCopyright"]) {
 			t.Errorf("VERSIONINFO copyright does not match %s", path)
 		}
 	}
@@ -86,7 +86,7 @@ func TestGeneratedResources(t *testing.T) {
 		}
 	}
 	const version = "2026.10.5-alpha"
-	if err := generate(root, dir, version); err != nil {
+	if err := generate(root, dir, version, "driga.exe"); err != nil {
 		t.Fatal(err)
 	}
 	objects := map[string][32]byte{}
@@ -97,9 +97,9 @@ func TestGeneratedResources(t *testing.T) {
 			t.Fatal(err)
 		}
 		objects[path] = sha256.Sum256(body)
-		verifyPE(t, build("windows", arch), arch, version)
+		verifyPE(t, build("windows", arch), arch, version, "driga.exe")
 	}
-	if err := generate(root, dir, version); err != nil {
+	if err := generate(root, dir, version, "driga.exe"); err != nil {
 		t.Fatal(err)
 	}
 	for path, want := range objects {
@@ -131,21 +131,24 @@ func TestReleaseResources(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer z.Close()
-			f, err := z.Open("driga.exe")
-			if err != nil {
-				t.Fatal(err)
+			// The CLI and the app carry the same icon and version resources.
+			for path, file := range map[string]string{"bin/driga.exe": "driga.exe", "Driga.exe": "Driga.exe"} {
+				f, err := z.Open(path)
+				if err != nil {
+					t.Fatal(err)
+				}
+				body, err := io.ReadAll(f)
+				f.Close()
+				if err != nil {
+					t.Fatal(err)
+				}
+				verifyPE(t, body, arch, *releaseVersion, file)
 			}
-			defer f.Close()
-			body, err := io.ReadAll(f)
-			if err != nil {
-				t.Fatal(err)
-			}
-			verifyPE(t, body, arch, *releaseVersion)
 		})
 	}
 }
 
-func verifyPE(t *testing.T, body []byte, arch, version string) {
+func verifyPE(t *testing.T, body []byte, arch, version, file string) {
 	t.Helper()
 	f, err := pe.NewFile(bytes.NewReader(body))
 	if err != nil {
@@ -251,7 +254,7 @@ func verifyPE(t *testing.T, body []byte, arch, version string) {
 			t.Errorf("numeric VERSIONINFO does not match %s", numeric)
 		}
 	}
-	for key, value := range versionStrings(version) {
+	for key, value := range versionStrings(version, file) {
 		keyBytes := utf16Bytes(key)
 		i := bytes.Index(versionInfo, keyBytes)
 		if i < 0 {

@@ -17,6 +17,7 @@ func TestTaskArgs(t *testing.T) {
 		{"start", []string{"/Run", "/TN", `\Driga\test`}},
 		{"stop", []string{"/End", "/TN", `\Driga\test`}},
 		{"status", []string{"/Query", "/TN", `\Driga\test`, "/FO", "CSV", "/NH"}},
+		{"xml", []string{"/Query", "/TN", `\Driga\test`, "/XML"}},
 	} {
 		got, err := taskArgs(tc.action, `\Driga\test`, `C:\a b\task.xml`)
 		if err != nil || !reflect.DeepEqual(got, tc.want) {
@@ -41,5 +42,23 @@ func TestTaskFileIsUTF16(t *testing.T) {
 	got := string(utf16.Decode(units))
 	if !strings.HasPrefix(got, `<?xml version="1.0" encoding="UTF-16"?>`) || !strings.Contains(got, `Zoë`) {
 		t.Fatalf("UTF-16 task file: %.120s", got)
+	}
+}
+
+func TestTaskArguments(t *testing.T) {
+	doc := `<?xml version="1.0" encoding="UTF-8"?>
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+ <Actions Context="User"><Exec><Command>C:\driga.exe</Command><Arguments>collect --service-data-dir "C:\a &amp; b"</Arguments></Exec></Actions>
+</Task>
+`
+	want := `collect --service-data-dir "C:\a & b"`
+	// schtasks /Query /XML prints the definition as UTF-16, as /Create reads it.
+	for name, b := range map[string][]byte{"utf-8": []byte(doc), "utf-16": taskFile([]byte(doc))} {
+		if got, err := taskArguments(b); err != nil || got != want {
+			t.Fatalf("%s: arguments %q, %v", name, got, err)
+		}
+	}
+	if _, err := taskArguments([]byte(`<Task><Actions/></Task>`)); err == nil {
+		t.Fatal("task without an action read")
 	}
 }

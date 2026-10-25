@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -10,7 +11,7 @@ import (
 	"github.com/labstack/driga/internal/store"
 )
 
-func TestNeedsYouReadOnlyInbox(t *testing.T) {
+func TestNeedsYouInboxJumps(t *testing.T) {
 	s, st, id, _ := fixture(t)
 	at := time.Now().UTC()
 	if err := st.Tx(context.Background(), func(tx *store.Tx) error {
@@ -18,14 +19,17 @@ func TestNeedsYouReadOnlyInbox(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	w := request(s, "GET", "/inbox", s.token)
+	w := request(s, "GET", "/inbox")
 	body := w.Body.String()
-	for _, want := range []string{"permission", "Bash", "claude --resume", "readonly", "/repo"} {
+	for _, want := range []string{"permission", "Bash", "data-inbox-jump", fmt.Sprintf(`data-session="%d"`, id), "/repo"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("missing %s", want)
 		}
 	}
-	if request(s, "POST", "/inbox", s.token).Code < 400 {
+	if strings.Contains(body, "claude --resume") {
+		t.Error("Jump replaced by a command to copy")
+	}
+	if request(s, "POST", "/inbox").Code < 400 {
 		t.Fatal("inbox accepted POST")
 	}
 }

@@ -1,6 +1,6 @@
 ---
 title: See what your coding agents are doing, and what needs you.
-description: Driga watches Claude Code, Codex, Gemini CLI and Copilot sessions across your projects and machines, in a CLI, a terminal UI and a local web dashboard.
+description: Driga watches Claude Code, Codex, Gemini CLI and Copilot sessions across your projects and machines, in a desktop app, a terminal UI and a CLI.
 summary: What Driga is, how to install it on macOS, and what it shows.
 template: splash
 head:
@@ -20,7 +20,7 @@ head:
       content: "https://driga.dev/"
 hero:
   title: See what your coding agents are doing, and what needs you.
-  tagline: Every Claude Code, Codex, Copilot and Gemini session across your projects and machines, live. Answer a waiting agent from the terminal or the browser.
+  tagline: Every Claude Code, Codex, Copilot and Gemini session across your projects and machines, live. Answer a waiting agent from the terminal or the Driga app.
   actions:
     - text: Read the docs
       link: /start/what-driga-is
@@ -32,18 +32,6 @@ import Feature from "../../components/landing/Feature.astro";
 import Section from "../../components/landing/Section.astro";
 import Way from "../../components/landing/Way.astro";
 import InstallCommand from "../../components/landing/InstallCommand.astro";
-
-<Feature eyebrow="◆ NEEDS YOU" tone="yellow" title="Stop checking tabs. The waiting agent comes to you." href="/guides/needs-you" more="How Needs you works" media="needs" label="The web dashboard's Needs you panel: a permission prompt for pnpm prisma migrate deploy, with Allow and Deny; Allow is pressed and the wait clears.">
-
-Permission prompts, questions and finished turns land in one list, oldest first, with the full command. Allow or deny without finding the window.
-
-</Feature>
-
-<Feature eyebrow="▶ FLOW" tone="green" title="Who is doing what, at a glance." href="/guides/flow" more="Read about Flow" media="flow" label="The web dashboard's Flow map in light mode: sessions grouped by project, workers under the session that started them, and a selected session showing a file also touched by another session." flip>
-
-Sessions grouped by project, workers under the agent that started them, and a red tag when two agents edit the same file. As a map, a timeline or a plain list.
-
-</Feature>
 
 <Feature eyebrow="▣ MACHINES" tone="mauve" title="Know which agent is using your machine." href="/guides/projects-and-machines" more="Projects and machines" media="machines" label="The terminal UI's Machines tab: memory and CPU for each agent session, other apps, and machine vitals.">
 
@@ -59,9 +47,9 @@ Keyboard first. Flow, Projects and Machines, with Chat one key away. [Flow](/gui
 
 </Way>
 
-<Way command="driga web" title="Web dashboard">
+<Way command="driga app" title="Desktop app">
 
-The same views in your browser, on loopback only. Light and dark follow your system. [First run](/start/first-run)
+The same views in a native window. It collects in the background, lives in the menu bar and notifies you when an agent waits. [First run](/start/first-run)
 
 </Way>
 
@@ -87,6 +75,6 @@ No account and no API key. Driga reads session files, the process table and Git 
 
 <InstallCommand command="brew install --cask labstack/tap/driga" label="" id="dg-install-closing" />
 
-Then run `driga`. Linux packages and Windows (experimental) are on the [install page](/start/install).
+Then open Driga, or run `driga` in a terminal. Linux packages and Windows (experimental) are on the [install page](/start/install).
 
 </Section>

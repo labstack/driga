@@ -29,6 +29,20 @@ func logPathForOS(goos string) string {
 	return filepath.Join(config.ExpandHome("~"), "Library", "Logs", "driga", "collector.log")
 }
 
+// EnvKeys lists the environment variables a collector started outside the
+// user's shell needs from it. PATH and TMUX_TMPDIR matter most: launchd,
+// systemd and desktop sessions start processes with a bare PATH, so tmux and
+// agent CLIs would not be found.
+func EnvKeys() []string {
+	keys := []string{"PATH", "TMUX_TMPDIR", "DRIGA_CONFIG", "DRIGA_DATA_DIR", "DRIGA_SPOOL_DIR", "CODEX_HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS"}
+	for _, setting := range config.Settings() {
+		if name := setting.EnvName(); name != "" {
+			keys = append(keys, name)
+		}
+	}
+	return keys
+}
+
 // Config returns configuration only; it never contacts the service manager.
 func Config(binPath string) *ks.Config { return configForOS(binPath, runtime.GOOS) }
 
@@ -46,22 +60,14 @@ func configForOS(binPath, goos string) *ks.Config {
 	}
 	template = strings.ReplaceAll(template, "BUNDLE_ASSOCIATION", association)
 	env := map[string]string{"HOME": config.ExpandHome("~")}
-	// PATH and TMUX_TMPDIR come from the installing shell: launchd and systemd
-	// start services with a bare PATH, so tmux and agent CLIs would not be found.
-	keys := []string{"PATH", "TMUX_TMPDIR", "DRIGA_CONFIG", "DRIGA_DATA_DIR", "DRIGA_SPOOL_DIR", "CODEX_HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS"}
-	for _, setting := range config.Settings() {
-		if name := setting.EnvName(); name != "" {
-			keys = append(keys, name)
-		}
-	}
-	for _, key := range keys {
+	for _, key := range EnvKeys() {
 		if value := os.Getenv(key); value != "" {
 			env[key] = value
 		}
 	}
 	c := &ks.Config{
 		Name: "run.driga.collector", DisplayName: "Driga collector",
-		Executable: binPath, Arguments: []string{"collect"}, EnvVars: env,
+		Executable: binPath, Arguments: []string{"collect", "--owner=service"}, EnvVars: env,
 		Option: ks.KeyValue{"UserService": true, "KeepAlive": true, "RunAtLoad": true,
 			"LogDirectory": filepath.Dir(logPathForOS(goos)), "LaunchdConfig": template},
 	}
@@ -107,6 +113,32 @@ func New(binPath string) (Controller, error) {
 		return newLaunchdController(controller, binPath), nil
 	}
 	return controller, nil
+}
+
+// Installed reports whether the per-user service is registered, running or not.
+func Installed(c Controller) (bool, error) {
+	_, err := c.Status()
+	if errors.Is(err, ks.ErrNotInstalled) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
+// DataDir is the data directory the installed service collects into: the
+// one its definition records, or the default when it records none.
+func DataDir(c Controller) (string, error) {
+	r, ok := c.(interface{ recordedDataDir() (string, error) })
+	if !ok {
+		return "", errors.New("the service does not record its data directory here")
+	}
+	dir, err := r.recordedDataDir()
+	if err != nil {
+		return "", err
+	}
+	if dir == "" {
+		return config.DefaultDataDir(), nil
+	}
+	return filepath.Abs(config.ExpandHome(dir))
 }
 
 type controlOnly struct{}

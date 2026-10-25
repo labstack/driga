@@ -2,13 +2,14 @@ package web
 
 import (
 	"context"
-	"github.com/labstack/driga/internal/model"
-	"github.com/labstack/driga/internal/store"
-	"github.com/labstack/driga/internal/view"
 	"html"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/labstack/driga/internal/model"
+	"github.com/labstack/driga/internal/store"
+	"github.com/labstack/driga/internal/view"
 )
 
 func TestTailIncludesSessionContextWithoutHookText(t *testing.T) {
@@ -25,7 +26,7 @@ func TestTailIncludesSessionContextWithoutHookText(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	body := request(s, "GET", "/", s.token).Body.String()
+	body := request(s, "GET", "/").Body.String()
 	start := strings.Index(body, `data-event-key=`)
 	if start < 0 {
 		t.Fatal("missing event")

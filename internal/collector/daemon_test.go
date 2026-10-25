@@ -2,12 +2,12 @@ package collector
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -22,6 +22,7 @@ func TestRunExclusiveLock(t *testing.T) {
 	}
 
 	d, _, _, a := setup(t)
+	d.Owner = Owner{Kind: "service", Version: "test"}
 	dir := config.DataDir()
 	ready := make(chan struct{})
 	a.collect = func(ctx context.Context) { close(ready); <-ctx.Done() }
@@ -34,8 +35,12 @@ func TestRunExclusiveLock(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("collector never started")
 	}
-	err := Run(context.Background(), d, dir)
-	if !errors.Is(err, ErrAlreadyRunning) || !strings.Contains(err.Error(), "another driga collector is running (pid ") {
+	owner, held, err := ReadOwner(dir)
+	if err != nil || !held || owner.Kind != "service" || owner.Version != "test" || owner.PID != os.Getpid() {
+		t.Fatalf("run owner: %+v, %v, %v", owner, held, err)
+	}
+	err = Run(context.Background(), d, dir)
+	if !errors.Is(err, ErrAlreadyRunning) || !strings.Contains(err.Error(), "another driga collector is running (service, pid ") {
 		t.Fatalf("lock: %v", err)
 	}
 	info, err := os.Stat(filepath.Join(dir, "driga.lock"))
@@ -52,7 +57,7 @@ func TestRunExclusiveLock(t *testing.T) {
 		t.Fatal("cancel did not stop collector")
 	}
 	// A stopped collector releases the lock without removing the lock inode.
-	lock, err := Lock(dir)
+	lock, err := Lock(dir, Owner{Kind: "manual"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -140,7 +145,7 @@ func TestRunningReadsLockOwner(t *testing.T) {
 	if Running(dir) {
 		t.Fatal("no lock file reported running")
 	}
-	f, err := Lock(dir)
+	f, err := Lock(dir, Owner{Kind: "manual"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -153,10 +158,33 @@ func TestRunningReadsLockOwner(t *testing.T) {
 	if err := cmd.Run(); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "driga.lock"), []byte(strconv.Itoa(cmd.Process.Pid)+"\n"), 0600); err != nil {
+	data, err := json.Marshal(Owner{PID: cmd.Process.Pid, Kind: "manual"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "driga.lock"), data, 0600); err != nil {
 		t.Fatal(err)
 	}
 	if Running(dir) {
 		t.Fatal("exited owner reported running")
+	}
+}
+
+// A collector cancelled while it starts, as by SIGTERM or its parent going
+// away, stops cleanly at whatever step it was. The cancellations land at
+// spread points of the startup.
+func TestRunCancelledDuringStartupStopsCleanly(t *testing.T) {
+	d, _, _, a := setup(t)
+	dir := config.DataDir()
+	a.collect = func(ctx context.Context) { <-ctx.Done() }
+	for delay := time.Duration(0); delay < 20*time.Millisecond; delay += 100 * time.Microsecond {
+		ctx, cancel := context.WithCancel(context.Background())
+		timer := time.AfterFunc(delay, cancel)
+		err := Run(ctx, d, dir)
+		timer.Stop()
+		cancel()
+		if err != nil {
+			t.Fatalf("cancelled after %v: %v", delay, err)
+		}
 	}
 }

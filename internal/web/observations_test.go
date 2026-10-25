@@ -26,7 +26,7 @@ func TestFlowObservedRendering(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	body := request(s, "GET", fmt.Sprint("/flow.json?id=", id), s.token).Body.String()
+	body := request(s, "GET", fmt.Sprint("/flow.json?id=", id)).Body.String()
 	for _, want := range []string{`"last_growth_at":"` + at.Format(time.RFC3339Nano) + `"`, `"last_growth_bytes":12288`, `"last_growth_bytes":123`, `"from_at"`, `"cpu_ms_per_min"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("missing %s", want)

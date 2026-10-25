@@ -49,7 +49,7 @@ func TestTaskXML(t *testing.T) {
 	if !task.Settings.Hidden || task.Settings.DisallowStartIfOnBatteries || task.Settings.StopIfGoingOnBatteries || task.Settings.ExecutionTimeLimit != "PT0S" || task.Settings.MultipleInstancesPolicy != "IgnoreNew" || task.Settings.RestartOnFailure.Interval != "PT1M" || task.Settings.RestartOnFailure.Count != 999 {
 		t.Fatalf("settings: %+v", task.Settings)
 	}
-	if task.Actions.Exec.Command != bin || task.Actions.Exec.Arguments != `collect --scheduled --service-data-dir "C:\data dir"` || task.Actions.Exec.WorkingDirectory != `C:\data dir` {
+	if task.Actions.Exec.Command != bin || task.Actions.Exec.Arguments != `collect --owner=service --scheduled --service-data-dir "C:\data dir"` || task.Actions.Exec.WorkingDirectory != `C:\data dir` {
 		t.Fatalf("exec: %+v", task.Actions.Exec)
 	}
 	for _, bad := range []string{"driga.exe", `C:driga.exe`, "C:\\bad\x00.exe"} {
@@ -102,5 +102,21 @@ func TestTaskEscapeArgEquivalent(t *testing.T) {
 		if err != nil || !reflect.DeepEqual(got, want) || len(got) != 2 || got[1] != value {
 			t.Fatalf("%q: %q vs %q: %v", value, got, want, err)
 		}
+	}
+}
+
+func TestTaskDataDir(t *testing.T) {
+	b, err := taskXML(`C:\driga.exe`, "S-1-5-21-123", `C:\data & dir`, `DRIGA_SPOOL_DIR=C:\spool`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := &taskService{name: `\Driga\test`, run: func(_ string, args ...string) ([]byte, error) {
+		if !reflect.DeepEqual(args, []string{"/Query", "/TN", `\Driga\test`, "/XML"}) {
+			t.Fatalf("args %q", args)
+		}
+		return taskFile(b), nil
+	}}
+	if got, err := DataDir(s); err != nil || got != `C:\data & dir` {
+		t.Fatalf("DataDir = %q, %v", got, err)
 	}
 }

@@ -169,18 +169,17 @@ func (c InitCmd) Run(g *Globals) error {
 			}
 		}
 	}
-	if runtime.GOOS == "windows" {
-		fmt.Fprintln(out, "Service installation creates a per-user Task Scheduler logon task and starts background collection for inbox and history. Logs: %LOCALAPPDATA%\\driga\\logs\\collector.log. Undo: driga service uninstall.")
-	} else {
-		fmt.Fprintln(out, "Service installation creates a per-user LaunchAgent and starts background collection for inbox and history. Logs: ~/Library/Logs/driga/collector.log. Undo: driga service uninstall.")
-	}
-	yes, err = ask("Install and start the collector service?")
-	if err != nil {
-		return err
-	}
-	if yes {
-		if err := (ServiceInstallCmd{}).Run(&local); err != nil {
+	text, offer := collectorSetup(runtime.GOOS)
+	fmt.Fprintln(out, text)
+	if offer {
+		yes, err = ask("Install and start the collector service?")
+		if err != nil {
 			return err
+		}
+		if yes {
+			if err := (ServiceInstallCmd{}).Run(&local); err != nil {
+				return err
+			}
 		}
 	}
 	fmt.Fprintln(out, "Hooks update Claude settings and the Codex config with backups, and manage Copilot's hooks/driga.json under COPILOT_HOME or ~/.copilot. You will see a diff before applying. Undo: driga hooks uninstall.")
@@ -192,4 +191,14 @@ func (c InitCmd) Run(g *Globals) error {
 		return (HooksInstallCmd{HooksOptions: HooksOptions{Target: "all", Yes: c.Yes}}).Run(&local)
 	}
 	return nil
+}
+
+// collectorSetup explains how this machine collects in the background, and
+// whether init offers to install the collector service. On macOS and Windows
+// the app collects, and removes a service installed earlier.
+func collectorSetup(goos string) (string, bool) {
+	if collectorHint(goos) == "driga app" {
+		return "The Driga app collects for inbox and history while it runs, and by default opens at login. Open it with driga app; it replaces a collector service installed earlier.", false
+	}
+	return "Service installation creates a per-user systemd unit and starts background collection for inbox and history. Logs: journalctl --user -u run.driga.collector. Undo: driga service uninstall.", true
 }

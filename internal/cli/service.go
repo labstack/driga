@@ -10,7 +10,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"strings"
 	"time"
 
@@ -143,13 +142,11 @@ func (c serviceControl) Run(g *Globals) error {
 			if stateErr != nil && !errors.Is(stateErr, ks.ErrNotInstalled) {
 				return fmt.Errorf("query collector task: %w", stateErr)
 			}
-			held, err := probeCollectorLock(config.DataDir())
+			owner, held, err := collector.ReadOwner(config.DataDir())
 			if err != nil {
 				return fmt.Errorf("probe collector lock: %w", err)
 			}
-			pidText, _ := os.ReadFile(filepath.Join(config.DataDir(), "driga.lock"))
-			pid, _ := strconv.Atoi(strings.TrimSpace(string(pidText)))
-			_, err = fmt.Fprintf(commandOutput(g), "task: %s; collector: lock held=%t, pid=%d, alive=%t\n", state, held, pid, collector.Running(config.DataDir()))
+			_, err = fmt.Fprintf(commandOutput(g), "task: %s; collector: lock held=%t, pid=%d, alive=%t\n", state, held, owner.PID, collector.Running(config.DataDir()))
 			return err
 		}
 		status, statusErr := s.Status()
@@ -176,6 +173,15 @@ func (c serviceControl) Run(g *Globals) error {
 	}
 	_, err = fmt.Fprintln(commandOutput(g), "collector:", c.Action)
 	return err
+}
+
+// collectorHint is the command that starts background collection: the app on
+// macOS and Windows desktops, the service on Linux and headless machines.
+func collectorHint(goos string) string {
+	if goos == "darwin" || goos == "windows" {
+		return "driga app"
+	}
+	return "driga service install"
 }
 
 func serviceBinaryPath(bin string) (string, error) {

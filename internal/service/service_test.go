@@ -1,12 +1,15 @@
 package service
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
 	"runtime"
 	"strings"
 	"testing"
+
+	ks "github.com/kardianos/service"
 )
 
 func TestServiceConfig(t *testing.T) {
@@ -17,7 +20,7 @@ func TestServiceConfig(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	c := configForOS("/opt/driga", "darwin")
-	if c.Name != "run.driga.collector" || c.DisplayName != "Driga collector" || c.Executable != "/opt/driga" || !reflect.DeepEqual(c.Arguments, []string{"collect"}) {
+	if c.Name != "run.driga.collector" || c.DisplayName != "Driga collector" || c.Executable != "/opt/driga" || !reflect.DeepEqual(c.Arguments, []string{"collect", "--owner=service"}) {
 		t.Fatalf("unexpected config: %+v", c)
 	}
 	for _, key := range []string{"UserService", "KeepAlive", "RunAtLoad"} {
@@ -42,6 +45,9 @@ func TestServiceConfigLinux(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", filepath.Join(home, "xdg-data"))
 	t.Setenv("XDG_STATE_HOME", filepath.Join(home, "xdg-state"))
 	c := configForOS("/opt/driga", "linux")
+	if !reflect.DeepEqual(c.Arguments, []string{"collect", "--owner=service"}) {
+		t.Fatal(c.Arguments)
+	}
 	if c.Option["UserService"] != true || c.Option["Restart"] != "always" || c.Option["LogOutput"] != false || c.EnvVars["XDG_DATA_HOME"] != filepath.Join(home, "xdg-data") {
 		t.Fatalf("%+v", c)
 	}
@@ -100,6 +106,33 @@ func TestServiceCarriesPath(t *testing.T) {
 		c := configForOS("/opt/tools/bin/driga", goos)
 		if c.EnvVars["PATH"] != "/opt/tools/bin:/usr/bin:/bin" || c.EnvVars["TMUX_TMPDIR"] != "/run/user/tmux" {
 			t.Fatalf("%s env = %v", goos, c.EnvVars)
+		}
+	}
+}
+
+type statusController struct {
+	Controller
+	status ks.Status
+	err    error
+}
+
+func (c statusController) Status() (ks.Status, error) { return c.status, c.err }
+
+func TestInstalled(t *testing.T) {
+	failed := errors.New("launchctl failed")
+	for _, tc := range []struct {
+		c       statusController
+		want    bool
+		wantErr error
+	}{
+		{statusController{status: ks.StatusRunning}, true, nil},
+		{statusController{status: ks.StatusStopped}, true, nil},
+		{statusController{status: ks.StatusUnknown, err: ks.ErrNotInstalled}, false, nil},
+		{statusController{status: ks.StatusUnknown, err: failed}, false, failed},
+	} {
+		got, err := Installed(tc.c)
+		if got != tc.want || !errors.Is(err, tc.wantErr) {
+			t.Errorf("Installed(%v, %v) = %t, %v; want %t, %v", tc.c.status, tc.c.err, got, err, tc.want, tc.wantErr)
 		}
 	}
 }

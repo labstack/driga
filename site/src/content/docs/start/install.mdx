@@ -1,10 +1,10 @@
 ---
 title: Install
-description: Install Driga with Homebrew on macOS, packages on Linux, Scoop on Windows, or build it from source.
+description: Install the Driga app and CLI with Homebrew on macOS, packages on Linux, Scoop on Windows, or build the CLI from source.
 summary: Homebrew cask on macOS, .deb/.rpm and archives on Linux, Scoop on Windows (experimental), and source builds.
 read_when:
   - You are installing Driga for the first time.
-  - You are upgrading from a bare-binary release on macOS.
+  - You are upgrading from a release that used the collector service on a desktop.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components";
@@ -18,15 +18,14 @@ Install the signed and notarized release with Homebrew:
 brew install --cask labstack/tap/driga
 ```
 
-Homebrew keeps the background-only `Driga.app` in Caskroom and links `driga`
-to the CLI inside it. The app has no Dock icon; it gives the collector its name
-and icon in System Settings and is required for
-[desktop notifications](/guides/notifications).
+The cask installs `Driga.app` in `/Applications` and links `driga` to the CLI
+inside it. Open Driga from Finder or Spotlight, or run `driga app`. The app
+runs the collector, sends [desktop notifications](/guides/notifications) and
+starts at login. After `brew upgrade`, a running app relaunches itself on the
+new version.
 
-Upgrading from a bare-binary release: if you use the collector, run
-`driga service install` once to repair the service path. After that,
-`brew upgrade` keeps the path stable; run `driga service restart` to pick up
-the new version. `driga doctor` warns about a stale service path.
+If an earlier release installed the collector service, the app removes it on
+its first launch, says so once, and collects itself.
 
 </TabItem>
 <TabItem label="Linux">
@@ -36,10 +35,16 @@ arm64, are on [GitHub Releases](https://github.com/labstack/driga/releases).
 Verify each download against `driga_<version>_checksums.txt` before
 installing.
 
-The collector runs as a systemd user service. On a VM or server, allow it to
-run after logout:
+The packages install `driga.desktop`, so Driga appears in your launcher, and
+recommend GTK 3, WebKitGTK and an AppIndicator library for the app. The tray
+needs a desktop with a StatusNotifierItem host; GNOME needs an extension. The
+desktop app on Linux is best effort.
+
+On a VM or server, run the collector as a systemd user service instead, and
+allow it to run after logout:
 
 ```sh
+driga service install
 loginctl enable-linger "$USER"
 ```
 
@@ -55,15 +60,18 @@ scoop bucket add labstack https://github.com/labstack/scoop-bucket
 scoop install labstack/driga
 ```
 
-Archives containing `driga.exe` are also on
-[GitHub Releases](https://github.com/labstack/driga/releases). Keep
-`driga.exe` at a stable path without shell metacharacters before installing
-hooks or the service.
+Scoop installs the app, `Driga.exe`, with a Start menu shortcut, and puts the
+CLI, `bin\driga.exe`, on `PATH` as `driga`. Archives with both are also on
+[GitHub Releases](https://github.com/labstack/driga/releases). Keep them at a
+stable path without shell metacharacters before installing hooks or the
+service. The app's first launch removes a collector task installed earlier and
+says so once.
 
 </TabItem>
 <TabItem label="From source">
 
-Use the Go version in `go.mod` or newer:
+Use the Go version in `go.mod` or newer. This builds the CLI; the packaged
+app, with its name, icon and notifications, comes from a release:
 
 ```sh
 CGO_ENABLED=0 go build ./cmd/driga

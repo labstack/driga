@@ -3,7 +3,9 @@ package web
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -70,7 +72,7 @@ func TestDefaultVisibilityAndAll(t *testing.T) {
 				t.Errorf("%s all=%v: project idle count %d, want %d", path, all, projectIdle, want-1)
 			}
 
-			w := request(s, "GET", path+query, s.token)
+			w := request(s, "GET", path+query)
 			body := w.Body.String()
 			if !strings.Contains(body, "Show all sessions") && !strings.Contains(body, "Show default sessions") {
 				t.Error("missing visibility toggle")
@@ -112,7 +114,7 @@ func TestNeedsYouDedupeCapAndIdentity(t *testing.T) {
 	if len(p.Board.Needs) != 1 || p.Board.Pulse["waiting"] != 1 {
 		t.Fatal("completion events entered live Needs you", len(p.Board.Needs), p.Board.Pulse)
 	}
-	body := request(s, "GET", "/flow", s.token).Body.String()
+	body := request(s, "GET", "/flow").Body.String()
 	if !strings.Contains(body, "Activity · notifications") || !strings.Contains(body, "Session title 8") {
 		t.Fatal("history lost")
 	}
@@ -134,7 +136,7 @@ func TestProjectAggregatedStates(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	body := request(s, "GET", "/projects", s.token).Body.String()
+	body := request(s, "GET", "/projects").Body.String()
 	for _, text := range []string{"1 working", "1 waiting", "2 idle"} {
 		if !strings.Contains(body, text) {
 			t.Errorf("missing aggregate %q", text)
@@ -157,7 +159,7 @@ func TestFreshnessCompactAndActivityEmpty(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	body := request(s, "GET", "/", s.token).Body.String()
+	body := request(s, "GET", "/").Body.String()
 	if !strings.Contains(body, "Stale: cwds") || !strings.Contains(body, `class="seg intake-status"`) || !strings.Contains(body, "last successful reading") {
 		t.Error("missing compact stale line with hover details")
 	}
@@ -192,11 +194,83 @@ func TestAllSessionDetailLinksKeepFilter(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	body := request(s, "GET", "/agents?all=1", s.token).Body.String()
+	body := request(s, "GET", "/agents?all=1").Body.String()
 	if !strings.Contains(body, fmt.Sprintf(`/agents/%d?all=1&amp;machine=all`, id)) {
 		t.Error("ended session link loses all filter")
 	}
-	if w := request(s, "GET", fmt.Sprintf("/agents/%d?all=1", id), s.token); w.Code != 200 {
+	if w := request(s, "GET", fmt.Sprintf("/agents/%d?all=1", id)); w.Code != 200 {
 		t.Fatalf("ended detail status: %d", w.Code)
+	}
+}
+
+// The desktop shell owns the window title, view menu, settings and dialogs,
+// so the page carries none of them.
+func TestPageLeavesChromeToShell(t *testing.T) {
+	s, _, agent, _ := fixture(t)
+	title := regexp.MustCompile(`(?s)<head>.*?<title>([^<]*)</title>.*?</head>`)
+	for _, path := range []string{"/", "/flow", "/projects", "/machines", fmt.Sprint("/agents/", agent), "/help/keys"} {
+		w := request(s, "GET", path)
+		if w.Code != 200 {
+			t.Fatalf("%s: %d", path, w.Code)
+		}
+		body := w.Body.String()
+		if m := title.FindStringSubmatch(body); m == nil || m[1] != "Driga" {
+			t.Errorf("%s: title %q", path, m)
+		}
+		for _, banned := range []string{`<nav class="wins"`, `data-window=`, `class="keys"`, `id="theme"`, `theme-control`, `theme latte`, `data-inbox-copy`} {
+			if strings.Contains(body, banned) {
+				t.Errorf("%s still has %s", path, banned)
+			}
+		}
+		if path == "/" && strings.Contains(body, "<nav") {
+			t.Error("/ still has a tab bar")
+		}
+		if !strings.Contains(body, `data-view="flow"`) || !strings.Contains(body, `data-view="projects"`) || !strings.Contains(body, `data-view="machines"`) {
+			t.Errorf("%s lost the in-page view switcher", path)
+		}
+	}
+	keys := request(s, "GET", "/help/keys").Body.String()
+	for _, want := range []string{`<dt>:</dt>`, `<dt>/</dt>`, `<dt>?</dt>`, `<dt>0–2</dt>`, `<dt>c</dt>`, `<dt>m / t / s</dt>`} {
+		if !strings.Contains(keys, want) {
+			t.Errorf("/help/keys missing %s", want)
+		}
+	}
+}
+
+func TestPageTakesThemeFromApp(t *testing.T) {
+	s, _, _, _ := fixture(t)
+	for theme, want := range map[string]string{"": "system", "system": "system", "light": "light", "dark": "dark", "mocha": "system"} {
+		s.opts.Theme = theme
+		if body := request(s, "GET", "/").Body.String(); !strings.Contains(body, `<html lang="en" data-theme="`+want+`">`) {
+			t.Errorf("theme %q: want data-theme %q", theme, want)
+		}
+	}
+}
+
+func TestScriptsLeaveDialogsAndThemeToShell(t *testing.T) {
+	scripts, err := fs.Glob(assets, "static/*.js")
+	if err != nil || len(scripts) == 0 {
+		t.Fatal(scripts, err)
+	}
+	native := regexp.MustCompile(`\bconfirm\(`)
+	for _, name := range scripts {
+		raw, _ := assets.ReadFile(name)
+		if native.Match(raw) {
+			t.Errorf("%s calls confirm()", name)
+		}
+		if strings.Contains(string(raw), `"theme"`) || strings.Contains(string(raw), "setTheme") {
+			t.Errorf("%s still switches themes", name)
+		}
+	}
+	js, _ := assets.ReadFile("static/app.js")
+	for _, want := range []string{"window.drigaCommand", `view:`, `find:`, `reload:`, `openSession:`} {
+		if !strings.Contains(string(js), want) {
+			t.Errorf("app.js missing %s", want)
+		}
+	}
+	for _, name := range []string{"static/chat.js", "static/flow-board.js"} {
+		if raw, _ := assets.ReadFile(name); !strings.Contains(string(raw), `"/app/confirm"`) {
+			t.Errorf("%s does not ask the app", name)
+		}
 	}
 }

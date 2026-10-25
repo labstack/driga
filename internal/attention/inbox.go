@@ -269,7 +269,14 @@ func waitStart(i model.InboxItem) time.Time {
 	return i.TS
 }
 
-type Notification struct{ Kind, Title, Body, Sound, ItemID, MachineID string }
+type Notification struct {
+	Kind      string `json:"kind"`
+	Title     string `json:"title"`
+	Body      string `json:"body"`
+	Sound     string `json:"sound"`
+	ItemID    string `json:"item_id"`
+	MachineID string `json:"machine_id"`
+}
 type Notifier interface {
 	Notify(context.Context, Notification) error
 }

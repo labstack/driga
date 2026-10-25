@@ -8,5 +8,9 @@ import (
 )
 
 func main() {
-	notificationMain(func() { os.Exit(cli.Main(os.Args[1:], version, commit, date)) })
+	args := os.Args[1:]
+	if cli.AppLaunch(args) {
+		args = []string{"app"}
+	}
+	notificationMain(args, func() { os.Exit(cli.Main(args, version, commit, date)) })
 }

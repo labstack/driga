@@ -58,7 +58,7 @@ func TestLaunchdPlistBundleAndDevelopment(t *testing.T) {
 			}
 			arrays := plist.Dict.Arrays
 			args := arrays[len(arrays)-1].Strings
-			if len(args) != 2 || args[0] != tc.executable || args[1] != "collect" {
+			if len(args) != 3 || args[0] != tc.executable || args[1] != "collect" || args[2] != "--owner=service" {
 				t.Fatalf("ProgramArguments: %v", args)
 			}
 			associated := strings.Contains(string(body), "AssociatedBundleIdentifiers")
@@ -98,5 +98,27 @@ func TestLaunchdPlistBundleAndDevelopment(t *testing.T) {
 	}
 	if _, err := PlistStale(path, bundled); err == nil {
 		t.Fatal("malformed plist accepted")
+	}
+}
+
+func TestPlistEnv(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "collector.plist")
+	c := configForOS("/usr/local/bin/driga", "darwin")
+	c.EnvVars = map[string]string{"PATH": "/usr/bin", "DRIGA_DATA_DIR": "/data/a & b"}
+	data, err := renderLaunchd(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := plistEnv(path, "DRIGA_DATA_DIR"); err != nil || got != "/data/a & b" {
+		t.Fatalf("DRIGA_DATA_DIR = %q, %v", got, err)
+	}
+	if got, err := plistEnv(path, "DRIGA_SPOOL_DIR"); err != nil || got != "" {
+		t.Fatalf("unset DRIGA_SPOOL_DIR = %q, %v", got, err)
+	}
+	if _, err := plistEnv(filepath.Join(t.TempDir(), "missing.plist"), "DRIGA_DATA_DIR"); err == nil {
+		t.Fatal("missing plist read")
 	}
 }

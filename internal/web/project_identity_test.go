@@ -29,7 +29,7 @@ func TestSameNamedProjectsStaySeparate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	p, _, err := s.loadPage(httptest.NewRequest("GET", "http://"+s.opts.Host+"/", nil))
+	p, _, err := s.loadPage(httptest.NewRequest("GET", "/", nil))
 	if err != nil {
 		t.Fatal(err)
 	}

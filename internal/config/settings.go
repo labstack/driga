@@ -40,6 +40,8 @@ var settings = []Setting{
 	{"open_cmd", "OpenCmd", "string", "", "Editor command; {cwd} is substituted.", "empty = auto-detect"},
 	{"no_service_hint", "NoServiceHint", "bool", false, "Suppress optional service hints.", "true or false"},
 	{"ui.theme", "UI.Theme", "string", "system", "Palette for the whole terminal UI: light, dark, or system to follow the terminal.", "system, light or dark"},
+	{"app.tray", "App.Tray", "bool", true, "Show the desktop app in the menu bar or notification area; closing its window keeps it collecting there.", "true or false"},
+	{"app.launch_at_login", "App.LaunchAtLogin", "bool", true, "Start the desktop app when you log in.", "true or false"},
 	{"adapters.claude.enabled", "", "bool", true, "Enable Claude session discovery.", "true or false"},
 	{"adapters.codex.enabled", "", "bool", true, "Enable Codex session discovery.", "true or false"},
 	{"adapters.gemini.enabled", "", "bool", true, "Enable Gemini session discovery.", "true or false"},
@@ -304,47 +306,7 @@ func load(path string, overrides map[string]any) (Config, map[string]string, err
 		}
 	}
 	if err == nil {
-		var values map[string]any
-		if err := toml.Unmarshal(b, &values); err != nil {
-			return c, sources, fmt.Errorf("config %s: %w", path, err)
-		}
-		var apply func(string, map[string]any) error
-		apply = func(prefix string, values map[string]any) error {
-			keys := make([]string, 0, len(values))
-			for key := range values {
-				keys = append(keys, key)
-			}
-			sort.Strings(keys)
-			for _, key := range keys {
-				name := prefix + key
-				value := values[key]
-				if s, ok := byKey[name]; ok {
-					if err := s.assign(&c, value); err != nil {
-						return fmt.Errorf("config %s: %s: %w", path, name, err)
-					}
-					sources[name] = "file"
-					continue
-				}
-				section, ok := value.(map[string]any)
-				known := false
-				if ok {
-					for full := range byKey {
-						if strings.HasPrefix(full, name+".") {
-							known = true
-							break
-						}
-					}
-				}
-				if !known {
-					return fmt.Errorf("config %s: unknown key or section %s", path, name)
-				}
-				if err := apply(name+".", section); err != nil {
-					return err
-				}
-			}
-			return nil
-		}
-		if err := apply("", values); err != nil {
+		if err := applyFile(path, b, &c, sources, byKey); err != nil {
 			return c, sources, err
 		}
 	}
@@ -415,6 +377,51 @@ func load(path string, overrides map[string]any) (Config, map[string]string, err
 		return c, sources, fmt.Errorf("%s: intake.listen requires a loopback IP and numeric TCP port 0..65535", input("intake.listen"))
 	}
 	return c, sources, nil
+}
+
+// applyFile assigns the settings in the TOML file b over c.
+func applyFile(path string, b []byte, c *Config, sources map[string]string, byKey map[string]Setting) error {
+	var values map[string]any
+	if err := toml.Unmarshal(b, &values); err != nil {
+		return fmt.Errorf("config %s: %w", path, err)
+	}
+	var apply func(string, map[string]any) error
+	apply = func(prefix string, values map[string]any) error {
+		keys := make([]string, 0, len(values))
+		for key := range values {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		for _, key := range keys {
+			name := prefix + key
+			value := values[key]
+			if s, ok := byKey[name]; ok {
+				if err := s.assign(c, value); err != nil {
+					return fmt.Errorf("config %s: %s: %w", path, name, err)
+				}
+				sources[name] = "file"
+				continue
+			}
+			section, ok := value.(map[string]any)
+			known := false
+			if ok {
+				for full := range byKey {
+					if strings.HasPrefix(full, name+".") {
+						known = true
+						break
+					}
+				}
+			}
+			if !known {
+				return fmt.Errorf("config %s: unknown key or section %s", path, name)
+			}
+			if err := apply(name+".", section); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	return apply("", values)
 }
 
 // EnvExample generates the tracked template without active assignments. Only

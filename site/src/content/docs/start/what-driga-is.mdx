@@ -1,6 +1,6 @@
 ---
 title: What Driga is
-description: A CLI, terminal UI and local web dashboard that shows what your AI coding agents are doing across projects and machines, and what needs you.
+description: A desktop app and a CLI that show what your AI coding agents are doing across projects and machines, and what needs you.
 summary: The problem Driga solves, the agents it reads, its three views and its alpha status.
 read_when:
   - You are deciding whether Driga fits how you run coding agents.
@@ -11,13 +11,20 @@ Driga watches AI coding agent sessions on your machine, and optionally on
 machines you pair with it, and puts them in one place: what is running, what is
 waiting for you, what finished, and what was left behind.
 
-It is one binary with several faces:
+Driga is an app plus a CLI, the way Docker Desktop comes with `docker`:
 
+- **Desktop app** — Driga.app on macOS, `Driga.exe` on Windows, and a desktop
+  entry on Linux. It runs the collector, sends notifications that open the
+  session they are about, sits in the menu bar or tray, and shows Flow,
+  Projects and Machines in a native window. `driga app` opens it from a
+  terminal.
 - **Terminal UI** — `driga` (or `driga top`), with Flow, Projects and Machines tabs.
-- **Web dashboard** — `driga web` serves the same views on loopback.
 - **For scripts and agents** — `driga agents`, `driga inbox` and the other read
   commands print one snapshot as a table or versioned JSON, actions confirm
   before they change anything, and `driga mcp` serves read-only MCP tools.
+
+A machine without a desktop installs the CLI alone and runs the collector as a
+service (`driga service install`).
 
 ## What it reads
 

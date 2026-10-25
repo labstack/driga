@@ -40,10 +40,10 @@ func doctorFixture(t *testing.T) (DoctorDeps, *store.Store) {
 	if err := st.SetMeta("last_pass_at", now.Format(time.RFC3339Nano)); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "driga.lock"), []byte("1\n"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "driga.lock"), []byte(`{"pid":1,"kind":"manual","executable":"/opt/driga","version":"test"}`), 0600); err != nil {
 		t.Fatal(err)
 	}
-	return DoctorDeps{ProcessAlive: func(pid int32, _ time.Time) bool { return pid == 1 }, DataDir: dir, Store: st, Config: config.Default(), Home: home, Now: now, LockProbe: func(string) (bool, error) { return true, nil }}, st
+	return DoctorDeps{ProcessAlive: func(pid int32, _ time.Time) bool { return pid == 1 }, DataDir: dir, Store: st, Config: config.Default(), Home: home, Now: now, LockProbe: func(string) (collector.Owner, bool, error) { return collector.Owner{PID: 1, Kind: "manual"}, true, nil }}, st
 }
 
 func requireCheck(t *testing.T, checks []Check, name, status, fix string) Check {
@@ -67,8 +67,29 @@ func TestDoctorNoDaemon(t *testing.T) {
 
 	d, _ := doctorFixture(t)
 	d.Store = nil
-	d.LockProbe = func(string) (bool, error) { return false, nil }
+	d.LockProbe = func(string) (collector.Owner, bool, error) { return collector.Owner{}, false, nil }
+	d.OS = "linux"
 	requireCheck(t, Doctor(context.Background(), d), "collector", "warn", "driga service install")
+	d.OS = "darwin"
+	d.NotificationStatus = func() (string, error) { return "fixture", nil }
+	requireCheck(t, Doctor(context.Background(), d), "collector", "warn", "driga app")
+	d.DataDir = filepath.Join(d.DataDir, "missing")
+	requireCheck(t, Doctor(context.Background(), d), "data_permissions", "warn", "driga app")
+}
+
+func TestDoctorCollectorOwner(t *testing.T) {
+	d, _ := doctorFixture(t)
+	lock, err := collector.Lock(d.DataDir, collector.Owner{Kind: "app", Version: "test"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lock.Close()
+	d.LockProbe = nil
+	c := requireCheck(t, Doctor(context.Background(), d), "collector", "ok", "")
+	want := fmt.Sprintf("running (app, pid %d); last pass 0s ago", os.Getpid())
+	if c.Detail != want {
+		t.Fatalf("collector detail: %q; want %q", c.Detail, want)
+	}
 }
 
 func TestDoctorMacNotifier(t *testing.T) {
@@ -226,25 +247,25 @@ func TestDoctorPermissionsAndLockProbe(t *testing.T) {
 		t.Fatal(err)
 	}
 	requireCheck(t, Doctor(context.Background(), d), "data_permissions", "fail", "chmod 700 "+d.DataDir)
-	held, err := probeCollectorLock(d.DataDir)
+	_, held, err := collector.ReadOwner(d.DataDir)
 	if err != nil || held {
 		t.Fatalf("missing lock: %v %v", held, err)
 	}
 	if _, err := os.Stat(filepath.Join(d.DataDir, "driga.lock")); !os.IsNotExist(err) {
 		t.Fatalf("probe created lock: %v", err)
 	}
-	lock, err := collector.Lock(d.DataDir)
+	lock, err := collector.Lock(d.DataDir, collector.Owner{Kind: "manual"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	held, err = probeCollectorLock(d.DataDir)
+	_, held, err = collector.ReadOwner(d.DataDir)
 	if err != nil || !held {
 		t.Fatalf("held lock: %v %v", held, err)
 	}
 	if err := lock.Close(); err != nil {
 		t.Fatal(err)
 	}
-	held, err = probeCollectorLock(d.DataDir)
+	_, held, err = collector.ReadOwner(d.DataDir)
 	if err != nil || held {
 		t.Fatalf("released lock: %v %v", held, err)
 	}
@@ -304,7 +325,7 @@ func TestDoctorCommandWarningsAndFailures(t *testing.T) {
 	if err := json.Unmarshal(out.Bytes(), &checks); err != nil {
 		t.Fatal(err)
 	}
-	requireCheck(t, checks, "collector", "warn", "driga service install")
+	requireCheck(t, checks, "collector", "warn", collectorHint(runtime.GOOS))
 	if _, err := os.Stat(config.DataDir()); !os.IsNotExist(err) {
 		t.Fatalf("doctor wrote data directory: %v", err)
 	}

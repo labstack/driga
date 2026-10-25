@@ -2,9 +2,10 @@
 
 ## Everyday use
 
-Run `driga` in a terminal to open the viewer (`driga top`), or `driga web` for
-the browser dashboard. Both refresh live; the CLI below is for scripts, agents
-and actions.
+Open the Driga app from Finder, the Start menu or your launcher, or run
+`driga app` in a terminal. Run `driga` in a terminal to open the viewer
+(`driga top`). Both refresh live; the CLI below is for scripts, agents and
+actions.
 
 ## Scripting and actions
 
@@ -59,7 +60,7 @@ tolerantly and reported by `driga doctor`.
 
 `driga top` opens on **Flow (`0`)**. The three tabs are `0 Flow`, `1 Projects`
 and `2 Machines`. Flow offers Map (`m`, the default), Timeline (`t`) and Sessions
-(`s`). Map and Timeline use a grouped project tree in the terminal; the web Map is
+(`s`). Map and Timeline use a grouped project tree in the terminal; the app's Map is
 a deterministic SVG of projects, leads and workers. More than four Map workers
 fold into a `+N` control. Timeline and Sessions retain access to every session.
 
@@ -68,13 +69,13 @@ Use arrows or `j`/`k` to select, `/` to find, Enter to open context, Esc to retu
 Flow's Needs you shelf is oldest first and has the same count as the waiting header.
 Tab explicitly focuses it; `y`/`n` answer a pending permission after a short review
 delay. Commands wrap in full; Enter opens a scrollable inspector. `J` opens the
-selected session's terminal through its stored jump destination. `K` (web: Stop)
+selected session's terminal through its stored jump destination. `K` (app: Stop)
 stops a local session after you confirm; Driga first rechecks that it is the same
 idle process. Sessions on a paired machine must be stopped on that machine.
 
 `c` opens contextual Chat as a panel. Esc closes it, retaining the draft and current
 selection. Wide terminals show Chat beside the destination; narrow terminals give
-it the available reading width. Web Ask Chat prefills the selected session context.
+it the available reading width. The app's Ask Chat prefills the selected session context.
 `Alt+0`/`Alt+1`/`Alt+2` switch TUI tabs while typing.
 
 Flow's expandable Activity section keeps notification and event history; TUI `h`
@@ -93,7 +94,7 @@ from Flow's monetary cost.
 Flow shows only stored evidence: purple spawn links use session ParentID; red dashed
 same-file links require full paths on the same machine. Tool counts/ticks are labelled
 **telemetry** and appear only for actual Claude/Copilot tool events. Cost is labelled
-**retained window**. Unknown history remains neutral. The web Activity page and
+**retained window**. Unknown history remains neutral. The app's Activity page and
 the MCP `get_activity` tool show machine samples and events per minute; missing
 samples are gaps.
 
@@ -113,29 +114,31 @@ Remote inbox acknowledgments require the peer's `--allow-ack` grant; unreachable
 show `ack pending` and retry on reconnect.
 
 Desktop alerts show the session title or project and why it needs you, within
-your capture policy. macOS notifications require the installed **Driga.app**
-(`brew install --cask labstack/tap/driga`); they use Driga's name and icon through the native
-UserNotifications API. The collector asks for permission when it starts, so
-answer the macOS prompt after `driga service install`. macOS asks only once:
-if the prompt was declined, or withdrawn because the collector restarted before
-you answered, turn on Allow notifications in System Settings → Notifications →
-Driga (`driga doctor` prints the command that opens that page). Unbundled builds (`go run`, checkout
-binaries) cannot send macOS notifications; `driga doctor` explains how to install
-the app. No notification helpers are needed. `driga doctor` warns when
-notifications are turned off for Driga; turning them back on takes effect from
-the next notification, without restarting the collector. Alerts raised while
-notifications are off are not replayed; they stay in the inbox. Only the
-background collector posts notifications on macOS, so run the service
-(`driga service install`) to receive them.
+your capture policy. The Driga app sends them: its collector child hands each
+alert to the app, which posts it under Driga's name and icon. Clicking one
+brings Driga forward on the session it is about, without acknowledging it;
+summaries and machine warnings open the window. This works the same on macOS,
+Windows and Linux, and also when the window is closed. Re-sending an item
+replaces its existing notification.
 
-Clicking a local item's notification runs `driga inbox jump <item-id>` without
-acknowledging it. Jumps select a proven tmux pane, focus a proven Terminal/iTerm
-window with `inbox.jump_terminal = true`, or print a resume command. Machine
-warnings open Terminal on `driga top --tab machines`. Batch summaries and remote
-alerts have no click action. The collector keeps the native notification delegate
-and main run loop alive while it runs. Re-sending an item replaces its existing
-notification. Linux uses notify-send; Windows uses native WinRT toasts. Click
-to jump works on macOS only; Linux and Windows alerts have no click action.
+On macOS, notifications require the installed **Driga.app**
+(`brew install --cask labstack/tap/driga`). macOS asks only once: if the
+prompt was declined, turn on Allow notifications in System Settings →
+Notifications → Driga (`driga doctor` prints the command that opens that page).
+Unbundled builds (`go run`, checkout binaries) cannot send macOS notifications;
+`driga doctor` explains how to install the app. `driga doctor` warns when
+notifications are turned off for Driga; turning them back on takes effect from
+the next notification. Alerts raised while notifications are off are not
+replayed; they stay in the inbox.
+
+On a headless machine the collector service (`driga service install`) posts its
+own notifications instead: through the bundle on macOS, notify-send on Linux
+and native WinRT toasts on Windows. There, clicking a local item's macOS
+notification runs `driga inbox jump <item-id>` without acknowledging it. Jumps
+select a proven tmux pane, focus a proven Terminal/iTerm window with
+`inbox.jump_terminal = true`, or print a resume command. Machine warnings open
+Terminal on `driga top --tab machines`. Batch summaries and remote alerts have
+no click action, and service alerts on Linux and Windows have none either.
 
 Health warnings notify once per condition, until it clears. Concurrent health
 warnings from one machine form one summary. Details and cleanup commands remain
@@ -308,8 +311,25 @@ snake_case hook payloads are tagged `vscode` and never linked to a PID. Large
 64 MiB total stdin limits. Doctor warns about older CLI versions, enabled Copilot
 sandboxing and Copilot processes with no received hook events.
 
-The service is a per-user LaunchAgent on macOS and a systemd user service on
-Linux, named `run.driga.collector`:
+On a desktop, the Driga app runs the collector as its own child process,
+`driga collect`: it starts it at launch, restarts it if it exits unexpectedly
+and stops it on Quit. The child gets the PATH and other variables of your login
+shell, so agent discovery and terminal jumps work when Driga is opened from
+Finder or at login. Closing the window keeps Driga collecting while it has a
+menu bar or tray icon (`app.tray`, on by default); Quit stops the collector.
+The app starts at login unless `app.launch_at_login` is off; both settings are
+in Driga's Settings window. Only one collector runs per data directory: when
+the service or a `driga collect` you started holds it, the app shows that
+process's data, names it in the tray menu, and takes over once it exits.
+`driga doctor` names the collector's owner.
+
+Headless machines run the collector as a service instead: a per-user
+LaunchAgent on macOS and a systemd user service on Linux, named
+`run.driga.collector`, and a per-user Task Scheduler task on Windows. Do not install the service where the app runs. On macOS
+and Windows the app's first launch removes a service installed earlier, the
+way `driga service uninstall` does, and says so once; it leaves a Linux unit
+alone. `driga init` offers the service only on Linux; on macOS and Windows it
+points to `driga app`, as do the snapshot banner and `driga doctor`.
 
 ```sh
 driga service status
@@ -347,7 +367,7 @@ can hold the lock in a data directory. Idle collection samples processes/machine
 every 60 seconds and Git every five minutes. A viewer heartbeat speeds these to
 5 seconds, 10 seconds, and 30 seconds respectively. Cwd lookup remains at most
 once per minute. Full Git status runs at least every five minutes.
-To see where a collector spends CPU, stop the service and run
+To see where a collector spends CPU, quit the app or stop the service and run
 `driga collect --cpu-profile cpu.pprof` (it records for `--profile-for`, default 2m),
 then read it with `go tool pprof -top $(which driga) cpu.pprof`. When the window
 ends or the collector stops early, it also writes an allocation profile to
@@ -357,7 +377,7 @@ ends or the collector stops early, it also writes an allocation profile to
 ## Windows (experimental)
 
 Windows 10 1809+ / Windows 11 support the same read interfaces, foreground
-collector, optional OTLP intake, MCP, web and fleet. Phase 3 is feature-complete
+collector, optional OTLP intake, MCP, the desktop app and fleet. Phase 3 is feature-complete
 pending real-hardware verification; Windows remains experimental.
 
 `driga orphans kill <id>` and the TUI action use the
@@ -421,7 +441,12 @@ The native API contracts follow Microsoft's
 [IP Helper tables](https://learn.microsoft.com/en-us/windows/win32/api/iphlpapi/nf-iphlpapi-getextendedtcptable)
 and [IFileOperation flags](https://learn.microsoft.com/en-us/windows/win32/api/shobjidl_core/nf-shobjidl_core-ifileoperation-setoperationflags).
 
-`driga service install` registers `\Driga\<current-user-SID>\Driga collector`
+`Driga.exe` is the app; it runs the CLI next to it, `bin\driga.exe`, as its
+collector child without a console window, and registers itself to start at
+logon. Scoop puts `bin\driga.exe` on PATH as `driga` and adds a Start menu
+shortcut for Driga; `driga app` opens it.
+
+On a machine without the app, `driga service install` registers `\Driga\<current-user-SID>\Driga collector`
 and starts it. The task runs `driga.exe collect` with internal scheduler flags,
 at that user's logon, using the interactive token and least privilege. It has
 no password, elevation or PowerShell dependency. Failure restarts are attempted
@@ -503,7 +528,7 @@ the six-digit code displayed by **both terminals**, and answer `y` on each:
 driga fleet enroll --allow-ack           # omit --allow-ack for read-only access
 # Viewer terminal:
 driga fleet peers add <private-ip>:7411 --name vm-1
-driga service install             # or start an existing service / driga collect
+driga app                         # or driga service install / driga collect
 driga machines
 driga fleet peers list
 driga agents --machine vm-1
@@ -637,7 +662,8 @@ and login; Codex and Copilot are listed as coming. Required flags are probed on
 the first turn, and an unsupported CLI fails with the missing flag and version.
 No real agent CLI is run by tests.
 
-Open **8:chat** or press **c** on any web console page to dock Chat on the right.
+In the app, press **c** on any page, or choose View → Chat (Cmd+K, Ctrl+K on
+Windows and Linux), to dock Chat on the right.
 Non-command text in the command bar opens the composer. Enter sends and
 Shift+Enter adds a line; use Stop to cancel the current turn and queued messages,
 and use History to reopen a conversation. Escape closes the panel when the input
@@ -668,8 +694,8 @@ orphan, clean up a candidate and refresh project summaries. It also has Claude�
 built-in shell and file tools. Actions are local-only and keep the CLI’s process,
 cleanup and jump safety checks. Chat never types into a live agent terminal.
 
-Each conversation starts in **Confirm**. Change trust mode with the web header
-buttons or **m** in TUI navigate mode:
+Each conversation starts in **Confirm**. Change trust mode with the app's Chat
+header buttons or **m** in TUI navigate mode:
 
 | Mode | Runs without asking | Asks |
 |---|---|---|
@@ -684,7 +710,7 @@ or restart the broker; it is never persisted. Only clients can change modes or
 decide cards. Model text, files and tool output cannot change that authority.
 
 An action card shows the tool, exact input, working directory, status, who decided
-and the result. Click **Allow** or **Deny** on the web. In TUI navigate mode,
+and the result. Click **Allow** or **Deny** in the app. In TUI navigate mode,
 **y** allows and **n** denies the oldest pending card; while typing use **Alt+y**
 and **Alt+n**. The status line says **action waiting**. Stop denies pending cards
 before stopping the turn and queue. Running allowed actions show
@@ -709,43 +735,55 @@ server for your own agents also stays read-only. Chat’s private `mcp --chat`
 child supplies its action tools and permission bridge.
 
 The collector owns the broker and its local socket, using the shared directory
-rule described in Fleet setup. Web, TUI and ask connect locally. Without a service, the opening
+rule described in Fleet setup. The app, TUI and ask connect locally; the app opens
+Chat once its collector's broker answers. Without a collector, the opening
 client runs a private in-process broker and labels it **conversations end with it**.
-No driga conversation history survives that client. With the service, conversation
+No driga conversation history survives that client. With a collector, conversation
 IDs, vendor resume IDs and capture-filtered messages persist in SQLite for 30 days;
 interrupted work is marked interrupted after restart and is never replayed to the
-agent automatically. SSE cursors replay bounded ordered events; an expired cursor
-or service restart sends a replacement snapshot. Existing web and TUI clients
-reload the local broker key after a collector restart. Chat streams wake on broker
-events and retain a 15-second heartbeat. If the web process itself restarts, reopen
-its newly printed authentication URL, then reload any disconnected tab.
+agent automatically. Clients resume from a cursor over bounded ordered events;
+an expired cursor or collector restart sends a replacement snapshot. The app and
+TUI reload the local broker key after a collector restart.
 
 Your explicitly submitted question is scrubbed and sent to Claude. Context and
 MCP evidence pass the capture policy before reaching the agent. Driga retains no
 chat message bodies under `capture_text = "titles"`; `snippets` retains scrubbed
 200-character snippets. Live conversation text and drafts are bounded in memory,
-and browser history stores no chat text on disk. Tool names and safe action decision metadata are retained as
+and the app stores no chat text on disk. Tool names and safe action decision metadata are retained as
 metadata. Process command lines and argv require `capture_text = "snippets"` in
 Chat tool responses; other policies remove both argument-bearing fields. Downgrading to titles erases retained bodies when the broker starts.
 Claude's own session history is vendor-managed and enables `--resume`; driga's
 capture policy does not control that vendor history. Chat tools may make network connections when approved; Claude uses its existing
 vendor connection.
 
-## Web dashboard
+## Desktop app
 
-`driga web` serves an interactive dashboard for the same data in your browser:
+Driga is an app plus a CLI. The app collects, notifies and shows the dashboard;
+the CLI (`driga`, `driga top`, scripting, MCP) comes with it.
 
 ```sh
-driga web            # prints a one-time URL such as http://127.0.0.1:53817/?token=…
-driga web --open     # also opens it
+driga app    # open Driga, or bring the running app forward
 ```
 
-It listens on loopback only (`--listen` refuses other addresses), runs as its own
-process so the collector's footprint is unchanged, and updates live as the collector
-writes. The token in the printed URL sets a cookie for that browser; restarting
-`driga web` issues a new token. The three tabs are Flow, Projects and Machines. Flow has Map, Timeline and Sessions views,
-with Needs you and retained Activity history. Chat opens as a contextual panel on `c`;
-Machines includes process and disk reclamation. Chat provides local actions through approval cards.
+The app runs in a native window with the system webview and opens no network
+port. It updates live as its collector writes. The View menu switches between
+Flow (Cmd+1), Projects (Cmd+2), Machines (Cmd+3) and Chat (Cmd+K); Windows and
+Linux use Ctrl. Flow has Map, Timeline and Sessions views, with Needs you and
+retained Activity history. Chat opens as a contextual panel on `c`; Machines
+includes process and disk reclamation. Stop and other confirmations use native
+dialogs. Help → Keyboard Shortcuts lists the page keys.
+
+The menu bar item (the notification area on Windows, the tray on Linux) shows
+how many sessions need you, lists the first five, says who is collecting and
+quits Driga. On macOS the Dock icon shows the count too, and appears only while
+a window is open. Settings (Cmd+,) sets the theme (`ui.theme`), the tray icon
+(`app.tray`) and launch at login (`app.launch_at_login`). A second launch,
+`driga app` included, brings the running window forward.
+
+When an upgrade such as `brew upgrade` replaces Driga's executable, the
+running app stops its collector and relaunches on the new version. On Linux the
+app needs GTK 3, WebKitGTK and, for the tray, an AppIndicator library and a
+desktop with a StatusNotifierItem host; Linux desktop support is best effort.
 
 ## MCP registration
 
@@ -860,12 +898,12 @@ theme = 'light'
 ```
 
 `driga top --theme dark` overrides the config for the whole TUI. System follows
-the terminal's background in the TUI and the browser's colour preference on the
-web; `--no-color` keeps the layout without ANSI styling.
+the terminal's background in the TUI and the system appearance in the app;
+`--no-color` keeps the layout without ANSI styling.
 
 Light and dark are the [Catppuccin](https://catppuccin.com/palette/) Latte and
 Mocha palettes, taken from the official `github.com/catppuccin/go` package and
-shared by the TUI, the web console and assistant Markdown. Dark uses the
+shared by the TUI, the app and assistant Markdown. Dark uses the
 official colours unchanged. In light, text in Latte's yellow, green, blue,
 peach, teal and sky is darkened, keeping the hue, just enough to reach 4.5:1
 contrast on the background; fills and bars keep the official colours.
@@ -878,9 +916,8 @@ uninstall removes it. Restart existing Claude sessions after changing hooks.
 
 Pending local Claude prompts appear above the inbox waits with the session,
 tool, and exact input. In the TUI select a prompt and press `y` to allow or `n`
-to deny (`a` remains attach); Enter opens the full input. In the web inbox use
-Allow or Deny. Browser decisions require the authenticated session, Origin and
-CSRF token.
+to deny (`a` remains attach); Enter opens the full input. In the app's inbox use
+Allow or Deny.
 
 Action-enabled Chat's `list_prompts` shows inputs only with `capture_text = "snippets"`;
 other capture policies show tool metadata. `answer_prompt(id, allow)` uses the
@@ -929,14 +966,14 @@ contains related sessions; selecting a session never selects the whole family.
 | `cleanup remove <candidate-id>` | Verify and remove one candidate; `--dry-run`, `--sizes`, `--include-ignored`, `--yes/-y`, `--json`. |
 | `cleanup remove --all --kind worktree` or `--kind scratch` | Remove ready candidates of the selected kind; report completed/skipped/failed counts. `--include-ignored` requires one explicit ID. |
 | `top` | Interactive terminal dashboard; `--tab=flow\|projects\|machines`, `--theme=system\|light\|dark`, `--machine`, `--project`, `--since`, `--snapshot`, `--no-color`. |
-| `web` | Serve the interactive browser dashboard on loopback; `--listen`, `--open`, `--machine`, `--project`, `--since`, `--snapshot`. |
+| `app` | Open the Driga desktop app, or bring the running one forward. |
 | `ask <question>...` | One-shot Chat question; `--machine`, `--project`, `--json`. |
 | `mcp` | Serve read-only MCP tools over stdio; `--snapshot` forces one-shot collection for read tools without history. |
 | `doctor` | Setup/collection diagnostics; `--json`. |
 | `init` | Optional setup, previewing changes; `--yes/-y` accepts each prompt. |
 | `config path` / `config show` / `config edit` | Configuration path, values, or editor; only `path` supports `--json`. |
 | `collect` | Collector; `--once`, `--serve`, `--listen`, `--cpu-profile`, `--profile-for`. Explicit `--serve=false` overrides configuration. `--once` cannot serve; `--listen` requires serving. |
-| `service install` / `start` / `stop` / `restart` / `status` | Manage the collector service. |
+| `service install` / `start` / `stop` / `restart` / `status` | Manage the collector service on a headless machine. |
 | `service logs [-f]` | Show logs; `--follow/-f` is scoped to this command. |
 | `service uninstall` | Remove the collector service. |
 | `hooks install [<adapter>]` / `hooks uninstall [<adapter>]` | Adapter defaults to `all`; positional `claude\|codex\|copilot\|all`. `--dry-run`, `--yes/-y`, `--otlp`, `--traces` (requires OTLP). |
@@ -953,7 +990,7 @@ contains related sessions; selecting a session never selects the whole family.
 
 Read-view options are `--machine`, `--project`, `--since`, `--snapshot`,
 `--json`, and `--no-color`, on the commands listed above. For live views use
-`top` or `web`.
+`top` or the app.
 Unsupported flags and conflicting selectors are errors. `--theme` is scoped to
 `top`. Flags belong after the command or its explicit `list` verb.
 
@@ -970,7 +1007,7 @@ returns 1 if any item fails, with completed/skipped/failed counts in text or JSO
 Hidden integration interfaces are unchanged: `hook <adapter> <event>`, `feed`,
 `dev`, `mcp --chat`, and the collector's scheduled-service flags. MCP tool names
 and fields, configuration keys (including `inbox`), `DRIGA_*` environment names,
-JSON field names, web routes, Chat action tool names/records and `[[session:N]]`
+JSON field names, Chat action tool names/records and `[[session:N]]`
 citations retain their contracts. MCP `get_agent` maps to `agents show`,
 `inspect_project` to `projects show`, `inspect_setup` to `doctor`, and
 `list_cleanup_candidates` to `cleanup list`.

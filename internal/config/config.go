@@ -14,6 +14,7 @@ import (
 type Config struct {
 	Warnings        []string
 	UI              UIConfig
+	App             AppConfig
 	Motion          string
 	Roots           []string
 	RootDepth       int
@@ -34,6 +35,12 @@ type Config struct {
 }
 
 type UIConfig struct{ Theme string }
+
+// AppConfig controls the desktop app.
+type AppConfig struct {
+	Tray          bool
+	LaunchAtLogin bool
+}
 
 // MachineConfig controls machine warnings; zero selects the documented default.
 type MachineConfig struct{ DiskFreeMin uint64 }
@@ -121,10 +128,17 @@ func configPath() string {
 // DataDir holds driga.db, driga.lock and viewer.heartbeat (env DRIGA_DATA_DIR overrides).
 func DataDir() string { return absolutePath(dataDirForOS(runtime.GOOS)) }
 
+// DefaultDataDir is the data directory when DRIGA_DATA_DIR is unset.
+func DefaultDataDir() string { return absolutePath(defaultDataDirForOS(runtime.GOOS)) }
+
 func dataDirForOS(goos string) string {
 	if p := os.Getenv("DRIGA_DATA_DIR"); p != "" {
 		return p
 	}
+	return defaultDataDirForOS(goos)
+}
+
+func defaultDataDirForOS(goos string) string {
 	if goos == "windows" {
 		return filepath.Join(windowsAppDir("LOCALAPPDATA", "Local"), "driga")
 	}

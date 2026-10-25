@@ -4,7 +4,7 @@
     const row=button.closest("[data-prompt]"), status=row.querySelector('[role="status"]');
     row.querySelectorAll("button").forEach(el=>el.disabled=true);
     try {
-      const response=await fetch("/chat/api/prompt-answer",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json","X-CSRF-Token":document.querySelector('meta[name="chat-csrf"]').content},body:JSON.stringify({id:button.dataset.promptId,allow:button.dataset.promptAnswer==="allow"})});
+      const response=await fetch("/chat/api/prompt-answer",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:button.dataset.promptId,allow:button.dataset.promptAnswer==="allow"})});
       if(!response.ok)throw new Error(await response.text());
       row.remove();
     } catch(error) {status.textContent=error.message;row.querySelectorAll("button").forEach(el=>el.disabled=false);}
@@ -34,10 +34,6 @@
     if (verb === "flow") {
       if (tokens.length > 1 || tokens.length && !/^[1-9][0-9]*$/.test(tokens[0])) return error("Use flow [<id>]");
       if (tokens.length) query.id = tokens[0]; return url("/flow");
-    }
-    if (verb === "theme") {
-      if (tokens.length === 1 && ["light", "dark", "system"].includes(tokens[0])) return {theme: tokens[0]};
-      return error("Use theme light|dark|system");
     }
     if (["agents", "projects", "inbox", "orphans", "machines", "cleanup"].includes(verb) && tokens[0] === "list") tokens.shift();
     if (verb === "agents" && tokens[0] === "show") {
@@ -106,23 +102,10 @@
           viewport.scrollTo(position.x, position.y);
         }
       },
-      showOlder() { limit += 50; render(); },
-      copy(button, clipboard) {
-        const jump = button.closest(".inbox-jump"), command = jump.querySelector("[data-inbox-command]"), status = jump.querySelector("[data-inbox-copy-status]");
-        const fallback = () => {
-          command.focus({preventScroll:true});
-          const range = doc.createRange(); range.selectNodeContents(command);
-          const selection = doc.getSelection(); selection.removeAllRanges(); selection.addRange(range);
-          status.textContent = "Command selected · copy with your keyboard";
-        };
-        try {
-          // Invoke immediately in the click's user activation, before any await.
-          return clipboard.writeText(command.textContent).then(() => { status.textContent = "Copied"; }, fallback);
-        } catch (_) { fallback(); return Promise.resolve(); }
-      }
+      showOlder() { limit += 50; render(); }
     };
   }
-  function connectionText(connected,closed) { return connected?"● live":closed?"○ disconnected · authenticate the new web URL, then reload":"○ reconnecting…"; }
+  function connectionText(connected) { return connected?"● live":"○ reconnecting…"; }
   globalThis.DrigaConsole = Object.freeze({answerPrompt,connectionText,parseCommand, createInboxController, createMachineController});
   if (typeof document === "undefined") return;
 
@@ -132,23 +115,11 @@
   const system = matchMedia("(prefers-color-scheme: light)");
   const phone = matchMedia("(max-width: 900px)");
   const css = name => getComputedStyle(root).getPropertyValue("--" + name).trim();
-  let preference = "system", history = [], historyIndex = 0, draft = "";
+  let history = [], historyIndex = 0, draft = "";
   try {
-    const saved = localStorage.getItem("driga-theme");
-    if (["light", "dark", "system"].includes(saved)) preference = saved;
     const stored = JSON.parse(localStorage.getItem("driga-command-history") || "[]");
     if (Array.isArray(stored)) history = stored.filter(s => typeof s === "string" && s.length <= 500).slice(-100);
   } catch (_) { /* Storage is optional. */ }
-  function applyTheme(choice = preference) {
-    preference = choice; root.dataset.theme = choice;
-    const control = document.getElementById("theme"); if (control) control.value = choice;
-  }
-  function setTheme(choice) {
-    applyTheme(choice);
-    try { localStorage.setItem("driga-theme", choice); } catch (_) { /* Keep this visit's preference. */ }
-    charts.draw();
-  }
-  applyTheme();
 
   // The only ECharts owner: canvas + richText tooltip keeps CSP free of injected HTML/styles.
   const charts = {
@@ -262,7 +233,7 @@
 
   const input = document.getElementById("cmdline"), menu = document.getElementById("command-menu"), error = document.getElementById("command-error"), help = document.getElementById("help");
   let suggestions = [], choice = -1;
-  const commands = ["flow", "flow <id>", "agents", ...states.map(s => "agents --state " + s), "agents --all", "agents --project <name>", "projects show <project>", "projects", "inbox", "orphans", "machines", "cleanup", "cleanup --why", "activity", "theme light", "theme dark", "theme system", "agents show <session-id>", "agents jump <session-id>", "agents kill <session-id>", "inbox ack <item-id>", "inbox jump <item-id>", "orphans kill <orphan-id>", "cleanup remove <candidate-id>", "hooks install"];
+  const commands = ["flow", "flow <id>", "agents", ...states.map(s => "agents --state " + s), "agents --all", "agents --project <name>", "projects show <project>", "projects", "inbox", "orphans", "machines", "cleanup", "cleanup --why", "activity", "agents show <session-id>", "agents jump <session-id>", "agents kill <session-id>", "inbox ack <item-id>", "inbox jump <item-id>", "orphans kill <orphan-id>", "cleanup remove <candidate-id>", "hooks install"];
   const mutating = command => parseCommand(command).error === readOnly;
   function closeMenu() { menu.hidden = true; input.setAttribute("aria-expanded", "false"); input.removeAttribute("aria-activedescendant"); choice = -1; }
   function complete() {
@@ -270,7 +241,7 @@
     menu.replaceChildren();
     suggestions.forEach((command, i) => {
       const option = document.createElement("button"); option.type = "button"; option.className = "opt" + (mutating(command) ? " ro" : ""); option.id = "command-option-" + i; option.setAttribute("role", "option"); option.setAttribute("aria-selected", "false"); if (mutating(command)) option.setAttribute("aria-disabled", "true");
-      option.textContent = command; const hint = document.createElement("span"); hint.textContent = mutating(command) ? readOnly : command.startsWith("theme") ? "appearance" : "view"; option.append(hint);
+      option.textContent = command; const hint = document.createElement("span"); hint.textContent = mutating(command) ? readOnly : "view"; option.append(hint);
       option.addEventListener("click", () => { if (mutating(command)) return; input.value = command; input.focus(); closeMenu(); }); menu.append(option);
     });
     menu.hidden = !suggestions.length; input.setAttribute("aria-expanded", String(!menu.hidden));
@@ -292,7 +263,7 @@
   }
   function runCommand() {
     const text=input.value.trim(), verb=text.split(/\s+/)[0];
-    if (text && !["home","flow","agents","projects","inbox","orphans","machines","cleanup","activity","theme","ack","kill","hooks"].includes(verb) && window.drigaChat) {window.drigaChat.open(text);input.value="";closeMenu();return;}
+    if (text && !["home","flow","agents","projects","inbox","orphans","machines","cleanup","activity","ack","kill","hooks"].includes(verb) && window.drigaChat) {window.drigaChat.open(text);input.value="";closeMenu();return;}
     const scope = document.querySelector(".status").dataset.scope || "all";
     const result = parseCommand(input.value, scope);
     if (result.error) {
@@ -301,8 +272,7 @@
     history.push(input.value); history = history.slice(-100); historyIndex = history.length;
     try { localStorage.setItem("driga-command-history", JSON.stringify(history)); } catch (_) { /* History is optional. */ }
     error.hidden = true; input.removeAttribute("aria-invalid"); closeMenu();
-    if (result.theme) { setTheme(result.theme); input.value = ""; input.blur(); }
-    else window.location.assign(selectedFlowURL(result.url));
+    window.location.assign(selectedFlowURL(result.url));
   }
   document.getElementById("command-form").addEventListener("submit", event => { event.preventDefault(); runCommand(); });
   input.addEventListener("input", () => { complete(); error.hidden = true; input.removeAttribute("aria-invalid"); });
@@ -322,16 +292,50 @@
     }
   });
   function closeHelp() { help.close(); focusPane(focused); }
+  // The feedback notice sits outside #main, so refreshes keep it.
+  let noticeTimer = 0;
+  function notice(text) {
+    const el = document.getElementById("app-notice"); if (!el) return;
+    el.textContent = text; el.classList.add("show");
+    clearTimeout(noticeTimer); noticeTimer = setTimeout(() => el.classList.remove("show"), 4000);
+  }
+  async function jumpTo(button) {
+    button.disabled = true;
+    try {
+      const response = await fetch("/chat/api/flow-action", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({action: "jump", session_id: Number(button.dataset.session), machine: button.dataset.machine})});
+      if (!response.ok) throw new Error(await response.text());
+      notice("Opened terminal");
+    } catch (e) { notice(e.message); } finally { button.disabled = false; }
+  }
+  // The app's menus and notifications drive the page through the same
+  // functions its keys call.
+  function openView(name) {
+    if (name === "chat") { if (window.drigaChat) window.drigaChat.toggle(); return; }
+    const link = document.querySelector('[data-view="' + name + '"]');
+    if (link) window.location.assign(name === "flow" ? selectedFlowURL(link.href) : link.href);
+  }
+  function focusFind() {
+    const board = document.querySelector("[data-board-search]");
+    if (board) { board.focus(); return; }
+    const pane = panes()[focused]; if (pane) filterPane(pane);
+  }
+  function showSession(id) {
+    id = String(id); if (!/^[1-9][0-9]*$/.test(id)) return;
+    if (document.querySelector('[data-flow-board] [data-session="' + id + '"]')) { document.dispatchEvent(new CustomEvent("driga:select-session", {detail: {id: Number(id)}})); return; }
+    window.location.assign("/flow?" + new URLSearchParams({id, machine: document.querySelector(".status").dataset.scope || "all"}));
+  }
+  const commandsByName = {view: openView, find: focusFind, reload: () => window.location.reload(), openSession: showSession};
+  window.drigaCommand = (name, arg) => { if (Object.hasOwn(commandsByName, name)) commandsByName[name](arg); };
   document.querySelector("[data-close-help]").addEventListener("click", closeHelp);
   document.addEventListener("click", event => {
     const promptButton=event.target.closest("[data-prompt-answer]");
     if(promptButton){event.preventDefault();answerPrompt(promptButton);return;}
-    const copy = event.target.closest("[data-inbox-copy]");
-    if (copy) { inboxUI.copy(copy, navigator.clipboard); return; }
+    const jump = event.target.closest("[data-inbox-jump]");
+    if (jump) { event.preventDefault(); jumpTo(jump); return; }
     if (event.target.closest("[data-inbox-older]")) { inboxUI.showOlder(); return; }
     if (!event.target.closest(".cmd")) closeMenu();
     if (event.target.closest("[data-pause-tail]")) pauseTail();
-    const flowNav = event.target.closest('[data-window="0"]');
+    const flowNav = event.target.closest('[data-view="flow"]');
     if (flowNav) flowNav.href = selectedFlowURL(flowNav.href);
     const pane = event.target.closest("[data-pane]");
     if (pane) { focusPane(panes().indexOf(pane), false); const row = event.target.closest("[data-row]"); if (row) selectRow(pane, rows(pane).indexOf(row), !row.matches("[data-inbox-key]")); }
@@ -339,7 +343,6 @@
   document.addEventListener("focusin", event => {
     const pane = event.target.closest("[data-pane]"); if (pane) focusPane(panes().indexOf(pane), false);
   });
-  document.addEventListener("change", event => { if (event.target.id === "theme") setTheme(event.target.value); });
   document.addEventListener("driga:select-session", event => {
     const id=String(event.detail.id);
     const row=Array.from(document.querySelectorAll("[data-row]")).find(n=>(n.getAttribute("href")||"").split("?")[0]==="/agents/"+id);
@@ -354,7 +357,7 @@
     }
     if(document.querySelector("[data-flow-board]")&&!event.target.closest(".fb-activity")&&["j","k","ArrowDown","ArrowUp","ArrowLeft","ArrowRight","Home","End","Enter"," ","/"].includes(event.key))return;
     const pane = panes()[focused];
-    if (/^[0-2]$/.test(event.key)) { event.preventDefault(); document.querySelector('[data-window="' + event.key + '"]').click(); }
+    if (/^[0-2]$/.test(event.key)) { event.preventDefault(); openView(["flow", "projects", "machines"][Number(event.key)]); }
     else if (event.key === ":") { event.preventDefault(); input.focus(); }
     else if (event.key === "?") { event.preventDefault(); help.showModal(); }
     else if (event.key === "p") { event.preventDefault(); pauseTail(); }
@@ -368,7 +371,7 @@
     else if (event.key === "Escape") { closeMenu(); if (pane) { pane.querySelectorAll(".sel").forEach(el => el.classList.remove("sel")); focusPane(focused); } }
   });
   function refreshUI() {
-    applyTheme(); focusPane(focused, false);
+    focusPane(focused, false);
     panes().forEach((pane, i) => {
       for (const row of pane.querySelectorAll("[data-row]")) {
         if (!row.title && !row.matches("[data-inbox-key]")) row.title = row.textContent.trim();
@@ -388,27 +391,44 @@
   refreshUI();
   inboxUI.restore();
   if (document.fonts) document.fonts.ready.then(() => charts.draw());
-  system.addEventListener("change", () => { if (preference === "system") charts.draw(); });
+  system.addEventListener("change", () => { if (root.dataset.theme === "system") charts.draw(); });
   phone.addEventListener("change", () => charts.draw());
-  function connection(connected) { document.querySelectorAll(".connection").forEach(el => { el.textContent = connectionText(connected,stream.readyState===EventSource.CLOSED); el.classList.toggle("working", connected); el.classList.toggle("waiting", !connected); }); }
-  const stream = new EventSource("/events" + window.location.search);
-  stream.addEventListener("open", () => connection(true)); stream.addEventListener("error", () => connection(false));
+  function connection(connected) { document.querySelectorAll(".connection").forEach(el => { el.textContent = connectionText(connected); el.classList.toggle("working", connected); el.classList.toggle("waiting", !connected); }); }
   const refresh = () => { const main = document.getElementById("main"); if (window.htmx) htmx.trigger(main, "console:refresh"); };
+  // One long poll at a time: the first answer refreshes and fills the tail,
+  // later answers carry data changes and new tail rows.
+  const updates = new AbortController();
+  (async () => {
+    let cursor = "";
+    while (!updates.signal.aborted) {
+      try {
+        const query = new URLSearchParams(location.search); if (cursor) query.set("after", cursor);
+        const response = await fetch("/updates?" + query, {signal: updates.signal});
+        // A refused cursor (a restarted server) starts over with a fresh one.
+        if (!response.ok) { if (response.status >= 400 && response.status < 500) cursor = ""; throw new Error(response.statusText); }
+        const update = await response.json();
+        connection(true);
+        if (!cursor || update.refresh) refresh();
+        cursor = update.cursor; if (update.tail.length) ingestTail(update.tail);
+      } catch (_) {
+        if (updates.signal.aborted) return;
+        connection(false); await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    }
+  })();
   let promptPolling=false;
   setInterval(async()=>{
     const container=document.querySelector("[data-prompts]");
     if(!container||promptPolling)return;
     promptPolling=true;
     try {
-      const response=await fetch("/chat/api/prompts",{credentials:"same-origin"});
+      const response=await fetch("/chat/api/prompts");
       if(!response.ok)return;
       const prompts=await response.json();
       const shown=Array.from(container.querySelectorAll("[data-prompt]"),row=>row.dataset.prompt).sort();
       if(JSON.stringify(shown)!==JSON.stringify(prompts.map(prompt=>prompt.id).sort()))refresh();
     } catch(_) { /* The next poll retries. */ } finally {promptPolling=false;}
   },1000);
-  stream.addEventListener("ready", refresh); stream.addEventListener("change", refresh);
-  stream.addEventListener("tail", event => { try { ingestTail(JSON.parse(event.data)); } catch (_) { /* A reconnect will refresh the tail. */ } });
   const clock = setInterval(() => { document.querySelectorAll("[data-clock]").forEach(el => { el.textContent = new Date().toLocaleTimeString([], {hour12: false}); }); }, 1000);
-  window.addEventListener("pagehide", () => { stream.close(); charts.dispose(); clearInterval(clock); });
+  window.addEventListener("pagehide", () => { updates.abort(); charts.dispose(); clearInterval(clock); });
 })();

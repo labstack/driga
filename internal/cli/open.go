@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -117,7 +118,7 @@ func snapshotHint(w io.Writer, now time.Time) {
 	if err != nil {
 		return
 	}
-	fmt.Fprintln(w, "snapshot · no history — run 'driga service install' for inbox & history")
+	fmt.Fprintf(w, "snapshot · no history — run '%s' for inbox & history\n", collectorHint(runtime.GOOS))
 }
 
 // openViewer shares daemon selection, scoped views and disposable collection.

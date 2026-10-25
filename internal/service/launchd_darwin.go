@@ -23,8 +23,8 @@ func newLaunchdController(controller Controller, binPath string) *launchdControl
 	return &launchdController{Controller: controller, binPath: binPath,
 		plistPath: filepath.Join(config.ExpandHome("~"), "Library", "LaunchAgents", "run.driga.collector.plist"),
 		register: func(app string) error {
-			// Caskroom isn't automatically scanned like /Applications. Apple
-			// requires Launch Services to know the associated bundle.
+			// Apple requires Launch Services to know the associated bundle,
+			// wherever Driga.app was installed.
 			out, err := exec.Command("/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister", "-f", app).CombinedOutput()
 			if err != nil {
 				return fmt.Errorf("register Driga.app: %w: %s", err, out)
@@ -32,6 +32,11 @@ func newLaunchdController(controller Controller, binPath string) *launchdControl
 			return nil
 		},
 	}
+}
+
+// recordedDataDir is the DRIGA_DATA_DIR the plist gives the collector.
+func (s *launchdController) recordedDataDir() (string, error) {
+	return plistEnv(s.plistPath, "DRIGA_DATA_DIR")
 }
 
 // Start makes repeating service install harmless when launchd already runs it.

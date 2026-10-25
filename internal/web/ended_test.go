@@ -36,7 +36,7 @@ func TestEndedStateFilterAndCounts(t *testing.T) {
 			if !found {
 				t.Fatalf("ended missing from web totals: %+v", p.States)
 			}
-			body := request(s, "GET", tc.path, s.token).Body.String()
+			body := request(s, "GET", tc.path).Body.String()
 			if !strings.Contains(body, "ended") || !strings.Contains(body, "Normal end") {
 				t.Fatal("ended row missing")
 			}

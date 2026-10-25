@@ -40,8 +40,10 @@ parsed tolerantly and reported by `driga doctor`.
 Without a collector, every read command takes a one-shot snapshot that writes
 no database and is labelled `snapshot · no history`.
 
-The collector (`driga service install`, or `driga collect` in the foreground)
-keeps a local SQLite database. Only one collector can hold a data directory.
+The collector keeps a local SQLite database. On a desktop the Driga app runs
+it as its own child process; on a headless machine `driga service install`
+runs it as a per-user service, and `driga collect` runs it in the foreground.
+Only one collector can hold a data directory.
 Idle, it samples processes and machine health every 60 seconds and Git every
 five minutes; while a viewer is open those speed up to 5, 10 and 30 seconds.
 
@@ -53,7 +55,7 @@ from timing. Selecting one session never selects its whole family.
 
 ## Interfaces share one read path
 
-The CLI's `--json`, the terminal UI, the web dashboard, the MCP server and
+The CLI's `--json`, the terminal UI, the desktop app, the MCP server and
 paired viewers read the same schema-2 views. JSON envelopes carry the
 observation time, collection mode, source freshness and coverage gaps, so a
 consumer can tell how current an answer is.

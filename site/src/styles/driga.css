@@ -8,7 +8,7 @@
 /* Driga docs theme.
  *
  * Colours come from @catppuccin/starlight: Mocha in the dark, Latte in the
- * light, the same two palettes the terminal UI and web console ship (`ui.theme`).
+ * light, the same two palettes the terminal UI and the desktop app ship (`ui.theme`).
  * The theme's tokens live in a `catppuccin` cascade layer, so nothing here
  * redefines them. The state hues below are the app's own glyph colours
  * (working ▶ green, needs you ◆ yellow, overlap ┄ red); in Latte they are

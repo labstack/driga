@@ -30,7 +30,7 @@ export const GET: APIRoute = async () => {
     "# Driga — complete documentation",
     "",
     "Driga watches AI coding agent sessions across projects and paired machines:",
-    "a CLI, a terminal UI, a loopback web dashboard and a read-only MCP server.",
+    "a desktop app, a terminal UI, a CLI and a read-only MCP server.",
     "Generated from the documentation source.",
     "",
   ];

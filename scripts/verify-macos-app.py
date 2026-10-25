@@ -72,8 +72,10 @@ def verify_archive(path, version):
                            "CFBundlePackageType": "APPL", "CFBundleInfoDictionaryVersion": "6.0",
                            "CFBundleShortVersionString": numeric, "CFBundleVersion": numeric,
                            "DrigaReleaseVersion": version, "CFBundleIconFile": "Driga.icns",
-                           "LSUIElement": True}.items():
+                           "LSEnvironment": {"DRIGA_APP": "1"},
+                           "NSHighResolutionCapable": True}.items():
             require(info.get(key) == value, f"incorrect {key} in Info.plist")
+        require("LSUIElement" not in info, "Info.plist must not set LSUIElement")
         binary = archive.getmember("Driga.app/Contents/MacOS/driga")
         require(binary.mode & 0o111 and binary.size > 0, "bundle executable is empty or not executable")
         verify_icns(read("Driga.app/Contents/Resources/Driga.icns"))

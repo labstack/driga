@@ -39,7 +39,7 @@ func TestInboxDenseSectionsAndCap(t *testing.T) {
 			t.Fatal(err)
 		}
 		body := out.String()
-		for _, want := range []string{`data-inbox-section="needs"`, `data-inbox-section="recent"`, "needs you", "71 waiting · oldest 8h10m0s", "recent", "reason", "tool", "wait / age", "project · branch", "title / detail", "time", `data-inbox-older`, `data-inbox-copy`, `data-inbox-command`, `aria-readonly="true"`, "&lt;safe&gt;"} {
+		for _, want := range []string{`data-inbox-section="needs"`, `data-inbox-section="recent"`, "needs you", "71 waiting · oldest 8h10m0s", "recent", "reason", "tool", "wait / age", "project · branch", "title / detail", "time", `data-inbox-older`, `data-inbox-jump`, `data-session="1"`} {
 			if !strings.Contains(body, want) {
 				t.Errorf("missing %q", want)
 			}
@@ -82,14 +82,14 @@ func TestInboxDenseSectionsAndCap(t *testing.T) {
 
 func TestInboxReadOnlyCSPAndRefresh(t *testing.T) {
 	s, _, _, _ := fixture(t)
-	w := request(s, "GET", "/inbox", s.token)
-	if w.Header().Get("Content-Security-Policy") != request(s, "GET", "/", s.token).Header().Get("Content-Security-Policy") {
+	w := request(s, "GET", "/inbox")
+	if w.Header().Get("Content-Security-Policy") != request(s, "GET", "/").Header().Get("Content-Security-Policy") {
 		t.Error("inbox changed CSP")
 	}
 	if !strings.Contains(w.Body.String(), `hx-trigger="console:refresh"`) {
 		t.Error("lost live refresh")
 	}
-	if request(s, "POST", "/inbox", s.token).Code != 405 {
+	if request(s, "POST", "/inbox").Code != 405 {
 		t.Error("inbox accepts POST")
 	}
 }
