@@ -1,13 +1,10 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Chart } from "./Chart";
 import { cell, duration, label, value } from "./format";
-import { rows, type Column, type Frame, type Panel, type Result, type Row } from "./types";
+import { actionLabel, rowActions, useHost, type Act, type ActionKind } from "./host";
+import { rows, type Column, type Frame, type Panel, type Prompt, type Result, type Row } from "./types";
 
-/** An action a panel row offers. The host decides which it can run: the app
- * runs them all through its approval step; a chat card may offer none. */
-export type Action = { kind: "jump" | "ack" | "open"; row: Row };
-
-export type Act = (action: Action) => Promise<void>;
+export type { Act } from "./host";
 
 const heights = { s: 120, m: 240, l: 420 } as const;
 
@@ -16,13 +13,16 @@ export function panelHeight(panel: Panel): number {
   return heights[panel.height ?? fallback];
 }
 
-export function PanelView({ panel, result, act, fill }: { panel: Panel; result?: Result; act?: Act; fill?: boolean }) {
+export function PanelView({ panel, result, act: given, fill }: { panel: Panel; result?: Result; act?: Act; fill?: boolean }) {
+  const host = useHost();
+  const act = given ?? host.act;
   // In a grid cell the panel fills its cell; in a card it takes its own height.
   const height = fill ? 0 : panelHeight(panel);
   let body;
   if (panel.viz === "text") body = <Text content={panel.content ?? ""} />;
   else if (!result) body = <p className="muted">Loading…</p>;
   else if (result.status === "error") body = <p className="problem">{result.message ?? "This panel could not run."}</p>;
+  else if (panel.viz === "inbox" && host.prompts?.length) body = <Inbox frame={result.frame ?? { columns: [], rows: [] }} act={act} prompts={host.prompts} answer={host.answer} />;
   else if (!result.frame || result.status === "empty") body = <p className="muted empty">{panel.viz === "inbox" ? "Nothing needs you right now." : result.message ?? "Nothing matches right now."}</p>;
   else body = <Body panel={panel} frame={result.frame} height={height} act={act} />;
   return <section className={`panel viz-${panel.viz}${fill ? " fill" : ""}`} aria-labelledby={`panel-${panel.id}`}>
@@ -38,10 +38,10 @@ function Body({ panel, frame, height, act }: { panel: Panel; frame: Frame; heigh
     case "bar":
     case "timeseries": return <Chart panel={panel} frame={frame} height={height ? height - 48 : undefined} />;
     case "inbox": return <Inbox frame={frame} act={act} />;
-    case "list": return <List frame={frame} />;
-    case "cards": return <Cards frame={frame} />;
+    case "list": return <List frame={frame} source={panel.source} act={act} />;
+    case "cards": return <Cards frame={frame} source={panel.source} act={act} />;
     case "timeline": return <Timeline frame={frame} act={act} />;
-    default: return <Table frame={frame} act={act} />;
+    default: return <Table frame={frame} source={panel.source} act={act} />;
   }
 }
 
@@ -60,7 +60,8 @@ function Gauge({ frame, max }: { frame: Frame; max?: number }) {
   </div>;
 }
 
-function Table({ frame, act }: { frame: Frame; act?: Act }) {
+function Table({ frame, source, act }: { frame: Frame; source?: string; act?: Act }) {
+  const { local } = useHost();
   const [sort, setSort] = useState<{ col: number; desc: boolean } | null>(null);
   const sorted = useMemo(() => {
     if (!sort) return frame.rows;
@@ -70,32 +71,45 @@ function Table({ frame, act }: { frame: Frame; act?: Act }) {
       return sort.desc ? -c : c;
     });
   }, [frame, sort]);
+  const shown = frame.columns.map((c, i) => ({ c, i })).filter(({ c }) => !c.hidden);
   const id = frame.columns.findIndex(c => c.name === "id");
+  const actionsFor = (r: Frame["rows"][number]) => act ? rowActions(source, rowOf(frame.columns, r), local) : [];
+  const anyActions = act && sorted.some(r => actionsFor(r).length > 0);
   return <div className="table-wrap"><table>
-    <thead><tr>{frame.columns.map((c, i) => <th key={c.name} scope="col" className={c.type === "number" ? "num" : undefined} aria-sort={sort?.col === i ? (sort.desc ? "descending" : "ascending") : "none"}>
+    <thead><tr>{shown.map(({ c, i }) => <th key={c.name} scope="col" className={c.type === "number" ? "num" : undefined} aria-sort={sort?.col === i ? (sort.desc ? "descending" : "ascending") : "none"}>
       <button type="button" onClick={() => setSort(s => ({ col: i, desc: s?.col === i ? !s.desc : c.type === "number" }))}>{label(c.name)}</button>
-    </th>)}</tr></thead>
-    <tbody>{sorted.map((r, i) => <tr key={id >= 0 ? String(r[id]) : i} tabIndex={act ? 0 : undefined} onKeyDown={e => { if (act && e.key === "Enter") void act({ kind: "open", row: rowOf(frame.columns, r) }); }}>
-      {frame.columns.map((c, j) => <td key={c.name} className={c.type === "number" ? "num" : undefined}>{cell(r[j], c)}</td>)}
+    </th>)}{anyActions && <th scope="col"><span className="sr-only">Actions</span></th>}</tr></thead>
+    <tbody>{sorted.map((r, k) => <tr key={id >= 0 ? String(r[id]) : k}>
+      {shown.map(({ c, i }) => <td key={c.name} className={c.type === "number" ? "num" : undefined}>{cell(r[i], c)}</td>)}
+      {anyActions && <td className="row-actions"><Buttons kinds={actionsFor(r)} row={rowOf(frame.columns, r)} act={act!} /></td>}
     </tr>)}</tbody>
   </table></div>;
+}
+
+function Buttons({ kinds, row, act }: { kinds: ActionKind[]; row: Row; act: Act }) {
+  return <>{kinds.map(kind => <button type="button" key={kind} className={kind === "force_kill" ? "danger" : undefined} onClick={() => void act({ kind, row })}>{actionLabel(kind)}</button>)}</>;
 }
 
 function rowOf(columns: Column[], r: Frame["rows"][number]): Row {
   return Object.fromEntries(columns.map((c, i) => [c.name, r[i] ?? null]));
 }
 
-function List({ frame }: { frame: Frame }) {
-  const [first, ...rest] = frame.columns;
-  return <ul className="list">{frame.rows.map((r, i) => <li key={i}>
-    <span className="primary">{cell(r[0], first)}</span>
-    <span className="muted">{rest.map((c, j) => cell(r[j + 1], c)).join(" · ")}</span>
-  </li>)}</ul>;
+function List({ frame, source, act }: { frame: Frame; source?: string; act?: Act }) {
+  const { local } = useHost();
+  const shown = frame.columns.map((c, i) => ({ c, i })).filter(({ c }) => !c.hidden);
+  const [first, ...rest] = shown;
+  return <ul className="list">{frame.rows.map((r, k) => {
+    const kinds = act ? rowActions(source, rowOf(frame.columns, r), local) : [];
+    return <li key={k}>
+      <span className="primary">{first ? cell(r[first.i], first.c) : ""}</span>
+      <span className="list-end"><span className="muted">{rest.map(({ c, i }) => cell(r[i], c)).join(" · ")}</span>{kinds.length > 0 && <Buttons kinds={kinds} row={rowOf(frame.columns, r)} act={act!} />}</span>
+    </li>;
+  })}</ul>;
 }
 
 /** Inbox is the needs-you queue: waits first, each with why it waits and how
  * long, then completions. Grey is normal; only waits carry color. */
-function Inbox({ frame, act }: { frame: Frame; act?: Act }) {
+function Inbox({ frame, act, prompts, answer }: { frame: Frame; act?: Act; prompts?: Prompt[]; answer?: (p: Prompt, allow: boolean) => Promise<void> }) {
   const items = rows(frame);
   const waits = items.filter(r => r.kind === "waiting");
   const done = items.filter(r => r.kind !== "waiting");
@@ -115,6 +129,7 @@ function Inbox({ frame, act }: { frame: Frame; act?: Act }) {
     </li>;
   };
   return <div className="inbox">
+    {prompts && prompts.length > 0 && <><h3>Permission prompts · {prompts.length}</h3><ul>{prompts.map(p => <PromptItem key={p.id} prompt={p} answer={answer} />)}</ul></>}
     {waits.length > 0 && <><h3>Needs you · {waits.length}</h3><ul>{waits.map(item)}</ul></>}
     {done.length > 0 && <><h3>Finished · {done.length}</h3><ul>{done.map(item)}</ul></>}
   </div>;
@@ -134,16 +149,22 @@ function Text({ content }: { content: string }) {
 
 /** Cards shows each row as a tile: the first column names it, the rest are
  * its facts. Zero counts stay quiet; nonzero ones read as work in flight. */
-function Cards({ frame }: { frame: Frame }) {
-  const [first, ...rest] = frame.columns;
-  return <ul className="cards">{frame.rows.map((r, i) => <li key={i} className="card">
-    <span className="primary">{cell(r[0], first)}</span>
-    <dl>{rest.map((c, j) => {
-      const v = r[j + 1];
-      if (v === null || v === "" || v === undefined) return null;
-      return <div key={c.name} className={typeof v === "number" && v > 0 && c.unit === "count" ? "fact busy" : "fact"}><dt>{label(c.name)}</dt><dd>{cell(v, c)}</dd></div>;
-    })}</dl>
-  </li>)}</ul>;
+function Cards({ frame, source, act }: { frame: Frame; source?: string; act?: Act }) {
+  const { local } = useHost();
+  const shown = frame.columns.map((c, i) => ({ c, i })).filter(({ c }) => !c.hidden);
+  const [first, ...rest] = shown;
+  return <ul className="cards">{frame.rows.map((r, k) => {
+    const kinds = act ? rowActions(source, rowOf(frame.columns, r), local) : [];
+    return <li key={k} className="card">
+      <span className="primary">{first ? cell(r[first.i], first.c) : ""}</span>
+      <dl>{rest.map(({ c, i }) => {
+        const v = r[i];
+        if (v === null || v === "" || v === undefined) return null;
+        return <div key={c.name} className={typeof v === "number" && v > 0 && c.unit === "count" ? "fact busy" : "fact"}><dt>{label(c.name)}</dt><dd>{cell(v, c)}</dd></div>;
+      })}</dl>
+      {kinds.length > 0 && <div className="actions"><Buttons kinds={kinds} row={rowOf(frame.columns, r)} act={act!} /></div>}
+    </li>;
+  })}</ul>;
 }
 
 /** Timeline draws each session as a bar from its start to its end (or now),
@@ -178,4 +199,32 @@ function Timeline({ frame, act }: { frame: Frame; act?: Act }) {
       </li>;
     })}</ul>
   </div>;
+}
+
+/** PromptItem is one pending permission prompt: the tool and exactly what it
+ * asks to run. Its buttons arm after a moment, so a click meant for the row
+ * that was there before never answers the one that moved into place. */
+function PromptItem({ prompt, answer }: { prompt: Prompt; answer?: (p: Prompt, allow: boolean) => Promise<void> }) {
+  const [armed, setArmed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { const t = window.setTimeout(() => setArmed(true), 600); return () => window.clearTimeout(t); }, [prompt.id]);
+  const detail = promptDetail(prompt);
+  const respond = async (allow: boolean) => { if (!answer) return; setBusy(true); try { await answer(prompt, allow); } finally { setBusy(false); } };
+  return <li className="inbox-item waiting">
+    <div className="inbox-text">
+      <span className="primary">{prompt.tool} · {prompt.session}</span>
+      {detail && <span className="why">{detail}</span>}
+      <span className="muted">{prompt.cwd}</span>
+    </div>
+    {answer && <div className="actions">
+      <button type="button" className="primary-button" disabled={!armed || busy} onClick={() => void respond(true)}>Allow</button>
+      <button type="button" disabled={!armed || busy} onClick={() => void respond(false)}>Deny</button>
+    </div>}
+  </li>;
+}
+
+function promptDetail(p: Prompt): string {
+  const input = (p.input ?? {}) as Record<string, unknown>;
+  for (const key of ["command", "file_path", "url", "pattern"]) if (typeof input[key] === "string") return String(input[key]);
+  return "";
 }

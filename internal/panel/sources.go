@@ -23,6 +23,8 @@ type Column struct {
 	Name string `json:"name"`
 	Type string `json:"type"`
 	Unit string `json:"unit,omitempty"`
+	// Hidden columns carry a row's identity for actions, not for display.
+	Hidden bool `json:"hidden,omitempty"`
 }
 
 // Frame is a source's rows, or a panel's result after filtering and
@@ -88,13 +90,13 @@ func ms(d time.Duration) float64 { return float64(d.Milliseconds()) }
 var sources = map[string]schema{
 	"sessions": {
 		description: "Every live agent session, workers included, with its state label",
-		columns:     []Column{col("id", Number), col("title", String), col("label", String), col("agent", String), col("project", String), col("branch", String), col("machine", String), col("age", Number, "duration"), col("mem_bytes", Number, "bytes"), col("last_activity_at", Time)},
+		columns:     []Column{col("id", Number), col("title", String), col("label", String), col("agent", String), col("project", String), col("branch", String), col("machine", String), col("age", Number, "duration"), col("mem_bytes", Number, "bytes"), col("last_activity_at", Time), col("machine_id", String)},
 		build: func(s viewer.Snapshot) [][]any {
 			var rows [][]any
 			var walk func([]view.AgentRow)
 			walk = func(agents []view.AgentRow) {
 				for _, a := range agents {
-					rows = append(rows, []any{float64(a.ID), a.Title, a.Label, a.Adapter, a.Project, a.Branch, a.MachineName, ms(a.Age), float64(a.Mem), stamp(a.LastActivityAt)})
+					rows = append(rows, []any{float64(a.ID), a.Title, a.Label, a.Adapter, a.Project, a.Branch, a.MachineName, ms(a.Age), float64(a.Mem), stamp(a.LastActivityAt), a.MachineID})
 					walk(a.Children)
 				}
 			}
@@ -118,11 +120,11 @@ var sources = map[string]schema{
 	},
 	"projects": {
 		description: "Repositories with their live agents, uncommitted and unpushed work",
-		columns:     []Column{col("id", Number), col("project", String), col("path", String), col("branch", String), col("machine", String), col("live_agents", Number, "count"), col("dirty", Number, "count"), col("unpushed", Number, "count"), col("worktrees", Number, "count"), col("activity", String), col("at_risk", String)},
+		columns:     []Column{col("id", Number), col("project", String), col("path", String), col("branch", String), col("machine", String), col("live_agents", Number, "count"), col("dirty", Number, "count"), col("unpushed", Number, "count"), col("worktrees", Number, "count"), col("activity", String), col("at_risk", String), col("machine_id", String)},
 		build: func(s viewer.Snapshot) [][]any {
 			rows := make([][]any, 0, len(s.Projects.Rows))
 			for _, p := range s.Projects.Rows {
-				rows = append(rows, []any{float64(p.Status.Repo.ID), p.Status.Repo.Name, p.Status.Repo.Path, p.Branch, p.MachineName, float64(p.Status.LiveAgents), float64(p.Dirty), float64(p.Unpushed), float64(p.Worktrees), p.Status.Activity, strings.Join(p.Status.AtRisk, ", ")})
+				rows = append(rows, []any{float64(p.Status.Repo.ID), p.Status.Repo.Name, p.Status.Repo.Path, p.Branch, p.MachineName, float64(p.Status.LiveAgents), float64(p.Dirty), float64(p.Unpushed), float64(p.Worktrees), p.Status.Activity, strings.Join(p.Status.AtRisk, ", "), p.MachineID})
 			}
 			return rows
 		},
@@ -140,11 +142,11 @@ var sources = map[string]schema{
 	},
 	"cleanup": {
 		description: "Disk agents left behind on this machine: merged worktrees and scratch directories",
-		columns:     []Column{col("id", String), col("kind", String), col("path", String), col("project", String), col("branch", String), col("status", String), col("size_bytes", Number, "bytes")},
+		columns:     []Column{col("id", String), col("kind", String), col("path", String), col("project", String), col("branch", String), col("status", String), col("size_bytes", Number, "bytes"), col("machine_id", String)},
 		build: func(s viewer.Snapshot) [][]any {
 			rows := make([][]any, 0, len(s.Cleanup))
 			for _, c := range s.Cleanup {
-				rows = append(rows, []any{c.ID, string(c.Kind), c.Path, c.Repo, c.Branch, c.Status, float64(c.Size)})
+				rows = append(rows, []any{c.ID, string(c.Kind), c.Path, c.Repo, c.Branch, c.Status, float64(c.Size), s.LocalMachineID})
 			}
 			return rows
 		},

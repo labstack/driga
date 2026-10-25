@@ -21,6 +21,10 @@ const (
 
 const defaultLimit = 50
 
+// identity are the columns actions need to name a row: its id, session and
+// machine, plus what decides whether an action is offered.
+var identity = []string{"id", "session_id", "machine_id", "path", "verified", "young", "status", "label", "kind"}
+
 // RunRequest asks for a dashboard's panels with variable values. Panels, when
 // set, limits the run to those ids.
 type RunRequest struct {
@@ -47,6 +51,8 @@ type Fragment struct {
 	ObservedAt string              `json:"observed_at"`
 	ID         string              `json:"id,omitempty"`
 	Version    int                 `json:"version,omitempty"`
+	// LocalMachine is the machine the app runs on; actions act only there.
+	LocalMachine string `json:"local_machine"`
 }
 
 // Run validates the dashboard and runs its panels over snap.
@@ -70,7 +76,7 @@ func Run(snap viewer.Snapshot, req RunRequest) (Fragment, error) {
 		base[source] = r
 		return r
 	}
-	f := Fragment{Dashboard: req.Dashboard, Results: []Result{}, Vars: vars, Options: options(req.Dashboard, rows), ObservedAt: snap.ObservedAt.UTC().Format(time.RFC3339)}
+	f := Fragment{Dashboard: req.Dashboard, Results: []Result{}, Vars: vars, Options: options(req.Dashboard, rows), ObservedAt: snap.ObservedAt.UTC().Format(time.RFC3339), LocalMachine: snap.LocalMachineID}
 	for _, p := range req.Dashboard.Panels {
 		if len(req.Panels) > 0 && !slices.Contains(req.Panels, p.ID) {
 			continue
@@ -292,10 +298,21 @@ func project(s schema, rows [][]any, p Panel) Frame {
 		}
 	}
 	frame := Frame{}
+	// A row keeps its identity even when the view leaves those columns out,
+	// so the app can act on it.
+	hidden := map[string]bool{}
+	for _, key := range identity {
+		if !slices.Contains(names, key) && slices.ContainsFunc(s.columns, func(c Column) bool { return c.Name == key }) {
+			names = append(slices.Clone(names), key)
+			hidden[key] = true
+		}
+	}
 	index := make([]int, len(names))
 	for j, name := range names {
 		index[j] = slices.IndexFunc(s.columns, func(c Column) bool { return c.Name == name })
-		frame.Columns = append(frame.Columns, s.columns[index[j]])
+		c := s.columns[index[j]]
+		c.Hidden = hidden[name]
+		frame.Columns = append(frame.Columns, c)
 	}
 	// Sort on the full row so a column left out of the view still orders it.
 	sorted := slices.Clone(rows)

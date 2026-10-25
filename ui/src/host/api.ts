@@ -1,4 +1,4 @@
-import { normalize, type Dashboard, type Fragment, type Panel } from "../panels/types";
+import { normalize, type Dashboard, type Fragment, type Panel, type Prompt } from "../panels/types";
 
 async function post<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
   const response = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal });
@@ -51,5 +51,7 @@ export const chat = {
   send: (id: string, text: string, context: Record<string, unknown>) => post("/chat/api/send", { id, text, context }),
   stop: (id: string) => post("/chat/api/stop", { id }),
   decide: (id: string, action: string, allow: boolean) => post("/chat/api/decide", { id, action, allow }),
+  prompts: () => get<Prompt[] | null>("/chat/api/prompts").then(p => p ?? []),
+  answer: (id: string, allow: boolean) => post("/chat/api/prompt-answer", { id, allow }),
   wait: (id: string, after: number, signal: AbortSignal) => get<ChatState>(`/chat/api/wait?id=${encodeURIComponent(id)}&after=${after}`, signal),
 };

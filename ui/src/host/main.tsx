@@ -3,12 +3,12 @@
 import { StrictMode, useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { value } from "../panels/format";
-import type { Act } from "../panels/PanelView";
-import type { Fragment, Panel } from "../panels/types";
+import { HostContext, type Act, type Host } from "../panels/host";
+import type { Fragment, Panel, Prompt } from "../panels/types";
 import "../panels/theme.css";
 import "../panels/panels.css";
 import "./host.css";
-import { action, dashboards, type Operation, type Summary } from "./api";
+import { action, chat, confirm, dashboards, type Operation, type Summary } from "./api";
 import { Chat } from "./Chat";
 import { Dashboard } from "./Dashboard";
 
@@ -26,6 +26,7 @@ function App() {
   const [editing, setEditing] = useState(false);
   const [chatOpen, setChatOpen] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
+  const [prompts, setPrompts] = useState<Prompt[]>([]);
   const timer = useRef<number | undefined>(undefined);
 
   const load = useCallback(async () => {
@@ -40,6 +41,9 @@ function App() {
     timer.current = window.setInterval(tick, refreshMs);
     return () => window.clearInterval(timer.current);
   }, [load, editing]);
+  // Permission prompts come from the agents' hooks, not the snapshot; they
+  // refresh with the board.
+  useEffect(() => { chat.prompts().then(setPrompts, () => setPrompts([])); }, [fragment?.observed_at]);
   useEffect(() => { dashboards.list().then(setList, () => undefined); }, [fragment?.version]);
   useEffect(() => { history.replaceState(null, "", id === "home" ? "/app/" : `/app/?dashboard=${encodeURIComponent(id)}`); }, [id]);
 
@@ -50,11 +54,39 @@ function App() {
     catch (e) { say((e as Error).message); void load(); }
   };
   const act: Act = async ({ kind, row }) => {
+    const machine = row.machine_id;
+    const session = Number(row.session_id ?? row.id);
+    const name = String(row.title ?? row.signature ?? row.project ?? row.path ?? row.id ?? "");
+    // Anything that changes the machine asks the app's dialog first, as the
+    // TUI does; the server refuses it otherwise.
+    const ask = async (message: string) => { const ok = await confirm(message); if (!ok) say("Cancelled"); return ok; };
     try {
-      if (kind === "jump" || kind === "open") { await action({ action: "jump", session_id: Number(row.session_id ?? row.id), machine: row.machine_id }); say("Opened the session's pane"); }
-      if (kind === "ack") { await action({ action: "ack_inbox", id: row.id, machine: row.machine_id }); say("Acknowledged"); void load(); }
+      switch (kind) {
+        case "jump":
+        case "open": await action({ action: "jump", session_id: session, machine }); say("Opened the session's pane"); return;
+        case "ack": await action({ action: "ack_inbox", id: row.id, machine }); say("Acknowledged"); break;
+        case "stop":
+          if (!await ask(`Stop ${name}? Its agent and the processes it started are ended.`)) return;
+          await action({ action: "kill", session_id: session, machine, confirmed: true }); say(`Stopped ${name}`); break;
+        case "kill":
+        case "force_kill": {
+          const force = kind === "force_kill";
+          if (!await ask(`${force ? "Force kill" : "Kill"} the ${name} process tree? ${force ? "Processes get SIGKILL without a chance to clean up." : "Processes get SIGTERM first."}`)) return;
+          await action({ action: "kill", id: row.id, machine, force, confirmed: true }); say(`Killed ${name}`); break;
+        }
+        case "cleanup":
+          if (!await ask(`Remove ${name}? Driga checks it again before removing it.`)) return;
+          await action({ action: "cleanup", id: row.id, machine, confirmed: true }); say(`Removed ${name}`); break;
+        case "summarize": await action({ action: "summarize", project: row.path, machine }); say(`Summarizing ${name}`); return;
+      }
+      void load();
     } catch (e) { say((e as Error).message); }
   };
+  const answer = async (prompt: Prompt, allow: boolean) => {
+    try { await chat.answer(prompt.id, allow); setPrompts(ps => ps.filter(p => p.id !== prompt.id)); say(allow ? `Allowed ${prompt.tool}` : `Denied ${prompt.tool}`); }
+    catch (e) { say((e as Error).message); }
+  };
+  const host: Host = { act, local: fragment?.local_machine, prompts, answer };
   const pin = (panels: Panel[]) => {
     const taken = new Set(fragment?.dashboard.panels.map(p => p.id));
     const ops: Operation[] = panels.map(p => {
@@ -92,7 +124,7 @@ function App() {
   });
   const inboxPanel = fragment?.dashboard.panels.find(p => p.viz === "inbox");
   const inbox = inboxPanel ? { panel: inboxPanel, result: fragment!.results.find(r => r.id === inboxPanel.id) } : undefined;
-  return <div className={chatOpen ? "shell with-chat" : "shell"}>
+  return <HostContext.Provider value={host}><div className={chatOpen ? "shell with-chat" : "shell"}>
     <header className="top">
       <span className="mark" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 12 12"><circle cx="6" cy="6" r="4" fill="none" stroke="#fff" strokeWidth="1.6" /></svg></span>
       <strong className="wordmark">driga</strong>
@@ -117,7 +149,7 @@ function App() {
     </main>
     {chatOpen && <Chat inbox={inbox} status={status} act={act} onPin={pin} onClose={() => setChatOpen(false)} />}
     {notice && <p className="toast" role="status">{notice}</p>}
-  </div>;
+  </div></HostContext.Provider>;
 }
 
 createRoot(document.getElementById("root")!).render(<StrictMode><App /></StrictMode>);

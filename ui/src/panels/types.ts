@@ -31,7 +31,7 @@ export type Variable = { name: string; field: string; default?: string };
 
 export type Dashboard = { name: string; description?: string; variables?: Variable[]; panels: Panel[] };
 
-export type Column = { name: string; type: "string" | "number" | "time" | "bool"; unit?: string };
+export type Column = { name: string; type: "string" | "number" | "time" | "bool"; unit?: string; hidden?: boolean };
 
 export type Cell = string | number | boolean | null;
 
@@ -49,7 +49,11 @@ export type Fragment = {
   observed_at: string;
   id?: string;
   version?: number;
+  local_machine?: string;
 };
+
+/** Prompt is a pending Claude permission prompt, answered from the inbox. */
+export type Prompt = { id: string; session: string; session_id?: number; cwd: string; tool: string; input?: unknown; created_at: string };
 
 /** isFragment checks the shape a tool result must have before it renders. */
 export function isFragment(value: unknown): value is Fragment {

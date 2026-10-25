@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Board } from "../panels/Board";
+import { useHost } from "../panels/host";
 import { PanelView, type Act } from "../panels/PanelView";
 import type { Dashboard, Fragment, Panel, Result } from "../panels/types";
 import { chat, dashboards, type ChatAction, type ChatMessage, type ChatState } from "./api";
@@ -43,7 +44,8 @@ function ActionCard({ conversation, action }: { conversation: string; action: Ch
  * pick something. */
 function Brief({ inbox, status, act, ask }: { inbox?: { panel: Panel; result?: Result }; status: string[]; act?: Act; ask: (text: string) => void }) {
   const waits = inbox?.result?.frame?.rows.filter(r => r[inbox.result!.frame!.columns.findIndex(c => c.name === "kind")] === "waiting").length ?? 0;
-  const items = inbox?.result?.frame?.rows.length ?? 0;
+  const { prompts = [] } = useHost();
+  const items = (inbox?.result?.frame?.rows.length ?? 0) + prompts.length;
   const suggestions = [
     waits ? "What needs me first, and why?" : "Is anything stuck or looping?",
     "What finished since I was away, and is it safe to merge?",
@@ -51,7 +53,7 @@ function Brief({ inbox, status, act, ask }: { inbox?: { panel: Panel; result?: R
     "Which processes can I reclaim?",
   ];
   return <div className="brief">
-    <p className="brief-lead">{waits ? `${waits} ${waits === 1 ? "session needs" : "sessions need"} you.` : "Nothing is waiting on you."}{status.length > 0 && ` ${status.join(" · ")}.`}</p>
+    <p className="brief-lead">{prompts.length > 0 && `${prompts.length} permission ${prompts.length === 1 ? "prompt" : "prompts"} to answer. `}{waits ? `${waits} ${waits === 1 ? "session needs" : "sessions need"} you.` : prompts.length ? "" : "Nothing is waiting on you."}{status.length > 0 && ` ${status.join(" · ")}.`}</p>
     {inbox && items > 0 && <PanelView panel={inbox.panel} result={inbox.result} act={act} />}
     <div className="chips">{suggestions.map(s => <button type="button" key={s} onClick={() => ask(s)}>{s}</button>)}</div>
   </div>;
