@@ -20,7 +20,7 @@ func TestHomeExistsBeforeItIsSaved(t *testing.T) {
 		t.Fatalf("edited home = %+v, %v", edited, err)
 	}
 	list, err := s.List()
-	if err != nil || len(list) != 1 || list[0].ID != panel.HomeID || list[0].Version != 1 {
+	if err != nil || len(list) != len(panel.BuiltinIDs) || list[0].ID != panel.HomeID || list[0].Version != 1 || list[1].Version != 0 {
 		t.Fatalf("list = %+v, %v", list, err)
 	}
 }

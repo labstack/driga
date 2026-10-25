@@ -127,3 +127,30 @@ func TestValidateNamesEveryProblem(t *testing.T) {
 		}
 	}
 }
+
+func TestBuiltinsValidateAndRun(t *testing.T) {
+	for _, id := range BuiltinIDs {
+		d, ok := Builtin(id)
+		if !ok {
+			t.Fatalf("%s missing", id)
+		}
+		if _, err := Run(snapshot(), RunRequest{Dashboard: d}); err != nil {
+			t.Errorf("%s: %v", id, err)
+		}
+	}
+}
+
+func TestTimelineCarriesWaits(t *testing.T) {
+	s := snapshot()
+	start := s.ObservedAt.Add(-time.Hour)
+	end := s.ObservedAt.Add(-30 * time.Minute)
+	s.BoardData.Nodes = []view.FlowNode{{ID: 1, Title: "fix tz", StartedAt: start, LastActivityAt: s.ObservedAt, Waits: []view.FlowWait{{StartedAt: start.Add(time.Minute), EndedAt: &end, Reason: "permission"}}}, {ID: 2, Title: "other", StartedAt: start, LastActivityAt: start}}
+	f, err := Run(s, RunRequest{Dashboard: Dashboard{Name: "t", Panels: []Panel{{ID: "tl", Title: "T", Viz: "timeline", Source: "flow", Limit: 1}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	frame := f.Results[0].Frame
+	if len(frame.Rows) != 1 || frame.Rows[0][0] != 1.0 || len(frame.Spans) != 1 || frame.Spans[0].Reason != "permission" {
+		t.Fatalf("timeline = %+v", frame)
+	}
+}

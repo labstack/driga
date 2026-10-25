@@ -2,7 +2,7 @@ import { relative } from "./format";
 import { PanelView, type Act } from "./PanelView";
 import type { Fragment, Panel } from "./types";
 
-const defaultWidth: Record<Panel["viz"], number> = { stat: 3, gauge: 3, timeseries: 6, bar: 6, table: 12, list: 6, inbox: 8, text: 6 };
+const defaultWidth: Record<Panel["viz"], number> = { stat: 3, gauge: 3, timeseries: 6, bar: 6, table: 12, list: 6, inbox: 8, cards: 12, timeline: 12, text: 6 };
 
 /** Board lays a fragment's panels on the 12-column grid. Positions saved by
  * dragging win; otherwise panels flow in order at their widths. */

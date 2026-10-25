@@ -121,7 +121,7 @@ func registerPanels(s *sdk.Server, o Options) {
 	sdk.AddTool(s, &sdk.Tool{Name: "describe_panels", Title: "Panel sources", Annotations: readOnly,
 		Description: "List the data sources a panel can show, with their columns and types, the panel kinds, measures and variable fields. Read this before drafting a panel." + specGuide,
 	}, func(context.Context, *sdk.CallToolRequest, struct{}) (*sdk.CallToolResult, describeOutput, error) {
-		out := describeOutput{Sources: panel.Sources(), Vizzes: []string{"stat", "gauge", "timeseries", "bar", "table", "list", "inbox", "text"}, Measures: "count, sum:<column>, avg:<column>, max:<column>, min:<column>", Fields: []string{"project", "machine", "agent", "label", "kind"}}
+		out := describeOutput{Sources: panel.Sources(), Vizzes: []string{"stat", "gauge", "timeseries", "bar", "table", "list", "inbox", "cards", "timeline", "text"}, Measures: "count, sum:<column>, avg:<column>, max:<column>, min:<column>", Fields: []string{"project", "machine", "agent", "label", "kind"}}
 		return &sdk.CallToolResult{Content: []sdk.Content{&sdk.TextContent{Text: fmt.Sprintf("%d sources: %s.", len(out.Sources), strings.Join(panel.SourceNames(), ", "))}}}, out, nil
 	})
 	sdk.AddTool(s, &sdk.Tool{Name: "show_panels", Title: "Show panels", Annotations: readOnly, Meta: appMeta(),

@@ -124,6 +124,8 @@ func runPanel(p Panel, vars map[string]string, rows func(string) [][]any) Result
 		frame = Frame{Columns: []Column{{Name: "value", Type: Number, Unit: cmp.Or(p.Unit, unit)}}, Rows: [][]any{{value}}}
 	case p.Viz == "timeseries":
 		frame = timeseries(s, data, p)
+	case p.Viz == "timeline":
+		frame = timeline(s, data, p, rows("waits"))
 	case p.By != "":
 		frame = grouped(s, data, p)
 	default:
@@ -194,8 +196,9 @@ func match(cell any, op, value string) bool {
 	return false
 }
 
-// aggregate reduces rows to one number with measure (default count).
-func aggregate(s schema, rows [][]any, measure string) (float64, string) {
+// aggregate reduces rows to one number with measure (default count). With
+// no readings to sum, it returns nil: missing data is not zero.
+func aggregate(s schema, rows [][]any, measure string) (any, string) {
 	fn, column, _ := parseMeasure(cmp.Or(measure, "count"))
 	if fn == "count" {
 		return float64(len(rows)), "count"
@@ -209,7 +212,7 @@ func aggregate(s schema, rows [][]any, measure string) (float64, string) {
 	}
 	unit := s.columns[i].Unit
 	if len(values) == 0 {
-		return 0, unit
+		return nil, unit
 	}
 	switch fn {
 	case "sum", "avg":
@@ -376,4 +379,34 @@ func limit(f Frame, n int) Frame {
 		f.Rows = f.Rows[:n]
 	}
 	return f
+}
+
+// timeline lists each session, newest activity first, with its waits as
+// spans the renderer draws over the session's bar.
+func timeline(s schema, data [][]any, p Panel, waits [][]any) Frame {
+	if p.Sort == "" {
+		p.Sort = "-last_activity_at"
+	}
+	if len(p.Columns) == 0 {
+		p.Columns = []string{"id", "title", "label", "agent", "project", "started_at", "ended_at", "last_activity_at"}
+	}
+	for _, need := range []string{"id", "started_at", "ended_at", "last_activity_at"} {
+		if !slices.Contains(p.Columns, need) {
+			p.Columns = append(p.Columns, need)
+		}
+	}
+	frame := project(s, data, p)
+	shown := map[float64]bool{}
+	id := slices.IndexFunc(frame.Columns, func(c Column) bool { return c.Name == "id" })
+	for _, r := range frame.Rows {
+		if n, ok := r[id].(float64); ok {
+			shown[n] = true
+		}
+	}
+	for _, w := range waits {
+		if n, ok := w[0].(float64); ok && shown[n] {
+			frame.Spans = append(frame.Spans, Span{SessionID: n, Kind: "waiting", From: w[6], To: w[7], Reason: fmt.Sprint(w[4])})
+		}
+	}
+	return frame
 }

@@ -35,15 +35,15 @@ type Panel struct {
 	ID          string   `json:"id" jsonschema:"Stable identifier: lowercase letters, digits and underscores; edits address panels by id"`
 	Title       string   `json:"title" jsonschema:"Panel title, at most 80 characters; may reference $variables"`
 	Description string   `json:"description,omitempty" jsonschema:"Help text, at most 280 characters"`
-	Viz         string   `json:"viz" jsonschema:"stat, gauge, timeseries, bar, table, list, inbox, text"`
-	Source      string   `json:"source,omitempty" jsonschema:"sessions, inbox, projects, orphans, cleanup, activity, memory, costs, machines or summary; every viz except text needs one"`
+	Viz         string   `json:"viz" jsonschema:"stat, gauge, timeseries, bar, table, list, inbox, cards, timeline or text; cards shows rows as tiles, timeline draws each session from start to end with its waits"`
+	Source      string   `json:"source,omitempty" jsonschema:"sessions, flow, waits, inbox, projects, orphans, cleanup, activity, memory, costs, machines or summary; every viz except text needs one"`
 	Where       []Filter `json:"where,omitempty" jsonschema:"Filters on source columns, all of which must match"`
 	By          string   `json:"by,omitempty" jsonschema:"Column to group rows by; bar and table group, other vizzes ignore it"`
 	Measure     string   `json:"measure,omitempty" jsonschema:"count, or sum:, avg:, max: or min: followed by a numeric column, e.g. sum:mem_bytes; stat, gauge, bar and grouped tables aggregate with it"`
 	Columns     []string `json:"columns,omitempty" jsonschema:"Columns to show, in order; table and list default to the source's own"`
 	Sort        string   `json:"sort,omitempty" jsonschema:"Column to sort by; prefix with - for descending"`
 	Limit       int      `json:"limit,omitempty" jsonschema:"Most rows to return, 1 to 200; default 50"`
-	Unit        string   `json:"unit,omitempty" jsonschema:"count, bytes, percent, duration or none; inferred from the measured column when omitted"`
+	Unit        string   `json:"unit,omitempty" jsonschema:"count, bytes, percent, duration, usd or none; inferred from the measured column when omitted"`
 	Max         *float64 `json:"max,omitempty" jsonschema:"gauge: the value that fills the gauge"`
 	Width       int      `json:"width,omitempty" jsonschema:"Grid columns from 1 to 12; default depends on viz"`
 	Height      string   `json:"height,omitempty" jsonschema:"s, m or l; default depends on viz"`
@@ -68,10 +68,10 @@ type Grid struct {
 
 var (
 	idPattern = regexp.MustCompile(`^[a-z][a-z0-9_]{0,39}$`)
-	vizzes    = []string{"stat", "gauge", "timeseries", "bar", "table", "list", "inbox", "text"}
+	vizzes    = []string{"stat", "gauge", "timeseries", "bar", "table", "list", "inbox", "cards", "timeline", "text"}
 	ops       = []string{"", "eq", "ne", "in", "gt", "lt", "contains"}
 	heights   = []string{"", "s", "m", "l"}
-	units     = []string{"", "count", "bytes", "percent", "duration", "none"}
+	units     = []string{"", "count", "bytes", "percent", "duration", "usd", "none"}
 	fields    = []string{"project", "machine", "agent", "label", "kind"}
 )
 
@@ -216,6 +216,10 @@ func Validate(d Dashboard) error {
 		case "inbox":
 			if p.Source != "inbox" {
 				add(path+".source", "inbox panels show the inbox source")
+			}
+		case "timeline":
+			if p.Source != "flow" {
+				add(path+".source", "timeline panels show the flow source")
 			}
 		}
 	}

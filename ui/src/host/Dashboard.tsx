@@ -5,7 +5,7 @@ import type { Fragment, Panel } from "../panels/types";
 
 const rowHeight = 36;
 const rowsFor = { s: 2, m: 7, l: 12 } as const;
-const widthFor: Record<Panel["viz"], number> = { stat: 3, gauge: 3, timeseries: 6, bar: 6, table: 12, list: 6, inbox: 8, text: 6 };
+const widthFor: Record<Panel["viz"], number> = { stat: 3, gauge: 3, timeseries: 6, bar: 6, table: 12, list: 6, inbox: 8, cards: 12, timeline: 12, text: 6 };
 
 function size(p: Panel) {
   const w = Math.min(12, p.width ?? widthFor[p.viz]);

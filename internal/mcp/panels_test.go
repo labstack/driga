@@ -98,7 +98,7 @@ func TestDashboardLifecycleOverMCP(t *testing.T) {
 		t.Fatalf("invalid create = %+v", res.Content)
 	}
 	_, out = callPanels(t, cs, "list_dashboards", map[string]any{})
-	if dashboards, _ := out["dashboards"].([]any); len(dashboards) != 2 {
+	if dashboards, _ := out["dashboards"].([]any); len(dashboards) != len(panel.BuiltinIDs)+1 {
 		t.Fatalf("list = %v", out)
 	}
 	_, out = callPanels(t, cs, "restore_dashboard_version", map[string]any{"id": id, "version": 1})

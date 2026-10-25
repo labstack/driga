@@ -30,6 +30,7 @@ export function value(n: number, unit?: string): string {
     case "bytes": return bytes(n);
     case "duration": return duration(n);
     case "percent": return `${Math.round(n)}%`;
+    case "usd": return `$${n < 10 ? n.toFixed(2) : Math.round(n).toLocaleString()}`;
     default: return Number.isInteger(n) ? n.toLocaleString() : n.toFixed(2);
   }
 }

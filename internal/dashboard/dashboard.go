@@ -102,9 +102,8 @@ func (s *Store) read(id string) (Record, error) {
 	}
 	b, err := os.ReadFile(s.path(id))
 	if errors.Is(err, os.ErrNotExist) {
-		if id == panel.HomeID {
-			home := panel.Home()
-			return Record{ID: id, Name: home.Name, Spec: home}, nil
+		if spec, ok := panel.Builtin(id); ok {
+			return Record{ID: id, Name: spec.Name, Spec: spec}, nil
 		}
 		return Record{}, ErrNotFound
 	}
@@ -158,15 +157,15 @@ func (s *Store) save(r Record, spec panel.Dashboard, author Author, message stri
 	return Record{ID: r.ID, Name: spec.Name, Version: v.Version, SavedAt: v.SavedAt, Spec: spec, history: history}, nil
 }
 
-// List returns every saved dashboard, and Home even before it is saved.
+// List returns the built-in dashboards, saved or not, then the user's own.
 func (s *Store) List() ([]Summary, error) {
 	entries, err := os.ReadDir(s.dir)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	}
-	ids := []string{panel.HomeID}
+	ids := slices.Clone(panel.BuiltinIDs)
 	for _, e := range entries {
-		if id, ok := strings.CutSuffix(e.Name(), ".json"); ok && idPattern.MatchString(id) && id != panel.HomeID {
+		if id, ok := strings.CutSuffix(e.Name(), ".json"); ok && idPattern.MatchString(id) && !slices.Contains(panel.BuiltinIDs, id) {
 			ids = append(ids, id)
 		}
 	}

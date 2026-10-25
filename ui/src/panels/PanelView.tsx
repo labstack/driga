@@ -39,6 +39,8 @@ function Body({ panel, frame, height, act }: { panel: Panel; frame: Frame; heigh
     case "timeseries": return <Chart panel={panel} frame={frame} height={height ? height - 48 : undefined} />;
     case "inbox": return <Inbox frame={frame} act={act} />;
     case "list": return <List frame={frame} />;
+    case "cards": return <Cards frame={frame} />;
+    case "timeline": return <Timeline frame={frame} act={act} />;
     default: return <Table frame={frame} act={act} />;
   }
 }
@@ -128,4 +130,52 @@ function Text({ content }: { content: string }) {
     if (lines.every(l => /^\s*[-*] /.test(l))) return <ul key={i}>{lines.map((l, j) => <li key={j}>{inline(l.replace(/^\s*[-*] /, ""))}</li>)}</ul>;
     return <p key={i}>{inline(b)}</p>;
   })}</div>;
+}
+
+/** Cards shows each row as a tile: the first column names it, the rest are
+ * its facts. Zero counts stay quiet; nonzero ones read as work in flight. */
+function Cards({ frame }: { frame: Frame }) {
+  const [first, ...rest] = frame.columns;
+  return <ul className="cards">{frame.rows.map((r, i) => <li key={i} className="card">
+    <span className="primary">{cell(r[0], first)}</span>
+    <dl>{rest.map((c, j) => {
+      const v = r[j + 1];
+      if (v === null || v === "" || v === undefined) return null;
+      return <div key={c.name} className={typeof v === "number" && v > 0 && c.unit === "count" ? "fact busy" : "fact"}><dt>{label(c.name)}</dt><dd>{cell(v, c)}</dd></div>;
+    })}</dl>
+  </li>)}</ul>;
+}
+
+/** Timeline draws each session as a bar from its start to its end (or now),
+ * with its waits on you marked over it. Working is grey; only waits carry
+ * color. */
+function Timeline({ frame, act }: { frame: Frame; act?: Act }) {
+  const items = rows(frame);
+  const now = Date.now();
+  const starts = items.map(r => Date.parse(String(r.started_at))).filter(n => !Number.isNaN(n));
+  const from = starts.length ? Math.min(...starts) : now - 3600_000;
+  const span = Math.max(60_000, now - from);
+  const pos = (t: number) => `${Math.max(0, Math.min(100, ((t - from) / span) * 100))}%`;
+  const end = (r: Row) => Date.parse(String(r.ended_at ?? "")) || now;
+  const ticks = [0, 0.25, 0.5, 0.75, 1].map(f => from + f * span);
+  return <div className="timeline">
+    <div className="tl-axis" aria-hidden="true"><span />{ticks.map(t => <span key={t} style={{ left: pos(t) }}>{new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>)}</div>
+    <ul>{items.map(r => {
+      const start = Date.parse(String(r.started_at));
+      const finish = end(r);
+      const waits = (frame.spans ?? []).filter(s => s.session_id === r.id);
+      const waiting = r.label === "waiting";
+      return <li key={String(r.id)} className="tl-row">
+        <button type="button" className="tl-label" disabled={!act} onClick={() => act && void act({ kind: "jump", row: { ...r, session_id: r.id } })} title={String(r.title ?? "")}>
+          <span className="primary">{String(r.title || `Session ${r.id}`)}</span>
+          <span className="muted">{[r.agent, r.project].filter(Boolean).join(" · ")}</span>
+        </button>
+        <div className="tl-track" role="img" aria-label={`${r.title}: ${r.label}, ${waits.length} waits`}>
+          <span className={`tl-bar ${waiting ? "waiting" : r.ended_at ? "ended" : ""}`} style={{ left: pos(start), width: `calc(${pos(finish)} - ${pos(start)})` }} />
+          {waits.map((w, i) => { const a = Date.parse(String(w.from)); const b = Date.parse(String(w.to ?? "")) || now; return <span key={i} className="tl-wait" title={w.reason} style={{ left: pos(a), width: `max(3px, calc(${pos(b)} - ${pos(a)}))` }} />; })}
+        </div>
+        <span className={`tl-state ${waiting ? "waiting" : ""}`}>{String(r.label ?? "")}</span>
+      </li>;
+    })}</ul>
+  </div>;
 }

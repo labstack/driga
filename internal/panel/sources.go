@@ -30,6 +30,17 @@ type Column struct {
 type Frame struct {
 	Columns []Column `json:"columns"`
 	Rows    [][]any  `json:"rows"`
+	// Spans are the waits of a timeline's sessions, by session id.
+	Spans []Span `json:"spans,omitempty"`
+}
+
+// Span is one stretch of a session's timeline, such as a wait on a person.
+type Span struct {
+	SessionID float64 `json:"session_id"`
+	Kind      string  `json:"kind"`
+	From      any     `json:"from"`
+	To        any     `json:"to"`
+	Reason    string  `json:"reason,omitempty"`
 }
 
 type schema struct {
@@ -177,6 +188,55 @@ var sources = map[string]schema{
 			return rows
 		},
 	},
+	"flow": {
+		description: "Every session in the flow window, ended ones included, with its family, cost and model",
+		columns:     []Column{col("id", Number), col("parent_id", Number), col("title", String), col("label", String), col("agent", String), col("model", String), col("project", String), col("branch", String), col("machine_id", String), col("machine", String), col("started_at", Time), col("ended_at", Time), col("last_activity_at", Time), col("elapsed", Number, "duration"), col("mem_bytes", Number, "bytes"), col("cost_usd", Number, "usd"), col("input_tokens", Number, "count"), col("output_tokens", Number, "count"), col("last_tool", String), col("reason", String)},
+		build: func(s viewer.Snapshot) [][]any {
+			names := machineNames(s)
+			rows := make([][]any, 0, len(s.BoardData.Nodes))
+			for _, n := range s.BoardData.Nodes {
+				var parent, ended, mem, cost, in, out any
+				if n.ParentID != nil {
+					parent = float64(*n.ParentID)
+				}
+				if n.EndedAt != nil {
+					ended = stamp(*n.EndedAt)
+				}
+				if n.Mem != nil {
+					mem = float64(*n.Mem)
+				}
+				if n.CostUSD != nil {
+					cost = *n.CostUSD
+				}
+				if n.InputTokens != nil {
+					in = float64(*n.InputTokens)
+				}
+				if n.OutputTokens != nil {
+					out = float64(*n.OutputTokens)
+				}
+				rows = append(rows, []any{float64(n.ID), parent, n.Title, n.Label, n.Adapter, n.Model, n.Project, n.Branch, n.MachineID, names[n.MachineID], stamp(n.StartedAt), ended, stamp(n.LastActivityAt), ms(n.Elapsed), mem, cost, in, out, n.LastTool, n.Reason})
+			}
+			return rows
+		},
+	},
+	"waits": {
+		description: "Spans when a session waited on a person, from the flow window",
+		columns:     []Column{col("session_id", Number), col("title", String), col("project", String), col("agent", String), col("reason", String), col("detail", String), col("started_at", Time), col("ended_at", Time)},
+		build: func(s viewer.Snapshot) [][]any {
+			names := machineNames(s)
+			var rows [][]any
+			for _, n := range s.BoardData.Nodes {
+				for _, w := range n.Waits {
+					var ended any
+					if w.EndedAt != nil {
+						ended = stamp(*w.EndedAt)
+					}
+					rows = append(rows, []any{float64(n.ID), n.Title, n.Project, n.Adapter, w.Reason, w.Detail, stamp(w.StartedAt), ended, names[n.MachineID]})
+				}
+			}
+			return rows
+		},
+	},
 	"machines": {
 		description: "Known machines with their agents, inbox and connection state",
 		columns:     []Column{col("machine_id", String), col("machine", String), col("state", String), col("os", String), col("agents", Number, "count"), col("inbox", Number, "count"), col("last_seen", Number, "duration")},
@@ -228,3 +288,12 @@ func Sources() []SourceInfo {
 // variableColumns maps a variable's field to the column it filters in each
 // source that has one.
 var variableColumns = map[string]string{"project": "project", "machine": "machine", "agent": "agent", "label": "label", "kind": "kind"}
+
+// machineNames maps machine ids to the names the other sources show.
+func machineNames(s viewer.Snapshot) map[string]string {
+	names := map[string]string{}
+	for _, m := range s.Machines.Rows {
+		names[m.MachineID] = view.MachineName(m.Machine)
+	}
+	return names
+}

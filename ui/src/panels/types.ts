@@ -1,7 +1,7 @@
 // Mirrors internal/panel: the spec Driga's MCP tools accept and the fragment
 // they return. A fragment is a dashboard with its results.
 
-export type Viz = "stat" | "gauge" | "timeseries" | "bar" | "table" | "list" | "inbox" | "text";
+export type Viz = "stat" | "gauge" | "timeseries" | "bar" | "table" | "list" | "inbox" | "cards" | "timeline" | "text";
 
 export type Filter = { column: string; op?: string; value: string };
 
@@ -35,7 +35,9 @@ export type Column = { name: string; type: "string" | "number" | "time" | "bool"
 
 export type Cell = string | number | boolean | null;
 
-export type Frame = { columns: Column[]; rows: Cell[][] };
+export type Span = { session_id: number; kind: string; from: string | null; to: string | null; reason?: string };
+
+export type Frame = { columns: Column[]; rows: Cell[][]; spans?: Span[] };
 
 export type Result = { id: string; status: "ok" | "empty" | "error"; message?: string; frame?: Frame };
 
@@ -62,7 +64,7 @@ export function normalize(f: Fragment): Fragment {
   return {
     ...f,
     dashboard: { ...f.dashboard, panels: f.dashboard.panels ?? [], variables: f.dashboard.variables ?? [] },
-    results: (f.results ?? []).map(r => r.frame ? { ...r, frame: { columns: r.frame.columns ?? [], rows: r.frame.rows ?? [] } } : r),
+    results: (f.results ?? []).map(r => r.frame ? { ...r, frame: { ...r.frame, columns: r.frame.columns ?? [], rows: r.frame.rows ?? [] } } : r),
   };
 }
 

@@ -61,3 +61,29 @@ tbody tr:focus-visible { outline-offset: -2px; }
 
 .panel.fill .panel-body { display: flex; flex-direction: column; }
 .panel.fill .panel-body > * { flex: 1; min-height: 0; }
+
+.cards { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+.card { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 8px; background: var(--bg); border: 1px solid var(--raise); }
+.card .primary { font-size: 14px; }
+.card dl { margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 12px; font-size: 12px; }
+.fact { display: flex; justify-content: space-between; gap: 6px; min-width: 0; }
+.fact dt { color: var(--dim); }
+.fact dd { margin: 0; font-family: var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fact.busy dd { color: var(--warn); }
+
+.timeline { display: flex; flex-direction: column; gap: 4px; }
+.tl-axis { position: relative; height: 16px; margin-left: 220px; margin-right: 80px; font-size: 11px; color: var(--dim); }
+.tl-axis span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+.timeline ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.tl-row { display: grid; grid-template-columns: 210px minmax(0, 1fr) 70px; gap: 10px; align-items: center; padding: 3px 0; border-bottom: 1px solid var(--raise); }
+.tl-label { all: unset; display: flex; flex-direction: column; min-width: 0; cursor: pointer; }
+.tl-label:disabled { cursor: default; }
+.tl-label .primary, .tl-label .muted { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.tl-track { position: relative; height: 14px; background: var(--bg); border-radius: 3px; }
+.tl-bar { position: absolute; top: 3px; height: 8px; border-radius: 4px; background: var(--rail); }
+.tl-bar.ended { opacity: 0.5; }
+.tl-bar.waiting { background: var(--waiting); }
+.tl-wait { position: absolute; top: 0; height: 14px; border-radius: 3px; background: var(--waiting); opacity: 0.85; }
+.tl-state { font: 12px var(--mono); color: var(--dim); }
+.tl-state.waiting { color: var(--waiting); font-weight: 600; }
+@media (max-width: 720px) { .tl-row { grid-template-columns: 1fr; } .tl-axis { display: none; } }

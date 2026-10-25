@@ -69,15 +69,17 @@ function App() {
 
   // The app's menus drive the page through drigaCommand, as on every page.
   useEffect(() => {
-    const go = (path: string) => location.assign(path);
+    // Every view is a dashboard: menu paths map onto the built-in ones.
+    const open = (dashboard: string) => { setEditing(false); setVars({}); setId(dashboard); };
+    const forPath = (path: string) => path.startsWith("/machines") ? "machines" : path.startsWith("/projects") ? "projects" : path.startsWith("/flow") ? "flow" : "home";
     (window as unknown as { drigaCommand: (name: string, arg?: unknown) => void }).drigaCommand = (name, arg) => {
       if (name === "reload") void load();
       else if (name === "back") history.back();
       else if (name === "forward") history.forward();
       else if (name === "view" && arg === "chat") setChatOpen(o => !o);
-      else if (name === "view") go(`/${String(arg)}`);
-      else if (name === "go") go(String(arg));
-      else if (name === "openSession") go(`/flow?id=${encodeURIComponent(String(arg))}`);
+      else if (name === "view") open(String(arg));
+      else if (name === "go") open(forPath(String(arg)));
+      else if (name === "openSession") { open("flow"); setChatOpen(true); }
     };
   }, [load]);
 
@@ -94,18 +96,15 @@ function App() {
     <header className="top">
       <span className="mark" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 12 12"><circle cx="6" cy="6" r="4" fill="none" stroke="#fff" strokeWidth="1.6" /></svg></span>
       <strong className="wordmark">driga</strong>
-      <label className="picker"><span className="sr-only">Dashboard</span>
-        <select value={id} onChange={e => { setEditing(false); setId(e.target.value); }}>
-          {(list.length ? list : [{ id: "home", name: "Home", panels: 0, version: 0 }]).map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-        </select>
-      </label>
+      <nav aria-label="Dashboards" className="tabs">
+        {(list.length ? list : [{ id: "home", name: "Home", panels: 0, version: 0 }]).map(d => <button type="button" key={d.id} aria-current={d.id === id ? "page" : undefined} onClick={() => { setEditing(false); setVars({}); setId(d.id); }}>{d.name}</button>)}
+      </nav>
       {fragment?.dashboard.variables?.map(v => <label key={v.name} className="picker"><span>{v.name}</span>
         <select value={vars[v.name] ?? ""} onChange={e => setVars(prev => ({ ...prev, [v.name]: e.target.value }))}>
           <option value="">All</option>
           {(fragment.options?.[v.name] ?? []).map(o => <option key={o} value={o}>{o}</option>)}
         </select>
       </label>)}
-      <nav aria-label="Views" className="views"><a href="/flow">Flow</a><a href="/projects">Projects</a><a href="/machines">Machines</a></nav>
       <span className="spacer" />
       <button type="button" aria-pressed={editing} onClick={() => setEditing(e => !e)}>{editing ? "Done" : "Edit"}</button>
       <button type="button" aria-pressed={chatOpen} onClick={() => setChatOpen(o => !o)}>Chat</button>
