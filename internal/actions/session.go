@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/labstack/driga/internal/self"
 	"os"
 	"path/filepath"
 	"time"
@@ -64,7 +65,7 @@ func Jump(ctx context.Context, g Environment, runner attention.Runner, j *model.
 	if err != nil {
 		return err
 	}
-	exe, err := os.Executable()
+	exe, err := self.Executable()
 	if err != nil {
 		return err
 	}

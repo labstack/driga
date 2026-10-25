@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/labstack/driga/internal/self"
 	"io"
 	"os"
 	"path/filepath"
@@ -453,7 +454,7 @@ func ours(program, driga string) bool {
 }
 
 func currentBinary() string {
-	path, err := os.Executable()
+	path, err := self.Executable()
 	if err != nil {
 		return ""
 	}

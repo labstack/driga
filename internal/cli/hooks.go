@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/labstack/driga/internal/self"
 	"io"
 	"os"
 	"os/exec"
@@ -70,7 +71,7 @@ func (s HooksStatusCmd) Run(g *Globals) error {
 		return err
 	}
 	out := hooksOutput(g)
-	exe, err := os.Executable()
+	exe, err := self.Executable()
 	if err != nil {
 		return err
 	}
@@ -192,7 +193,7 @@ func (c HooksOptions) change(g *Globals, install bool) error {
 	}
 	var driga string
 	if install && !c.OTLP {
-		driga, err = os.Executable()
+		driga, err = self.Executable()
 		if err != nil {
 			return err
 		}

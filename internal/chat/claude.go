@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/labstack/driga/internal/secfile"
+	"github.com/labstack/driga/internal/self"
 	"os"
 	"path/filepath"
 	"slices"
@@ -78,7 +79,7 @@ func (a *Claude) Run(ctx context.Context, r Request, emit func(Delta) error) err
 	defer os.Remove(f.Name())
 	exe := a.Executable
 	if exe == "" {
-		exe, err = os.Executable()
+		exe, err = self.Executable()
 		if err != nil {
 			f.Close()
 			return err

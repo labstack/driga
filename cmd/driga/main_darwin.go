@@ -31,7 +31,9 @@ func notificationMain(args []string, run func()) {
 		// so restart from the real path for the commands that use that identity.
 		if exe, err := os.Executable(); err == nil {
 			if real, err := filepath.EvalSymlinks(exe); err == nil && real != exe {
-				_ = syscall.Exec(real, append([]string{real}, args...), os.Environ())
+				// The original arguments: started as drigad, the program adds
+				// "service run" itself, and would add it twice.
+				_ = syscall.Exec(real, append([]string{real}, os.Args[1:]...), os.Environ())
 			}
 		}
 	}

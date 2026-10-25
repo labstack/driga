@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/labstack/driga/internal/self"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -288,7 +289,7 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 					add("events:copilot", "warn", "Copilot processes seen but no Copilot hook events received; check sandbox, disableAllHooks, and sessions started before installation", "driga hooks install copilot; restart running Copilot sessions")
 				}
 			}
-			exe, err := os.Executable()
+			exe, err := self.Executable()
 			status, detail := "fail", ""
 			if err == nil {
 				status, detail, err = hookStatus("copilot", hooks.CopilotPath(d.Home, d.CopilotHome), stablePath(exe))
@@ -352,7 +353,7 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 				}
 				path = filepath.Join(claudeHome, "settings.json")
 			}
-			exe, err := os.Executable()
+			exe, err := self.Executable()
 			status, detail := "fail", ""
 			if err == nil {
 				status, detail, err = hookStatus(name, path, stablePath(exe))
