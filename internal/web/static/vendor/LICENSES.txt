@@ -1,4 +1,4 @@
-Vendored browser libraries for driga web. Taken from the npm tarballs; each tarball's sha512 matched the registry's dist.integrity on 2026-10-19.
+Vendored browser libraries for the Driga app's dashboard. Taken from the npm tarballs; each tarball's sha512 matched the registry's dist.integrity on 2026-10-19.
 
 61f13280aba3161f77fc801bf5f9c786f55f10432153a0683fc5cc0700b013d5  echarts-6.1.0.common.min.js
 e209dda5c8235479f3166defc7750e1dbcd5a5c1808b7792fc2e6733768fb447  htmx-2.0.4.min.js

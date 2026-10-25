@@ -1,5 +1,5 @@
 // Command driga-demo plays a scripted set of agent sessions into a private
-// data directory, so the real `driga top` and `driga web` can be filmed for
+// data directory, so the real `driga top` can be filmed for
 // the website without showing anyone's machine. It never reads the process
 // table, agent files or Git: every row is written here.
 //
@@ -318,7 +318,7 @@ func (d *demo) pass(tx *store.Tx, now time.Time) error {
 }
 
 // ask raises the wait the way the PermissionRequest hook does: an inbox item
-// plus a pending prompt in the real broker, answered from top or web.
+// plus a pending prompt in the real broker, answered from top or the app.
 func (d *demo) ask(ctx context.Context, broker *chat.Broker, answered chan<- bool) error {
 	now := time.Now().UTC()
 	command := "pnpm prisma migrate deploy --schema packages/db/prisma/schema.prisma"

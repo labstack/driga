@@ -325,7 +325,7 @@ process's data, names it in the tray menu, and takes over once it exits.
 
 Headless machines run the collector as a service instead: a per-user
 LaunchAgent on macOS and a systemd user service on Linux, named
-`run.driga.collector`. Do not install the service where the app runs. On macOS
+`run.driga.collector`, and a per-user Task Scheduler task on Windows. Do not install the service where the app runs. On macOS
 and Windows the app's first launch removes a service installed earlier, the
 way `driga service uninstall` does, and says so once; it leaves a Linux unit
 alone. `driga init` offers the service only on Linux; on macOS and Windows it
