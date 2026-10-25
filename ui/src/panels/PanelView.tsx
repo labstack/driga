@@ -7,6 +7,7 @@ import { Chart } from "./Chart";
 import { bar, sparkline as sparklineOption, timeseries } from "./charts";
 import { cell, duration, exact, label, value } from "./format";
 import { actionLabel, rowActions, useHost, type Act, type ActionKind } from "./host";
+import { RowMenu, rowProps } from "./RowMenu";
 import { StatusBadge, toneOf } from "./StatusBadge";
 import { rows, type Cell, type Column, type Frame, type Panel, type Prompt, type Result, type Row } from "./types";
 
@@ -137,22 +138,22 @@ function DataTable({ frame, source, act }: { frame: Frame; source?: string; act?
             </UnstyledButton>
           </Table.Th>;
         })}
-        {anyActions && <Table.Th><span className="sr-only">Actions</span></Table.Th>}
+        {anyActions && <Table.Th w={36}><span className="sr-only">Actions</span></Table.Th>}
       </Table.Tr>)}</Table.Thead>
-      <Table.Tbody>{table.getRowModel().rows.map(row => <Table.Tr key={row.id}>
+      <Table.Tbody>{table.getRowModel().rows.map(row => <Table.Tr key={row.id} {...rowProps(actionsFor(row.original), row.original, act)}>
         {row.getAllCells().map(c => {
           const column = (c.column.columnDef.meta as { column: Column }).column;
           return <Table.Td key={c.id} ta={column.type === "number" ? "right" : undefined} style={{ whiteSpace: "nowrap", maxWidth: 320, overflow: "hidden", textOverflow: "ellipsis" }}><table.FlexRender cell={c} /></Table.Td>;
         })}
-        {anyActions && <Table.Td ta="right"><Actions kinds={actionsFor(row.original)} row={row.original} act={act!} /></Table.Td>}
+        {anyActions && <Table.Td ta="right" py={0}><RowMenu kinds={actionsFor(row.original)} row={row.original} act={act!} label={rowLabel(row.original)} /></Table.Td>}
       </Table.Tr>)}</Table.Tbody>
     </Table>
   </ScrollArea>;
 }
 
-function Actions({ kinds, row, act }: { kinds: ActionKind[]; row: Row; act: Act }) {
-  return <Group gap={4} justify="flex-end" wrap="nowrap">{kinds.map(kind =>
-    <Button key={kind} size="compact-xs" variant={kind === "force_kill" ? "light" : "default"} color={kind === "force_kill" ? "danger" : undefined} onClick={() => void act({ kind, row })}>{actionLabel(kind)}</Button>)}</Group>;
+// rowLabel names a row for its menu's accessible name.
+function rowLabel(r: Row): string {
+  return String(r.title || r.signature || r.project || r.path || r.id || "this row");
 }
 
 function rowOf(columns: Column[], r: Frame["rows"][number]): Row {
@@ -165,11 +166,11 @@ function List({ frame, source, act }: { frame: Frame; source?: string; act?: Act
   const [first, ...rest] = shown;
   return <ScrollArea style={{ flex: 1 }} type="auto"><Stack gap={0}>{rows(frame).map((r, k) => {
     const kinds = act ? rowActions(source, r, local) : [];
-    return <Group key={k} justify="space-between" wrap="nowrap" py={6} style={{ borderBottom: "1px solid var(--driga-border-soft)" }}>
+    return <Group key={k} justify="space-between" wrap="nowrap" py={6} px={4} style={{ borderBottom: "1px solid var(--driga-border-soft)" }} {...rowProps(kinds, r, act)} className={`row-hover ${rowProps(kinds, r, act).className ?? ""}`}>
       <Text size="sm" fw={500} truncate>{first ? cell(r[first.name], first) : ""}</Text>
       <Group gap="xs" wrap="nowrap">
         <Text size="xs" c="dimmed" ff="monospace">{rest.map(c => cell(r[c.name], c)).join(" · ")}</Text>
-        {kinds.length > 0 && <Actions kinds={kinds} row={r} act={act!} />}
+        {kinds.length > 0 && <RowMenu kinds={kinds} row={r} act={act!} label={rowLabel(r)} />}
       </Group>
     </Group>;
   })}</Stack></ScrollArea>;
@@ -184,7 +185,8 @@ function Inbox({ frame, act, prompts, answer }: { frame: Frame; act?: Act; promp
   const item = (r: Row) => {
     const waiting = r.kind === "waiting";
     const why = waiting ? [r.reason || "waiting", r.tool, r.detail].filter(Boolean).join(" · ") : String(r.summary || r.kind || "");
-    return <Paper key={String(r.id)} p="xs" radius="sm" withBorder style={{ background: "var(--driga-inset)", borderLeft: waiting ? "3px solid var(--mantine-color-warning-filled)" : undefined }}>
+    const kinds: ActionKind[] = act ? [...(Number(r.session_id) > 0 ? ["jump" as const] : []), ...(!waiting && !r.ack_pending ? ["ack" as const] : [])] : [];
+    return <Paper key={String(r.id)} p="xs" radius="sm" withBorder {...rowProps(kinds, r, act)} className={`row-hover ${rowProps(kinds, r, act).className ?? ""}`} style={{ background: "var(--driga-inset)", borderLeft: waiting ? "3px solid var(--mantine-color-warning-filled)" : undefined }}>
       <Group justify="space-between" wrap="nowrap" align="flex-start" gap="sm">
         <Stack gap={2} style={{ minWidth: 0 }}>
           <Group gap={6} wrap="nowrap">
@@ -194,10 +196,7 @@ function Inbox({ frame, act, prompts, answer }: { frame: Frame; act?: Act; promp
           <Text size="xs" ff="monospace" c="dimmed" style={{ overflowWrap: "anywhere" }}>{why}</Text>
           <Text size="xs" c="dimmed">{[r.project, r.agent, r.machine].filter(Boolean).join(" · ")}</Text>
         </Stack>
-        {act && <Group gap={4} wrap="nowrap">
-          {Number(r.session_id) > 0 && <Button size="compact-xs" variant="default" onClick={() => void act({ kind: "jump", row: r })}>Open pane</Button>}
-          {!waiting && !r.ack_pending && <Button size="compact-xs" variant="default" onClick={() => void act({ kind: "ack", row: r })}>Ack</Button>}
-        </Group>}
+        {act && <RowMenu kinds={kinds} row={r} act={act} label={rowLabel(r)} />}
       </Group>
     </Paper>;
   };
@@ -231,7 +230,7 @@ function Cards({ frame, source, act }: { frame: Frame; source?: string; act?: Ac
             <Text size="xs" ff="monospace" c={busy ? "warning" : undefined} truncate>{cell(v, c)}</Text>
           </Group>;
         })}</SimpleGrid>
-        {kinds.length > 0 && <Group mt="xs" gap={4}><Actions kinds={kinds} row={r} act={act!} /></Group>}
+        {kinds.length > 0 && <Group justify="flex-end" mt={4}><RowMenu kinds={kinds} row={r} act={act!} label={rowLabel(r)} /></Group>}
       </Paper>;
     })}</Box>
   </ScrollArea>;

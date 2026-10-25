@@ -17,3 +17,13 @@ body { font-variant-numeric: tabular-nums; }
 
 .editing .panel-handle { cursor: grab; }
 .editing .mantine-Card-root { border-style: dashed; }
+
+/* Row actions: the row runs its primary action; its ⋯ menu shows on hover,
+   keyboard focus or an open menu, and always on touch screens. */
+.row-act { cursor: pointer; }
+.row-act:focus-visible { outline: 2px solid var(--mantine-color-brand-filled); outline-offset: -2px; }
+.row-hover { transition: background-color 120ms ease-out; }
+.row-hover:hover { background: var(--driga-hover); }
+.row-menu { opacity: 0; transition: opacity 120ms ease-out; }
+tr:hover .row-menu, tr:focus-within .row-menu, .row-hover:hover .row-menu, .row-hover:focus-within .row-menu, .row-menu[aria-expanded="true"], .row-menu:focus-visible { opacity: 1; }
+@media (pointer: coarse) { .row-menu { opacity: 1; } }
