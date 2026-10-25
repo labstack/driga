@@ -9,6 +9,7 @@ import (
 	"github.com/labstack/driga/internal/secfile"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 
@@ -212,6 +213,7 @@ func (s *stream) line(line []byte) error {
 		Message       struct {
 			Content []struct {
 				Type, Text, Name, ID string
+				Input                json.RawMessage `json:"input"`
 				ToolUseID            string          `json:"tool_use_id"`
 				Content              json.RawMessage `json:"content"`
 				IsError              bool            `json:"is_error"`
@@ -302,6 +304,9 @@ func (s *stream) line(line []byte) error {
 				if err := s.tool(content.ID, content.Name); err != nil {
 					return err
 				}
+				if err := s.panel(content.Name, content.Input); err != nil {
+					return err
+				}
 			}
 		}
 		full := text.String()
@@ -368,6 +373,28 @@ func (s *stream) tool(id, name string) error {
 	return s.emit(Delta{Tool: name})
 }
 
+// panelTools render as a live card in the app's conversation.
+var panelTools = []string{"show_panels", "open_dashboard", "create_dashboard", "edit_dashboard", "replace_dashboard", "restore_dashboard_version"}
+
+// maxPanelInput bounds a card's spec; a larger one stays a tool line.
+const maxPanelInput = 128 << 10
+
+// panel records a panel tool's input so the app can run it again as a card.
+func (s *stream) panel(name string, input json.RawMessage) error {
+	tool, ok := strings.CutPrefix(name, "mcp__driga__")
+	if !ok || !slices.Contains(panelTools, tool) || len(input) == 0 || len(input) > maxPanelInput || !json.Valid(input) {
+		return nil
+	}
+	card, err := json.Marshal(struct {
+		Tool  string          `json:"tool"`
+		Input json.RawMessage `json:"input"`
+	}{tool, input})
+	if err != nil {
+		return err
+	}
+	return s.emit(Delta{Panel: card})
+}
+
 func (s *stream) validTool(name string) bool {
 	if readTool(name) {
 		return true
@@ -385,4 +412,29 @@ func (s *stream) validTool(name string) bool {
 		return true
 	}
 	return false
+}
+
+// PanelTitle names a panel card for surfaces that cannot render it.
+func PanelTitle(card string) string {
+	var c struct {
+		Tool  string `json:"tool"`
+		Input struct {
+			ID        string `json:"id"`
+			Dashboard struct {
+				Name string `json:"name"`
+			} `json:"dashboard"`
+		} `json:"input"`
+	}
+	if json.Unmarshal([]byte(card), &c) != nil {
+		return "panel"
+	}
+	switch {
+	case c.Input.Dashboard.Name != "":
+		return c.Input.Dashboard.Name
+	case c.Input.ID != "":
+		return "dashboard " + c.Input.ID
+	case c.Tool == "open_dashboard":
+		return "Home"
+	}
+	return "panel"
 }

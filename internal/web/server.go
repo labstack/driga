@@ -20,6 +20,7 @@ import (
 
 	"github.com/labstack/driga/internal/chat"
 	"github.com/labstack/driga/internal/cleanup"
+	"github.com/labstack/driga/internal/dashboard"
 	"github.com/labstack/driga/internal/store"
 	"github.com/labstack/driga/internal/view"
 	"github.com/labstack/driga/internal/viewer"
@@ -52,6 +53,8 @@ type Options struct {
 	OpenExternal func(url string)
 	// Theme is the app's ui.theme: "system", "light" or "dark".
 	Theme string
+	// Dashboards enables the dashboard host at /app/ and its API.
+	Dashboards *dashboard.Store
 }
 
 // Server is a transport-free handler: pages, their JSON endpoints and long polls.
@@ -146,7 +149,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	w.Header().Set("Cache-Control", "no-store")
-	if r.Method != http.MethodGet && r.Method != http.MethodHead && !(r.Method == http.MethodPost && (isChatPOST(r.URL.Path) || isAppPOST(r.URL.Path))) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead && !(r.Method == http.MethodPost && (isChatPOST(r.URL.Path) || isAppPOST(r.URL.Path) || isDashboardPOST(r.URL.Path))) {
 		w.Header().Set("Allow", "GET, HEAD")
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -181,6 +184,7 @@ func (s *Server) newRoutes() *http.ServeMux {
 	for _, path := range []string{"/chat/api/prompt-answer", "/chat/api/new", "/chat/api/send", "/chat/api/stop", "/chat/api/mode", "/chat/api/decide"} {
 		mux.HandleFunc("POST "+path, s.chatAPI)
 	}
+	s.appRoutes(mux)
 	mux.HandleFunc("POST /app/confirm", s.appConfirm)
 	mux.HandleFunc("POST /app/action", s.appAction)
 	mux.HandleFunc("POST /app/open-external", s.appOpenExternal)

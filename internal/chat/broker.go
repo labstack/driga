@@ -39,6 +39,9 @@ type Request struct {
 	ReadOnly                    bool
 }
 type Delta struct {
+	// Panel is a panel tool's name and input, {"tool","input"}: the app
+	// renders it as a live card in the conversation.
+	Panel                 json.RawMessage
 	ToolUseID, ToolResult string
 	Failed                bool
 	Text, Tool, SessionID string
@@ -508,6 +511,13 @@ func (b *Broker) run(ctx context.Context, c *conversation) {
 						return err
 					}
 					b.message(c, tool)
+				}
+				if len(d.Panel) > 0 {
+					card := store.ChatMessage{ID: uuid.NewString(), MachineID: c.row.MachineID, ConversationID: c.row.ID, Role: "panel", Text: string(d.Panel), Status: "used", CreatedAt: time.Now().UTC()}
+					if err := b.save(ctx, card); err != nil {
+						return err
+					}
+					b.message(c, card)
 				}
 				return nil
 			})

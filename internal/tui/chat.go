@@ -254,6 +254,11 @@ func (m *app) chatView() string {
 			lines = append(lines, card, "")
 			continue
 		}
+		if row.Role == "panel" {
+			// The app renders panels as cards; the terminal names them.
+			lines = append(lines, view.TokenStyle("tool", m.opts.NoColor).Render("  ▦ "+chat.PanelTitle(row.Text)+" · open the Driga app to see it"), "")
+			continue
+		}
 		if row.Role == "tool" {
 			tools++
 			if m.chatTools {

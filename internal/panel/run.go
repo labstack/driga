@@ -130,6 +130,8 @@ func runPanel(p Panel, vars map[string]string, rows func(string) [][]any) Result
 		frame = project(s, data, p)
 	}
 	if len(frame.Rows) == 0 {
+		// An empty frame is [] on the wire, never null.
+		frame.Rows = [][]any{}
 		r.Status, r.Message = StatusEmpty, "Nothing matches right now."
 	}
 	r.Frame = &frame

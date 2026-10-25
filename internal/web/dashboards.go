@@ -1,0 +1,150 @@
+package web
+
+import (
+	"context"
+	"embed"
+	"encoding/json"
+	"errors"
+	"io/fs"
+	"net/http"
+	"slices"
+	"strings"
+
+	"github.com/labstack/driga/internal/dashboard"
+	"github.com/labstack/driga/internal/panel"
+	"github.com/labstack/driga/internal/store"
+)
+
+// app holds the dashboard host the app opens on, built from ui/ by
+// `just ui` and committed so a Go build needs no JavaScript toolchain.
+//
+//go:embed all:app
+var appBuild embed.FS
+
+// you is the author of edits made in the app.
+var you = dashboard.Author{Kind: "user"}
+
+func isDashboardPOST(path string) bool { return strings.HasPrefix(path, "/app/api/") }
+
+func (s *Server) appRoutes(mux *http.ServeMux) {
+	files, err := fs.Sub(appBuild, "app")
+	if err != nil {
+		panic(err)
+	}
+	// One page at /app/, its state in the query; the app's other POST
+	// endpoints under /app/ keep answering GET with 405.
+	host := http.StripPrefix("/app/", http.FileServer(http.FS(files)))
+	mux.Handle("GET /app/{$}", host)
+	mux.Handle("GET /app/assets/", host)
+	for _, route := range []string{"list", "open", "run", "edit", "versions", "restore"} {
+		mux.HandleFunc("POST /app/api/"+route, s.dashboardAPI)
+	}
+}
+
+type dashboardRequest struct {
+	ID          string                `json:"id,omitempty"`
+	Vars        map[string]string     `json:"vars,omitempty"`
+	Dashboard   *panel.Dashboard      `json:"dashboard,omitempty"`
+	Operations  []dashboard.Operation `json:"operations,omitempty"`
+	BaseVersion int                   `json:"base_version,omitempty"`
+	Message     string                `json:"message,omitempty"`
+	Version     int                   `json:"version,omitempty"`
+}
+
+func (s *Server) dashboardAPI(w http.ResponseWriter, r *http.Request) {
+	if s.opts.Dashboards == nil {
+		http.Error(w, "Dashboards unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	var in dashboardRequest
+	if r.Header.Get("Content-Type") != "application/json" {
+		http.Error(w, "expected application/json", http.StatusUnsupportedMediaType)
+		return
+	}
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 256<<10))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&in); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	store := s.opts.Dashboards
+	var out any
+	var err error
+	switch strings.TrimPrefix(r.URL.Path, "/app/api/") {
+	case "list":
+		var list []dashboard.Summary
+		list, err = store.List()
+		out = map[string]any{"dashboards": list}
+	case "open":
+		var rec dashboard.Record
+		if rec, err = store.Get(cmpOr(in.ID, panel.HomeID)); err == nil {
+			out, err = s.fragment(r.Context(), rec, in.Vars)
+		}
+	case "run":
+		if in.Dashboard == nil {
+			err = errors.New("dashboard is required")
+			break
+		}
+		out, err = s.runPanels(r.Context(), panel.RunRequest{Dashboard: *in.Dashboard, Vars: in.Vars})
+	case "edit":
+		var rec dashboard.Record
+		if rec, err = store.Edit(cmpOr(in.ID, panel.HomeID), in.Operations, in.BaseVersion, you, in.Message); err == nil {
+			out, err = s.fragment(r.Context(), rec, in.Vars)
+		}
+	case "versions":
+		out, err = store.Versions(cmpOr(in.ID, panel.HomeID))
+		out = map[string]any{"versions": out}
+	case "restore":
+		var rec dashboard.Record
+		if rec, err = store.Restore(cmpOr(in.ID, panel.HomeID), in.Version, you); err == nil {
+			out, err = s.fragment(r.Context(), rec, in.Vars)
+		}
+	default:
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		status := http.StatusBadRequest
+		if errors.Is(err, dashboard.ErrNotFound) {
+			status = http.StatusNotFound
+		} else if errors.Is(err, dashboard.ErrStale) {
+			status = http.StatusConflict
+		}
+		http.Error(w, err.Error(), status)
+		return
+	}
+	writeJSON(w, out)
+}
+
+func (s *Server) fragment(ctx context.Context, rec dashboard.Record, vars map[string]string) (panel.Fragment, error) {
+	f, err := s.runPanels(ctx, panel.RunRequest{Dashboard: rec.Spec, Vars: vars})
+	f.ID, f.Version = rec.ID, rec.Version
+	return f, err
+}
+
+// runPanels runs over the same cached snapshot the pages show. Disk
+// candidates are read only when a panel shows them.
+func (s *Server) runPanels(ctx context.Context, req panel.RunRequest) (panel.Fragment, error) {
+	if err := panel.Validate(req.Dashboard); err != nil {
+		return panel.Fragment{}, err
+	}
+	snap, err := s.cachedLoad(ctx, store.Scope{}, false)
+	if err != nil {
+		return panel.Fragment{}, err
+	}
+	if s.opts.CleanupList != nil && slices.ContainsFunc(req.Dashboard.Panels, func(p panel.Panel) bool { return p.Source == "cleanup" }) {
+		if rows, err := s.cachedCleanup(ctx); err == nil {
+			snap.Cleanup = rows
+		}
+	}
+	return panel.Run(snap, req)
+}
+
+func cmpOr(values ...string) string {
+	for _, v := range values {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
+}

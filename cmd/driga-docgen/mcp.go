@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"slices"
 	"sort"
 	"strings"
 
@@ -59,13 +60,25 @@ func renderMCP() (string, error) {
 	for _, tool := range read {
 		readNames[tool.Name] = true
 	}
+	// Panel and dashboard tools return fragments and may save dashboards;
+	// they get their own section.
+	var panels []*sdk.Tool
+	served := read[:0:0]
+	for _, tool := range read {
+		if slices.Contains(drigamcp.DashboardTools, tool.Name) {
+			panels = append(panels, tool)
+		} else {
+			served = append(served, tool)
+		}
+	}
+	read = served
 	var chatOnly []*sdk.Tool
 	for _, tool := range full {
 		if !readNames[tool.Name] {
 			chatOnly = append(chatOnly, tool)
 		}
 	}
-	for _, tools := range [][]*sdk.Tool{read, chatOnly} {
+	for _, tools := range [][]*sdk.Tool{read, panels, chatOnly} {
 		sort.Slice(tools, func(i, j int) bool { return tools[i].Name < tools[j].Name })
 	}
 	for _, tool := range read {
@@ -78,12 +91,12 @@ func renderMCP() (string, error) {
 	frontmatter(&b,
 		"MCP tools",
 		"Every tool driga's MCP server exposes, with its inputs, generated from the server's tools/list answer.",
-		fmt.Sprintf("The %s `driga mcp` serves to your agents and the %s only Driga's own Chat receives, with their inputs.", plural(len(read), "read-only tool"), plural(len(chatOnly), "tool")),
+		fmt.Sprintf("The %s and %s `driga mcp` serves to your agents and the %s only Driga's own Chat receives, with their inputs.", plural(len(read), "read-only tool"), plural(len(panels), "panel and dashboard tool"), plural(len(chatOnly), "tool")),
 		"You are connecting an agent to driga over MCP and want to know what it can call.",
 		"You need a tool's exact input fields, defaults or limits.",
 	)
-	b.WriteString("`driga mcp` serves read-only tools over stdio. Every response is the same\n")
-	b.WriteString("schema-2 view envelope as the CLI's `--json` output, and reading never\n")
+	b.WriteString("`driga mcp` serves read tools and panel tools over stdio. Every read tool\n")
+	b.WriteString("answers with the same schema-2 view envelope as the CLI's `--json` output, and reading never\n")
 	b.WriteString("acknowledges inbox items. Without a running collector the tools answer from a\n")
 	b.WriteString("labelled one-shot snapshot with no history. Registration is covered in\n")
 	b.WriteString("[Connect an agent over MCP](/guides/mcp).\n\n")
@@ -98,6 +111,20 @@ func renderMCP() (string, error) {
 	toolIndex(&b, read)
 	for _, tool := range read {
 		if err := renderTool(&b, tool, suffix); err != nil {
+			return "", err
+		}
+	}
+
+	fmt.Fprintf(&b, "## Panel and dashboard tools\n\n")
+	b.WriteString("Served by `driga mcp`. Each returns a dashboard with its live results,\n")
+	b.WriteString("which hosts that support MCP Apps render as an interactive card from\n")
+	b.WriteString("`ui://driga/panels.html`; other hosts show its text summary. The writes\n")
+	b.WriteString("change only Driga's own dashboards: every save is a version that\n")
+	b.WriteString("`restore_dashboard_version` can bring back. `run_panels` is called only by the\n")
+	b.WriteString("rendered card, to refresh it.\n\n")
+	toolIndex(&b, panels)
+	for _, tool := range panels {
+		if err := renderTool(&b, tool, ""); err != nil {
 			return "", err
 		}
 	}

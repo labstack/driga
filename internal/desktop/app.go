@@ -475,7 +475,7 @@ func (p mainPage) Eval(js string) {
 // newWindow opens the main window on the dashboard.
 func (s *shell) newWindow(loaded func()) page {
 	w := mygo.NewWindow(mygo.WindowOptions{
-		Title: "Driga", URL: "/", Width: 1280, Height: 820, MinWidth: 720, MinHeight: 480,
+		Title: "Driga", URL: "/app/", Width: 1280, Height: 820, MinWidth: 720, MinHeight: 480,
 		StateKey: "main", BackgroundColor: "light-dark(#eff1f5, #0e0e16)",
 	})
 	p := mainPage{w}

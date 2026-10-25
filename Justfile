@@ -84,6 +84,18 @@ docs:
 docs-check:
     go run ./cmd/driga-docgen --check
 
+# ---------- App UI ----------
+
+# Install the UI's dependencies from the lockfile.
+ui-deps:
+    cd ui && bun install --frozen-lockfile
+
+# Typecheck and build the app's dashboard host and the panels MCP App into
+# internal/web/app and internal/mcp/apps. Both are committed, so a Go build
+# needs no JavaScript toolchain; rebuild after changing ui/.
+ui: ui-deps
+    cd ui && bun run build
+
 # ---------- Documentation site ----------
 
 # Install the site's dependencies from the lockfile.
