@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
@@ -169,6 +170,51 @@ func TestUpdatesNoDuplicateTail(t *testing.T) {
 	check(poll(t, s, got.Cursor))
 	if !seen["d"] {
 		t.Fatal("later row missing")
+	}
+}
+
+// A row that lands late, older than one the page holds, still reaches the
+// page once, as from a machine whose events sync after another's.
+func TestUpdatesLateTailRow(t *testing.T) {
+	at := time.Date(2026, 10, 24, 12, 0, 0, 0, time.UTC)
+	row := func(key string, offset int) view.TailEvent {
+		return view.TailEvent{Key: key, TS: at.Add(time.Duration(offset) * time.Second), Summary: key}
+	}
+	source := &updateSource{}
+	source.setTail(row("a", 0), row("c", 5))
+	s := watched(t, source)
+	s.pollTimeout = 50 * time.Millisecond
+	s.refreshInterval = time.Hour
+	got := poll(t, s, "")
+	source.setTail(row("a", 0), row("b", 2), row("c", 5))
+	got = poll(t, s, got.Cursor)
+	if len(got.Tail) != 1 || got.Tail[0].Key != "b" {
+		t.Fatalf("late row not sent: %+v", got.Tail)
+	}
+	if again := poll(t, s, got.Cursor); len(again.Tail) != 0 {
+		t.Fatalf("late row sent twice: %+v", again.Tail)
+	}
+}
+
+// The remembered keys stay bounded; rows older than the oldest remembered
+// one count as seen.
+func TestUpdatesSeenKeysBounded(t *testing.T) {
+	at := time.Date(2026, 10, 24, 12, 0, 0, 0, time.UTC)
+	rows := []view.TailEvent{}
+	for i := range 3 * seenKeys {
+		rows = append(rows, view.TailEvent{Key: fmt.Sprintf("%064x", i), TS: at.Add(time.Duration(i) * time.Second)})
+	}
+	source := &updateSource{}
+	source.setTail(rows...)
+	s := watched(t, source)
+	s.pollTimeout = 50 * time.Millisecond
+	s.refreshInterval = time.Hour
+	got := poll(t, s, "")
+	if len(got.Cursor) > 64*seenKeys {
+		t.Fatalf("cursor grew to %d bytes", len(got.Cursor))
+	}
+	if again := poll(t, s, got.Cursor); len(again.Tail) != 0 {
+		t.Fatalf("old rows resent: %d", len(again.Tail))
 	}
 }
 

@@ -103,13 +103,16 @@ the same click behaviour. The headless service keeps its own notifier.
 The app watches its executable's version. When `brew upgrade` (or the Windows
 installer) replaces it, the app stops its child and relaunches itself, so an
 old app never reads a store migrated by a newer collector (`ErrSchemaNewer`).
+If the quit is cancelled, no collector starts under the old app: the tray
+says "Restart Driga to finish updating" and the app asks again on its next
+check.
 
 ### Executables
 
 - macOS: one binary, `Driga.app/Contents/MacOS/driga`, the CLI and the app.
   Homebrew links it as `driga`. `driga app` hands off to Launch Services
-  (`open -b run.driga`) so the login item and notification identity are the
-  bundle's.
+  (`open -a` with the bundle's path) so the login item and notification
+  identity are the bundle's.
 - Windows: `Driga.exe` (GUI subsystem, the app) and `bin\driga.exe` (console
   subsystem, the CLI), built from the same packages, like VS Code's `Code.exe`
   and `code`. The collector child is started with `CREATE_NO_WINDOW`.
@@ -158,14 +161,13 @@ stay. Alpha: no compatibility path.
   (Keyboard Shortcuts, Documentation opens driga.dev in the browser). Ctrl
   replaces Cmd on Windows and Linux. Menu items send the page's existing
   commands (the same functions its `m`, `t`, `s`, `/` keys call).
-- **Tray.** Template icon from the Driga mark. macOS shows the needs-you count
-  as its title. Menu: Open Driga, the first five needs (each opens that
+- **Tray.** An icon only, never text: the Driga mark (a template on macOS),
+  with a dot while anything needs you. Menu: Open Driga, the first five needs (each opens that
   session), collector status ("Collecting", or who else is, or the error),
   Quit. Off with `app.tray = false`.
-- **Count.** Dock badge on macOS, launcher badge on Linux where supported.
-  Windows has neither a tray title nor a badge in mygo, so the count shows in
-  the tray tooltip and the tray menu's first line, and the tray icon switches
-  to a variant with a dot while anything needs you.
+- **Count.** Dock badge on macOS, launcher badge on Linux where supported. On
+  every platform the tray tooltip and the tray menu's first line say how many
+  need you.
 - **Dialogs.** Stop asks with a native dialog parented to the window ("Stop
   ‹title›?" Stop / Cancel). Every `confirm()` in the page becomes a native
   dialog.

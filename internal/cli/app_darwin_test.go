@@ -1,6 +1,9 @@
 package cli
 
-import "testing"
+import (
+	"slices"
+	"testing"
+)
 
 func TestAppBundle(t *testing.T) {
 	for _, tt := range []struct{ exe, want string }{
@@ -30,5 +33,14 @@ func TestAppHandOff(t *testing.T) {
 		if got := handsOff(tt.system, tt.exe); got != tt.want {
 			t.Errorf("handsOff(%v, %q) = %v, want %v", tt.system, tt.exe, got, tt.want)
 		}
+	}
+}
+
+// The hand-off opens the bundle the command line ran from, not whichever
+// bundle Launch Services knows by the identifier.
+func TestAppHandOffCommand(t *testing.T) {
+	cmd := handOffCommand("/Users/someone/Applications/Driga.app")
+	if want := []string{"open", "-a", "/Users/someone/Applications/Driga.app"}; !slices.Equal(cmd.Args, want) {
+		t.Fatalf("hand-off runs %q, want %q", cmd.Args, want)
 	}
 }

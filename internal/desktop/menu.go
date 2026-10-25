@@ -131,6 +131,8 @@ func needLabel(n int) string {
 // StatusLine says who collects, or why nothing does.
 func StatusLine(st Status) string {
 	switch {
+	case st.RestartPending:
+		return "Restart Driga to finish updating"
 	case st.Collecting && st.Err != nil:
 		return clip("Collecting · "+st.Err.Error(), 80)
 	case st.Collecting:

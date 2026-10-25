@@ -51,6 +51,9 @@ func (s *shell) updateTray() { s.redrawTray(false) }
 // goroutines; drawing on the main thread keeps an older menu from landing
 // after a newer one.
 func (s *shell) redrawTray(force bool) {
+	if !s.trayCreated() {
+		return
+	}
 	mygo.RunOnMain(func() { s.drawTray(force) })
 }
 
@@ -74,9 +77,6 @@ func (s *shell) drawTray(force bool) {
 	s.mu.Unlock()
 	if icon, err := assets.ReadFile("assets/" + l.Icon); err == nil {
 		_ = tray.SetIcon(icon, l.Template)
-	}
-	if s.goos == "darwin" {
-		tray.SetTitle(l.Title)
 	}
 	tray.SetToolTip(l.ToolTip)
 	tray.SetMenu(s.menu(model))

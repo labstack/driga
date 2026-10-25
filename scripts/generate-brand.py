@@ -57,7 +57,7 @@ def write(name, width, height, children):
 
 
 def generate_icns(renderer, portable=False):
-    """Render the unchanged Murmur master at Apple's 1x and 2x icon sizes."""
+    """Render the macOS app icon (Murmur on its tile) at Apple's 1x and 2x sizes."""
     iconutil = shutil.which("iconutil")
     if not portable and not iconutil:
         raise SystemExit("macOS iconutil is required to regenerate Driga.icns")
@@ -70,7 +70,7 @@ def generate_icns(renderer, portable=False):
                 subprocess.run([
                     renderer, "--width", str(size * scale), "--height", str(size * scale),
                     "--output", str(iconset / f"icon_{size}x{size}{suffix}.png"),
-                    str(ASSETS / "murmur.svg"),
+                    str(ASSETS / "app-icon.svg"),
                 ], check=True)
         if portable:
             # PNG-backed ICNS elements retain every Apple 1x/2x representation.
@@ -97,7 +97,7 @@ def generate_tray(renderer):
     notification areas that show icons in color."""
     symbol = ET.parse(ASSETS / "murmur.svg").getroot()
     primary = symbol.find(f"{{{NS}}}g").get("fill")
-    variants = [("tray-template.png", "#000000", False)]
+    variants = [("tray-template.png", "#000000", False), ("tray-template-dot.png", "#000000", True)]
     for tone, color in [("ink", "#1b1e21"), ("white", "#ffffff")]:
         variants += [(f"tray-{tone}.png", color, False), (f"tray-{tone}-dot.png", color, True)]
     TRAY.mkdir(parents=True, exist_ok=True)
@@ -112,7 +112,9 @@ def generate_tray(renderer):
                 ET.SubElement(mask, f"{{{NS}}}rect", {"width": "128", "height": "128", "fill": "#ffffff"})
                 ET.SubElement(mask, f"{{{NS}}}circle", {"cx": "104", "cy": "24", "r": "34", "fill": "#000000"})
                 mark.set("mask", "url(#gap)")
-                ET.SubElement(root, f"{{{NS}}}circle", {"cx": "104", "cy": "24", "r": "24", "fill": primary})
+                # A template is drawn in one color that macOS tints; elsewhere the dot is red.
+                fill = color if name.startswith("tray-template") else primary
+                ET.SubElement(root, f"{{{NS}}}circle", {"cx": "104", "cy": "24", "r": "24", "fill": fill})
             source = Path(temporary) / (name + ".svg")
             source.write_text(ET.tostring(root, encoding="unicode"))
             subprocess.run([
@@ -166,6 +168,12 @@ def main():
         "width": "64", "height": "64", "rx": "14", "fill": primary,
     })
     write("favicon.svg", 64, 64, [tile, placed(symbol, 3, 3, scale=58 / 128, color=white)])
+    # macOS app icon grid: an 824 px tile with a 185 px corner radius centred on
+    # a 1024 px canvas, so the Dock shows Driga's own tile rather than a gray one.
+    plate = ET.Element(f"{{{NS}}}rect", {
+        "x": "100", "y": "100", "width": "824", "height": "824", "rx": "185", "fill": primary,
+    })
+    write("app-icon.svg", 1024, 1024, [plate, placed(symbol, 192, 192, scale=640 / 128, color=white)])
 
     if not args.svg_only:
         # Render each size directly from the master, never from a scaled PNG.

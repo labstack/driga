@@ -773,10 +773,11 @@ retained Activity history. Chat opens as a contextual panel on `c`; Machines
 includes process and disk reclamation. Stop and other confirmations use native
 dialogs. Help → Keyboard Shortcuts lists the page keys.
 
-The menu bar item (the notification area on Windows, the tray on Linux) shows
-how many sessions need you, lists the first five, says who is collecting and
-quits Driga. On macOS the Dock icon shows the count too, and appears only while
-a window is open. Settings (Cmd+,) sets the theme (`ui.theme`), the tray icon
+The menu bar item (the notification area on Windows, the tray on Linux) is an
+icon only: it gains a dot while anything needs you, and its tooltip and menu
+say how many. The menu lists the first five, says who is collecting and quits
+Driga. On macOS the Dock icon shows the count as a badge, and appears only
+while a window is open. Settings (Cmd+,) sets the theme (`ui.theme`), the tray icon
 (`app.tray`) and launch at login (`app.launch_at_login`). A second launch,
 `driga app` included, brings the running window forward.
 

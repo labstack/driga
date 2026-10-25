@@ -9,6 +9,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/labstack/driga/internal/web"
 )
 
 // A service the app could not remove keeps collecting, and the tray says how
@@ -107,7 +109,10 @@ func (f *fakeCollector) waitRunning(t *testing.T, runs int) {
 	t.Fatalf("collector runs %d, running %d; want %d, 1", r, n, runs)
 }
 
-func TestRelaunchCancelledKeepsCollecting(t *testing.T) {
+// A cancelled relaunch leaves the collector stopped: starting it again would
+// run the upgraded binary's collector under the old app, which may then read
+// a store the new one migrated. The tray says how to finish.
+func TestRelaunchCancelledWaitsForRestart(t *testing.T) {
 	os.Unsetenv("DRIGA_APP")
 	t.Cleanup(func() { os.Unsetenv("DRIGA_APP") })
 	collector := &fakeCollector{}
@@ -124,17 +129,47 @@ func TestRelaunchCancelledKeepsCollecting(t *testing.T) {
 	s.ctx = ctx
 	s.startCollector(nil)
 	collector.waitRunning(t, 1)
-	s.relaunch()
+	if s.relaunch() {
+		t.Fatal("a cancelled relaunch reported as done")
+	}
 	if during != "1" {
 		t.Fatalf("relaunched with DRIGA_APP=%q", during)
 	}
 	if value, set := os.LookupEnv("DRIGA_APP"); set {
 		t.Fatalf("DRIGA_APP=%q left set after the cancelled quit", value)
 	}
-	collector.waitRunning(t, 2)
-	s.stopCollector()
-	if _, running := collector.state(); running != 0 {
-		t.Fatal("collector still runs after stop")
+	time.Sleep(50 * time.Millisecond)
+	if runs, running := collector.state(); runs != 1 || running != 0 {
+		t.Fatalf("collector runs %d, running %d after a cancelled relaunch", runs, running)
+	}
+	s.status = Status{Err: errors.New("collector exited")}
+	if line := StatusLine(s.trayStatus()); line != "Restart Driga to finish updating" {
+		t.Fatalf("tray says %q", line)
+	}
+}
+
+// The watch keeps checking after a cancelled relaunch and asks again.
+func TestUpgradeWatchRetriesCancelledRelaunch(t *testing.T) {
+	stats := 0
+	w := &upgradeWatch{
+		exe: "/app/driga", version: "v1", interval: time.Millisecond,
+		// Replaced after the watch started.
+		stat: func(string) (time.Time, error) { stats++; return time.Unix(int64(min(stats, 2)), 0), nil },
+		read: func(context.Context, string) (string, error) { return "v2", nil },
+	}
+	calls := 0
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		w.run(context.Background(), func() bool { calls++; return calls == 3 })
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("watch stopped asking")
+	}
+	if calls != 3 {
+		t.Fatalf("relaunch asked %d times, want 3", calls)
 	}
 }
 
@@ -171,5 +206,18 @@ func TestNoCollectorAfterQuit(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 	if runs, running := collector.state(); runs != 1 || running != 0 {
 		t.Fatalf("collector runs %d, running %d after quit", runs, running)
+	}
+}
+
+// A second launch hands over to the running app before it opens the store,
+// which the running app's collector may be migrating.
+func TestSecondInstanceDoesNotOpenSource(t *testing.T) {
+	opened := 0
+	open := func() (web.Source, func(), error) { opened++; return nil, func() {}, nil }
+	if _, _, first, err := openAfterLock(func() bool { return false }, open); first || err != nil || opened != 0 {
+		t.Fatalf("second instance: first %v, err %v, opened %d", first, err, opened)
+	}
+	if _, closeSource, first, err := openAfterLock(func() bool { return true }, open); !first || err != nil || opened != 1 || closeSource == nil {
+		t.Fatalf("first instance: first %v, err %v, opened %d", first, err, opened)
 	}
 }

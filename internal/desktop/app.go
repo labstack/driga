@@ -33,7 +33,10 @@ const loginMarker = "open-at-login"
 
 // Options configure the desktop app.
 type Options struct {
-	Source web.Source
+	// OpenSource opens the data the app shows, and its closer. Run calls it
+	// once it holds the single-instance lock, so a second launch never opens
+	// the store.
+	OpenSource func() (web.Source, func(), error)
 	// Web carries the page handlers the CLI provides: session actions,
 	// cleanup, the machine scope and activity. Run sets its Chat, Confirm,
 	// OpenExternal and Theme.
@@ -50,6 +53,7 @@ type Options struct {
 // shell is the running app: the main window, the tray and the collector.
 type shell struct {
 	opts    Options
+	source  web.Source
 	goos    string
 	dataDir string
 	host    *windowHost
@@ -63,6 +67,8 @@ type shell struct {
 	openService func() (installedService, error)
 	// homes returns HOME and the account's home directory.
 	homes func() (string, string)
+	// loginEnv is the login environment the collector starts with.
+	loginEnv *loginEnv
 	// relaunchApp quits and starts the app again, and reports false when
 	// the quit was cancelled.
 	relaunchApp func() bool
@@ -78,9 +84,11 @@ type shell struct {
 	status     Status
 	envErr     error
 	serviceErr error
-	needs      []view.BoardRow
-	trayKey    string
-	settings   *mygo.Window
+	// restartPending is set once an upgrade's relaunch was cancelled.
+	restartPending bool
+	needs          []view.BoardRow
+	trayKey        string
+	settings       *mygo.Window
 }
 
 // Run runs the desktop app until it quits. It must be called on the main
@@ -88,16 +96,18 @@ type shell struct {
 func Run(opts Options) error {
 	mygo.App.SetName("Driga")
 	mygo.App.SetVersion(opts.Version)
-	if !mygo.App.RequestSingleInstanceLock() {
-		return nil
+	source, closeSource, first, err := openAfterLock(mygo.App.RequestSingleInstanceLock, opts.OpenSource)
+	if !first || err != nil {
+		return err
 	}
+	defer closeSource()
 	dataDir := config.DataDir()
 	if opts.Chat == nil {
 		remote := &collectorChat{dataDir: dataDir}
 		defer remote.Close()
 		opts.Chat = remote
 	}
-	s := &shell{opts: opts, goos: runtime.GOOS, dataDir: dataDir, cfg: opts.Config, relaunchApp: relaunchApp}
+	s := &shell{opts: opts, source: source, goos: runtime.GOOS, dataDir: dataDir, cfg: opts.Config, relaunchApp: relaunchApp}
 	s.host = &windowHost{create: s.newWindow}
 	webOpts := opts.Web
 	webOpts.Chat, webOpts.ChatEphemeral = opts.Chat, false
@@ -105,7 +115,7 @@ func Run(opts Options) error {
 	webOpts.OpenExternal = func(url string) { _ = mygo.Shell.OpenExternal(url) }
 	// The page follows the app's appearance, which Settings changes live.
 	webOpts.Theme = "system"
-	server, err := web.New(opts.Source, webOpts)
+	server, err := web.New(source, webOpts)
 	if err != nil {
 		return err
 	}
@@ -124,6 +134,9 @@ func Run(opts Options) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	s.ctx = ctx
+	if s.loginEnv != nil {
+		go s.loginEnv.refresh(ctx)
+	}
 	go server.Watch(ctx)
 	mygo.Protocol.Handle("mygo", server)
 	mygo.Theme.SetSource(themeSource(opts.Config.UI.Theme))
@@ -163,6 +176,22 @@ func Run(opts Options) error {
 	return err
 }
 
+// openAfterLock takes the single-instance lock and only then opens the
+// source. It reports false, opening nothing, when another instance runs.
+func openAfterLock(lock func() bool, open func() (web.Source, func(), error)) (web.Source, func(), bool, error) {
+	if !lock() {
+		return nil, nil, false, nil
+	}
+	if open == nil {
+		return nil, nil, true, errors.New("desktop: no data source")
+	}
+	source, closeSource, err := open()
+	if err != nil {
+		return nil, nil, true, err
+	}
+	return source, closeSource, true, nil
+}
+
 // prepareSupervisor fills the supervisor's production defaults and wires its
 // reports to the shell. It returns the collector executable.
 func (s *shell) prepareSupervisor(dataDir string) (string, error) {
@@ -178,10 +207,11 @@ func (s *shell) prepareSupervisor(dataDir string) (string, error) {
 		sup.Executable = exe
 	}
 	if sup.Start == nil {
+		s.loginEnv = newLoginEnv(dataDir, LoginEnvironment)
 		sup.Start = func(ctx context.Context) (Child, error) {
 			// Without the login environment the collector still runs, with
 			// the app's own; the status says what is missing.
-			env, err := LoadEnvironment(ctx, dataDir)
+			env, err := s.loginEnv.get(ctx)
 			s.mu.Lock()
 			s.envErr = err
 			s.mu.Unlock()
@@ -280,24 +310,31 @@ func (s *shell) finish() {
 }
 
 // relaunch restarts the app on the upgraded executable, after its collector
-// stopped so the new one starts from the new binary. When the quit is
-// cancelled the app keeps running, and collecting.
-func (s *shell) relaunch() {
+// stopped so the new one starts from the new binary, and reports whether the
+// quit went ahead. When it is cancelled the app keeps running without a
+// collector: one started now would be the upgraded binary's, whose store the
+// old app may not read. The tray asks for a restart, and the upgrade watch
+// asks again on its next check.
+func (s *shell) relaunch() bool {
 	slog.Info("executable upgraded; relaunching", "event", "app_relaunch")
 	s.stopCollector()
 	// The relaunched process starts as the app again, whatever launched this one.
 	previous, set := os.LookupEnv("DRIGA_APP")
 	_ = os.Setenv("DRIGA_APP", "1")
 	if s.relaunchApp() {
-		return
+		return true
 	}
-	slog.Info("relaunch cancelled; collecting again", "event", "app_relaunch_cancelled")
+	slog.Info("relaunch cancelled; restart Driga to finish updating", "event", "app_relaunch_cancelled")
 	if set {
 		_ = os.Setenv("DRIGA_APP", previous)
 	} else {
 		_ = os.Unsetenv("DRIGA_APP")
 	}
-	s.startCollector(nil)
+	s.mu.Lock()
+	s.restartPending = true
+	s.mu.Unlock()
+	s.updateTray()
+	return false
 }
 
 // relaunchApp asks the toolkit to relaunch and reports whether the quit went
@@ -327,6 +364,8 @@ func (s *shell) trayStatus() Status {
 	defer s.mu.Unlock()
 	st := s.status
 	switch {
+	case s.restartPending:
+		st = Status{RestartPending: true}
 	case st.Err != nil:
 	case s.serviceErr != nil:
 		// The error itself is in the log; the line has room for the fix.
@@ -343,9 +382,9 @@ func (s *shell) watchNeeds(ctx context.Context) {
 	ticker := time.NewTicker(needsPoll)
 	defer ticker.Stop()
 	for {
-		version, err := s.opts.Source.DataVersion(ctx)
+		version, err := s.source.DataVersion(ctx)
 		if err == nil && version != last {
-			if snap, err := s.opts.Source.LoadScope(ctx, store.Scope{}); err == nil {
+			if snap, err := s.source.LoadScope(ctx, store.Scope{}); err == nil {
 				last = version
 				observed := snap.ObservedAt
 				if observed.IsZero() {
@@ -374,7 +413,7 @@ func (s *shell) watchNeeds(ctx context.Context) {
 func (s *shell) inboxRows() []view.InboxRow {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	snap, err := s.opts.Source.LoadScope(ctx, store.Scope{})
+	snap, err := s.source.LoadScope(ctx, store.Scope{})
 	if err != nil {
 		slog.Warn("inbox unavailable for a notification click", "event", "notification_click_failed", "err", err.Error())
 		return nil

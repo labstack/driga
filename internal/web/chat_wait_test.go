@@ -123,3 +123,26 @@ func TestWebChatSurvivesCollectorBrokerRestart(t *testing.T) {
 		t.Fatal(w.Code, w.Body)
 	}
 }
+
+// expiringChat gives up on Wait with its own deadline, as the collector's
+// chat client does when its request timeout ends before the page's poll.
+type expiringChat struct{ chat.Client }
+
+func (c expiringChat) Wait(ctx context.Context, id string, after uint64) (chat.State, error) {
+	time.Sleep(20 * time.Millisecond)
+	return chat.State{}, fmt.Errorf("wait: %w", context.DeadlineExceeded)
+}
+
+func TestChatWaitClientDeadlineIsNoChange(t *testing.T) {
+	s, b, id := chatFixture(t)
+	s.opts.Chat = expiringChat{Client: b}
+	s.pollTimeout = time.Hour
+	if err := b.SetMode(context.Background(), id, chat.Auto); err != nil {
+		t.Fatal(err)
+	}
+	initial := waitChat(t, s, id, 0)
+	got := waitChat(t, s, id, initial.Cursor)
+	if got.Cursor != initial.Cursor || got.Reset || len(got.Events) != 0 {
+		t.Fatalf("a client deadline must answer the current state: %+v", got.State)
+	}
+}

@@ -28,9 +28,13 @@ const (
 	// orphanWait bounds how long a terminated orphan may take to free the lock.
 	orphanWait = 10 * time.Second
 	orphanPoll = 100 * time.Millisecond
-	// readyTimeout bounds how long a new child may take to answer on the chat socket.
+	// readyTimeout bounds one check that a new child answers on the chat socket.
 	readyTimeout = 10 * time.Second
 )
+
+// readyBackoff is the wait before each further check of a child that does
+// not answer yet. The last step repeats.
+var readyBackoff = []time.Duration{time.Second, 2 * time.Second, 5 * time.Second, 10 * time.Second, 30 * time.Second}
 
 // Child is a running collector process.
 type Child interface {
@@ -50,6 +54,9 @@ type Status struct {
 	// Owner is the other process holding the collector lock, if any.
 	Owner collector.Owner
 	Err   error
+	// RestartPending is the app's: an upgrade waits for it to restart, and
+	// no collector runs until then.
+	RestartPending bool
 }
 
 // Supervisor keeps one collector running for the app. When the lock is free it
@@ -188,24 +195,35 @@ func (s *Supervisor) supervise(ctx context.Context) error {
 	readyCtx, cancelReady := context.WithCancel(ctx)
 	defer cancelReady()
 	ready := make(chan error, 1)
-	go func() {
-		if s.Ready == nil {
-			ready <- nil
-			return
-		}
-		ready <- s.Ready(readyCtx)
-	}()
+	check := func() {
+		go func() {
+			if s.Ready == nil {
+				ready <- nil
+				return
+			}
+			ready <- s.Ready(readyCtx)
+		}()
+	}
+	check()
+	// A child can take long to serve chat, as while it migrates the store:
+	// it is asked again with backoff for as long as it runs.
+	var retry <-chan time.Time
+	attempt := 0
 	for {
 		select {
 		case err := <-ready:
-			ready = nil
 			if err != nil {
 				// Not collecting as far as the app is concerned: it opens
 				// chat only while Collecting is set.
 				s.report(Status{Err: fmt.Errorf("collector not answering: %w", err)})
+				retry = s.clock.After(readyBackoff[min(attempt, len(readyBackoff)-1)])
+				attempt++
 				continue
 			}
 			s.report(Status{Collecting: true})
+		case <-retry:
+			retry = nil
+			check()
 		case err := <-exited:
 			<-drained
 			if ctx.Err() != nil {
@@ -254,7 +272,8 @@ func sameStatus(a, b Status) bool {
 }
 
 // WaitChat returns once the collector's chat socket in dataDir accepts a
-// connection, or after ten seconds with the last dial error.
+// connection, or after ten seconds with the last dial error. The supervisor
+// calls it again while the collector runs.
 func WaitChat(ctx context.Context, dataDir string) error {
 	ctx, cancel := context.WithTimeout(ctx, readyTimeout)
 	defer cancel()
