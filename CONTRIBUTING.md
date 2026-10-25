@@ -48,7 +48,8 @@ just install      # deliberately copies it to ~/.local/bin
 The app's page and the panels MCP App are built from `ui/` with [Bun](https://bun.sh):
 `just ui` installs the pinned packages, type-checks and writes both bundles into
 `internal/web/app` and `internal/mcp/apps`. The bundles are committed, so a Go
-build needs no JavaScript toolchain. Run `cd ui && bun run test` for the UI tests.
+build needs no JavaScript toolchain, but `just check` needs Bun: it runs the UI
+tests, rebuilds the bundles and fails when the committed ones are behind `ui/`.
 
 `just dev` develops the UI in a browser at http://127.0.0.1:5173/app/: Vite
 hot-reloads it, and `driga dev serve` answers the API on 127.0.0.1:47801 from
@@ -67,7 +68,7 @@ install, so Driga composes its status badge and stat tile from Mantine instead.
 ## Verify
 
 ```sh
-just check        # gofmt, go mod tidy, vet (native and Windows), generated files, tests
+just check        # gofmt, go mod tidy, vet (native and Windows), generated files, UI, tests
 just race         # the suite under the race detector
 just ci           # what the Linux CI job runs: check, race, govulncheck, actionlint, release snapshot
 ```

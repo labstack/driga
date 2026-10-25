@@ -45,8 +45,8 @@ func Home() Dashboard {
 				Empty: "No session looks stuck. A busy session quiet past stalled_after shows here."},
 			{ID: "sessions", Title: "Sessions", Viz: "table", Source: "sessions", Columns: []string{"state", "title", "project", "branch", "agent", "machine", "last_activity_at", "mem_bytes"}, Sort: "age", Where: with(), Width: 12, Height: "m",
 				Empty: "No live sessions. Agent sessions on your machines show here while they run."},
-			{ID: "memory", Title: "Memory by project", Description: "Agent memory on this machine.", Viz: "bar", Source: "costs", By: "project", Measure: "sum:mem_bytes", Width: 6, Height: "m"},
-			{ID: "machine_memory", Title: "Machine memory used", Viz: "timeseries", Source: "activity", Measure: "max:mem_used_bytes", Where: []Filter{{Column: "machine", Value: "$machine"}}, Width: 6, Height: "m"},
+			{ID: "memory", Title: "Memory by project, this machine", Description: "Memory held by agents and the processes they started, on this machine only; other machines don't report it yet.", Viz: "bar", Source: "costs", By: "project", Measure: "sum:mem_bytes", Width: 6, Height: "m"},
+			{ID: "machine_memory", Title: "Machine memory used", Description: "Each machine's used memory over the last hour, one line per machine.", Viz: "timeseries", Source: "activity", By: "machine", Measure: "max:mem_used_bytes", Where: []Filter{{Column: "machine", Value: "$machine"}}, Width: 6, Height: "m"},
 		},
 	}
 }

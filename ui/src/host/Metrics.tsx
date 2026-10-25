@@ -29,13 +29,16 @@ function delta(trend: (number | null)[] | undefined, unit?: string): string | nu
  * space: an icon and label, the value with its unit, the change over the
  * last hour and a sparkline where the metric has readings over time. A
  * count that needs the person takes its tone. Clicking one asks Chat. */
-export function Metrics({ fragment, editing, onAsk, onShow, onRemove }: { fragment: Fragment | null; editing: boolean; onAsk: (m: Metric) => void; onShow?: (panel: string) => void; onRemove: (id: string) => void }) {
+export function Metrics({ fragment, editing, extra, onAsk, onShow, onRemove }: { fragment: Fragment | null; editing: boolean; extra?: Record<string, number>; onAsk: (m: Metric) => void; onShow?: (panel: string) => void; onRemove: (id: string) => void }) {
   if (!fragment) return <Box style={{ flex: 1 }} />;
   return <ScrollArea type="never" style={{ flex: 1, minWidth: 0 }}>
     <Group gap={6} wrap="nowrap" component="ul" aria-label="Metrics" m={0} p={0} style={{ listStyle: "none" }}>
       {fragment.dashboard.panels.map(p => {
         const r = fragment.results.find(x => x.id === p.id);
-        const n = r?.frame?.rows[0]?.[0] ?? null;
+        // extra adds what the panel's source can't see, such as Chat's
+        // permission prompts to the waits that need the person.
+        const read = r?.frame?.rows[0]?.[0] ?? null;
+        const n = typeof read === "number" && extra?.[p.id] ? read + extra[p.id] : read;
         const unit = r?.frame?.columns[0]?.unit;
         const tone = typeof n === "number" && n > 0 ? alarms[p.id] : undefined;
         const change = delta(r?.trend, unit);

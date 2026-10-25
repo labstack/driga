@@ -105,8 +105,8 @@ var sources = map[string]schema{
 		},
 	},
 	"inbox": {
-		description: "What needs you and what finished: waits, completions and machine warnings. A session's finished turns are one item, its latest, with how many turns it holds",
-		columns:     []Column{col("id", String), col("kind", String), col("reason", String), col("tool", String), col("detail", String), col("summary", String), col("title", String), col("project", String), col("branch", String), col("agent", String), col("session_id", Number), col("machine_id", String), col("machine", String), col("waited", Number, "duration"), col("age", Number, "duration"), col("occurred_at", Time), col("ack_pending", Bool), col("turns", Number, "count"), col("ids", String)},
+		description: "What needs you and what finished: waits, completions and machine warnings. A session's finished turns are one item, its latest, with how many turns it holds. A finished item carries what there is to review: files the session edited, and its checkout's uncommitted, unpushed and latest commit",
+		columns:     []Column{col("id", String), col("kind", String), col("reason", String), col("tool", String), col("detail", String), col("summary", String), col("title", String), col("project", String), col("branch", String), col("agent", String), col("session_id", Number), col("machine_id", String), col("machine", String), col("waited", Number, "duration"), col("age", Number, "duration"), col("occurred_at", Time), col("ack_pending", Bool), col("turns", Number, "count"), col("ids", String), col("files", Number, "count"), col("edited", String), col("checkout", String), col("dirty", Number, "count"), col("unpushed", Number, "count"), col("last_commit", String)},
 		build: func(s viewer.Snapshot) [][]any {
 			type key struct {
 				machine string
@@ -118,7 +118,13 @@ var sources = map[string]schema{
 				if r.Historical {
 					continue
 				}
-				row := []any{r.ID, r.Kind, r.Reason, r.Tool, r.Detail, r.Summary, sessionTitle(r.Title, r.Adapter, r.Project), r.Project, r.Branch, r.Adapter, float64(r.SessionID), r.MachineID, r.MachineName, ms(r.Waited), ms(r.Age), stamp(r.TS), r.AckPendingAt != nil, 1.0, r.ID}
+				row := []any{r.ID, r.Kind, r.Reason, r.Tool, r.Detail, r.Summary, sessionTitle(r.Title, r.Adapter, r.Project), r.Project, r.Branch, r.Adapter, float64(r.SessionID), r.MachineID, r.MachineName, ms(r.Waited), ms(r.Age), stamp(r.TS), r.AckPendingAt != nil, 1.0, r.ID, nil, nil, nil, nil, nil, nil}
+				if r.Kind == "finished" {
+					row[19], row[20] = float64(len(r.Files)), strings.Join(r.Files, "\n")
+					if c := r.Checkout; c != nil {
+						row[21], row[22], row[23], row[24] = c.Path, float64(c.Dirty+c.Untracked), float64(c.Ahead), c.LastCommitSubject
+					}
+				}
 				k := key{r.MachineID, r.SessionID}
 				if r.Kind != "finished" || r.SessionID == 0 {
 					rows = append(rows, row)
@@ -241,6 +247,18 @@ var sources = map[string]schema{
 					out = float64(*n.OutputTokens)
 				}
 				rows = append(rows, []any{float64(n.ID), parent, n.Title, n.Label, n.Adapter, n.Model, n.Project, n.Branch, n.MachineID, names[n.MachineID], stamp(n.StartedAt), ended, stamp(n.LastActivityAt), ms(n.Elapsed), mem, cost, in, out, n.LastTool, n.Reason})
+			}
+			return rows
+		},
+	},
+	"history": {
+		description: "Top-level sessions that ended in the last two weeks, newest first, with the command that resumes each where its agent can",
+		columns:     []Column{col("id", Number), col("title", String), col("project", String), col("branch", String), col("agent", String), col("machine", String), col("machine_id", String), col("started_at", Time), col("ended_at", Time), col("resume", String)},
+		build: func(s viewer.Snapshot) [][]any {
+			names := machineNames(s)
+			rows := make([][]any, 0, len(s.BoardData.History))
+			for _, h := range s.BoardData.History {
+				rows = append(rows, []any{float64(h.ID), h.Title, h.Project, h.Branch, h.Adapter, names[h.MachineID], h.MachineID, stamp(h.StartedAt), stamp(h.EndedAt), h.Resume})
 			}
 			return rows
 		},

@@ -30,3 +30,8 @@ tr:hover .row-menu, tr:focus-within .row-menu, .row-hover:hover .row-menu, .row-
 
 /* A panel the header just pointed at. */
 .panel-shown { box-shadow: 0 0 0 2px var(--mantine-color-brand-filled); transition: box-shadow 150ms ease-out; }
+
+.search-button { padding: 6px 10px; border: 1px solid var(--driga-border); border-radius: var(--mantine-radius-md); color: var(--driga-muted); transition: background-color 120ms ease-out; }
+.search-button:hover { background: var(--driga-hover); }
+.mantine-Spotlight-action[data-selected] { background: var(--driga-hover); color: inherit; }
+.mantine-Spotlight-action:not([data-selected]):not(:hover) .search-hint { visibility: hidden; }

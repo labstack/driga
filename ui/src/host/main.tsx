@@ -17,6 +17,7 @@ import { Brand } from "./Brand";
 import { Chat } from "./Chat";
 import { Dashboard } from "./Dashboard";
 import { Metrics } from "./Metrics";
+import { Search } from "./Search";
 
 const refreshMs = 5000;
 const headerID = "header";
@@ -40,6 +41,15 @@ function showPanel(id: string) {
   window.setTimeout(() => el.classList.remove("panel-shown"), 1600);
 }
 
+// remembered and remember keep small per-viewer settings; storage can be
+// missing or refuse, and the app works the same without it.
+function remembered(key: string): string | null {
+  try { return localStorage.getItem(key); } catch { return null; }
+}
+function remember(key: string, value: string) {
+  try { localStorage.setItem(key, value); } catch { /* not kept */ }
+}
+
 function App() {
   const [id, setId] = useState<string>(initial);
   const [list, setList] = useState<Summary[]>([]);
@@ -48,7 +58,9 @@ function App() {
   const [fragment, setFragment] = useState<Fragment | null>(null);
   const [vars, setVars] = useState<Record<string, string>>({});
   const [editing, setEditing] = useState(false);
-  const [chatOpen, setChatOpen] = useState(true);
+  const [chatOpen, setChatOpen] = useState(() => remembered("driga-chat-open") !== "false");
+  // When the board last refreshed, and whether the latest try failed.
+  const [fresh, setFresh] = useState<{ at: number; failed: boolean }>({ at: 0, failed: false });
   const [prompts, setPrompts] = useState<Prompt[]>([]);
   const [ask, setAsk] = useState<{ text: string; at: number } | null>(null);
   const timer = useRef<number | undefined>(undefined);
@@ -58,9 +70,13 @@ function App() {
     const [h, i] = await Promise.allSettled([dashboards.open(headerID), dashboards.run(inboxSpec)]);
     if (h.status === "fulfilled") setHeader(h.value);
     if (i.status === "fulfilled") setInbox(i.value);
-    chat.prompts().then(setPrompts, () => setPrompts([]));
-    try { setFragment(await dashboards.open(id, vars)); }
-    catch (e) { say((e as Error).message); if (id !== homeID) setId(homeID); }
+    // A failed fetch keeps the prompts last seen; the stale note says so.
+    chat.prompts().then(setPrompts, () => undefined);
+    try { setFragment(await dashboards.open(id, vars)); setFresh({ at: Date.now(), failed: false }); }
+    catch (e) {
+      setFresh(f => ({ ...f, failed: true }));
+      if (id !== homeID) { say((e as Error).message); setId(homeID); }
+    }
   }, [id, vars]);
   useEffect(() => { void load(); }, [load]);
   // Refresh while visible; editing holds the board still.
@@ -71,6 +87,7 @@ function App() {
     return () => window.clearInterval(timer.current);
   }, [load, editing]);
   useEffect(() => { dashboards.list().then(l => setList(l.filter(d => d.id !== headerID)), () => undefined); }, [fragment?.version, fragment?.id]);
+  useEffect(() => { remember("driga-chat-open", String(chatOpen)); }, [chatOpen]);
   useEffect(() => { history.replaceState(null, "", id === homeID ? "/app/" : `/app/?dashboard=${encodeURIComponent(id)}`); }, [id]);
 
   const open = (next: string) => { setEditing(false); setVars({}); setId(next); };
@@ -168,9 +185,10 @@ function App() {
       <AppShell.Header px="md" style={{ background: "color-mix(in srgb, var(--driga-ground) 88%, transparent)", backdropFilter: "blur(10px)", borderColor: "var(--driga-border)" }}>
         <Group h="100%" gap="md" wrap="nowrap">
           <Brand />
-          <Metrics fragment={header} editing={editing} onAsk={m => { setChatOpen(true); setAsk({ text: `Tell me about "${m.panel.title}" right now.`, at: Date.now() }); }}
+          <Metrics fragment={header} editing={editing} extra={{ waiting: prompts.length }} onAsk={m => { setChatOpen(true); setAsk({ text: `Tell me about "${m.panel.title}" right now.`, at: Date.now() }); }}
             onShow={target => { if (id !== homeID) open(homeID); window.setTimeout(() => showPanel(target), id !== homeID ? 600 : 0); }}
             onRemove={pid => header && void edit(headerID, header.version ?? 0, [{ op: "remove", id: pid }], "Removed a metric")} />
+          <Search list={list} act={act} say={say} open={open} ask={text => { setChatOpen(true); setAsk({ text, at: Date.now() }); }} />
           <Tooltip label={chatOpen ? "Hide Chat" : "Show Chat"}>
             <ActionIcon size="lg" variant={chatOpen ? "light" : "subtle"} color={chatOpen ? "brand" : "gray"} aria-pressed={chatOpen} aria-label="Chat" onClick={() => setChatOpen(o => !o)}><ChatCircle size={20} /></ActionIcon>
           </Tooltip>
@@ -180,7 +198,10 @@ function App() {
         <Group justify="space-between" wrap="nowrap" gap="sm" px="md" pt="sm" pb={8}>
           <Box style={{ minWidth: 0 }}>
             <Title order={1} fz={28} fw={650} lh={1.2} style={{ letterSpacing: "-0.02em" }}>{d?.name ?? "Loading…"}</Title>
-            {d?.description && <Text size="xs" c="dimmed" truncate>{d.description}</Text>}
+            {fresh.failed && fresh.at > 0
+              ? <Text size="xs" c="warning" truncate role="status">Not updated since {new Date(fresh.at).toLocaleTimeString([], { timeStyle: "medium" })}. Retrying; check <Text span size="xs" ff="monospace">driga service status</Text>.</Text>
+              : fresh.failed ? <Text size="xs" c="warning" role="status">Driga can't reach its service. Retrying every {refreshMs / 1000}s.</Text>
+              : d?.description && <Text size="xs" c="dimmed" truncate>{d.description}</Text>}
           </Box>
           <Group gap="xs" wrap="nowrap">
             {d?.variables?.map(v => <Select key={v.name} size="xs" w={140} aria-label={v.name} placeholder={`All ${v.name}s`} clearable
@@ -198,7 +219,8 @@ function App() {
         </Box>
       </AppShell.Main>
       <AppShell.Aside style={{ borderColor: "var(--driga-border)", background: "var(--driga-inset)" }}>
-        {chatOpen && <Chat inbox={brief} act={act} ask={ask} pinLabel={`Add to ${d?.name ?? "dashboard"}`} onPin={pin} onSave={save} onClose={() => setChatOpen(false)} />}
+        {/* Chat stays mounted while hidden, so a draft and the conversation survive. */}
+        <Box display={chatOpen ? "contents" : "none"}><Chat inbox={brief} act={act} ask={ask} pinLabel={`Add to ${d?.name ?? "dashboard"}`} onPin={pin} onSave={save} onClose={() => setChatOpen(false)} /></Box>
       </AppShell.Aside>
     </AppShell>
   </HostContext.Provider>;

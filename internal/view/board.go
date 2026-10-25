@@ -16,7 +16,30 @@ type BoardSnapshot struct {
 	Nodes  []FlowNode                   `json:"nodes"`
 	Load   []int                        `json:"load"`
 	Memory string                       `json:"memory"`
+	// History is the top-level sessions that ended in the last two weeks,
+	// newest first, for finding and resuming past work.
+	History []HistoryRow `json:"history,omitempty"`
 }
+
+// HistoryRow is one ended session and how to resume it, when its agent can.
+type HistoryRow struct {
+	MachineID string    `json:"machine_id"`
+	ID        int64     `json:"id"`
+	Title     string    `json:"title"`
+	Project   string    `json:"project"`
+	Branch    string    `json:"branch"`
+	Adapter   string    `json:"adapter"`
+	StartedAt time.Time `json:"started_at"`
+	EndedAt   time.Time `json:"ended_at"`
+	Resume    string    `json:"resume,omitempty"`
+}
+
+// HistoryWindow and HistoryLimit bound BoardSnapshot.History.
+const (
+	HistoryWindow = 14 * 24 * time.Hour
+	HistoryLimit  = 500
+)
+
 type BoardSlice struct {
 	At       time.Time `json:"at"`
 	State    string    `json:"state"`

@@ -59,6 +59,33 @@ export function bar(frame: Frame, panel: Panel, t: Theme): Option {
   };
 }
 
+/** summary says in words what a chart shows, as Canon's chart card asks:
+ * the largest bar and the total, or a series' latest reading and its peak.
+ * Several series name the highest now. */
+export function summary(frame: Frame, panel: Panel): string {
+  if (panel.viz === "bar") {
+    const unit = frame.columns[1]?.unit;
+    const data = frame.rows.map(r => ({ name: String(r[0] ?? "–") || "–", n: Number(r[1] ?? 0) }));
+    if (!data.length) return "";
+    const top = data.reduce((a, b) => (b.n > a.n ? b : a));
+    const total = data.reduce((sum, d) => sum + d.n, 0);
+    return `${top.name} most, ${value(top.n, unit)} of ${value(total, unit)}`;
+  }
+  if (panel.viz !== "timeseries") return "";
+  const unit = frame.columns[2]?.unit;
+  const last = new Map<string, number>();
+  let peak = -Infinity;
+  for (const r of frame.rows) {
+    if (typeof r[2] !== "number") continue;
+    last.set(String(r[1] ?? ""), r[2]);
+    peak = Math.max(peak, r[2]);
+  }
+  if (!last.size) return "";
+  if (last.size === 1) return `${value([...last.values()][0], unit)} now, peak ${value(peak, unit)}`;
+  const [name, n] = [...last.entries()].reduce((a, b) => (b[1] > a[1] ? b : a));
+  return `${name} highest now at ${value(n, unit)}`;
+}
+
 /** timeseries draws [ts, series, value] rows as one line per series. */
 export function timeseries(frame: Frame, panel: Panel, t: Theme): Option {
   const unit = frame.columns[2]?.unit;

@@ -1,10 +1,10 @@
 import { ActionIcon, Badge, Box, Button, Card, Group, Paper, Progress, ScrollArea, SimpleGrid, Stack, Table, Text, Title, Tooltip, UnstyledButton } from "@mantine/core";
-import { CaretDown, CaretUp, CheckCircle, Info } from "@phosphor-icons/react";
+import { CaretDown, CaretUp, ChartLine, Check, CheckCircle, Info, Table as TableIcon } from "@phosphor-icons/react";
 import { createSortedRowModel, rowSortingFeature, sortFn_alphanumeric, sortFn_basic, tableFeatures, useTable, type ColumnDef, type SortingState } from "@tanstack/react-table";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import Markdown from "react-markdown";
 import { Chart } from "./Chart";
-import { bar, sparkline as sparklineOption, timeseries } from "./charts";
+import { bar, sparkline as sparklineOption, summary, timeseries } from "./charts";
 import { cell, duration, exact, label, value } from "./format";
 import { actionLabel, rowActions, useHost, type Act, type ActionKind } from "./host";
 import { RowMenu, rowProps } from "./RowMenu";
@@ -27,22 +27,41 @@ export function PanelView({ panel, result, act: given, fill }: { panel: Panel; r
   const host = useHost();
   const act = given ?? host.act;
   const height = fill ? 0 : panelHeight(panel);
+  // A chart can also be read as a table, for exact values and screen readers.
+  const [asTable, setAsTable] = useState(false);
+  const chart = (panel.viz === "bar" || panel.viz === "timeseries") && result?.status !== "error" && !!result?.frame?.rows.length;
   let body: ReactNode;
   if (panel.viz === "text") body = <Text component="div" size="sm" className="markdown"><Markdown>{panel.content ?? ""}</Markdown></Text>;
   else if (!result) body = <Text size="sm" c="dimmed">Loading…</Text>;
   else if (result.status === "error") body = <Text size="sm" c="danger">{result.message ?? "This panel could not run."}</Text>;
   else if (panel.viz === "inbox" && host.prompts?.length) body = <Inbox frame={result.frame ?? { columns: [], rows: [] }} act={act} prompts={host.prompts} answer={host.answer} />;
   else if (!result.frame || result.status === "empty") body = <Text size="sm" c="dimmed">{panel.viz === "inbox" ? "Nothing needs you right now." : result.message ?? "Nothing matches right now."}</Text>;
+  else if (chart && asTable) body = <DataTable frame={chartTable(result.frame, panel)} source={panel.source} />;
   else body = <Body panel={panel} result={result} frame={result.frame} height={height} act={act} />;
+  const said = chart && result?.frame ? summary(result.frame, panel) : "";
   return <Card component="section" aria-labelledby={`panel-${panel.id}`} h={fill ? "100%" : undefined} style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
     <Group gap={6} wrap="nowrap" mb={6} className="panel-handle">
-      <Title order={2} id={`panel-${panel.id}`} fz="md" fw={600} lineClamp={1} style={{ letterSpacing: "-0.01em" }}>{panel.title}</Title>
+      <Title order={2} id={`panel-${panel.id}`} fz="md" fw={600} lineClamp={1} style={{ letterSpacing: "-0.01em", flex: "0 1 auto", maxWidth: "75%" }}>{panel.title}</Title>
       {panel.description && <Tooltip label={panel.description} multiline maw={320}>
         <ActionIcon size="xs" aria-label={`About ${panel.title}`}><Info size={14} /></ActionIcon>
+      </Tooltip>}
+      {said && <Text size="xs" c="dimmed" truncate ml="auto" ta="right" style={{ flex: "1 1 0", minWidth: 0 }} title={said}>{said}</Text>}
+      {chart && <Tooltip label={asTable ? "Show as chart" : "Show as table"}>
+        <ActionIcon size="sm" ml={said ? 0 : "auto"} aria-pressed={asTable} aria-label={asTable ? `Show ${panel.title} as chart` : `Show ${panel.title} as table`} onClick={() => setAsTable(v => !v)}>{asTable ? <ChartLine size={14} /> : <TableIcon size={14} />}</ActionIcon>
       </Tooltip>}
     </Group>
     <Box style={{ flex: 1, minHeight: fill ? 0 : Math.min(height, 120), display: "flex", flexDirection: "column" }}>{body}</Box>
   </Card>;
+}
+
+/** chartTable is a chart's frame as a table: newest first for a time series,
+ * with the series column only when there are several. */
+function chartTable(frame: Frame, panel: Panel): Frame {
+  if (panel.viz !== "timeseries") return frame;
+  const several = new Set(frame.rows.map(r => r[1])).size > 1;
+  const columns = several ? frame.columns : [frame.columns[0], frame.columns[2]];
+  const rows = [...frame.rows].reverse().map(r => several ? r : [r[0], r[2]]);
+  return { columns: columns.map(c => c.name === "value" ? { ...c, name: panel.measure?.split(":").pop() || "value" } : c.name === "ts" ? { ...c, name: "time" } : c), rows };
 }
 
 function Body({ panel, result, frame, height, act }: { panel: Panel; result: Result; frame: Frame; height: number; act?: Act }) {
@@ -211,12 +230,15 @@ function Inbox({ frame, act, prompts, answer }: { frame: Frame; act?: Act; promp
     const name = String(r.title || r.summary || "Session " + r.session_id);
     const where = [r.project, r.agent, r.machine].filter(Boolean).join(" · ");
     const props = rowProps(kinds, r, act);
-    // A finished turn is one line; a wait keeps a second for what it waits on.
+    // A finished turn is one line with what there is to review; a wait keeps
+    // a second line for what it waits on.
     if (!waiting) return <Group key={String(r.id)} gap={8} wrap="nowrap" px={6} py={4} {...props} className={`row-hover ${props.className ?? ""}`} style={{ borderRadius: "var(--mantine-radius-sm)" }}>
       <CheckCircle size={14} aria-hidden style={{ color: "var(--driga-muted)", flex: "none" }} />
       <Text size="sm" fw={500} truncate style={{ flex: "0 1 auto" }}>{name}</Text>
-      <Text size="xs" c="dimmed" truncate style={{ flex: 1 }}>{[where, typeof r.turns === "number" && r.turns > 1 ? `${r.turns} turns` : ""].filter(Boolean).join(" · ")}</Text>
+      <Text size="xs" c="dimmed" truncate style={{ flex: 1 }}>{[where, r.branch, typeof r.turns === "number" && r.turns > 1 ? `${r.turns} turns` : ""].filter(Boolean).join(" · ")}</Text>
+      <Review row={r} />
       {typeof r.age === "number" && <Text size="xs" c="dimmed" style={{ whiteSpace: "nowrap" }}>{duration(r.age)} ago</Text>}
+      {act && !r.ack_pending && <Tooltip label="Mark reviewed"><ActionIcon className="row-menu" aria-label={`Mark ${name} reviewed`} onClick={e => { e.stopPropagation(); void act({ kind: "ack", row: r }); }}><Check size={16} /></ActionIcon></Tooltip>}
       {act && <RowMenu kinds={kinds} row={r} act={act} label={name} />}
     </Group>;
     return <Paper key={String(r.id)} p="xs" radius="sm" withBorder {...props} className={`row-hover ${props.className ?? ""}`} style={{ background: "var(--driga-inset)", borderLeft: "3px solid var(--mantine-color-warning-filled)" }}>
@@ -239,9 +261,36 @@ function Inbox({ frame, act, prompts, answer }: { frame: Frame; act?: Act; promp
   return <ScrollArea style={{ flex: 1 }} type="auto"><Stack gap="sm">
     {section("Permission prompts", prompts?.length ?? 0, prompts?.map(p => <PromptItem key={p.id} prompt={p} answer={answer} />))}
     {section("Needs you", waits.length, waits.map(item))}
-    {section("Finished", done.length, done.map(item))}
+    {section("To review", done.length, done.map(item))}
   </Stack></ScrollArea>;
 }
+
+/** Review states what a finished turn left behind: the files its session
+ * edited, and work in its checkout that is not committed or not pushed. Only
+ * the latter two carry color, since they are what a person must act on. */
+function Review({ row }: { row: Row }) {
+  const files = typeof row.files === "number" ? row.files : 0;
+  const dirty = typeof row.dirty === "number" ? row.dirty : 0;
+  const unpushed = typeof row.unpushed === "number" ? row.unpushed : 0;
+  if (!files && !dirty && !unpushed) return null;
+  const edited = typeof row.edited === "string" && row.edited ? row.edited.split("\n") : [];
+  const checkout = typeof row.checkout === "string" ? row.checkout : "";
+  const tip = <Stack gap={2} maw={420}>
+    {checkout && <Text size="xs" ff="monospace">{checkout}</Text>}
+    {typeof row.last_commit === "string" && row.last_commit && <Text size="xs">Last commit: {row.last_commit}</Text>}
+    {edited.slice(0, 8).map(f => <Text key={f} size="xs" ff="monospace" truncate>{checkout && f.startsWith(checkout + "/") ? f.slice(checkout.length + 1) : f}</Text>)}
+    {edited.length > 8 && <Text size="xs" c="dimmed">and {edited.length - 8} more</Text>}
+  </Stack>;
+  return <Tooltip label={tip} multiline withinPortal>
+    <Group gap={6} wrap="nowrap" style={{ flex: "none" }} aria-label={[files && plural(files, "file"), dirty && `${dirty} uncommitted`, unpushed && `${unpushed} unpushed`].filter(Boolean).join(", ")}>
+      {files > 0 && <Text size="xs" c="dimmed" style={{ whiteSpace: "nowrap" }}>{plural(files, "file")}</Text>}
+      {dirty > 0 && <Badge size="xs" variant="light" color="warning">{dirty} uncommitted</Badge>}
+      {unpushed > 0 && <Badge size="xs" variant="light" color="gray">{unpushed} unpushed</Badge>}
+    </Group>
+  </Tooltip>;
+}
+
+function plural(n: number, word: string): string { return `${n} ${word}${n === 1 ? "" : "s"}`; }
 
 /** Cards shows each row as a tile: the first column names it, the rest are
  * its facts. Zero counts stay quiet; nonzero ones read as work in flight. */

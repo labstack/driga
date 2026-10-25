@@ -252,6 +252,10 @@ type InboxRow struct {
 	Adapter string        `json:"adapter"`
 	Title   string        `json:"title"`
 	Branch  string        `json:"branch"`
+	// Checkout and Files are what a finished turn left to review: the
+	// session's worktree as last scanned, and the files it edited.
+	Checkout *model.Worktree `json:"checkout,omitzero"`
+	Files    []string        `json:"files,omitempty"`
 }
 
 // InboxView lists attention and completion events without acknowledging them.

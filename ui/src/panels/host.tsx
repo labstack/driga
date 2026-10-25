@@ -22,7 +22,7 @@ export const HostContext = createContext<Host>({});
 
 export function useHost(): Host { return useContext(HostContext); }
 
-const label: Record<ActionKind, string> = { jump: "Open pane", ack: "Ack", open: "Open", stop: "Stop", kill: "Kill", force_kill: "Force kill", cleanup: "Remove", summarize: "Summarize" };
+const label: Record<ActionKind, string> = { jump: "Open pane", ack: "Mark reviewed", open: "Open", stop: "Stop", kill: "Kill", force_kill: "Force kill", cleanup: "Remove", summarize: "Summarize" };
 
 export function actionLabel(kind: ActionKind): string { return label[kind]; }
 

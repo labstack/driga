@@ -37,7 +37,7 @@ clean:
 # ---------- Verification ----------
 
 # Local pre-commit gate.
-check: _fmt-check tidy-check vet generate-check docs-check test
+check: _fmt-check tidy-check vet generate-check docs-check ui-check test
     @echo "All checks passed"
 
 # Adds race, vulnerability, workflow and release-snapshot checks.
@@ -93,9 +93,6 @@ docs-check:
 ui-deps:
     cd ui && bun install --frozen-lockfile
 
-# Typecheck and build the app's dashboard host and the panels MCP App into
-# internal/web/app and internal/mcp/apps. Both are committed, so a Go build
-# needs no JavaScript toolchain; rebuild after changing ui/.
 # Develop the app's UI in a browser at http://127.0.0.1:5173/app/: Vite
 # hot-reloads the UI and sends the API to driga dev serve, which restarts when
 # Go files change (with watchexec on PATH). It reads the data directory the
@@ -111,8 +108,25 @@ dev: ui-deps
     fi
     cd ui && bun --bun vite
 
+# Typecheck and build the app's dashboard host and the panels MCP App into
+# internal/web/app and internal/mcp/apps. Both are committed, so a Go build
+# needs no JavaScript toolchain; rebuild after changing ui/.
 ui: ui-deps
     cd ui && bun run build
+
+# Test and rebuild the UI, and fail when the build in git (staged counts) is
+# behind ui/.
+ui-check: ui
+    #!/usr/bin/env bash
+    set -euo pipefail
+    (cd ui && bun run test)
+    built=(internal/web/app internal/mcp/apps)
+    stale="$(git diff --name-only -- "${built[@]}"; git ls-files --others --exclude-standard -- "${built[@]}")"
+    if [[ -n "$stale" ]]; then
+      echo "$stale" >&2
+      echo "The UI build in git is behind ui/; add the rebuilt files above." >&2
+      exit 1
+    fi
 
 # ---------- Documentation site ----------
 
