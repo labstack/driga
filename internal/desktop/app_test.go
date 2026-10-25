@@ -16,7 +16,7 @@ import (
 func TestServiceRemovalFailureInTray(t *testing.T) {
 	failed := errors.New("launchctl failed")
 	dataDir := t.TempDir()
-	s := &shell{goos: "darwin", openService: func() (installedService, error) {
+	s := &shell{goos: "darwin", homes: sameHomes, openService: func() (installedService, error) {
 		return &fakeService{installed: true, dataDir: dataDir, uninstallErr: failed}, nil
 	}}
 	if removed := s.removeService(dataDir); removed {
@@ -145,5 +145,31 @@ func TestRelaunchKeepsALoginLaunchMarked(t *testing.T) {
 	s.stopCollector()
 	if os.Getenv("DRIGA_APP") != "1" {
 		t.Fatal("DRIGA_APP the app started with was removed")
+	}
+}
+
+// An app in an isolated home says nothing about the service in the tray.
+func TestIsolatedHomeHasNoServiceHint(t *testing.T) {
+	s := &shell{goos: "darwin", homes: func() (string, string) { return "/tmp/fake", "/Users/someone" },
+		openService: func() (installedService, error) { t.Fatal("opened the service"); return nil, nil }}
+	if s.removeService(t.TempDir()) {
+		t.Fatal("removed")
+	}
+	if line := StatusLine(s.trayStatus()); line != "Starting the collector…" {
+		t.Fatalf("tray says %q", line)
+	}
+}
+
+// Once the app's final stop has run, nothing starts the collector again.
+func TestNoCollectorAfterQuit(t *testing.T) {
+	collector := &fakeCollector{}
+	s := &shell{runCollector: collector.run, ctx: context.Background()}
+	s.startCollector(nil)
+	collector.waitRunning(t, 1)
+	s.finish()
+	s.startCollector(nil)
+	time.Sleep(50 * time.Millisecond)
+	if runs, running := collector.state(); runs != 1 || running != 0 {
+		t.Fatalf("collector runs %d, running %d after quit", runs, running)
 	}
 }

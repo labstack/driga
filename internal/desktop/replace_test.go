@@ -55,7 +55,7 @@ func TestReplaceInstalledService(t *testing.T) {
 	dataDir := filepath.Join(t.TempDir(), "data")
 	svc := &fakeService{installed: true, dataDir: dataDir}
 	open := func() (installedService, error) { return svc, nil }
-	removed, err := replaceService("darwin", dataDir, open)
+	removed, err := replaceService("darwin", dataDir, sameHomes, open)
 	if err != nil || !removed || svc.uninstalled != 1 {
 		t.Fatalf("first launch: removed=%t err=%v uninstalled=%d", removed, err, svc.uninstalled)
 	}
@@ -67,7 +67,7 @@ func TestReplaceInstalledService(t *testing.T) {
 		t.Fatalf("marker mode %v; want 0600", info.Mode().Perm())
 	}
 	// Said once: a service installed again later stays, and is not queried.
-	removed, err = replaceService("darwin", dataDir, open)
+	removed, err = replaceService("darwin", dataDir, sameHomes, open)
 	if err != nil || removed || svc.uninstalled != 1 || svc.queried != 1 {
 		t.Fatalf("second launch: removed=%t err=%v uninstalled=%d queried=%d", removed, err, svc.uninstalled, svc.queried)
 	}
@@ -94,7 +94,7 @@ func TestReplaceServiceLeavesOthersAlone(t *testing.T) {
 			if tc.svc.dataDir == "" {
 				tc.svc.dataDir = dataDir
 			}
-			removed, err := replaceService(tc.goos, dataDir, func() (installedService, error) { return tc.svc, nil })
+			removed, err := replaceService(tc.goos, dataDir, sameHomes, func() (installedService, error) { return tc.svc, nil })
 			if removed || !errors.Is(err, tc.err) {
 				t.Fatalf("removed=%t err=%v; want false, %v", removed, err, tc.err)
 			}
@@ -117,8 +117,42 @@ func TestReplaceServiceSameDataDir(t *testing.T) {
 	root := t.TempDir()
 	dataDir := filepath.Join(root, "data")
 	svc := &fakeService{installed: true, dataDir: filepath.Join(root, "x", "..", "data") + string(filepath.Separator)}
-	removed, err := replaceService("windows", dataDir, func() (installedService, error) { return svc, nil })
+	removed, err := replaceService("windows", dataDir, sameHomes, func() (installedService, error) { return svc, nil })
 	if err != nil || !removed || svc.uninstalled != 1 {
 		t.Fatalf("removed=%t err=%v uninstalled=%d", removed, err, svc.uninstalled)
+	}
+}
+
+// sameHomes is a launch whose HOME is the account's home.
+func sameHomes() (string, string) { return "/Users/someone", "/Users/someone" }
+
+// With HOME pointing elsewhere, as under scripts/isolated.sh, the data
+// directory can match while the service manager still finds the account's
+// real service: the app never asks it.
+func TestReplaceServiceIsolatedHome(t *testing.T) {
+	dataDir := t.TempDir()
+	homes := func() (string, string) { return "/tmp/fake-home", "/Users/someone" }
+	for _, goos := range []string{"darwin", "windows"} {
+		removed, err := replaceService(goos, dataDir, homes, func() (installedService, error) {
+			t.Fatal("opened the service from an isolated home")
+			return nil, nil
+		})
+		if removed || !errors.Is(err, errIsolatedHome) {
+			t.Fatalf("%s: removed=%t err=%v", goos, removed, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(dataDir, replacedMarker)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("marker written: %v", err)
+	}
+	// The same home through a symlink is the same home.
+	real := t.TempDir()
+	link := filepath.Join(t.TempDir(), "home")
+	if err := os.Symlink(real, link); err != nil {
+		t.Skip("no symlinks:", err)
+	}
+	svc := &fakeService{installed: true, dataDir: dataDir}
+	removed, err := replaceService("darwin", dataDir, func() (string, string) { return link, real }, func() (installedService, error) { return svc, nil })
+	if err != nil || !removed {
+		t.Fatalf("symlinked home: removed=%t err=%v", removed, err)
 	}
 }

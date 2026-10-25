@@ -61,11 +61,14 @@ type shell struct {
 	runCollector func(context.Context)
 	// openService opens the background service the app replaces.
 	openService func() (installedService, error)
+	// homes returns HOME and the account's home directory.
+	homes func() (string, string)
 	// relaunchApp quits and starts the app again, and reports false when
 	// the quit was cancelled.
 	relaunchApp func() bool
 
 	collectMu  sync.Mutex
+	finished   bool // The app's final stop ran: no collector starts again.
 	stopCancel context.CancelFunc
 	stopped    chan struct{}
 
@@ -111,7 +114,7 @@ func Run(opts Options) error {
 		return err
 	}
 	s.upgrade = newUpgradeWatch(exe, opts.Version)
-	s.openService = openUserService(exe)
+	s.openService, s.homes = openUserService(exe), accountHomes
 	s.runCollector = func(ctx context.Context) {
 		if err := opts.Supervisor.Run(ctx); err != nil {
 			slog.Warn("collector did not stop cleanly", "event", "collector_stop_failed", "err", err.Error())
@@ -156,7 +159,7 @@ func Run(opts Options) error {
 		go s.upgrade.run(ctx, s.relaunch)
 	})
 	err = mygo.App.Run()
-	s.stopCollector()
+	s.finish()
 	return err
 }
 
@@ -217,7 +220,11 @@ func (s *shell) replaceService() {
 // reports whether it did. A failure is kept for the tray, whose status line
 // then says how to remove the service by hand.
 func (s *shell) removeService(dataDir string) bool {
-	removed, err := replaceService(s.goos, dataDir, s.openService)
+	removed, err := replaceService(s.goos, dataDir, s.homes, s.openService)
+	if errors.Is(err, errIsolatedHome) {
+		slog.Info("the app runs in an isolated environment; leaving the collector service alone", "event", "service_replace_isolated")
+		return false
+	}
 	s.mu.Lock()
 	s.serviceErr = err
 	s.mu.Unlock()
@@ -236,6 +243,11 @@ func (s *shell) startCollector(first func()) {
 	ctx, cancel := context.WithCancel(s.ctx)
 	done := make(chan struct{})
 	s.collectMu.Lock()
+	if s.finished {
+		s.collectMu.Unlock()
+		cancel()
+		return
+	}
 	s.stopCancel, s.stopped = cancel, done
 	s.collectMu.Unlock()
 	go func() {
@@ -257,6 +269,14 @@ func (s *shell) stopCollector() {
 	}
 	cancel()
 	<-done
+}
+
+// finish is the app's final stop of the collector: none starts after it.
+func (s *shell) finish() {
+	s.collectMu.Lock()
+	s.finished = true
+	s.collectMu.Unlock()
+	s.stopCollector()
 }
 
 // relaunch restarts the app on the upgraded executable, after its collector

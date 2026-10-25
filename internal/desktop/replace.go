@@ -3,6 +3,7 @@ package desktop
 import (
 	"errors"
 	"os"
+	"os/user"
 	"path/filepath"
 
 	"github.com/labstack/driga/internal/pathx"
@@ -51,12 +52,46 @@ func openUserService(exe string) func() (installedService, error) {
 	}
 }
 
+// errIsolatedHome reports an app whose HOME is not the account's home.
+var errIsolatedHome = errors.New("HOME is not the account's home; the background service is left alone")
+
+// accountHomes returns HOME and the account's home directory.
+func accountHomes() (env, account string) {
+	if u, err := user.Current(); err == nil {
+		account = u.HomeDir
+	}
+	return os.Getenv("HOME"), account
+}
+
+// isolatedHome reports whether HOME is set to another directory than the
+// account's home, symlinks resolved. An unset HOME, as on Windows, is the
+// account's home.
+func isolatedHome(homes func() (string, string)) bool {
+	env, account := homes()
+	if env == "" {
+		return false
+	}
+	resolve := func(p string) string {
+		if r, err := filepath.EvalSymlinks(p); err == nil {
+			return r
+		}
+		return filepath.Clean(p)
+	}
+	return account == "" || !pathx.Equal(resolve(env), resolve(account))
+}
+
 // replaceService uninstalls the per-user service when ReplaceService says so,
 // the way driga service uninstall does, and records it. It reports whether it
 // removed one. The service manager knows one service per user, so a service
 // that collects into another data directory, as the user's own does for an
-// app run with DRIGA_DATA_DIR, is left alone.
-func replaceService(goos, dataDir string, open func() (installedService, error)) (bool, error) {
+// app run with DRIGA_DATA_DIR, is left alone. So is every service when HOME
+// is not the account's home: the app would read the data directory from a
+// plist under HOME while launchd finds the account's own, so it does not ask
+// at all and returns errIsolatedHome.
+func replaceService(goos, dataDir string, homes func() (string, string), open func() (installedService, error)) (bool, error) {
+	if isolatedHome(homes) {
+		return false, errIsolatedHome
+	}
 	marker := filepath.Join(dataDir, replacedMarker)
 	_, err := os.Stat(marker)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
