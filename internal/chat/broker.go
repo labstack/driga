@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/labstack/driga/internal/secfile"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -538,6 +539,9 @@ func (b *Broker) run(ctx context.Context, c *conversation) {
 				m.Status = "stopped"
 			} else {
 				m.Text += "\n" + scrub.Scrub(err.Error())
+				// The message keeps the error only while the service runs and
+				// within the capture policy; the log keeps it for diagnosis.
+				slog.Warn("chat turn failed", "event", "chat_turn_failed", "conversation", c.row.ID, "err", scrub.Scrub(err.Error()))
 			}
 		}
 		if e := b.save(context.Background(), m); e != nil {
