@@ -1,6 +1,7 @@
 package panel
 
 import (
+	"cmp"
 	"slices"
 	"strings"
 	"time"
@@ -89,24 +90,29 @@ func ms(d time.Duration) float64 { return float64(d.Milliseconds()) }
 // the app's views use.
 var sources = map[string]schema{
 	"sessions": {
-		description: "Every live agent session, workers included. label is Driga's raw label (a leading ~ marks an inferred one); state is the label without the mark, inferred says whether it was inferred, and evidence is why",
+		description: "Every live agent session, workers included, ordered by state (waiting, then stalled? or dead, working, idle, finished, other) and newest first within each. label is Driga's raw label (a leading ~ marks an inferred one); state is the label without the mark, inferred says whether it was inferred, and evidence is why",
 		columns:     []Column{col("id", Number), col("title", String), col("label", String), col("agent", String), col("project", String), col("branch", String), col("machine", String), col("age", Number, "duration"), col("mem_bytes", Number, "bytes"), col("last_activity_at", Time), col("machine_id", String), col("state", String), col("inferred", Bool), col("evidence", String)},
 		build: func(s viewer.Snapshot) [][]any {
 			var rows [][]any
 			var walk func([]view.AgentRow)
 			walk = func(agents []view.AgentRow) {
 				for _, a := range agents {
-					rows = append(rows, []any{float64(a.ID), sessionTitle(a.Title, a.Adapter, a.Project), a.Label, a.Adapter, a.Project, a.Branch, a.MachineName, ms(a.Age), bytesKnown(a.Mem), stamp(a.LastActivityAt), a.MachineID, strings.TrimPrefix(a.Label, "~"), a.Heuristic || strings.HasPrefix(a.Label, "~"), a.Evidence})
+					rows = append(rows, []any{float64(a.ID), sessionTitle(a.Title, a.Adapter, a.Project, a.Branch), a.Label, a.Adapter, a.Project, a.Branch, a.MachineName, ms(a.Age), bytesKnown(a.Mem), stamp(a.LastActivityAt), a.MachineID, strings.TrimPrefix(a.Label, "~"), a.Heuristic || strings.HasPrefix(a.Label, "~"), a.Evidence})
 					walk(a.Children)
 				}
 			}
 			walk(s.Agents.Rows)
+			// What needs the person comes first, then what may be stuck, what
+			// works, and what rests; newest first within each.
+			slices.SortStableFunc(rows, func(a, b []any) int {
+				return cmp.Or(cmp.Compare(urgency(a[11].(string)), urgency(b[11].(string))), cmp.Compare(a[7].(float64), b[7].(float64)))
+			})
 			return rows
 		},
 	},
 	"inbox": {
-		description: "What needs you and what finished: waits, completions and machine warnings. A session's finished turns are one item, its latest, with how many turns it holds. A finished item carries what there is to review: files the session edited, and its checkout's uncommitted, unpushed and latest commit",
-		columns:     []Column{col("id", String), col("kind", String), col("reason", String), col("tool", String), col("detail", String), col("summary", String), col("title", String), col("project", String), col("branch", String), col("agent", String), col("session_id", Number), col("machine_id", String), col("machine", String), col("waited", Number, "duration"), col("age", Number, "duration"), col("occurred_at", Time), col("ack_pending", Bool), col("turns", Number, "count"), col("ids", String), col("files", Number, "count"), col("edited", String), col("checkout", String), col("dirty", Number, "count"), col("unpushed", Number, "count"), col("last_commit", String)},
+		description: "What needs you and what finished: waits, completions and machine warnings. A session's finished turns are one item, its latest, with how many turns it holds. needs_you is true for a wait and for a machine warning still in effect, such as memory_pressure or low_disk. A finished item carries what there is to review: files the session edited, and its checkout's uncommitted, unpushed and latest commit",
+		columns:     []Column{col("id", String), col("kind", String), col("reason", String), col("tool", String), col("detail", String), col("summary", String), col("title", String), col("project", String), col("branch", String), col("agent", String), col("session_id", Number), col("machine_id", String), col("machine", String), col("waited", Number, "duration"), col("age", Number, "duration"), col("occurred_at", Time), col("ack_pending", Bool), col("turns", Number, "count"), col("ids", String), col("files", Number, "count"), col("edited", String), col("checkout", String), col("dirty", Number, "count"), col("unpushed", Number, "count"), col("last_commit", String), col("needs_you", Bool)},
 		build: func(s viewer.Snapshot) [][]any {
 			type key struct {
 				machine string
@@ -118,7 +124,7 @@ var sources = map[string]schema{
 				if r.Historical {
 					continue
 				}
-				row := []any{r.ID, r.Kind, r.Reason, r.Tool, r.Detail, r.Summary, sessionTitle(r.Title, r.Adapter, r.Project), r.Project, r.Branch, r.Adapter, float64(r.SessionID), r.MachineID, r.MachineName, ms(r.Waited), ms(r.Age), stamp(r.TS), r.AckPendingAt != nil, 1.0, r.ID, nil, nil, nil, nil, nil, nil}
+				row := []any{r.ID, r.Kind, r.Reason, r.Tool, r.Detail, r.Summary, sessionTitle(r.Title, r.Adapter, r.Project, r.Branch), r.Project, r.Branch, r.Adapter, float64(r.SessionID), r.MachineID, r.MachineName, ms(r.Waited), ms(r.Age), stamp(r.TS), r.AckPendingAt != nil, 1.0, r.ID, nil, nil, nil, nil, nil, nil, r.Kind == "waiting" || (r.Kind != "finished" && r.EndedAt == nil)}
 				if r.Kind == "finished" {
 					row[19], row[20] = float64(len(r.Files)), strings.Join(r.Files, "\n")
 					if c := r.Checkout; c != nil {
@@ -342,18 +348,40 @@ func machineNames(s viewer.Snapshot) map[string]string {
 	return names
 }
 
-// sessionTitle names a session that has no title of its own by its agent and
-// project, so a row never reads as a dash.
-func sessionTitle(title, agent, project string) string {
-	switch {
-	case title != "":
-		return title
-	case agent != "" && project != "":
-		return agent + " session in " + project
-	case agent != "":
-		return agent + " session"
+// urgency orders session states by how soon the person should look.
+func urgency(state string) int {
+	switch state {
+	case "waiting":
+		return 0
+	case "stalled?", "dead":
+		return 1
+	case "working":
+		return 2
+	case "idle":
+		return 3
+	case "finished":
+		return 4
 	}
-	return title
+	return 5
+}
+
+// sessionTitle names a session that has no title of its own by its agent,
+// project and, off the main line, its branch, which is what tells two such
+// sessions in one project apart.
+func sessionTitle(title, agent, project, branch string) string {
+	if title != "" || agent == "" {
+		return title
+	}
+	name := agent + " session"
+	if project != "" {
+		name += " in " + project
+	}
+	switch branch {
+	case "", "main", "master", "HEAD":
+	default:
+		name += " on " + branch
+	}
+	return name
 }
 
 // stampAfter reports whether t is later than a stamp, or the stamp is unset.

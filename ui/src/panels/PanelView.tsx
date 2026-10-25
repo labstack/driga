@@ -151,6 +151,8 @@ function CellView({ v, column, row }: { v: Cell; column: Column; row?: Row }) {
   const text = cell(v, column);
   if (column.type === "time" && typeof v === "string") return <Text span fz="inherit" title={exact(v)}>{text}</Text>;
   if (column.type === "number") return <Text span ff="monospace" fz="inherit">{text}</Text>;
+  // A long title or branch gives way to the columns beside it; its full text is on hover.
+  if (column.name === "title" || column.name === "branch") return <Text fz="inherit" truncate maw={column.name === "title" ? 240 : 140} title={text}>{text}</Text>;
   return <>{text}</>;
 }
 
@@ -222,7 +224,26 @@ function List({ frame, source, act }: { frame: Frame; source?: string; act?: Act
 function Inbox({ frame, act, prompts, answer }: { frame: Frame; act?: Act; prompts?: Prompt[]; answer?: (p: Prompt, allow: boolean) => Promise<void> }) {
   const items = rows(frame);
   const waits = items.filter(r => r.kind === "waiting");
-  const done = items.filter(r => r.kind !== "waiting");
+  // Machine warnings, such as memory pressure, need the person too; they are
+  // not finished work.
+  const warnings = items.filter(r => r.kind !== "waiting" && r.kind !== "finished");
+  const done = items.filter(r => r.kind === "finished");
+  const warning = (r: Row) => {
+    const live = r.needs_you === true;
+    return <Paper key={String(r.id)} p="xs" radius="sm" withBorder style={{ background: "var(--driga-inset)", borderLeft: live ? "3px solid var(--mantine-color-warning-filled)" : undefined }}>
+      <Group justify="space-between" wrap="nowrap" align="flex-start" gap="sm">
+        <Stack gap={2} style={{ minWidth: 0 }}>
+          <Group gap={6} wrap="nowrap">
+            <StatusBadge tone={live ? "warning" : "neutral"}>{`${label(String(r.kind))}${live ? "" : ", ended"}`}</StatusBadge>
+            {r.machine && <Text size="xs" c="dimmed">{String(r.machine)}</Text>}
+            {typeof r.age === "number" && <Text size="xs" c="dimmed">{duration(r.age)} ago</Text>}
+          </Group>
+          {r.summary && <Text size="xs" style={{ overflowWrap: "anywhere" }}>{String(r.summary)}</Text>}
+        </Stack>
+        {act && !r.ack_pending && <Button size="compact-xs" variant="default" onClick={() => void act({ kind: "ack", row: r })}>Dismiss</Button>}
+      </Group>
+    </Paper>;
+  };
   const item = (r: Row) => {
     const waiting = r.kind === "waiting";
     const why = waiting ? [r.reason || "waiting", r.tool, r.detail].filter(Boolean).join(" · ") : String(r.summary || r.kind || "");
@@ -235,10 +256,10 @@ function Inbox({ frame, act, prompts, answer }: { frame: Frame; act?: Act; promp
     if (!waiting) return <Group key={String(r.id)} gap={8} wrap="nowrap" px={6} py={4} {...props} className={`row-hover ${props.className ?? ""}`} style={{ borderRadius: "var(--mantine-radius-sm)" }}>
       <CheckCircle size={14} aria-hidden style={{ color: "var(--driga-muted)", flex: "none" }} />
       <Text size="sm" fw={500} truncate style={{ flex: "0 1 auto" }}>{name}</Text>
-      <Text size="xs" c="dimmed" truncate style={{ flex: 1 }}>{[where, r.branch, typeof r.turns === "number" && r.turns > 1 ? `${r.turns} turns` : ""].filter(Boolean).join(" · ")}</Text>
+      <Text size="xs" c="dimmed" truncate style={{ flex: 1 }}>{[where, r.branch, typeof r.turns === "number" && r.turns > 1 ? `${r.turns} turns` : "", r.summary && r.summary !== "turn finished" ? r.summary : r.last_commit ? `last commit: ${r.last_commit}` : ""].filter(Boolean).join(" · ")}</Text>
       <Review row={r} />
       {typeof r.age === "number" && <Text size="xs" c="dimmed" style={{ whiteSpace: "nowrap" }}>{duration(r.age)} ago</Text>}
-      {act && !r.ack_pending && <Tooltip label="Mark reviewed"><ActionIcon className="row-menu" aria-label={`Mark ${name} reviewed`} onClick={e => { e.stopPropagation(); void act({ kind: "ack", row: r }); }}><Check size={16} /></ActionIcon></Tooltip>}
+      {act && !r.ack_pending && <Button size="compact-xs" variant="subtle" color="gray" leftSection={<Check size={12} />} aria-label={`Mark ${name} reviewed`} onClick={e => { e.stopPropagation(); void act({ kind: "ack", row: r }); }}>Reviewed</Button>}
       {act && <RowMenu kinds={kinds} row={r} act={act} label={name} />}
     </Group>;
     return <Paper key={String(r.id)} p="xs" radius="sm" withBorder {...props} className={`row-hover ${props.className ?? ""}`} style={{ background: "var(--driga-inset)", borderLeft: "3px solid var(--mantine-color-warning-filled)" }}>
@@ -261,6 +282,7 @@ function Inbox({ frame, act, prompts, answer }: { frame: Frame; act?: Act; promp
   return <ScrollArea style={{ flex: 1 }} type="auto"><Stack gap="sm">
     {section("Permission prompts", prompts?.length ?? 0, prompts?.map(p => <PromptItem key={p.id} prompt={p} answer={answer} />))}
     {section("Needs you", waits.length, waits.map(item))}
+    {section("Machines", warnings.length, warnings.map(warning))}
     {section("To review", done.length, done.map(item))}
   </Stack></ScrollArea>;
 }
@@ -272,9 +294,13 @@ function Review({ row }: { row: Row }) {
   const files = typeof row.files === "number" ? row.files : 0;
   const dirty = typeof row.dirty === "number" ? row.dirty : 0;
   const unpushed = typeof row.unpushed === "number" ? row.unpushed : 0;
-  if (!files && !dirty && !unpushed) return null;
-  const edited = typeof row.edited === "string" && row.edited ? row.edited.split("\n") : [];
   const checkout = typeof row.checkout === "string" ? row.checkout : "";
+  // With nothing edited and nothing left over, say which: a clean checkout,
+  // or no checkout Driga knows to look at.
+  if (!files && !dirty && !unpushed) return checkout
+    ? <Tooltip label={<Text size="xs" ff="monospace">{checkout}</Text>} withinPortal><Badge size="xs" variant="light" color="gray">clean</Badge></Tooltip>
+    : <Text size="xs" c="dimmed" style={{ whiteSpace: "nowrap" }}>no checkout</Text>;
+  const edited = typeof row.edited === "string" && row.edited ? row.edited.split("\n") : [];
   const tip = <Stack gap={2} maw={420}>
     {checkout && <Text size="xs" ff="monospace">{checkout}</Text>}
     {typeof row.last_commit === "string" && row.last_commit && <Text size="xs">Last commit: {row.last_commit}</Text>}

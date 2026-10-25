@@ -54,7 +54,7 @@ export function bar(frame: Frame, panel: Panel, t: Theme): Option {
     ...base(t, panel),
     tooltip: { ...base(t, panel).tooltip as object, trigger: "item", formatter: (p: { name: string; value: number }) => `${escape(p.name)}: ${escape(value(p.value, unit))}` },
     xAxis: { type: "value", ...byteSteps(unit, Math.max(0, ...data.map(d => d.value))), axisLabel: { ...axisLabel(t), formatter: (n: number) => value(n, unit) }, axisLine: { show: false }, axisTick: { show: false }, splitLine: { lineStyle: { color: t.grid } } },
-    yAxis: { type: "category", data: data.map(d => d.name), axisLabel: { color: t.text, fontSize: typeScale.small, width: 140, overflow: "truncate" }, axisLine: { show: false }, axisTick: { show: false } },
+    yAxis: { type: "category", data: data.map(d => d.name), axisLabel: { color: t.text, fontSize: typeScale.small, width: 140, overflow: "truncate", interval: 0 }, axisLine: { show: false }, axisTick: { show: false } },
     series: [{ type: "bar", data: data.map(d => d.value), itemStyle: { color: slot(t, 0), borderRadius: [0, 2, 2, 0] }, barMaxWidth: 14 }],
   };
 }

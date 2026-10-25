@@ -88,6 +88,6 @@ export function Search({ list, act, ask, open, say }: { list: Summary[]; act: Ac
     <Spotlight shortcut={["mod + K"]} filter={filter} onSpotlightOpen={() => void load()} limit={40} highlightQuery scrollable maxHeight={480}
       actions={[...sessionActions(found.live, found.ended, Date.now(), act, resume), ...(boards.actions.length ? [boards] : [])]}
       nothingFound={failed ? "Driga can't reach its service, so there is nothing to search." : "No session or dashboard matches. Sessions that ended more than two weeks ago aren't listed."}
-      searchProps={{ leftSection: <MagnifyingGlass size={18} aria-hidden />, placeholder: "Search sessions by title, project, branch, agent or machine" }} />
+      searchProps={{ "aria-label": "Search sessions and dashboards", leftSection: <MagnifyingGlass size={18} aria-hidden />, placeholder: "Search sessions by title, project, branch, agent or machine" }} />
   </>;
 }

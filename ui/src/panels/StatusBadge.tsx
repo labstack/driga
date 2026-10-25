@@ -30,9 +30,10 @@ export function toneOf(label: string): StatusTone {
 }
 
 /** StatusBadge shows a state; an inferred one, which Driga read from
- * process and file activity rather than the agent, is outlined and says so. */
+ * process and file activity rather than the agent, has a dashed edge and
+ * says so to screen readers. Canon keeps one badge style, so it stays light. */
 export function StatusBadge({ tone, children, inferred }: { tone: StatusTone; children: string; inferred?: boolean }) {
   const { color, icon } = look[tone];
   const Glyph = stateIcons[children.replace(/^~/, "")] ?? icon;
-  return <Badge color={color} variant={inferred ? "outline" : "light"} leftSection={<Glyph size={12} aria-hidden />} aria-label={inferred ? `${children}, inferred` : children}>{children}</Badge>;
+  return <Badge color={color} variant="light" style={{ minWidth: "max-content", border: inferred ? "1px dashed currentColor" : undefined }} leftSection={<Glyph size={12} aria-hidden />} aria-label={inferred ? `${children}, inferred` : children}>{children}</Badge>;
 }

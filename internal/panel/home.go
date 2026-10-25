@@ -43,7 +43,7 @@ func Home() Dashboard {
 				Empty: "No leftover processes. Helper trees an agent left running after it ended show here."},
 			{ID: "stuck", Title: "Quiet longer than expected", Description: "Busy sessions with no new activity past stalled_after; suspected, not proven.", Viz: "table", Source: "sessions", Columns: []string{"title", "agent", "project", "machine", "last_activity_at", "evidence"}, Sort: "last_activity_at", Where: with(Filter{Column: "state", Value: "stalled?"}), Width: 12, Height: "s",
 				Empty: "No session looks stuck. A busy session quiet past stalled_after shows here."},
-			{ID: "sessions", Title: "Sessions", Viz: "table", Source: "sessions", Columns: []string{"state", "title", "project", "branch", "agent", "machine", "last_activity_at", "mem_bytes"}, Sort: "age", Where: with(), Width: 12, Height: "m",
+			{ID: "sessions", Title: "Sessions", Viz: "table", Source: "sessions", Columns: []string{"state", "title", "project", "branch", "agent", "machine", "last_activity_at", "mem_bytes"}, Where: with(), Width: 12, Height: "m",
 				Empty: "No live sessions. Agent sessions on your machines show here while they run."},
 			{ID: "memory", Title: "Memory by project, this machine", Description: "Memory held by agents and the processes they started, on this machine only; other machines don't report it yet.", Viz: "bar", Source: "costs", By: "project", Measure: "sum:mem_bytes", Width: 6, Height: "m"},
 			{ID: "machine_memory", Title: "Machine memory used", Description: "Each machine's used memory over the last hour, one line per machine.", Viz: "timeseries", Source: "activity", By: "machine", Measure: "max:mem_used_bytes", Where: []Filter{{Column: "machine", Value: "$machine"}}, Width: 6, Height: "m"},
@@ -60,7 +60,7 @@ func Header() Dashboard {
 		Name:        "Header",
 		Description: "The numbers shown above Chat in the app. Only stat panels.",
 		Panels: []Panel{
-			{ID: "waiting", Title: "Need you", Viz: "stat", Source: "inbox", Where: []Filter{{Column: "kind", Value: "waiting"}}},
+			{ID: "waiting", Title: "Need you", Description: "Agents waiting on you and machine warnings in effect.", Viz: "stat", Source: "inbox", Where: []Filter{{Column: "needs_you", Value: "true"}}},
 			{ID: "finished", Title: "To review", Viz: "stat", Source: "inbox", Where: []Filter{{Column: "kind", Value: "finished"}}},
 			{ID: "stuck", Title: "Possibly stuck", Viz: "stat", Source: "sessions", Where: []Filter{{Column: "state", Value: "stalled?"}}},
 			{ID: "leftover", Title: "Leftover processes", Viz: "stat", Source: "orphans", Measure: "sum:rss_bytes"},

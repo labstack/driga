@@ -204,7 +204,7 @@ func TestRowsMatchColumnsAndKeepIdentity(t *testing.T) {
 	for id, want := range map[string]string{"s": "here", "c": "here"} {
 		f := got[id].Frame
 		i := slices.IndexFunc(f.Columns, func(c Column) bool { return c.Name == "machine_id" })
-		if i < 0 || !f.Columns[i].Hidden || f.Rows[0][i] != want {
+		if i < 0 || !f.Columns[i].Hidden || !slices.ContainsFunc(f.Rows, func(r []any) bool { return r[i] == want }) {
 			t.Errorf("%s: machine_id = %+v in %v", id, f.Columns, f.Rows)
 		}
 	}
@@ -258,5 +258,63 @@ func TestStatesTotalsAndEmptySums(t *testing.T) {
 	}
 	if r["quiet"].Status != StatusEmpty || r["quiet"].Message != "No leftover processes." {
 		t.Fatalf("empty = %+v", r["quiet"])
+	}
+}
+
+// "Need you" counts waits and machine warnings still in effect; finished
+// turns and warnings that have ended are not.
+func TestNeedYouCountsWarningsInEffect(t *testing.T) {
+	snap := snapshot()
+	at := snap.ObservedAt
+	ended := at.Add(-time.Minute)
+	snap.Inbox.Rows = []view.InboxRow{
+		{InboxItem: model.InboxItem{ID: "w", Kind: "waiting", SessionID: 1, TS: at}},
+		{InboxItem: model.InboxItem{ID: "p", Kind: "memory_pressure", TS: at}},
+		{InboxItem: model.InboxItem{ID: "old", Kind: "low_disk", TS: at.Add(-time.Hour), EndedAt: &ended}},
+		{InboxItem: model.InboxItem{ID: "f", Kind: "finished", SessionID: 2, TS: at}},
+	}
+	h := Header()
+	f, err := Run(snap, RunRequest{Dashboard: Dashboard{Name: "x", Panels: h.Panels[:1]}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := f.Results[0].Frame.Rows[0][0]; n != 2.0 {
+		t.Fatalf("need you = %v, want the wait and the memory warning", n)
+	}
+}
+
+// An untitled session is named by its agent and project, and by its branch
+// off the main line, so two in one project read differently.
+func TestSessionTitleFallback(t *testing.T) {
+	for _, tc := range []struct{ title, agent, project, branch, want string }{
+		{"Fix login", "claude", "api", "fix/login", "Fix login"},
+		{"", "codex", "monk", "main", "codex session in monk"},
+		{"", "codex", "monk", "fix/sec", "codex session in monk on fix/sec"},
+		{"", "codex", "", "", "codex session"},
+		{"", "", "monk", "x", ""},
+	} {
+		if got := sessionTitle(tc.title, tc.agent, tc.project, tc.branch); got != tc.want {
+			t.Errorf("sessionTitle(%q, %q, %q, %q) = %q, want %q", tc.title, tc.agent, tc.project, tc.branch, got, tc.want)
+		}
+	}
+}
+
+// Sessions list what needs the person first, then what may be stuck, then
+// working and resting sessions, newest first within each state.
+func TestSessionsOrderedByUrgency(t *testing.T) {
+	snap := snapshot()
+	snap.Agents.Rows = []view.AgentRow{
+		{ID: 1, Label: "idle", Age: time.Minute},
+		{ID: 2, Label: "working", Age: time.Hour},
+		{ID: 3, Label: "~stalled?", Age: time.Hour},
+		{ID: 4, Label: "working", Age: time.Minute},
+		{ID: 5, Label: "waiting", Age: 2 * time.Hour},
+	}
+	var ids []any
+	for _, r := range sources["sessions"].build(snap) {
+		ids = append(ids, r[0])
+	}
+	if want := []any{5.0, 3.0, 4.0, 2.0, 1.0}; !slices.Equal(ids, want) {
+		t.Fatalf("order = %v, want %v", ids, want)
 	}
 }

@@ -32,7 +32,13 @@ function fitted(p: Panel, r: Result | undefined, w: number, width: number): numb
   switch (p.viz) {
     case "table": px = chrome + 32 + 31 * n; break;
     case "list": px = chrome + 33 * n; break;
-    case "inbox": px = chrome + 28 * 2 + 60 * n; break;
+    case "inbox": {
+      // A wait takes two lines; a finished turn or a warning one.
+      const kind = r?.frame?.columns.findIndex(c => c.name === "kind") ?? -1;
+      const waits = kind < 0 ? n : r!.frame!.rows.filter(row => row[kind] === "waiting").length;
+      px = chrome + 28 * 3 + 72 * waits + 36 * (n - waits);
+      break;
+    }
     case "cards": { const across = Math.max(1, Math.floor((width * w / 12) / 230)); px = chrome + 160 * Math.ceil(n / across); break; }
     case "stat": case "gauge": return 2;
     default: return undefined;
@@ -57,10 +63,11 @@ export function layoutOf(panels: Panel[]): Item[] {
 }
 
 /** packed leaves no blank space: list-like panels take the rows their
- * content needs; every panel moves up as far as it can;
- * when that is taller than the window the tallest panels give up rows and
- * scroll inside; then each panel widens into empty columns beside it and
- * grows into empty rows below it, to the window's edge. */
+ * content needs; every panel moves up as far as it can; when that is taller
+ * than the window, panels give up rows and scroll inside, the last on the
+ * dashboard first, since a dashboard lists what matters most first; then
+ * each panel widens into empty columns beside it and grows into empty rows
+ * below it, to the window's edge. */
 export function packed(layout: Item[], panels: Map<string, Panel>, results: Map<string, Result>, width: number, rows: number): Item[] {
   // A panel takes what its content needs, even past its size; overflow is
   // settled below, tallest first.
@@ -73,11 +80,22 @@ export function packed(layout: Item[], panels: Map<string, Panel>, results: Map<
     }
   };
   const bottom = () => Math.max(0, ...items.map(i => i.y + i.h));
+  // A panel that grew to its content pushes the panels below it down.
+  const settled: Item[] = [];
+  for (const it of [...items].sort((a, b) => a.y - b.y || a.x - b.x)) {
+    while (settled.some(d => overlaps(it, d))) it.y++;
+    settled.push(it);
+  }
   compact();
+  // A chart keeps enough rows to read; a list keeps a few of its rows.
+  const charts = new Set<string>(["bar", "timeseries", "timeline"]);
+  const floor = (it: Item) => charts.has(panels.get(it.i)!.viz) ? 4 : Math.min(5, it.h);
+  const order = new Map(layout.map((l, n) => [l.i, n]));
   while (bottom() > rows) {
-    const tallest = items.filter(i => i.h > 3).sort((a, b) => b.h - a.h)[0];
-    if (!tallest) break;
-    tallest.h--;
+    const giver = items.filter(i => i.h > floor(i)).sort((a, b) => order.get(b.i)! - order.get(a.i)!)[0]
+      ?? items.filter(i => i.h > 3).sort((a, b) => b.h - a.h)[0];
+    if (!giver) break;
+    giver.h--;
     compact();
   }
   for (const it of items) {

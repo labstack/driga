@@ -4,6 +4,7 @@
 import "@mantine/notifications/styles.css";
 import { ActionIcon, AppShell, Box, Button, Group, Select, Text, Title, Tooltip } from "@mantine/core";
 import { Notifications, notifications } from "@mantine/notifications";
+import { spotlight } from "@mantine/spotlight";
 import { ChatCircle, PencilSimple } from "@phosphor-icons/react";
 import { StrictMode, useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -167,13 +168,15 @@ function App() {
 
   // The app's menus drive the page through drigaCommand.
   useEffect(() => {
-    (window as unknown as { drigaCommand: (name: string, arg?: unknown) => void }).drigaCommand = name => {
+    (window as unknown as { drigaCommand: (name: string, arg?: unknown) => void }).drigaCommand = (name, arg) => {
       if (name === "reload") void load();
       else if (name === "back") history.back();
       else if (name === "forward") history.forward();
-      else if (name === "openSession") { open(homeID); setChatOpen(true); }
+      else if (name === "find") spotlight.open();
+      // A session picked from the tray opens its pane, as clicking its row does.
+      else if (name === "openSession" && typeof arg === "number") void act({ kind: "jump", row: { session_id: arg } });
     };
-  }, [load]);
+  });
 
   // The brief lists the inbox only when the dashboard does not.
   const inboxPanel = inbox?.dashboard.panels[0];

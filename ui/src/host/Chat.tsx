@@ -54,7 +54,7 @@ function Brief({ inbox, act, ask }: { inbox?: { panel: Panel; result?: Result; l
   const { prompts = [] } = useHost();
   const items = (inbox?.result?.frame?.rows.length ?? 0) + prompts.length;
   const suggestions = [
-    waits ? "What needs me first, and why?" : "Is anything stuck or looping?",
+    waits ? "What needs me first, and why?" : "Is anything stuck?",
     "What finished since I was away, and is it safe to merge?",
     "Make a dashboard for the project I am working on",
     "Which processes can I reclaim?",
@@ -78,6 +78,9 @@ export function Chat({ inbox, act, ask, pinLabel, onPin, onSave, onClose }: {
   const [active, setActive] = useState(false);
   const [draft, setDraft] = useState("");
   const [problem, setProblem] = useState<string | null>(null);
+  // The last question sent, so a failed reply can be retried even when the
+  // capture policy keeps no text.
+  const [sent, setSent] = useState("");
   const log = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
   useEffect(() => { if (ask) { setDraft(ask.text); input.current?.focus(); } }, [ask]);
@@ -122,8 +125,14 @@ export function Chat({ inbox, act, ask, pinLabel, onPin, onSave, onClose }: {
       let conversation = id;
       if (!conversation) { conversation = (await chat.create()).id; setId(conversation); }
       await chat.send(conversation, trimmed, { page: "/app/" });
-    } catch (e) { setProblem((e as Error).message); }
+      setSent(trimmed);
+    } catch (e) {
+      // A send that never reached the service gives the text back.
+      setDraft(d => d || trimmed);
+      setProblem((e as Error).message);
+    }
   };
+  const retry = sent && !active ? <Button size="compact-xs" variant="default" onClick={() => void send(sent)}>Retry</Button> : null;
 
   const dropped = (m: ChatMessage) => (m.role === "user" || m.role === "assistant") && !m.text.trim() && m.status !== "streaming" && m.status !== "queued";
   const firstDropped = messages.findIndex(dropped);
@@ -142,7 +151,7 @@ export function Chat({ inbox, act, ask, pinLabel, onPin, onSave, onClose }: {
           // the latest reply says it failed.
           if ((m.role === "user" || m.role === "assistant") && !m.text.trim()) {
             if (m.status === "streaming" || m.status === "queued") return null;
-            if (m.role === "assistant" && m.status === "error" && i === lastReply) return <Text key={m.id} size="xs" c="danger">This reply failed. <Text span ff="monospace" fz="inherit">driga service logs</Text> has the error.</Text>;
+            if (m.role === "assistant" && m.status === "error" && i === lastReply) return <Group key={m.id} gap="xs"><Text size="xs" c="danger">This reply failed. <Text span ff="monospace" fz="inherit">driga service logs</Text> has the error.</Text>{retry}</Group>;
             if (i !== firstDropped) return null;
             return <Text key={m.id} size="xs" c="dimmed">Earlier messages aren't kept. Set <Text span ff="monospace" fz="inherit">capture_text = "snippets"</Text> to keep Chat history.</Text>;
           }
@@ -150,7 +159,8 @@ export function Chat({ inbox, act, ask, pinLabel, onPin, onSave, onClose }: {
           if (m.role === "tool") return <Group key={m.id} gap={4} c="dimmed"><Check size={12} /><Text size="xs" ff="monospace">{m.text.replace(/^mcp__driga__/, "")}</Text></Group>;
           if (m.role === "action") { const a = actions.get(m.id); return a && id ? <ActionCard key={m.id} conversation={id} action={a} /> : null; }
           if (m.role === "user") return <Paper key={m.id} px="sm" py={6} radius="lg" maw="85%" style={{ alignSelf: "flex-end", background: "var(--driga-hover)", whiteSpace: "pre-wrap" }}><Text size="sm">{m.text}</Text></Paper>;
-          return <Box key={m.id} fz="sm" className="markdown">{m.html ? <div dangerouslySetInnerHTML={{ __html: m.html }} /> : <Text size="sm">{m.text}</Text>}</Box>;
+          const failed = m.role === "assistant" && m.status === "error" && i === lastReply;
+          return <Box key={m.id} fz="sm" className="markdown" c={failed ? "danger" : undefined}>{m.html ? <div dangerouslySetInnerHTML={{ __html: m.html }} /> : <Text size="sm" c="inherit">{m.text}</Text>}{failed && retry && <Box mt={4}>{retry}</Box>}</Box>;
         })}
         {active && <Text size="xs" c="dimmed">Working…</Text>}
         {problem && <Text size="xs" c="danger">{problem}</Text>}

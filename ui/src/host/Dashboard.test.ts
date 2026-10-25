@@ -30,6 +30,19 @@ describe("packed", () => {
     expect(covered(items, 16)).toBe(true);
     expect(items.every(i => i.h >= 2)).toBe(true);
   });
+
+  it("takes rows from the last panels first, so the inbox keeps its rows", () => {
+    const results = new Map([rows("inbox", 10), rows("orphans", 1), rows("stuck", 1), rows("sessions", 4)].map(r => [r.id, r]));
+    const items = packed(layoutOf(panels), byId, results, 1000, 20);
+    const h = (id: string) => items.find(i => i.i === id)!.h;
+    expect(Math.max(...items.map(i => i.y + i.h))).toBe(20);
+    expect(covered(items, 20)).toBe(true);
+    // The charts at the end give up rows down to a readable floor before
+    // the inbox at the top loses any of the rows its content needs.
+    expect(h("memory")).toBe(4);
+    expect(h("inbox")).toBeGreaterThanOrEqual(8);
+    expect(h("sessions")).toBeGreaterThanOrEqual(5);
+  });
 });
 
 import { byteSteps } from "../panels/charts";
