@@ -9,8 +9,9 @@ body { font-variant-numeric: tabular-nums; }
 
 .wordmark { display: block; width: 44px; height: 18px; background: var(--driga-text); mask: url("/static/brand/wordmark.svg") left center / contain no-repeat; }
 
-.metric { transition: background-color 120ms ease-out, border-color 120ms ease-out; }
+.metric { display: block; border-radius: var(--mantine-radius-md); transition: background-color 120ms ease-out; }
 .metric:hover { background: var(--driga-hover); }
+.metric:active { transform: scale(0.98); }
 
 .react-grid-item.react-grid-placeholder { background: var(--mantine-color-brand-filled); opacity: 0.15; border-radius: var(--mantine-radius-md); }
 

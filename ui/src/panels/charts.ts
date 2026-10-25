@@ -2,14 +2,15 @@
 // spec, never ECharts options: formatters, colors and layout stay here, and
 // every string from the data is escaped before it reaches a tooltip.
 import { BarChart, LineChart } from "echarts/charts";
-import { AriaComponent, DataZoomComponent, GridComponent, TooltipComponent } from "echarts/components";
+import { AriaComponent, DataZoomComponent, GridComponent, MarkPointComponent, TooltipComponent } from "echarts/components";
 import * as echarts from "echarts/core";
 import { CanvasRenderer, SVGRenderer } from "echarts/renderers";
+import { alpha } from "@mantine/core";
 import { fonts, series as slots, surfaces, typeScale, type Scheme } from "../theme/tokens";
 import { label, value } from "./format";
 import type { Frame, Panel } from "./types";
 
-echarts.use([BarChart, LineChart, GridComponent, TooltipComponent, DataZoomComponent, AriaComponent, CanvasRenderer, SVGRenderer]);
+echarts.use([BarChart, LineChart, MarkPointComponent, GridComponent, TooltipComponent, DataZoomComponent, AriaComponent, CanvasRenderer, SVGRenderer]);
 
 export { echarts };
 
@@ -105,6 +106,18 @@ export function sparkline(trend: (number | null)[], title: string, t: Theme, col
     grid: { left: 1, right: 3, top: 3, bottom: 3 },
     xAxis: { type: "value", show: false, min: 0, max: Math.max(1, trend.length - 1) },
     yAxis: { type: "value", show: false, scale: true },
-    series: [{ type: "line", data: points, showSymbol: false, connectNulls: false, lineStyle: { width: 1.25, color: line }, areaStyle: { color: line, opacity: 0.12 }, silent: true }],
+    series: [{
+      type: "line", data: points, showSymbol: false, connectNulls: false, smooth: 0.3, silent: true,
+      lineStyle: { width: 1.5, color: line },
+      // The area fades toward the baseline, so the line carries the shape.
+      areaStyle: { color: { type: "linear", x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: alpha(line, 0.32) }, { offset: 1, color: alpha(line, 0) }] } },
+      // The latest reading is marked, since it is the value beside the line.
+      markPoint: { symbol: "circle", symbolSize: 4, silent: true, label: { show: false }, itemStyle: { color: line }, data: lastPoint(points) },
+    }],
   };
+}
+
+function lastPoint(points: (number | null)[][]): { coord: (number | null)[] }[] {
+  for (let i = points.length - 1; i >= 0; i--) if (points[i][1] !== null) return [{ coord: points[i] }];
+  return [];
 }
