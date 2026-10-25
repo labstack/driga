@@ -10,13 +10,11 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
-	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
 
 	ks "github.com/kardianos/service"
-	"github.com/labstack/driga/internal/filelock"
 	"github.com/labstack/driga/internal/secfile"
 
 	"github.com/labstack/driga/internal/attention"
@@ -135,11 +133,21 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 	if info, err := os.Stat(filepath.Join(d.DataDir, "viewer.heartbeat")); err == nil {
 		intervals = collector.Cadence(d.Now.Sub(info.ModTime()))
 	}
-	probe := d.LockProbe
-	if probe == nil {
-		probe = probeCollectorLock
+	var owner collector.Owner
+	var held bool
+	var err error
+	if d.LockProbe == nil {
+		owner, held, err = collector.ReadOwner(d.DataDir)
+	} else {
+		held, err = d.LockProbe(d.DataDir)
+		if held && err == nil {
+			var data []byte
+			data, err = os.ReadFile(filepath.Join(d.DataDir, "driga.lock"))
+			if err == nil {
+				err = json.Unmarshal(data, &owner)
+			}
+		}
 	}
-	held, err := probe(d.DataDir)
 	switch {
 	case err != nil:
 		add("collector", "fail", err.Error(), "check access to "+d.DataDir+"/driga.lock")
@@ -153,7 +161,7 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 		if err != nil || parseErr != nil || last.After(d.Now) || d.Now.Sub(last) > 3*intervals.Procs {
 			add("collector", "warn", "lock held but last pass is missing or stale", "driga service restart")
 		} else {
-			add("collector", "ok", "running; last pass "+d.Now.Sub(last).Round(time.Second).String()+" ago", "")
+			add("collector", "ok", fmt.Sprintf("running (%s, pid %d)", owner.Kind, owner.PID), "")
 		}
 	}
 	if d.Store != nil {
@@ -210,8 +218,6 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 			// also counts clean, shared code pages and swings with each GC.
 			var rss, footprint, budget uint64
 			found, measured := false, false
-			owner, _ := os.ReadFile(filepath.Join(d.DataDir, "driga.lock"))
-			ownerPID, _ := strconv.ParseInt(strings.TrimSpace(string(owner)), 10, 32)
 			alive := d.ProcessAlive
 			if alive == nil {
 				alive = platform.New().Alive
@@ -220,7 +226,7 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 			for _, p := range procs {
 				// The lock owner is this data directory's collector whatever its
 				// binary is called; other collectors are recognised by name.
-				owned := held && p.PID > 0 && int64(p.PID) == ownerPID && alive(p.PID, p.StartTime) && len(p.Argv) >= 2 && p.Argv[1] == "collect"
+				owned := held && p.PID > 0 && int(p.PID) == owner.PID && alive(p.PID, p.StartTime) && len(p.Argv) >= 2 && p.Argv[1] == "collect"
 				if !owned {
 					if isCollectorProc(p) {
 						others++
@@ -601,33 +607,15 @@ func isCollectorProc(p model.Proc) bool {
 
 // probeCollectorLock does not create a file or modify its contents/permissions.
 func probeCollectorLock(dir string) (bool, error) {
-	flags := os.O_RDONLY
-	if runtime.GOOS == "windows" {
-		flags = os.O_RDWR
-	}
-	f, err := os.OpenFile(filepath.Join(dir, "driga.lock"), flags, 0)
-	if errors.Is(err, os.ErrNotExist) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	defer f.Close()
-	err = filelock.Lock(f, true)
-	if filelock.Busy(err) {
-		return true, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	return false, filelock.Unlock(f)
+	_, held, err := collector.ReadOwner(dir)
+	return held, err
 }
 
 // runtimeDoctor gives CLI and MCP diagnostics the same read-only probes.
 // Creating a service handle and querying its state never installs a task;
 // notification status never registers an identity or displays an alert.
 func runtimeDoctor(ctx context.Context, cfg config.Config, now time.Time, reader DoctorReader) []Check {
-	d := DoctorDeps{DataDir: config.DataDir(), Config: cfg, Home: config.ExpandHome("~"), CodexHome: os.Getenv("CODEX_HOME"), CopilotHome: os.Getenv("COPILOT_HOME"), Now: now, Store: reader, LockProbe: probeCollectorLock}
+	d := DoctorDeps{DataDir: config.DataDir(), Config: cfg, Home: config.ExpandHome("~"), CodexHome: os.Getenv("CODEX_HOME"), CopilotHome: os.Getenv("COPILOT_HOME"), Now: now, Store: reader}
 	if runtime.GOOS == "darwin" {
 		d.ServicePlistStale = func() (bool, error) {
 			bin, err := os.Executable()

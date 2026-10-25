@@ -120,7 +120,7 @@ func TestAckWithoutDaemon(t *testing.T) {
 func TestAckWithDaemonReceipt(t *testing.T) {
 	readEnv(t)
 	s := readDB(t, nil)
-	lock, err := collector.Lock(config.DataDir())
+	lock, err := collector.Lock(config.DataDir(), collector.Owner{Kind: "manual"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -159,7 +159,7 @@ func TestAckWithDaemonReceipt(t *testing.T) {
 	if err != nil || !bytes.Equal(before, after) {
 		t.Fatalf("lock disturbed: %q -> %q: %v", before, after, err)
 	}
-	if other, err := collector.Lock(config.DataDir()); err == nil {
+	if other, err := collector.Lock(config.DataDir(), collector.Owner{Kind: "manual"}); err == nil {
 		other.Close()
 		t.Fatal("collector lock released")
 	}
@@ -258,7 +258,7 @@ func TestAckReceiptTimeout(t *testing.T) {
 			if !missingDB {
 				readDB(t, nil)
 			}
-			lock, err := collector.Lock(config.DataDir())
+			lock, err := collector.Lock(config.DataDir(), collector.Owner{Kind: "manual"})
 			if err != nil {
 				t.Fatal(err)
 			}

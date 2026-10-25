@@ -58,7 +58,7 @@ func TestLaunchdPlistBundleAndDevelopment(t *testing.T) {
 			}
 			arrays := plist.Dict.Arrays
 			args := arrays[len(arrays)-1].Strings
-			if len(args) != 2 || args[0] != tc.executable || args[1] != "collect" {
+			if len(args) != 3 || args[0] != tc.executable || args[1] != "collect" || args[2] != "--owner=service" {
 				t.Fatalf("ProgramArguments: %v", args)
 			}
 			associated := strings.Contains(string(body), "AssociatedBundleIdentifiers")

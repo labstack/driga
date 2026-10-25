@@ -17,7 +17,7 @@ func TestServiceConfig(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	c := configForOS("/opt/driga", "darwin")
-	if c.Name != "run.driga.collector" || c.DisplayName != "Driga collector" || c.Executable != "/opt/driga" || !reflect.DeepEqual(c.Arguments, []string{"collect"}) {
+	if c.Name != "run.driga.collector" || c.DisplayName != "Driga collector" || c.Executable != "/opt/driga" || !reflect.DeepEqual(c.Arguments, []string{"collect", "--owner=service"}) {
 		t.Fatalf("unexpected config: %+v", c)
 	}
 	for _, key := range []string{"UserService", "KeepAlive", "RunAtLoad"} {
@@ -42,6 +42,9 @@ func TestServiceConfigLinux(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", filepath.Join(home, "xdg-data"))
 	t.Setenv("XDG_STATE_HOME", filepath.Join(home, "xdg-state"))
 	c := configForOS("/opt/driga", "linux")
+	if !reflect.DeepEqual(c.Arguments, []string{"collect", "--owner=service"}) {
+		t.Fatal(c.Arguments)
+	}
 	if c.Option["UserService"] != true || c.Option["Restart"] != "always" || c.Option["LogOutput"] != false || c.EnvVars["XDG_DATA_HOME"] != filepath.Join(home, "xdg-data") {
 		t.Fatalf("%+v", c)
 	}

@@ -7,15 +7,14 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
 	"unsafe"
 
 	ks "github.com/kardianos/service"
+	"github.com/labstack/driga/internal/collector"
 	"github.com/labstack/driga/internal/config"
-	"github.com/labstack/driga/internal/platform"
 	"github.com/labstack/driga/internal/secfile"
 	"github.com/labstack/driga/internal/wincom"
 	"golang.org/x/sys/windows"
@@ -138,16 +137,7 @@ func (s *taskService) Stop() error {
 
 // collectorAlive checks the PID recorded in the collector lock file.
 func (s *taskService) collectorAlive() bool {
-	b, err := os.ReadFile(filepath.Join(s.dataDir, "driga.lock"))
-	if err != nil {
-		return false
-	}
-	pid, err := strconv.Atoi(strings.TrimSpace(string(b)))
-	if err != nil || pid <= 0 {
-		return false
-	}
-	start, err := platform.ProcessStart(int32(pid))
-	return err == nil && platform.New().Alive(int32(pid), start)
+	return collector.Running(s.dataDir)
 }
 func (s *taskService) Restart() error {
 	if err := s.Stop(); err != nil {

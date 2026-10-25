@@ -36,6 +36,7 @@ import (
 
 // Deps supplies collection sources, configuration, and optional shared state.
 type Deps struct {
+	Owner       Owner
 	InboxRunner attention.Runner
 	Notifier    attention.Notifier
 	Cfg         config.Config

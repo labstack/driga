@@ -49,7 +49,7 @@ func TestTaskXML(t *testing.T) {
 	if !task.Settings.Hidden || task.Settings.DisallowStartIfOnBatteries || task.Settings.StopIfGoingOnBatteries || task.Settings.ExecutionTimeLimit != "PT0S" || task.Settings.MultipleInstancesPolicy != "IgnoreNew" || task.Settings.RestartOnFailure.Interval != "PT1M" || task.Settings.RestartOnFailure.Count != 999 {
 		t.Fatalf("settings: %+v", task.Settings)
 	}
-	if task.Actions.Exec.Command != bin || task.Actions.Exec.Arguments != `collect --scheduled --service-data-dir "C:\data dir"` || task.Actions.Exec.WorkingDirectory != `C:\data dir` {
+	if task.Actions.Exec.Command != bin || task.Actions.Exec.Arguments != `collect --owner=service --scheduled --service-data-dir "C:\data dir"` || task.Actions.Exec.WorkingDirectory != `C:\data dir` {
 		t.Fatalf("exec: %+v", task.Actions.Exec)
 	}
 	for _, bad := range []string{"driga.exe", `C:driga.exe`, "C:\\bad\x00.exe"} {

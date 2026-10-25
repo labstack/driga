@@ -55,7 +55,7 @@ func prepare(dir string) (*os.File, error) {
 	if _, err := os.Stat(filepath.Join(dir, marker)); len(entries) > 0 && err != nil {
 		return nil, fmt.Errorf("%s is not empty and is not a driga-demo directory", dir)
 	}
-	lock, err := collector.Lock(dir)
+	lock, err := collector.Lock(dir, collector.Owner{Kind: "manual"})
 	if err != nil {
 		return nil, err
 	}

@@ -21,6 +21,7 @@ import (
 
 // CollectCmd runs the daemon, or one persistent pass with --once.
 type CollectCmd struct {
+	Owner          string        `hidden:"" default:"manual" enum:"app,service,manual"`
 	Serve          *bool         `help:"Enable fleet serving alongside collection (overrides fleet.serve)."`
 	Listen         string        `help:"Fleet private IP or interface and port (requires serving)."`
 	Scheduled      bool          `hidden:""`
@@ -71,6 +72,10 @@ func (c CollectCmd) Run(g *Globals) error {
 	if err != nil {
 		return err
 	}
+	d.Owner = collector.Owner{Kind: c.Owner}
+	if g != nil {
+		d.Owner.Version = g.Version
+	}
 	if runtime.GOOS == "darwin" {
 		// Record what macOS reports, so a silent notification problem shows in the log.
 		if status, err := attention.MacNotificationStatus(); err != nil {
@@ -98,7 +103,7 @@ func (c CollectCmd) Run(g *Globals) error {
 		defer restore()
 		return collector.Run(ctx, d, dir)
 	}
-	lock, err := collector.Lock(dir)
+	lock, err := collector.Lock(dir, d.Owner)
 	if err != nil {
 		return err
 	}

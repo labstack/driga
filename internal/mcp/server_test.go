@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -69,7 +68,7 @@ func fixture(t *testing.T) (*store.Store, int64) {
 	t.Cleanup(func() { _ = s.Close() })
 	// Reads trust the database only while its collector lives; this test
 	// process stands in for it.
-	if err := os.WriteFile(filepath.Join(home, "data", "driga.lock"), []byte(strconv.Itoa(os.Getpid())+"\n"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(home, "data", "driga.lock"), []byte(fmt.Sprintf(`{"pid":%d,"kind":"manual","executable":"/opt/driga","version":"test"}`, os.Getpid())), 0600); err != nil {
 		t.Fatal(err)
 	}
 	// Future observations keep derived ages at zero, so only observed_at

@@ -40,7 +40,7 @@ func doctorFixture(t *testing.T) (DoctorDeps, *store.Store) {
 	if err := st.SetMeta("last_pass_at", now.Format(time.RFC3339Nano)); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "driga.lock"), []byte("1\n"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "driga.lock"), []byte(`{"pid":1,"kind":"manual","executable":"/opt/driga","version":"test"}`), 0600); err != nil {
 		t.Fatal(err)
 	}
 	return DoctorDeps{ProcessAlive: func(pid int32, _ time.Time) bool { return pid == 1 }, DataDir: dir, Store: st, Config: config.Default(), Home: home, Now: now, LockProbe: func(string) (bool, error) { return true, nil }}, st
@@ -69,6 +69,21 @@ func TestDoctorNoDaemon(t *testing.T) {
 	d.Store = nil
 	d.LockProbe = func(string) (bool, error) { return false, nil }
 	requireCheck(t, Doctor(context.Background(), d), "collector", "warn", "driga service install")
+}
+
+func TestDoctorCollectorOwner(t *testing.T) {
+	d, _ := doctorFixture(t)
+	lock, err := collector.Lock(d.DataDir, collector.Owner{Kind: "app", Version: "test"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lock.Close()
+	d.LockProbe = nil
+	c := requireCheck(t, Doctor(context.Background(), d), "collector", "ok", "")
+	want := fmt.Sprintf("running (app, pid %d)", os.Getpid())
+	if c.Detail != want {
+		t.Fatalf("collector detail: %q; want %q", c.Detail, want)
+	}
 }
 
 func TestDoctorMacNotifier(t *testing.T) {
@@ -233,7 +248,7 @@ func TestDoctorPermissionsAndLockProbe(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(d.DataDir, "driga.lock")); !os.IsNotExist(err) {
 		t.Fatalf("probe created lock: %v", err)
 	}
-	lock, err := collector.Lock(d.DataDir)
+	lock, err := collector.Lock(d.DataDir, collector.Owner{Kind: "manual"})
 	if err != nil {
 		t.Fatal(err)
 	}

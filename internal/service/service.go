@@ -61,7 +61,7 @@ func configForOS(binPath, goos string) *ks.Config {
 	}
 	c := &ks.Config{
 		Name: "run.driga.collector", DisplayName: "Driga collector",
-		Executable: binPath, Arguments: []string{"collect"}, EnvVars: env,
+		Executable: binPath, Arguments: []string{"collect", "--owner=service"}, EnvVars: env,
 		Option: ks.KeyValue{"UserService": true, "KeepAlive": true, "RunAtLoad": true,
 			"LogDirectory": filepath.Dir(logPathForOS(goos)), "LaunchdConfig": template},
 	}

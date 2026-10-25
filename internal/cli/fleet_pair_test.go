@@ -70,7 +70,7 @@ func TestFleetIdentityMaintenanceRequiresStoppedCollector(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	lock, err := collector.Lock(config.DataDir())
+	lock, err := collector.Lock(config.DataDir(), collector.Owner{Kind: "manual"})
 	if err != nil {
 		t.Fatal(err)
 	}

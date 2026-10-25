@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -55,7 +54,7 @@ func readDB(t *testing.T, seed func(*store.Tx) error) *store.Store {
 	}
 	// Reads trust the database only while its collector is alive; this test
 	// process stands in for it.
-	if err := os.WriteFile(filepath.Join(config.DataDir(), "driga.lock"), []byte(strconv.Itoa(os.Getpid())+"\n"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(config.DataDir(), "driga.lock"), []byte(fmt.Sprintf(`{"pid":%d,"kind":"manual","executable":"/opt/driga","version":"test"}`, os.Getpid())), 0600); err != nil {
 		t.Fatal(err)
 	}
 	if seed != nil {

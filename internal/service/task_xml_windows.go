@@ -22,7 +22,7 @@ func taskXML(bin, sid, dataDir string, env ...string) ([]byte, error) {
 	}
 	escape := func(s string) string { var b strings.Builder; _ = xml.EscapeText(&b, []byte(s)); return b.String() }
 	// Task Scheduler passes these arguments directly to the process, without a shell.
-	args := `collect --scheduled --service-data-dir ` + windows.EscapeArg(dataDir)
+	args := `collect --owner=service --scheduled --service-data-dir ` + windows.EscapeArg(dataDir)
 	for _, value := range env {
 		key, _, ok := strings.Cut(value, "=")
 		if !ok || !scheduledEnvKey(key) || strings.ContainsAny(value, "\x00\r\n\"") {

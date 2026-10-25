@@ -15,7 +15,7 @@ import (
 func TestDoctorCollectorBudgetUsesLockOwner(t *testing.T) {
 	d, st := doctorFixture(t)
 	start := d.Now.Add(-time.Hour)
-	if err := os.WriteFile(filepath.Join(d.DataDir, "driga.lock"), []byte("42\n"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(d.DataDir, "driga.lock"), []byte(`{"pid":42,"kind":"service","executable":"/opt/driga","version":"test"}`), 0600); err != nil {
 		t.Fatal(err)
 	}
 	d.ProcessAlive = func(pid int32, at time.Time) bool { return pid == 42 && at.Equal(start) }
