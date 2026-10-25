@@ -9,20 +9,14 @@
 .fb-activity{margin-left:auto;color:var(--flow-muted);font:11px "IBM Plex Mono",monospace}.fb-foot:has(.fb-activity[open]){flex-wrap:wrap}.fb-activity[open]{flex-basis:100%;margin-left:0}.fb-node-title,.fb-node-meta{paint-order:stroke;stroke:var(--flow-canvas);stroke-width:4px;stroke-linejoin:round}.fb-activity>summary{cursor:pointer}.fb-activity h2{font-size:12px}.fb-activity .tail{max-height:300px;overflow:auto}
 /* Flow owns its monitoring chrome; host diagnosis remains in Machines. */
 body:has(.flow-board){background:var(--flow-canvas)}
-body:has(.flow-board) .status{display:none}
+body:has(.flow-board) .status{background:var(--flow-canvas);border-bottom:1px solid var(--flow-line)}
+body:has(.flow-board) .status>:not(.views){display:none}
 body:has(.flow-board) .grid{padding:0;gap:0}
-body:has(.flow-board) .wins{height:56px;align-items:center;border-bottom:1px solid var(--flow-line);background:var(--flow-canvas);gap:12px;padding:0 24px}
-body:has(.flow-board) .wins:before{content:"driga";color:var(--stalled);font-weight:600;margin-right:12px;font-size:15px}
-body:has(.flow-board) .win{border:0;border-radius:7px;padding:6px 12px;font-weight:400}
-body:has(.flow-board) .win.on{background:var(--pane)}
-body:has(.flow-board) .state-totals,body:has(.flow-board) .wins .count{display:none}
-body:has(.flow-board) .chat-open-button{margin-left:auto;border-radius:7px;padding:6px 12px}
 body:has(.flow-board) .notices:empty{display:none}
 body:has(.flow-board) .cmd{display:none}
 body:has(.flow-board) .grid+footer{display:none}
 .fb-row.working .fb-glyph{color:var(--working)}.fb-row.waiting .fb-glyph{color:var(--warn)}.fb-row.stalled .fb-glyph{color:var(--stalled)}.fb-row.idle .fb-glyph{color:var(--idle)}.fb-row.finished .fb-glyph{color:var(--finished)}
-@media(max-width:760px){body:has(.flow-board) .wins{gap:4px;padding:0 10px}body:has(.flow-board) .win{padding:6px}body:has(.flow-board) .wins:before{margin-right:5px}}
 .fb-overlap-link{display:none}.fb-overlap-link.on{display:inline}.fb-node-meta .fb-overlap{fill:var(--stalled)}
 .fb-detail-actions .fb-stop{color:var(--stalled);border-color:color-mix(in srgb,var(--stalled) 45%,transparent)}
-@media(max-width:760px){.fb-header{flex-wrap:wrap;gap:10px 14px}.fb-search{margin-left:0}.fb-search input{width:110px}.fb-canvas{padding:10px}body:has(.flow-board) .wins{height:auto;min-height:48px;flex-wrap:wrap;padding:6px 10px}}
+@media(max-width:760px){.fb-header{flex-wrap:wrap;gap:10px 14px}.fb-search{margin-left:0}.fb-search input{width:110px}.fb-canvas{padding:10px}}
 

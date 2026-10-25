@@ -46,6 +46,7 @@ type pageData struct {
 	AttentionOnly          bool
 	viewer.Snapshot
 	Title, Page, Scope, RefreshURL, CleanupError string
+	Theme                                        string // system, light or dark
 	Nav                                          []navItem
 	Agent                                        view.AgentView
 	Project                                      view.WhereView
@@ -63,12 +64,15 @@ type pageData struct {
 }
 
 func (s *Server) loadPage(r *http.Request) (pageData, int, error) {
-	p := pageData{ChatEphemeral: s.opts.ChatEphemeral, Nav: navigation, Page: r.URL.Path, Scope: r.URL.Query().Get("machine"), All: r.URL.Query().Get("all") == "1"}
+	p := pageData{ChatEphemeral: s.opts.ChatEphemeral, Nav: navigation, Page: r.URL.Path, Scope: r.URL.Query().Get("machine"), All: r.URL.Query().Get("all") == "1", Theme: "system"}
+	if s.opts.Theme == "light" || s.opts.Theme == "dark" {
+		p.Theme = s.opts.Theme
+	}
 	if p.Page == "/" {
 		p.Page = "/flow"
 	}
 	switch p.Page {
-	case "/", "/activity", "/agents", "/projects", "/inbox", "/orphans", "/machines", "/cleanup", "/flow", "/chat":
+	case "/", "/activity", "/agents", "/projects", "/inbox", "/orphans", "/machines", "/cleanup", "/flow", "/chat", "/help/keys":
 	default:
 		if !strings.HasPrefix(p.Page, "/agents/") && !strings.HasPrefix(p.Page, "/projects/") && !strings.HasPrefix(p.Page, "/flow/") {
 			return p, 404, fmt.Errorf("page not found")
@@ -155,6 +159,9 @@ func (s *Server) loadPage(r *http.Request) (pageData, int, error) {
 	p.Title = "Home"
 	if p.Page == "/activity" {
 		p.Title = "Activity"
+	}
+	if p.Page == "/help/keys" {
+		p.Title = "Keyboard shortcuts"
 	}
 	for _, n := range navigation {
 		if p.Page == n.Path {
@@ -551,26 +558,9 @@ func templateFuncs() template.FuncMap {
 			}{row, scope, all}
 		},
 		"navActive": func(path, page string) bool { return path == page || path != "/" && strings.HasPrefix(page, path+"/") },
-		"navCount": func(p pageData, name string) int {
-			switch name {
-			case "Agents":
-				return len(p.AgentRows)
-			case "Projects":
-				return len(p.Projects.Rows)
-			case "Inbox":
-				return len(p.Inbox.Rows)
-			case "Orphans":
-				return len(p.Orphans.Rows)
-			case "Machines":
-				return len(p.Machines.Rows)
-			case "Cleanup":
-				return len(p.Cleanup)
-			}
-			return 0
-		},
-		"lower": strings.ToLower,
-		"clock": func(t time.Time) string { return t.Local().Format("15:04:05") },
-		"add":   func(a, b int) int { return a + b },
+		"lower":     strings.ToLower,
+		"clock":     func(t time.Time) string { return t.Local().Format("15:04:05") },
+		"add":       func(a, b int) int { return a + b },
 		"initial": func(s string) string {
 			if s == "" {
 				return "?"

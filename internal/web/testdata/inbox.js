@@ -1,13 +1,11 @@
 (async () => {
   const assert = (ok, message) => { if (!ok) throw Error(message); };
-  let rows, selected = null, copied = null, calls = 0, scrollCalls = 0;
+  let rows, scrollCalls = 0;
   const older = {hidden:false, textContent:""};
   const pane = {scrollLeft:3, scrollTop:250, querySelector:()=>null};
   const doc = {
     querySelectorAll: selector => selector === "[data-inbox-key]" ? rows : selector === "[data-inbox-recent]" ? rows.filter(r => r.recent) : selector === "[data-pane]" ? [pane] : [],
     querySelector: selector => selector === "[data-inbox-older]" ? older : null,
-    createRange: () => ({selectNodeContents: el => { selected = el; }}),
-    getSelection: () => ({removeAllRanges() {}, addRange() {}}),
     activeElement: null
   };
   const viewport = {scrollX:0, scrollY:640, scrollTo(x,y) { this.scrollX=x; this.scrollY=y; scrollCalls++; }};
@@ -26,19 +24,6 @@
   rows[4].open=false; controller.capture(); rows=makeRows(); controller.restore();
   assert(!rows[4].open && rows[125].open, "closed row stays closed");
   controller.showOlder(); assert(rows.every(r=>!r.hidden) && older.hidden, "final partial batch hides show older");
-  const command={textContent:"agent --resume 'full command'", focus() { this.focused=true; }};
-  const status={textContent:""};
-  const button={closest:()=>({querySelector:s=>s==="[data-inbox-command]" ? command : status})};
-  const pending = controller.copy(button, {writeText(text) { calls++; copied=text; return Promise.resolve(); }});
-  assert(calls===1, "clipboard invoked synchronously in user activation");
-  await pending;
-  assert(calls===1 && copied===command.textContent && !selected && status.textContent==="Copied", "clipboard success");
-  await controller.copy(button, {writeText() { return Promise.reject(Error("denied")); }});
-  assert(selected===command && command.focused && status.textContent.includes("select"), "clipboard rejection selects full command");
-  selected=null; await controller.copy(button, undefined);
-  assert(selected===command, "unavailable clipboard selects command");
-  selected=null; await controller.copy(button, {writeText() { throw Error("blocked"); }});
-  assert(selected===command, "synchronous clipboard failure selects command");
   rows=makeRows();
   const arriving = DrigaConsole.createInboxController(doc, viewport);
   arriving.restore(); rows[119].open=true; arriving.capture();

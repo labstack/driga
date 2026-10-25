@@ -60,7 +60,7 @@ func TestFlowPageCSP(t *testing.T) {
 		t.Fatalf("%d %s", w.Code, w.Body.String())
 	}
 	body := w.Body.String()
-	for _, want := range []string{"Selected family", "fb-map", "data-flow-board", "data-window=\"0\"", "&lt;script&gt;alert(1)&lt;/script&gt;"} {
+	for _, want := range []string{"Selected family", "fb-map", "data-flow-board", "data-view=\"flow\"", "&lt;script&gt;alert(1)&lt;/script&gt;"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("missing %s", want)
 		}

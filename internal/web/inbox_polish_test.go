@@ -39,7 +39,7 @@ func TestInboxDenseSectionsAndCap(t *testing.T) {
 			t.Fatal(err)
 		}
 		body := out.String()
-		for _, want := range []string{`data-inbox-section="needs"`, `data-inbox-section="recent"`, "needs you", "71 waiting · oldest 8h10m0s", "recent", "reason", "tool", "wait / age", "project · branch", "title / detail", "time", `data-inbox-older`, `data-inbox-copy`, `data-inbox-command`, `aria-readonly="true"`, "&lt;safe&gt;"} {
+		for _, want := range []string{`data-inbox-section="needs"`, `data-inbox-section="recent"`, "needs you", "71 waiting · oldest 8h10m0s", "recent", "reason", "tool", "wait / age", "project · branch", "title / detail", "time", `data-inbox-older`, `data-inbox-jump`, `data-session="1"`} {
 			if !strings.Contains(body, want) {
 				t.Errorf("missing %q", want)
 			}

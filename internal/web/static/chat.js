@@ -10,6 +10,8 @@
  let id="",poll=null,messages=new Map(),cursor=0,removed=new Set(),drafts=[],draftIndex=0,selectedSession=0,opening=null,active=false,started=0,replyID="",tool="",timer=null,stickToBottom=true,rendered=new Map();
  try{id=sessionStorage.getItem("driga-chat-conversation")||"";}catch(_){}
  const remember=()=>{try{sessionStorage.setItem("driga-chat-conversation",id);}catch(_){}};
+ // The app asks with a native dialog; without one (tests, no host) nothing is confirmed.
+ async function ask(message){try{const response=await fetch("/app/confirm",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message})});return response.ok&&(await response.json()).confirmed===true;}catch(_){return false;}}
  async function api(path,body,signal){const res=await fetch("/chat/api/"+path,{method:body===undefined?"GET":"POST",headers:body===undefined?{}:{"Content-Type":"application/json"},body:body===undefined?undefined:JSON.stringify(body),keepalive:body!==undefined,signal});if(!res.ok)throw new Error(await res.text());return res.json();}
  function note(text){status.textContent=text;}
  const stopButton=document.getElementById("chat-stop");
@@ -47,7 +49,7 @@
  // Full auto lasts 30 minutes on the broker; show what is left.
  function showLeft(){const left=document.getElementById("chat-mode-left"),ms=until-Date.now();left.hidden=mode!=="full auto"||!until;if(!left.hidden)left.textContent=Math.max(0,Math.ceil(ms/60000))+"m left";}
  function setMode(value,end){until=end?Date.parse(end)||0:0;if(untilTimer!==null)clearInterval(untilTimer);untilTimer=null;mode=value||"confirm";if(mode==="full auto"&&until)untilTimer=setInterval(showLeft,15000);showLeft();for(const [key,buttonID] of [["confirm","chat-mode-confirm"],["auto","chat-mode-auto"],["full auto","chat-mode-full"]]){const button=document.getElementById(buttonID);button.setAttribute("aria-pressed",String(mode===key));button.classList.toggle("danger",mode==="full auto"&&key===mode);}}
- for(const [value,buttonID] of [["confirm","chat-mode-confirm"],["auto","chat-mode-auto"],["full auto","chat-mode-full"]])document.getElementById(buttonID).addEventListener("click",async()=>{if(!id)return;if(value==="full auto"&&!confirm("Full auto runs every action without asking, including shell commands, kill and cleanup, for 30 minutes. Text Chat reads can try to steer it. Turn it on?"))return;try{await api("mode",{id,mode:value});}catch(e){note(e.message);}});
+ for(const [value,buttonID] of [["confirm","chat-mode-confirm"],["auto","chat-mode-auto"],["full auto","chat-mode-full"]])document.getElementById(buttonID).addEventListener("click",async()=>{if(!id)return;if(value==="full auto"&&!await ask("Full auto runs every action without asking, including shell commands, kill and cleanup, for 30 minutes. Text Chat reads can try to steer it. Turn it on?"))return;try{await api("mode",{id,mode:value});}catch(e){note(e.message);}});
  function actionCard(a){
   const node=document.createElement("article");node.className="chat-action "+a.status;node.setAttribute("aria-label",a.title);
   if(a.status!=="pending"){
@@ -188,7 +190,7 @@
  document.getElementById("chat-form").addEventListener("submit",async event=>{event.preventDefault();const text=input.value;if(!text.trim())return;try{await open();if(!id)return;const before=cursor;await api("send",{id,text,context:scope()});drafts.push(text);drafts=drafts.slice(-100);draftIndex=drafts.length;if(input.value===text)input.value="";if(cursor===before)note("Queued");}catch(e){note(e.message);}});
  input.addEventListener("keydown",event=>{if(event.isComposing)return;if(event.key==="Enter"&&!event.shiftKey&&!event.altKey){event.preventDefault();document.getElementById("chat-form").requestSubmit();}if(event.key==="Escape"){if(document.getElementById("help")?.open)return;event.preventDefault();if(input.value)input.blur();else close();}if(event.key==="ArrowUp"&&input.selectionStart===0&&drafts.length){event.preventDefault();draftIndex=Math.max(0,draftIndex-1);input.value=drafts[draftIndex];}});
  document.addEventListener("keydown",event=>{if(event.defaultPrevented||event.metaKey||event.ctrlKey||event.altKey||event.isComposing)return;if(event.key==="c"&&!event.target.closest("input,textarea,select,[contenteditable='true']")){event.preventDefault();window.drigaChat.toggle();}else if(event.key==="Escape"&&!panel.hidden){if(event.target.closest(".filter")||document.getElementById("help")?.open)return;event.preventDefault();close();}});
- document.addEventListener("click",event=>{if(event.target.closest("[data-chat-toggle]"))window.drigaChat.toggle();if(!panel.hidden)contextChips();});
+ document.addEventListener("click",()=>{if(!panel.hidden)contextChips();});
  document.body.addEventListener("htmx:afterSwap",contextChips);
  document.addEventListener("driga:session-selected",event=>{selectedSession=Number(event.detail.id);contextChips();});
  if(location.pathname==="/chat"){document.body.classList.add("chat-page");open();}else{try{if(sessionStorage.getItem("driga-chat-open")==="1")open();}catch(_){}}

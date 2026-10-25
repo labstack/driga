@@ -17,10 +17,13 @@ const surfaces={},rows={},details={};
 for(const view of ['map','timeline','sessions']){host.append(new Element('button',{flowView:view}));const surface=new Element('section',{flowSurface:view},{class:'fb-'+(view==='map'?'canvas':view)});surfaces[view]=surface;host.append(surface);rows[view]=[];for(let i=1;i<=3;i++){const row=new Element(view==='map'?'g':'div',{boardKey:'local/'+i,root:'local/1',session:String(i),machine:'local',title:'Session '+i,project:'project',parent:i>1?'local/1':''},{id:view+'-'+i,role:view==='timeline'?'treeitem':'button'});surface.append(row);rows[view].push(row);}}
 for(let i=1;i<=3;i++){const detail=new Element('div',{detail:'local/'+i});host.append(detail);details[i]=detail;const family=new Element('div',{familyRow:'local/'+i,familyRoot:'local/1'});family.append(new Element('button'));host.append(family);}
 const panel=new Element('aside',{}, {class:'fb-panel'});host.append(panel);
+const stop=new Element('button',{stop:'local/2'});host.append(stop);
 const prompt=new Element('div',{prompt:'p1'}),allow=new Element('button',{answer:'allow'},{id:'prompt-p1-allow'});prompt.append(allow);host.append(prompt);
 global.document={activeElement:body,body,querySelector:s=>body.querySelector(s),getElementById:id=>body.querySelector('#'+id),addEventListener:(name,fn)=>(handlers[name]??=[]).push(fn),dispatchEvent:()=>{}};
 global.location={search:'',pathname:'/flow'};global.window={htmx:null};global.CSS={escape:s=>s};global.CustomEvent=class{constructor(type,o){this.type=type;this.detail=o.detail;}};global.setInterval=fn=>(timer=fn,1);Date.now=()=>now;
-global.fetch=async(path,options)=>(requests.push({path,body:JSON.parse(options.body)}),{ok:true});
+// The app's native dialog; 404 is a page without a host.
+let confirmReply={ok:false,status:404};
+global.fetch=async(path,options)=>(requests.push({path,body:JSON.parse(options.body)}),path==='/app/confirm'?confirmReply:{ok:true});
 const event=(type,target,key)=>{const e={target,key,preventDefault(){this.defaultPrevented=true;}};return Promise.all((handlers[type]||[]).map(fn=>fn(e)));};
 async function runFlowDOMTests(){
  assert(rows.map[0].classList.contains('selected'));assert.equal(document.activeElement,body,'initialization stole focus');assert(allow.disabled,'new permission was armed immediately');
@@ -29,5 +32,10 @@ async function runFlowDOMTests(){
  assert.equal(document.activeElement,rows.timeline[1],'refresh lost focus');assert(rows.timeline[1].classList.contains('selected'),'refresh lost identity');assert.equal(surfaces.timeline.hidden,false);assert.equal(surfaces.timeline.scrollTop,170);assert.equal(panel.scrollTop,60);
  search.focus();search.value='session 2';search.selectionStart=2;search.selectionEnd=7;await event('input',search);await event('htmx:beforeSwap',main);search.value='';document.activeElement=body;await event('htmx:afterSwap',main);assert.equal(search.value,'session 2');assert.equal(document.activeElement,search);assert.deepEqual([search.selectionStart,search.selectionEnd],[2,7]);assert(rows.timeline[0].hidden);assert(!rows.timeline[1].hidden);
  await event('click',allow);assert.equal(requests.length,0,'unarmed prompt submitted');now+=700;timer();await event('click',allow);assert.equal(requests.length,1);assert.deepEqual(requests[0].body,{id:'p1',allow:true});assert.equal(document.activeElement,search,'answer stole focus');
+ const kills=()=>requests.filter(r=>r.path==='/chat/api/flow-action');
+ await event('click',stop);assert.equal(kills().length,0,'stopped without an app to confirm');
+ confirmReply={ok:true,json:async()=>({confirmed:false})};await event('click',stop);assert.equal(kills().length,0,'stopped after Cancel');
+ confirmReply={ok:true,json:async()=>({confirmed:true})};await event('click',stop);assert.deepEqual(kills().map(r=>r.body),[{action:'kill',session_id:2,machine:'local',confirmed:true}]);
+ assert(requests.filter(r=>r.path==='/app/confirm').every(r=>r.body.message.includes('Session 2')),'dialog names the session');
  console.log('Flow DOM focus, selection, scroll, filtering and approval regressions passed');
 }

@@ -34,9 +34,12 @@ global.location={pathname:'/agents',search:''};
 global.sessionStorage={getItem(){return null;},setItem(){}};
 global.CustomEvent=class {constructor(type,options){this.type=type;this.detail=options.detail;}};
 const requests=[],payloads=[];
+// The app's native dialog; 404 is a page without a host.
+let confirmReply={ok:false,status:404};
 // The Chat long poll waits until a test delivers its answer.
 let waiting=null;
 global.fetch=(path,options)=>{requests.push(path);payloads.push({path,options});
+ if(path==='/app/confirm')return Promise.resolve(confirmReply);
  if(path.startsWith('/chat/api/wait'))return new Promise((resolve,reject)=>{waiting={resolve,reject};});
  return Promise.resolve({ok:true,json:async()=>path.endsWith('new')?{id:'conversation'}:[]});};
 const settle=()=>new Promise(resolve=>setImmediate(resolve));
@@ -186,9 +189,12 @@ async function runChatTests(){
  assert.equal(get('chat-mode-auto')['aria-pressed'],'true');
  assert(!get('chat-mode-full').classList.contains('danger'));
  const fullPosts=()=>payloads.filter(p=>p.path==='/chat/api/mode'&&JSON.parse(p.options.body).mode==='full auto').length;
- global.confirm=()=>false;await get('chat-mode-full').handlers.click();
- assert.equal(fullPosts(),0,'Full auto sent without confirmation');
- let asked='';global.confirm=text=>{asked=text;return true;};await get('chat-mode-full').handlers.click();
+ await get('chat-mode-full').handlers.click();
+ assert.equal(fullPosts(),0,'Full auto sent without an app to confirm');
+ confirmReply={ok:true,json:async()=>({confirmed:false})};await get('chat-mode-full').handlers.click();
+ assert.equal(fullPosts(),0,'Full auto sent after Cancel');
+ confirmReply={ok:true,json:async()=>({confirmed:true})};await get('chat-mode-full').handlers.click();
+ const asked=JSON.parse(payloads.findLast(p=>p.path==='/app/confirm').options.body).message;
  assert.equal(fullPosts(),1);assert(asked.includes('30 minutes'),'confirmation must state the limit');
  await change({seq:33,kind:'mode',mode:'full auto',until:new Date(now+30*60000).toISOString()});
  assert.equal(get('chat-mode-left').hidden,false);assert.equal(get('chat-mode-left').textContent,'30m left');

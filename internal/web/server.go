@@ -46,6 +46,8 @@ type Options struct {
 	// opener; without them their endpoints answer 404.
 	Confirm      func(ctx context.Context, message string) bool
 	OpenExternal func(url string)
+	// Theme is the app's ui.theme: "system", "light" or "dark".
+	Theme string
 }
 
 // Server is a transport-free handler: pages, their JSON endpoints and long polls.
