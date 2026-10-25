@@ -46,11 +46,17 @@ func main() {
 			_ = json.Unmarshal(b, &config)
 		}
 	}
-	// --tools names claude's built-in tools; "default" is all of them.
+	// --tools names claude's built-in tools: "default" is all of them,
+	// otherwise a comma-separated list. claude also lists ToolSearch.
 	var tools []string
 	for i, a := range args {
-		if a == "--tools" && i+1 < len(args) && args[i+1] == "default" {
-			tools = append(tools, "Bash", "Edit", "Read", "TodoWrite", "Write")
+		if a == "--tools" && i+1 < len(args) && args[i+1] != "" {
+			tools = append(tools, "ToolSearch")
+			if args[i+1] == "default" {
+				tools = append(tools, "Bash", "Edit", "Read", "TodoWrite", "Write")
+			} else {
+				tools = append(tools, strings.Split(args[i+1], ",")...)
+			}
 		}
 	}
 	server := config.MCPServers["driga"]

@@ -13,7 +13,7 @@ func TestClaudePermissionBridgeArgs(t *testing.T) {
  if [ "$previous" = "--mcp-config" ]; then /bin/cat "$arg" > "$CHAT_RECORD.config"; fi
  previous="$arg"
 done
-echo '{"type":"system","subtype":"init","mcp_servers":[{"name":"driga","status":"connected"}],"tools":["Bash","Read","mcp__driga__kill"]}'
+echo '{"type":"system","subtype":"init","mcp_servers":[{"name":"driga","status":"connected"}],"tools":["Read","mcp__driga__kill"]}'
 echo '{"type":"result","result":"answer"}'`)
 	r := Request{Socket: "/private/chat.sock", Conversation: "conversation", Token: "random-turn-token"}
 	if err := a.Run(context.Background(), r, func(Delta) error { return nil }); err != nil {
@@ -21,7 +21,7 @@ echo '{"type":"result","result":"answer"}'`)
 	}
 	raw, _ := os.ReadFile(record + ".args")
 	args := string(raw)
-	for _, want := range []string{"--tools\ndefault\n", "--permission-prompts\nhost\n", "--permission-prompt-tool\nmcp__driga__approve\n", "TodoWrite,mcp__driga__list_prompts"} {
+	for _, want := range []string{"--tools\nRead,Glob,Grep,TodoWrite\n", "--permission-prompts\nhost\n", "--permission-prompt-tool\nmcp__driga__approve\n", "TodoWrite,mcp__driga__list_prompts"} {
 		if !strings.Contains(args, want) {
 			t.Fatal("missing", want, args)
 		}
@@ -42,5 +42,41 @@ echo '{"type":"result","result":"answer"}'`)
 	env := conf.MCPServers["driga"].Env
 	if env["DRIGA_CHAT_SOCKET"] != r.Socket || env["DRIGA_CHAT_CONVERSATION"] != r.Conversation || env["DRIGA_CHAT_TOKEN"] != r.Token {
 		t.Fatal("per-turn environment missing")
+	}
+}
+
+// Chat that can act reads files but never runs commands or writes them: it
+// refuses a claude that offers Bash, Edit or Write anyway.
+func TestChatRefusesCommandAndWriteTools(t *testing.T) {
+	for _, tool := range []string{"Bash", "Edit", "Write"} {
+		a, _ := fakeCLI(t, flags+"\n --permission-prompts <host> Permission prompts", `echo '{"type":"system","subtype":"init","mcp_servers":[{"name":"driga","status":"connected"}],"tools":["Read","`+tool+`"]}'
+echo '{"type":"result","result":"answer"}'`)
+		r := Request{Socket: "/private/chat.sock", Conversation: "conversation", Token: "token"}
+		if err := a.Run(context.Background(), r, func(Delta) error { return nil }); err == nil || !strings.Contains(err.Error(), tool) {
+			t.Fatalf("%s: err = %v", tool, err)
+		}
+	}
+}
+
+// A resumed conversation's model may still call Bash, which claude no
+// longer offers and refuses; the turn goes on, with no tool row for it.
+func TestChatOutlivesACallToAToolNotOffered(t *testing.T) {
+	a, _ := fakeCLI(t, flags+"\n --permission-prompts <host> Permission prompts", `echo '{"type":"system","subtype":"init","mcp_servers":[{"name":"driga","status":"connected"}],"tools":["Read"]}'
+echo '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"du -sk ."}}]}}'
+echo '{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","is_error":true,"content":"No such tool available: Bash"}]}}'
+echo '{"type":"assistant","message":{"content":[{"type":"text","text":"I cannot measure that."}]}}'
+echo '{"type":"result","result":"I cannot measure that."}'`)
+	var tools []string
+	r := Request{Socket: "/private/chat.sock", Conversation: "conversation", Token: "token"}
+	if err := a.Run(context.Background(), r, func(d Delta) error {
+		if d.Tool != "" {
+			tools = append(tools, d.Tool)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if len(tools) != 0 {
+		t.Fatalf("tool rows = %v", tools)
 	}
 }

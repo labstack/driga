@@ -297,7 +297,7 @@ echo '{"type":"result","result":"ok"}'`
 			raw, _ := os.ReadFile(record + ".args")
 			args := string(raw)
 			if support {
-				for _, want := range []string{"--tools\ndefault\n", "--permission-prompts\nhost\n", "--permission-prompt-tool\nmcp__driga__approve\n", "TodoWrite,mcp__driga__list_prompts"} {
+				for _, want := range []string{"--tools\nRead,Glob,Grep,TodoWrite\n", "--permission-prompts\nhost\n", "--permission-prompt-tool\nmcp__driga__approve\n", "TodoWrite,mcp__driga__list_prompts"} {
 					if !strings.Contains(args, want) {
 						t.Fatal(want, args)
 					}

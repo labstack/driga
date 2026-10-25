@@ -86,6 +86,8 @@ export function ChatCard({ text, open: initiallyOpen, onOpen }: {
     const run = id && (saves.has(c.tool) || c.tool === "open_dashboard") ? dashboards.open(id, c.input?.vars) : dashboards.run(spec!, c.input?.vars);
     run.then(setFragment, (e: Error) => setProblem(e.message));
   }, [text]);
+  // A dashboard a card saved or opened may since have been deleted.
+  if (problem && card && /not found/i.test(problem) && (card.saved || card.input.id)) return <Text size="sm" c="dimmed">{card.input.dashboard?.name ?? "This dashboard"} was deleted since.</Text>;
   if (problem) return <Text size="sm" c="danger">{problem}</Text>;
   // A write that failed saved nothing; say so and why, as a rejected draft.
   if (card?.error) return <Paper withBorder radius="md" p="sm" style={{ background: "var(--driga-raised)" }}>

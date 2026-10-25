@@ -10,7 +10,7 @@ import (
 )
 
 func TestClaudeReadsUsePermissionBridge(t *testing.T) {
-	a, record := fakeCLI(t, flags+"\n --permission-prompts <host> Host prompts", `echo '{"type":"system","subtype":"init","mcp_servers":[{"name":"driga","status":"connected"}],"tools":["Read","Glob","Grep","LS","NotebookRead","mcp__driga__list_prompts"]}'
+	a, record := fakeCLI(t, flags+"\n --permission-prompts <host> Host prompts", `echo '{"type":"system","subtype":"init","mcp_servers":[{"name":"driga","status":"connected"}],"tools":["ToolSearch","Read","Glob","Grep","TodoWrite","mcp__driga__list_prompts"]}'
 echo '{"type":"result","result":"ok"}'`)
 	r := Request{Socket: "private.sock", Conversation: "conv", Token: "token"}
 	if err := a.Run(context.Background(), r, func(Delta) error { return nil }); err != nil {

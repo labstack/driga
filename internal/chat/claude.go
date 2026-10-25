@@ -22,6 +22,11 @@ import (
 
 var ReadTools = []string{"get_flow", "get_activity", "get_summary", "list_agents", "get_agent", "list_projects", "inspect_project", "list_inbox", "list_conflicts", "list_orphans", "get_machine", "list_machines", "inspect_setup", "list_cleanup_candidates", "describe_panels", "show_panels", "open_dashboard", "list_dashboards", "list_dashboard_versions"}
 
+// NativeTools are the claude built-in tools Chat may use when it can act:
+// reading files and its own task list. It never runs commands or changes
+// files; what Chat changes goes through Driga's own tools and their cards.
+var NativeTools = []string{"Read", "Glob", "Grep", "TodoWrite"}
+
 // DashboardWrites change only the user's dashboards, each save a version that
 // can be restored, so Chat runs them without an approval card.
 var DashboardWrites = []string{"create_dashboard", "edit_dashboard", "replace_dashboard", "restore_dashboard_version"}
@@ -111,7 +116,7 @@ func (a *Claude) Run(ctx context.Context, r Request, emit func(Delta) error) err
 	}
 	nativeTools := ""
 	if actions {
-		nativeTools = "default"
+		nativeTools = strings.Join(NativeTools, ",")
 		// Claude permits reads in cwd itself; pre-allowing read tools would
 		// also bypass the permission bridge for paths outside that directory.
 		tools = append(tools, "TodoWrite", "mcp__driga__list_prompts")
@@ -181,7 +186,10 @@ type stream struct {
 	gap bool
 	// cards are panel tool calls waiting for their result, by tool use id.
 	cards map[string]card
-	err   error
+	// offered is the tools claude's init event listed, all of them ones
+	// Chat accepts; nil until it arrives.
+	offered map[string]bool
+	err     error
 }
 
 // text emits reply text, starting a new paragraph after an earlier message.
@@ -261,10 +269,12 @@ func (s *stream) line(line []byte) error {
 		if !s.connected {
 			return errors.New("driga MCP server did not connect; refusing Chat")
 		}
+		s.offered = map[string]bool{}
 		for _, tool := range e.Tools {
 			if !s.validTool(tool) {
 				return fmt.Errorf("unexpected tool %q; Chat requires driga read tools only", tool)
 			}
+			s.offered[tool] = true
 		}
 	}
 	switch e.Type {
@@ -292,9 +302,6 @@ func (s *stream) line(line []byte) error {
 			s.gap = s.printed
 		}
 		if e.Event.Type == "content_block_start" && e.Event.ContentBlock.Type == "tool_use" {
-			if !s.validTool(e.Event.ContentBlock.Name) {
-				return errors.New("agent attempted a tool outside driga read tools")
-			}
 			return s.tool(e.Event.ContentBlock.ID, e.Event.ContentBlock.Name)
 		}
 		if e.Event.Type == "content_block_delta" && e.Event.Delta.Type == "text_delta" {
@@ -381,6 +388,12 @@ func (s *stream) finish() error {
 
 func (s *stream) tool(id, name string) error {
 	if !s.validTool(name) {
+		// A model resuming a conversation may still ask for a tool it once
+		// had. claude refuses a tool its init did not offer, and the model
+		// goes on; only a refused tool that was offered ends the turn.
+		if s.offered != nil && !s.offered[name] {
+			return nil
+		}
 		return errors.New("agent attempted a tool outside driga read tools")
 	}
 	if s.tools == nil {
@@ -488,7 +501,8 @@ func (s *stream) validTool(name string) bool {
 		return false
 	}
 	if !strings.HasPrefix(name, "mcp__") {
-		return true
+		// ToolSearch is how claude loads deferred tool definitions.
+		return name == "ToolSearch" || slices.Contains(NativeTools, name)
 	}
 	switch name {
 	case "mcp__driga__create_dashboard", "mcp__driga__edit_dashboard", "mcp__driga__replace_dashboard", "mcp__driga__restore_dashboard_version", "mcp__driga__delete_dashboard":
