@@ -1,10 +1,10 @@
 {
   "machines-dark": {
-    "mp4": "https://assets.driga.dev/media/machines-dark-3237d4b552e6.mp4",
-    "webm": "https://assets.driga.dev/media/machines-dark-ea34fa9126af.webm"
+    "mp4": "https://assets.driga.dev/videos/machines-dark-3237d4b552e6.mp4",
+    "webm": "https://assets.driga.dev/videos/machines-dark-ea34fa9126af.webm"
   },
   "machines-light": {
-    "mp4": "https://assets.driga.dev/media/machines-light-4e11c88b5cb0.mp4",
-    "webm": "https://assets.driga.dev/media/machines-light-04154808997c.webm"
+    "mp4": "https://assets.driga.dev/videos/machines-light-4e11c88b5cb0.mp4",
+    "webm": "https://assets.driga.dev/videos/machines-light-04154808997c.webm"
   }
 }
