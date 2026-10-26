@@ -3,9 +3,30 @@ package panel
 import (
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/view"
+	"slices"
 	"testing"
 	"time"
 )
+
+func TestHeaderCountsWaitingWithoutInboxAndDeduplicatesApprovals(t *testing.T) {
+	s := snapshot()
+	s.LocalMachineID = "a"
+	s.Inbox.Rows = nil
+	s.Agents.Rows = []view.AgentRow{
+		{MachineID: "a", ID: 1, Label: "waiting", Children: []view.AgentRow{{MachineID: "a", ID: 2, Label: "~waiting"}}},
+		{MachineID: "b", ID: 1, Label: "waiting"},
+	}
+	f, err := Run(s, RunRequest{Dashboard: Header()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := f.Results[0].Frame.Rows[0][0]; got != 3.0 {
+		t.Fatalf("Need you = %v, want 3", got)
+	}
+	if !slices.Equal(f.WaitingSessions, []int64{1, 2}) {
+		t.Fatalf("local sessions already counted = %v", f.WaitingSessions)
+	}
+}
 
 func TestSessionPanelsAndWaitsUseMachineIdentity(t *testing.T) {
 	s := snapshot()

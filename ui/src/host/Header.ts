@@ -158,7 +158,15 @@ export const nothingKept: Kept = { attention: { waiting: [], review: [], stuck: 
 /** counts reads the three attention counts the header fragment and Chat's
  * prompts give: waits plus prompts, finished turns, sessions that look stuck. */
 export function counts(header: Fragment, prompts: Prompt[]): Record<AttentionKind, number> {
-  return { waiting: (stat(header, "waiting") ?? 0) + prompts.filter(p => !p.session_id || !header.waiting_sessions?.includes(p.session_id)).length, review: stat(header, "finished") ?? 0, stuck: stat(header, "stuck") ?? 0 };
+  const waiting = new Set(header.waiting_sessions);
+  let extra = 0;
+  for (const p of prompts) {
+    if (!p.session_id || !waiting.has(p.session_id)) {
+      extra++;
+      if (p.session_id) waiting.add(p.session_id);
+    }
+  }
+  return { waiting: (stat(header, "waiting") ?? 0) + extra, review: stat(header, "finished") ?? 0, stuck: stat(header, "stuck") ?? 0 };
 }
 
 /** machineOf reads one fleet machine with its sessions by state. */

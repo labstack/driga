@@ -630,5 +630,5 @@ func (m *app) extraPrompts() int {
 	for _, p := range m.prompts {
 		ids = append(ids, p.SessionID)
 	}
-	return view.ExtraPrompts(m.snap.Inbox, m.localMachine(), ids)
+	return view.ExtraPrompts(m.snap.Inbox, m.snap.Agents, m.localMachine(), ids)
 }

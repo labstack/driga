@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"github.com/labstack/driga/internal/chat"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/view"
@@ -23,6 +24,28 @@ func TestHeaderShowsCPUAndDiskTotals(t *testing.T) {
 	got = m.header()
 	if !strings.Contains(got, "load 9.0/4") || !strings.Contains(got, "disk free "+view.HumanBytes(100)) {
 		t.Fatal(got)
+	}
+}
+
+func TestFlowNeedYouMatchesBoardWaitingSessions(t *testing.T) {
+	m := boardApp(t, "busy")
+	m.width = 200
+	m.snap.LocalMachineID = "local"
+	m.snap.Agents.Rows = nil
+	m.snap.Inbox.Rows = nil
+	for _, r := range m.board.Needs {
+		m.snap.Agents.Rows = append(m.snap.Agents.Rows, view.AgentRow{MachineID: r.Node.MachineID, ID: r.Node.ID, Label: "waiting"})
+	}
+	if len(m.board.Needs) == 0 {
+		t.Fatal("fixture has no waiting sessions")
+	}
+	// A live approval for a session already waiting must not add another need.
+	r := m.board.Needs[0]
+	m.snap.LocalMachineID = r.Node.MachineID
+	m.prompts = []chat.Prompt{{SessionID: r.Node.ID}}
+	got, _ := m.boardLayout()
+	if want := fmt.Sprintf("Need you %d", len(m.board.Needs)); !strings.Contains(got, want) {
+		t.Fatalf("missing %q: %s", want, got)
 	}
 }
 func TestFlowPulseUsesSharedAttentionAndHygiene(t *testing.T) {

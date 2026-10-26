@@ -278,8 +278,8 @@ func TestNeedYouCountsWarningsInEffect(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n := f.Results[0].Frame.Rows[0][0]; n != 2.0 {
-		t.Fatalf("need you = %v, want the wait and the memory warning", n)
+	if n := f.Results[0].Frame.Rows[0][0]; n != 3.0 {
+		t.Fatalf("need you = %v, want the wait, waiting child and memory warning", n)
 	}
 }
 

@@ -87,7 +87,7 @@ func Run(snap viewer.Snapshot, req RunRequest) (Fragment, error) {
 		base[source] = r
 		return r
 	}
-	f := Fragment{LeftoverCount: view.HeaderCounts(snap.Inbox, snap.Agents, snap.Orphans, snap.Summary).Leftover, WaitingSessions: view.WaitingSessions(snap.Inbox, snap.LocalMachineID), History: snap.PanelHistory, Dashboard: req.Dashboard, Results: []Result{}, Vars: vars, Options: options(req.Dashboard, rows), ObservedAt: snap.ObservedAt.UTC().Format(time.RFC3339), LocalMachine: snap.LocalMachineID}
+	f := Fragment{LeftoverCount: view.HeaderCounts(snap.Inbox, snap.Agents, snap.Orphans, snap.Summary).Leftover, WaitingSessions: view.WaitingSessions(snap.Inbox, snap.Agents, snap.LocalMachineID), History: snap.PanelHistory, Dashboard: req.Dashboard, Results: []Result{}, Vars: vars, Options: options(req.Dashboard, rows), ObservedAt: snap.ObservedAt.UTC().Format(time.RFC3339), LocalMachine: snap.LocalMachineID}
 	for _, p := range req.Dashboard.Panels {
 		if len(req.Panels) > 0 && !slices.Contains(req.Panels, p.ID) {
 			continue

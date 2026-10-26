@@ -50,4 +50,9 @@ describe("header prompt counts", () => {
     fragment.waiting_sessions = [];
     expect(counts(fragment, [prompt("one"), prompt("zero", 0)]).waiting).toBe(5);
   });
+  it("counts multiple approvals for a new session once, with unbound prompts separate", () => {
+    const fragment = header([]);
+    fragment.waiting_sessions = [11, 12];
+    expect(counts(fragment, [prompt("waiting-session", 11), prompt("waiting-child", 12), prompt("first", 13), prompt("second", 13), prompt("unbound"), prompt("zero", 0)]).waiting).toBe(6);
+  });
 });
