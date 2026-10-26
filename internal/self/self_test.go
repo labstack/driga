@@ -18,6 +18,7 @@ func TestCLI(t *testing.T) {
 		"/opt/driga-dev":                                "/opt/driga-dev",
 		"/opt/drigadx":                                  "/opt/drigadx",
 	} {
+		in, want = filepath.FromSlash(in), filepath.FromSlash(want)
 		if got := CLI(in); got != want {
 			t.Errorf("CLI(%q) = %q, want %q", in, got, want)
 		}

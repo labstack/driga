@@ -202,7 +202,7 @@ func TestWindowsEndToEnd(t *testing.T) {
 		if len(events) != 1 || events[0].SessionID != "windows-e2e" || events[0].Event != "Notification" || !pathx.Equal(events[0].Cwd, f.repo) {
 			t.Fatalf("installed hook did not reach isolated spool: %+v", events)
 		}
-		f.run(t, "", "collect", "--once")
+		f.run(t, "", "service", "run", "--once")
 		st, err := store.Open(filepath.Join(f.data, "driga.db"), store.ReadOnly)
 		must(t, err)
 		must(t, st.Tx(context.Background(), func(tx *store.Tx) error {
@@ -328,7 +328,7 @@ func TestWindowsEndToEnd(t *testing.T) {
 		}
 		old := time.Now().Add(-30 * 24 * time.Hour)
 		must(t, os.Chtimes(index, old, old))
-		f.run(t, "", "collect", "--once")
+		f.run(t, "", "service", "run", "--once")
 		var envelope struct{ Data []cleanup.Candidate }
 		must(t, json.Unmarshal(f.run(t, "", "cleanup", "--kind", "worktree", "--why", "--json"), &envelope))
 		var candidate cleanup.Candidate

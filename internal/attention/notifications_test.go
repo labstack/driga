@@ -258,10 +258,10 @@ func TestServiceNotificationClickRunsTheCLI(t *testing.T) {
 		calls = append(calls, append([]string{name}, args...))
 		return nil, nil
 	})
-	if err := notificationResponse(t.Context(), r, "/Applications/Driga.app/Contents/MacOS/drigad", notificationDefaultAction, "w1", "local", ""); err != nil {
+	if err := notificationResponse(t.Context(), r, filepath.FromSlash("/Applications/Driga.app/Contents/MacOS/drigad"), notificationDefaultAction, "w1", "local", ""); err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(calls, [][]string{{"/Applications/Driga.app/Contents/MacOS/driga", "app", "--notification-stdin"}}) {
+	if !reflect.DeepEqual(calls, [][]string{{filepath.FromSlash("/Applications/Driga.app/Contents/MacOS/driga"), "app", "--notification-stdin"}}) {
 		t.Fatal(calls)
 	}
 }

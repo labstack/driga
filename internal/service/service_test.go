@@ -143,6 +143,7 @@ func TestDaemonPathAndVariant(t *testing.T) {
 	for in, want := range map[string]string{
 		"/opt/driga": "/opt/drigad", "/opt/driga-dev": "/opt/drigad-dev", "/opt/driga.exe": "/opt/drigad.exe", "/opt/drigad": "/opt/drigad", "/opt/other": "/opt/other",
 	} {
+		in, want = filepath.FromSlash(in), filepath.FromSlash(want)
 		if got := DaemonPath(in); got != want {
 			t.Errorf("DaemonPath(%q) = %q, want %q", in, got, want)
 		}
