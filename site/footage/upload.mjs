@@ -1,4 +1,4 @@
-// Publishes out/media to the R2 bucket driga-assets, served at
+// Publishes out/media to the R2 bucket driga, served at
 // https://assets.driga.dev, and records the URLs in src/data/media.json.
 // Keys carry a content hash, so files are immutable and a retake never
 // overwrites what a cached page still points at. Unchanged files are skipped.
@@ -20,7 +20,7 @@ for (const file of readdirSync(input).sort()) {
   const url = `https://assets.driga.dev/${key}`;
   if (manifest[name]?.[format] === url) continue;
   // Keys are content-addressed, so retrying a put is always safe.
-  const args = ["r2", "object", "put", `driga-assets/${key}`, "--file", join(input, file),
+  const args = ["r2", "object", "put", `driga/${key}`, "--file", join(input, file),
     "--content-type", `video/${format}`, "--cache-control", "public, max-age=31536000, immutable", "--remote"];
   let put;
   for (let attempt = 1; attempt <= 3; attempt++) {
