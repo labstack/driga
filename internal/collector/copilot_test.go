@@ -77,7 +77,7 @@ func TestCopilotPromptBeforeStartAndError(t *testing.T) {
 					if i == 2 {
 						at = at.Add(11 * time.Minute)
 						collect()
-						check() // A failed turn must never age into stalled.
+						check() // A failed turn must never age into stuck.
 					}
 				}
 			})

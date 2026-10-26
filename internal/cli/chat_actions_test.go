@@ -138,7 +138,7 @@ func TestChatListPromptsOnlyWithActions(t *testing.T) {
 			t.Run(fmt.Sprintf("%s/%t", policy, actions), func(t *testing.T) {
 				ctx := context.Background()
 				a, b := sdk.NewInMemoryTransports()
-				ss, err := newMCPServer(&Globals{}, actions, policy).Connect(ctx, a, nil)
+				ss, err := newMCPServer(&Globals{}, true, actions, policy).Connect(ctx, a, nil)
 				if err != nil {
 					t.Fatal(err)
 				}

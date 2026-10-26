@@ -48,30 +48,31 @@ type repoResult struct {
 	err       error
 }
 type sourceResults struct {
-	agents       []attention.Agent
-	sessions     []model.Session
-	original     map[int64]model.Session
-	procs        []model.Proc
-	procErr      error
-	procAt       time.Time
-	sample       model.MachineSample
-	machineErr   error
-	adapters     []adapterResult
-	observations []model.SessionObs
-	first        bool
-	baseline     time.Time
-	cwdRan       bool
-	cwdErr       error
-	git          []repoResult
-	gitErr       error
-	feedEnabled  bool
-	spool        spoolResult
-	peers        map[int32]bool
-	socketErr    error
-	subreaper    int32
-	paths        map[string]string
-	logs         map[string]logBaseline
-	jumps        map[string]*model.InboxJump
+	agents        []attention.Agent
+	sessions      []model.Session
+	internalChats map[string]bool
+	original      map[int64]model.Session
+	procs         []model.Proc
+	procErr       error
+	procAt        time.Time
+	sample        model.MachineSample
+	machineErr    error
+	adapters      []adapterResult
+	observations  []model.SessionObs
+	first         bool
+	baseline      time.Time
+	cwdRan        bool
+	cwdErr        error
+	git           []repoResult
+	gitErr        error
+	feedEnabled   bool
+	spool         spoolResult
+	peers         map[int32]bool
+	socketErr     error
+	subreaper     int32
+	paths         map[string]string
+	logs          map[string]logBaseline
+	jumps         map[string]*model.InboxJump
 }
 
 func collectSources(ctx context.Context, d Deps, st *store.Store, p Plan, state *State, now time.Time) (sourceResults, error) {
@@ -100,6 +101,23 @@ func collectSources(ctx context.Context, d Deps, st *store.Store, p Plan, state 
 	if err != nil {
 		return r, err
 	}
+	conversations, err := st.InternalChatSessions()
+	if err != nil {
+		return r, err
+	}
+	r.internalChats = make(map[string]bool, len(conversations))
+	for _, conversation := range conversations {
+		if conversation != "" {
+			r.internalChats[conversation] = true
+		}
+	}
+	kept := ss[:0]
+	for _, session := range ss {
+		if session.Adapter != "claude" || !r.internalChats[session.ExternalID] {
+			kept = append(kept, session)
+		}
+	}
+	ss = kept
 	r.spool = collectSpool(d, offsets)
 	var knownRepos []model.Repo
 	if p.Git || p.GitIdentity {
@@ -215,6 +233,9 @@ func collectSources(ctx context.Context, d Deps, st *store.Store, p Plan, state 
 		for _, o := range result.obs {
 			if o.Adapter == "" {
 				o.Adapter = result.name
+			}
+			if o.Adapter == "claude" && r.internalChats[o.ExternalID] {
+				continue
 			}
 			r.observations = append(r.observations, o)
 		}
@@ -578,7 +599,7 @@ func collectSocketPeers(ctx context.Context, d Deps, st *store.Store, state *Sta
 		if err := intakeInput(st, *s, bySession[sessionKey(s.Adapter, s.ExternalID)], &in, now); err != nil {
 			return nil, err
 		}
-		mixSession(s, in, d.Cfg.StalledAfter, now)
+		mixSession(s, in, d.Cfg.StuckAfter, now)
 		// New rows receive real IDs in the write transaction. Private IDs keep
 		// their process ownership distinct while planning the probe.
 		if s.ID == 0 {

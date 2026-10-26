@@ -13,19 +13,19 @@ import (
 func TestMixerRetainsLabelInputs(t *testing.T) {
 	now := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
 	in := StateInput{Obs: model.SessionObs{Adapter: "claude", PID: 42, RegistryStatus: "busy", LastActivityAt: now.Add(-15 * time.Minute)}, Proc: &model.Proc{PID: 42, CPUPercent: 8.4}}
-	m := LabelWithEvidence(in, now, Thresholds{StalledAfter: 20 * time.Minute})
+	m := LabelWithEvidence(in, now, Thresholds{StuckAfter: 20 * time.Minute})
 	raw, err := json.Marshal(m)
 	if err != nil {
 		t.Fatal(err)
 	}
 	var saved struct {
-		Input          *StateInput `json:"input"`
-		StalledAfterMS int64       `json:"stalled_after_ms"`
+		Input        *StateInput `json:"input"`
+		StuckAfterMS int64       `json:"stuck_after_ms"`
 	}
 	if err := json.Unmarshal(raw, &saved); err != nil {
 		t.Fatal(err)
 	}
-	if saved.Input == nil || !reflect.DeepEqual(*saved.Input, in) || saved.StalledAfterMS != (20*time.Minute).Milliseconds() {
+	if saved.Input == nil || !reflect.DeepEqual(*saved.Input, in) || saved.StuckAfterMS != (20*time.Minute).Milliseconds() {
 		t.Fatalf("label inputs/threshold not retained: %s", raw)
 	}
 }
@@ -55,11 +55,11 @@ func TestLabel(t *testing.T) {
 		{name: "agy alive", label: "unknown", in: StateInput{Obs: model.SessionObs{Adapter: "agy", PID: 10}, Proc: &model.Proc{}}},
 		{name: "agy gone", label: "unknown", in: StateInput{Obs: model.SessionObs{Adapter: "agy"}}},
 		{name: "claude busy recent", label: "working", in: claude("busy", time.Minute)},
-		{name: "claude busy quiet low cpu", label: "stalled", evidence: "CPU 0.2%", in: claude("busy", 14*time.Minute)},
-		{name: "claude busy threshold", label: "stalled", in: claude("busy", 10*time.Minute)},
+		{name: "claude busy quiet low cpu", label: "stuck", evidence: "CPU 0.2%", in: claude("busy", 14*time.Minute)},
+		{name: "claude busy threshold", label: "stuck", in: claude("busy", 10*time.Minute)},
 		{name: "claude busy quiet high cpu", label: "unknown", evidence: "CPU 5.0%", in: claude("busy", 14*time.Minute)},
 		{name: "claude busy cpu boundary", label: "unknown", evidence: "CPU 1.0%", in: claude("busy", 14*time.Minute)},
-		{name: "claude busy no sample", label: "stalled", evidence: "no process sample", in: claude("busy", 14*time.Minute)},
+		{name: "claude busy no sample", label: "stuck", evidence: "no process sample", in: claude("busy", 14*time.Minute)},
 		{name: "claude stop", label: "finished", in: claude("idle", 5*time.Minute)},
 		{name: "claude stop already seen", label: "idle", in: claude("idle", 5*time.Minute)},
 		{name: "claude stop before prompt", label: "idle", in: claude("idle", 5*time.Minute)},
@@ -72,7 +72,7 @@ func TestLabel(t *testing.T) {
 		{name: "claude pid zero no registry", label: "unknown", in: StateInput{Obs: model.SessionObs{Adapter: "claude"}}},
 		{name: "claude notification old", label: "idle", in: claude("idle", time.Second)},
 		{name: "codex recent", label: "working", in: codex(true, false, time.Second)},
-		{name: "codex quiet open", label: "stalled", in: codex(true, false, 14*time.Minute)},
+		{name: "codex quiet open", label: "stuck", in: codex(true, false, 14*time.Minute)},
 		{name: "codex tool approval never waiting", label: "unknown", in: codex(true, false, 2*time.Minute)},
 		{name: "codex idle", label: "idle", in: codex(false, false, time.Hour)},
 		{name: "codex unseen completion", label: "finished", in: codex(false, false, time.Hour)},
@@ -86,7 +86,7 @@ func TestLabel(t *testing.T) {
 		{name: "hosted minute boundary", label: "unknown", heuristic: true, in: codex(true, true, time.Minute)},
 		{name: "gemini recent", label: "working", in: gemini(true, time.Second)},
 		{name: "gemini open tool never waiting", label: "unknown", in: gemini(true, 2*time.Minute)},
-		{name: "gemini quiet open", label: "stalled", in: gemini(true, 14*time.Minute)},
+		{name: "gemini quiet open", label: "stuck", in: gemini(true, 14*time.Minute)},
 		{name: "gemini completed alive", label: "idle", in: gemini(false, time.Hour)},
 		{name: "gemini gone open", label: "dead", in: gemini(true, time.Hour)},
 		{name: "gemini gone completed", label: "ended", in: gemini(false, time.Hour)},
@@ -124,8 +124,8 @@ func TestLabel(t *testing.T) {
 			if strings.HasPrefix(tt.name, "codex gone") || strings.HasPrefix(tt.name, "gemini gone") {
 				tt.in.Proc = nil
 			}
-			label, heuristic, evidence := Label(tt.in, now, Thresholds{StalledAfter: 10 * time.Minute})
-			mixed := LabelWithEvidence(tt.in, now, Thresholds{StalledAfter: 10 * time.Minute})
+			label, heuristic, evidence := Label(tt.in, now, Thresholds{StuckAfter: 10 * time.Minute})
+			mixed := LabelWithEvidence(tt.in, now, Thresholds{StuckAfter: 10 * time.Minute})
 			if mixed.Verdict != label || mixed.Heuristic != heuristic || mixed.Evidence != evidence || len(mixed.Rows) != 4 {
 				t.Fatalf("mixer disagrees: %+v", mixed)
 			}
@@ -158,8 +158,8 @@ func TestLabel(t *testing.T) {
 				t.Fatalf("duration not rounded: %q", evidence)
 			}
 			wantDisplay := label
-			if label == "stalled" {
-				wantDisplay = "stalled?"
+			if label == "stuck" {
+				wantDisplay = "stuck"
 			}
 			if heuristic {
 				wantDisplay = "~" + wantDisplay
@@ -190,7 +190,7 @@ func TestBusyQuietWithCPUIsUnknown(t *testing.T) {
 			Obs:  model.SessionObs{Adapter: "claude", PID: 10, RegistryStatus: "busy", LastActivityAt: now.Add(-14 * time.Minute)},
 			Proc: &model.Proc{CPUPercent: cpu},
 		}
-		label, heuristic, evidence := Label(in, now, Thresholds{StalledAfter: 10 * time.Minute})
+		label, heuristic, evidence := Label(in, now, Thresholds{StuckAfter: 10 * time.Minute})
 		if label != "unknown" || heuristic || !strings.Contains(evidence, "14m") || !strings.Contains(evidence, "CPU") {
 			t.Fatalf("CPU %v: got %q, heuristic=%v, evidence=%q", cpu, label, heuristic, evidence)
 		}
@@ -247,7 +247,7 @@ func TestMixerMissingAndConflictingSignals(t *testing.T) {
 func TestMixerMissingClaudeSampleIsNotProcessDeath(t *testing.T) {
 	now := time.Now()
 	m := LabelWithEvidence(StateInput{Obs: model.SessionObs{Adapter: "claude", PID: 1, RegistryStatus: "busy", LastActivityAt: now.Add(-time.Hour)}}, now, Thresholds{})
-	if m.Verdict != "stalled" || m.Rows[3].Alive != nil || m.Rows[3].Strength != 0 {
+	if m.Verdict != "stuck" || m.Rows[3].Alive != nil || m.Rows[3].Strength != 0 {
 		t.Fatal(m)
 	}
 }

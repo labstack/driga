@@ -184,8 +184,8 @@ func TestGeminiNeverWaiting(t *testing.T) {
 	for _, tc := range []struct {
 		age  time.Duration
 		want string
-	}{{time.Second, "working"}, {2 * time.Minute, "unknown"}, {11 * time.Minute, "stalled"}} {
-		got, _, _ := derive.Label(derive.StateInput{Obs: s, Proc: &model.Proc{PID: 123}}, s.LastActivityAt.Add(tc.age), derive.Thresholds{StalledAfter: 10 * time.Minute})
+	}{{time.Second, "working"}, {2 * time.Minute, "unknown"}, {11 * time.Minute, "stuck"}} {
+		got, _, _ := derive.Label(derive.StateInput{Obs: s, Proc: &model.Proc{PID: 123}}, s.LastActivityAt.Add(tc.age), derive.Thresholds{StuckAfter: 10 * time.Minute})
 		if got != tc.want {
 			t.Fatalf("age=%v label=%s want=%s", tc.age, got, tc.want)
 		}
@@ -279,4 +279,27 @@ func TestGeminiVanishedFileSkipped(t *testing.T) {
 		t.Fatal(err)
 	}
 	collect(t, New(), env)
+}
+
+func TestGeminiPanelMetadataWithoutSnippets(t *testing.T) {
+	env, _ := setup(t, header+user1+answer+user2+tool)
+	o, _ := collect(t, New(), env)
+	tools, starts, ends := 0, 0, 0
+	for _, e := range o.Events {
+		if strings.HasPrefix(e.Kind, "log:tool_call:") {
+			tools++
+		}
+		if e.Kind == "log:turn_start" {
+			starts++
+		}
+		if e.Kind == "log:turn_end" {
+			ends++
+		}
+		if e.Summary != "" {
+			t.Fatal("captured conversation text")
+		}
+	}
+	if tools != 1 || starts != 2 || ends != 1 {
+		t.Fatalf("metadata %d tools %d starts %d ends: %+v", tools, starts, ends, o.Events)
+	}
 }

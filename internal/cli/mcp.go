@@ -11,12 +11,14 @@ import (
 	"github.com/labstack/driga/internal/chat"
 	"github.com/labstack/driga/internal/collector"
 	"github.com/labstack/driga/internal/config"
+	"github.com/labstack/driga/internal/dashboard"
 	drigamcp "github.com/labstack/driga/internal/mcp"
+	"github.com/labstack/driga/internal/panel"
 	"github.com/labstack/driga/internal/view"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// MCPCmd serves read-only tools over stdio.
+// MCPCmd serves read views and editable Driga dashboards over stdio.
 type MCPCmd struct {
 	Snapshot bool `help:"Force one-shot snapshot collection for read tools (no history)."`
 	Chat     bool `hidden:"" help:"Apply Chat capture policy to every response."`
@@ -26,7 +28,7 @@ func (c *MCPCmd) AfterApply(g *Globals) error { g.Snapshot = c.Snapshot; return 
 
 // Help documents client registration without changing client configuration.
 func (MCPCmd) Help() string {
-	return "Read-only MCP server on stdio. Reading never acknowledges inbox items; snapshot mode has no history.\n\n" +
+	return "MCP server on stdio: read collected views and create or edit Driga dashboards. Reading never acknowledges inbox items; snapshot mode has no history.\n\n" +
 		"Claude Code: claude mcp add --scope user driga -- driga mcp\n\n" +
 		"Codex configuration:\n[mcp_servers.driga]\ncommand = \"driga\"\nargs = [\"mcp\"]"
 }
@@ -43,7 +45,7 @@ func (c MCPCmd) Run(g *Globals) error {
 		}
 		policy = cfg.CaptureText
 	}
-	server := newMCPServer(g, c.Chat && os.Getenv("DRIGA_CHAT_READ_ONLY") != "1", policy)
+	server := newMCPServer(g, c.Chat, c.Chat && os.Getenv("DRIGA_CHAT_READ_ONLY") != "1", policy)
 	err := server.Run(ctx, &sdk.StdioTransport{MaxLineLength: drigamcp.MaxLineLength})
 	if ctx.Err() != nil {
 		return nil
@@ -57,9 +59,12 @@ func NewMCPServer(g *Globals, capture ...string) *sdk.Server {
 	if len(capture) > 0 {
 		policy = capture[0]
 	}
-	return newMCPServer(g, false, policy)
+	return newMCPServer(g, false, false, policy)
 }
-func newMCPServer(g *Globals, actions bool, capture ...string) *sdk.Server {
+
+// newMCPServer serves an outside MCP client, or Chat when forChat is set, with
+// its actions when actions is.
+func newMCPServer(g *Globals, forChat, actions bool, capture ...string) *sdk.Server {
 	policy := ""
 	if len(capture) > 0 {
 		policy = capture[0]
@@ -89,7 +94,7 @@ func newMCPServer(g *Globals, actions bool, capture ...string) *sdk.Server {
 			if q.CachedMachines && !copy.Snapshot {
 				if v, ok := data.(view.MachinesView); ok {
 					if !collector.Running(config.DataDir()) {
-						v.Warning = "viewer collector not running"
+						v.Warning = "this machine's Driga service is not running"
 					}
 					data = v
 				}
@@ -125,7 +130,9 @@ func newMCPServer(g *Globals, actions bool, capture ...string) *sdk.Server {
 		}
 	}
 	// Neither the SDK logger nor snapshot hints may write to protocol stdout.
-	return drigamcp.NewServer(drigamcp.Options{Prompts: prompts, Chat: actions, Action: chatAction(&base), Approve: chatApprove, CaptureText: policy, Version: base.Version, Logger: slog.New(slog.NewTextHandler(stderr, nil)), Read: read, Doctor: doctor, Cleanup: func(ctx context.Context, kind string, sizes bool) (view.Envelope, error) {
+	return drigamcp.NewServer(drigamcp.Options{Prompts: prompts, Chat: actions, ChatServer: forChat, Action: chatAction(&base), Approve: chatApprove, CaptureText: policy, Version: base.Version, Logger: slog.New(slog.NewTextHandler(stderr, nil)), Read: read, Doctor: doctor, Cleanup: func(ctx context.Context, kind string, sizes bool) (view.Envelope, error) {
 		return cleanupRead(ctx, &base, kind, sizes, false)
-	}})
+	}, Panels: func(ctx context.Context, req panel.RunRequest) (panel.Fragment, error) {
+		return runPanels(ctx, &base, req)
+	}, Dashboards: dashboard.New(config.DataDir())})
 }

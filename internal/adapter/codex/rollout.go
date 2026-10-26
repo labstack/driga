@@ -114,9 +114,11 @@ func fold(obs *model.SessionObs, e entry, offset int64, snippets bool) error {
 		}
 		switch event.Type {
 		case "task_started":
+			obs.Events = append(obs.Events, model.Event{TS: ts, Kind: "log:turn_start"})
 			obs.TurnOpen = true
 		case "task_complete", "turn_complete", "turn_completed":
 			obs.TurnOpen = false
+			obs.Events = append(obs.Events, model.Event{TS: ts, Kind: "log:turn_end"})
 			completion := model.CompletionEvent{ID: fmt.Sprintf("codex:%s:%d", obs.ExternalID, offset), TS: ts}
 			if snippets {
 				completion.Text = capturedText(event.LastAgentMessage)
@@ -131,6 +133,24 @@ func fold(obs *model.SessionObs, e entry, offset int64, snippets bool) error {
 			}
 		}
 	case "response_item":
+		var tool struct {
+			Type   string `json:"type"`
+			Name   string `json:"name"`
+			CallID string `json:"call_id"`
+		}
+		if json.Unmarshal(e.Payload, &tool) == nil && (tool.Type == "function_call" || tool.Type == "custom_tool_call") {
+			identity := tool.CallID
+			if identity == "" {
+				// Rotation and backlog seeks can move a call to a different byte
+				// offset. ToolEvent hashes this stable content identity before it
+				// is retained; no argument text enters the event metadata.
+				var payload any
+				_ = json.Unmarshal(e.Payload, &payload)
+				canonical, _ := json.Marshal(payload)
+				identity = ts.UTC().Format(time.RFC3339Nano) + "\x00" + string(canonical)
+			}
+			obs.Events = append(obs.Events, adapter.ToolEvent(ts, tool.Name, identity))
+		}
 		return patchFiles(obs, e.Payload, ts)
 	}
 	return nil

@@ -41,8 +41,8 @@ an observation time, collection mode, source freshness, coverage gaps, and data.
 `doctor --json` returns diagnostic checks rather than a view envelope.
 Use `driga <command> --help` for command-specific flags.
 
-Labels are `working`, `waiting`, `idle`, `stalled?`, `finished`, `ended`, `dead`, and
-`unknown`, with evidence in session details. `stalled?` means suspected inactivity.
+Labels are `working`, `waiting`, `idle`, `stuck`, `finished`, `ended`, `dead`, and
+`unknown`, with evidence in session details. `stuck` means suspected inactivity.
 `ended` means the process exited with no open turn, a SessionEnd/sessionEnd hook
 arrived, or the conversation was replaced by `/clear` or `/resume`. `dead` requires
 an interrupted open turn or crash evidence. An unsupported adapter's exit stays
@@ -60,9 +60,7 @@ tolerantly and reported by `driga doctor`.
 
 `driga top` opens on **Flow (`0`)**. The three tabs are `0 Flow`, `1 Projects`
 and `2 Machines`. Flow offers Map (`m`, the default), Timeline (`t`) and Sessions
-(`s`). Map and Timeline use a grouped project tree in the terminal; the app's Map is
-a deterministic SVG of projects, leads and workers. More than four Map workers
-fold into a `+N` control. Timeline and Sessions retain access to every session.
+(`s`). Map and Timeline use a grouped project tree. Timeline and Sessions retain access to every session.
 
 Use arrows or `j`/`k` to select, `/` to find, Enter to open context, Esc to return,
 `?` for help, `M` to change TUI machine scope, and `q` to quit. `S` sorts Sessions.
@@ -75,7 +73,7 @@ idle process. Sessions on a paired machine must be stopped on that machine.
 
 `c` opens contextual Chat as a panel. Esc closes it, retaining the draft and current
 selection. Wide terminals show Chat beside the destination; narrow terminals give
-it the available reading width. The app's Ask Chat prefills the selected session context.
+it the available reading width.
 `Alt+0`/`Alt+1`/`Alt+2` switch TUI tabs while typing.
 
 Flow's expandable Activity section keeps notification and event history; TUI `h`
@@ -94,7 +92,7 @@ from Flow's monetary cost.
 Flow shows only stored evidence: purple spawn links use session ParentID; red dashed
 same-file links require full paths on the same machine. Tool counts/ticks are labelled
 **telemetry** and appear only for actual Claude/Copilot tool events. Cost is labelled
-**retained window**. Unknown history remains neutral. The app's Activity page and
+**retained window**. Unknown history remains neutral. The app's `activity` panels and
 the MCP `get_activity` tool show machine samples and events per minute; missing
 samples are gaps.
 
@@ -114,12 +112,11 @@ Remote inbox acknowledgments require the peer's `--allow-ack` grant; unreachable
 show `ack pending` and retry on reconnect.
 
 Desktop alerts show the session title or project and why it needs you, within
-your capture policy. The Driga app sends them: its collector child hands each
-alert to the app, which posts it under Driga's name and icon. Clicking one
-brings Driga forward on the session it is about, without acknowledging it;
-summaries and machine warnings open the window. This works the same on macOS,
-Windows and Linux, and also when the window is closed. Re-sending an item
-replaces its existing notification.
+your capture policy. The Driga service posts them under Driga's name and icon,
+whether or not the app is open. A macOS notification click opens the app and
+jumps to the event's session pane, opens Fleet for a machine warning (including a health summary), or opens
+the inbox for a session summary or a session event no longer present. It never acknowledges
+the item. Re-sending an item replaces its existing notification.
 
 On macOS, notifications require the installed **Driga.app**
 (`brew install --cask labstack/tap/driga`). macOS asks only once: if the
@@ -131,14 +128,12 @@ notifications are turned off for Driga; turning them back on takes effect from
 the next notification. Alerts raised while notifications are off are not
 replayed; they stay in the inbox.
 
-On a headless machine the collector service (`driga service install`) posts its
+On a headless machine the Driga service (`driga service install`) posts its
 own notifications instead: through the bundle on macOS, notify-send on Linux
-and native WinRT toasts on Windows. There, clicking a local item's macOS
-notification runs `driga inbox jump <item-id>` without acknowledging it. Jumps
-select a proven tmux pane, focus a proven Terminal/iTerm window with
-`inbox.jump_terminal = true`, or print a resume command. Machine warnings open
-Terminal on `driga top --tab machines`. Batch summaries and remote alerts have
-no click action, and service alerts on Linux and Windows have none either.
+and native WinRT toasts on Windows. macOS clicks launch the app with the
+machine and item identity, including for paired peers; identical item IDs on
+two machines stay distinct. Service alerts on Linux and Windows have no click
+action. `driga inbox jump <item-id>` remains available for a terminal jump.
 
 Health warnings notify once per condition, until it clears. Concurrent health
 warnings from one machine form one summary. Details and cleanup commands remain
@@ -151,6 +146,24 @@ The default `capture_text = "titles"` stores generated titles and file paths,
 with session/process/Git/machine metadata. Prompt and handoff text is opt-in:
 `capture_text = "snippets"` stores at most 200 characters per snippet after secret
 scrubbing. Scrubbing cannot guarantee privacy. Full transcripts are not stored.
+The app's header history survives reloads: attention is reconstructed from
+inbox and Chat-approval intervals, while an hour of inferred stuck counts and
+the last 30 polls of each machine's worst state are stored without text. Chat
+approval history keeps random IDs and timestamps only; permission inputs stay
+in memory. The header does not invent stuck history before its first poll.
+
+Fleet machine cards show interval CPU utilization and memory/disk pressure.
+Selecting a machine gives CPU and disk bar gauges. CPU is unknown on the first
+sample and after counter resets. Each session shows its last 30 retained turn
+outcomes and captured files relative to its project; shared paths mark overlaps.
+Tool-call and lifecycle metadata are retained independently of the 200-event raw
+tail, without arguments, file contents or transcript text. The `activity_heatmap`
+panel source supplies 24 UTC hourly buckets per project, including the current
+hour. Fleet renders them with the Heatmap widget. To avoid double counting
+transcript, hook and OTLP reporting, each session/hour uses the largest of those
+channel counts. This is a conservative count when channels cover disjoint calls.
+CPU and disk gauges stay in Fleet to keep the header and default Home calm.
+
 Agent configuration is only changed by explicit setup/hook commands.
 
 ```sh
@@ -174,7 +187,7 @@ Defaults and their purpose:
 | `roots` | none | Discover from sessions; add scanning roots only when wanted. |
 | `root_depth` | `3` | Bound discovery below configured roots. |
 | `exclude` | `**/node_modules`, `**/.tmp/**` | Avoid dependency and temporary directories. |
-| `stalled_after` | `10m` | Suspect a quiet busy/mid-turn session after this interval. |
+| `stuck_after` | `10m` | Suspect a quiet busy/mid-turn session after this interval. |
 | `orphan_min_age` | `10m` | Show fresh leaks as young; withhold kill until mature. |
 | `capture_text` | `titles` | Require opt-in for prompt/handoff snippets. |
 | `fleet.serve` | `false` | Open a listener only when explicitly enabled. |
@@ -208,11 +221,11 @@ terminal-opening command using `{cwd}`; otherwise the terminal is detected.
 
 | Data | Default path | Override |
 | --- | --- | --- |
-| SQLite database and collector state (macOS) | `~/Library/Application Support/driga/` | `DRIGA_DATA_DIR` |
-| SQLite database and collector state (Linux) | `$XDG_DATA_HOME/driga`, else `~/.local/share/driga/` | `DRIGA_DATA_DIR` |
+| SQLite database and service state (macOS) | `~/Library/Application Support/driga/` | `DRIGA_DATA_DIR` |
+| SQLite database and service state (Linux) | `$XDG_DATA_HOME/driga`, else `~/.local/share/driga/` | `DRIGA_DATA_DIR` |
 | Hook/ack spool (macOS) | `~/Library/Application Support/driga/events/` | `DRIGA_SPOOL_DIR` |
 | Hook/ack spool (Linux) | `$XDG_STATE_HOME/driga/events`, else `~/.local/state/driga/events/` | `DRIGA_SPOOL_DIR` |
-| SQLite database and collector state (Windows) | `%LOCALAPPDATA%\driga\` | `DRIGA_DATA_DIR` |
+| SQLite database and service state (Windows) | `%LOCALAPPDATA%\driga\` | `DRIGA_DATA_DIR` |
 | Hook/ack spool (Windows) | `%LOCALAPPDATA%\driga\events` | `DRIGA_SPOOL_DIR` |
 | Configuration (Windows) | `%APPDATA%\driga\config.toml` | `DRIGA_CONFIG` |
 | Configuration (macOS/Linux) | `$XDG_CONFIG_HOME/driga/config.toml`, else `~/.config/driga/config.toml` | `DRIGA_CONFIG` |
@@ -233,7 +246,7 @@ row. Default reports and critical-pressure alerts read at most 24 hours.
 
 Pre-release databases must be reset; `driga doctor` prints the exact stop/remove/start command.
 Fresh databases enable incremental auto-vacuum before creating tables. The
-collector returns up to 256 free pages after each hourly retention pass.
+Driga service returns up to 256 free pages after each hourly retention pass.
 Long-lived read snapshots can delay WAL space recovery until they close.
 
 `driga doctor` warns when the database plus WAL exceeds the **500 MB**
@@ -280,7 +293,7 @@ SessionEnd and PermissionRequest to `~/.claude/settings.json`, preserving existi
 hooks. Codex
 installation manages only the `[[hooks.PermissionRequest]]` block in
 `config.toml`, preserving comments and existing `notify` settings. Uninstall
-removes only Driga entries. Capture hooks append events to the spool; the collector
+removes only Driga entries. Capture hooks append events to the spool; the Driga service
 alone writes SQLite. Claude PermissionRequest uses the in-memory broker instead.
 
 Copilot installation manages only `$COPILOT_HOME/hooks/driga.json`, falling back
@@ -311,25 +324,25 @@ snake_case hook payloads are tagged `vscode` and never linked to a PID. Large
 64 MiB total stdin limits. Doctor warns about older CLI versions, enabled Copilot
 sandboxing and Copilot processes with no received hook events.
 
-On a desktop, the Driga app runs the collector as its own child process,
-`driga collect`: it starts it at launch, restarts it if it exits unexpectedly
-and stops it on Quit. The child gets the PATH and other variables of your login
-shell, so agent discovery and terminal jumps work when Driga is opened from
-Finder or at login. Closing the window keeps Driga collecting while it has a
-menu bar or tray icon (`app.tray`, on by default); Quit stops the collector.
-The app starts at login unless `app.launch_at_login` is off; both settings are
-in Driga's Settings window. Only one collector runs per data directory: when
-the service or a `driga collect` you started holds it, the app shows that
-process's data, names it in the tray menu, and takes over once it exits.
-`driga doctor` names the collector's owner.
+### The Driga service
 
-Headless machines run the collector as a service instead: a per-user
-LaunchAgent on macOS and a systemd user service on Linux, named
-`run.driga.collector`, and a per-user Task Scheduler task on Windows. Do not install the service where the app runs. On macOS
-and Windows the app's first launch removes a service installed earlier, the
-way `driga service uninstall` does, and says so once; it leaves a Linux unit
-alone. `driga init` offers the service only on Linux; on macOS and Windows it
-points to `driga app`, as do the snapshot banner and `driga doctor`.
+One process per machine, the Driga service (`drigad`), collects, stores the
+database, hosts Chat and runs actions. It starts at login and keeps running
+whether or not the app or the terminal UI is open; both are its clients, as is
+`driga mcp`. It runs as a per-user LaunchAgent on macOS (`run.driga.service`), a
+systemd user unit on Linux (`driga`) and a Task Scheduler task at logon on
+Windows. A `driga-dev` build installs its own (`run.driga.service.dev`,
+`driga-dev`, and Windows task `Driga service (dev)`), so it never takes over the release's.
+
+The app's first launch installs the service, and every launch makes sure it
+runs and restarts it when it runs another version, as after an upgrade. It
+installs the service with the PATH and other variables of your login shell, so
+agent discovery and terminal jumps work when Driga is opened from Finder or at
+login. Quitting the app leaves the service running. On a machine without the
+app, or to install it yourself, run `driga service install`; `driga init`
+offers it too. Installing removes the `run.driga.collector` agent, systemd unit
+or task an earlier release installed. Only one service runs per data
+directory; `driga doctor` names it.
 
 ```sh
 driga service status
@@ -343,13 +356,13 @@ driga service uninstall
 ### Service identity
 
 - **macOS:** release binaries are signed by **LabStack LLC**. The Background
-  item shows the developer name; the launchd label is `run.driga.collector`.
-- **Linux:** the systemd user unit displays **Driga collector**.
-- **Windows:** Task Scheduler lists **Driga collector** under
+  item shows the developer name; the launchd label is `run.driga.service`.
+- **Linux:** the systemd user unit displays **Driga service**.
+- **Windows:** Task Scheduler lists **Driga service** under
   `\Driga\<user SID>`. Task Manager shows **Driga** with the Murmur icon.
 
-On macOS logs are at `~/Library/Logs/driga/collector.log`; Linux uses
-`journalctl --user -u run.driga.collector` (`driga service logs -f` wraps it).
+On macOS logs are at `~/Library/Logs/driga/service.log`; Linux uses
+`journalctl --user -u driga` (`driga service logs -f` wraps it).
 On a Linux VM, allow the user service to run after logout:
 
 ```sh
@@ -359,25 +372,25 @@ driga doctor
 ```
 
 The linger command may require administrator authorization. Linux without
-systemd can run `driga collect` under tmux/nohup instead. Missing PSI in containers
+systemd can run `driga service run` under tmux/nohup instead. Missing PSI in containers
 is supported and shown as `psi n/a`; memory pressure uses MemAvailable/MemTotal.
 
-`driga collect` runs a foreground collector; `driga collect --once` writes one collection pass. Only one collector
+`driga service run` runs the Driga service in the foreground, as `drigad`
+does; `driga service run --once` writes one collection pass. Only one service
 can hold the lock in a data directory. Idle collection samples processes/machine
 every 60 seconds and Git every five minutes. A viewer heartbeat speeds these to
 5 seconds, 10 seconds, and 30 seconds respectively. Cwd lookup remains at most
 once per minute. Full Git status runs at least every five minutes.
-To see where a collector spends CPU, quit the app or stop the service and run
-`driga collect --cpu-profile cpu.pprof` (it records for `--profile-for`, default 2m),
+To see where the Driga service spends CPU, quit the app or stop the service and run
+`driga service run --cpu-profile cpu.pprof` (it records for `--profile-for`, default 2m),
 then read it with `go tool pprof -top $(which driga) cpu.pprof`. When the window
-ends or the collector stops early, it also writes an allocation profile to
+ends or the Driga service stops early, it also writes an allocation profile to
 `cpu.pprof.alloc`; inspect it with
 `go tool pprof -sample_index=alloc_space -top $(which driga) cpu.pprof.alloc`.
 
 ## Windows (experimental)
 
-Windows 10 1809+ / Windows 11 support the same read interfaces, foreground
-collector, optional OTLP intake, MCP, the desktop app and fleet. Phase 3 is feature-complete
+Windows 10 1809+ / Windows 11 support the same read interfaces, the Driga service, optional OTLP intake, MCP, the desktop app and fleet. Phase 3 is feature-complete
 pending real-hardware verification; Windows remains experimental.
 
 `driga orphans kill <id>` and the TUI action use the
@@ -394,7 +407,7 @@ Driga never attaches to an arbitrary console or broadcasts a control event.
 After the usual five-second grace, `--force` uses `TerminateProcess` through an
 identity-checked handle, with the same second confirmation as Unix. Headless
 processes without windows may need `--force`. Children launched by Driga (Chat,
-LLM probes and collector Git probes) enter a non-breakaway, kill-on-close job
+LLM probes and the Driga service's Git probes) enter a non-breakaway, kill-on-close job
 before their initial thread runs. On cancellation, a driga-created console
 group sharing its console can safely receive `CTRL_BREAK`; otherwise Driga
 tries `WM_CLOSE`. Closing the job also ends any remaining descendants.
@@ -441,29 +454,28 @@ The native API contracts follow Microsoft's
 [IP Helper tables](https://learn.microsoft.com/en-us/windows/win32/api/iphlpapi/nf-iphlpapi-getextendedtcptable)
 and [IFileOperation flags](https://learn.microsoft.com/en-us/windows/win32/api/shobjidl_core/nf-shobjidl_core-ifileoperation-setoperationflags).
 
-`Driga.exe` is the app; it runs the CLI next to it, `bin\driga.exe`, as its
-collector child without a console window, and registers itself to start at
-logon. Scoop puts `bin\driga.exe` on PATH as `driga` and adds a Start menu
+`Driga.exe` is the app; it installs the Driga service, `bin\drigad.exe`, from
+the CLI next to it, `bin\driga.exe`, and registers itself to start at logon. Scoop puts `bin\driga.exe` on PATH as `driga` and adds a Start menu
 shortcut for Driga; `driga app` opens it.
 
-On a machine without the app, `driga service install` registers `\Driga\<current-user-SID>\Driga collector`
-and starts it. The task runs `driga.exe collect` with internal scheduler flags,
+`driga service install`, which the app runs, registers `\Driga\<current-user-SID>\Driga service`
+and starts it. The task runs `drigad.exe` with internal scheduler flags,
 at that user's logon, using the interactive token and least privilege. It has
 no password, elevation or PowerShell dependency. Failure restarts are attempted
 every minute, up to 999 times; battery operation and unlimited runtime are enabled.
 It stops at logout. `service stop` ends the task through Task Scheduler; SQLite
 recovers normally on restart. `restart` waits for the prior task to stop.
 Installation refuses an existing task; uninstall before changing its binary path.
-`service status` shows the task state plus collector lock/PID liveness; a running
+`service status` shows the task state plus the service's lock and PID liveness; a running
 task alone does not prove fresh collection. Check `doctor` for freshness.
-The scheduled collector detaches its console immediately; verify whether the
+The scheduled service detaches its console immediately; verify whether the
 host briefly shows a console during task launch. It uses the logon environment
 plus the home, temporary-directory, Driga config/data/spool and agent-path
 overrides recorded at installation. Reinstall after changing those paths. Other
 variables, including PATH, come from the logon environment.
 
-Collector logs are at `%LOCALAPPDATA%\driga\logs\collector.log` (or
-`DRIGA_DATA_DIR\logs\collector.log`), bounded to 10 MiB plus one rotated file.
+Service logs are at `%LOCALAPPDATA%\driga\logs\service.log` (or
+`DRIGA_DATA_DIR\logs\service.log`), bounded to 10 MiB plus one rotated file.
 `driga service logs [-f]` reads them directly. Agent homes use `%USERPROFILE%`
 and their usual overrides. Windows private files/directories use a protected
 DACL for the current user, SYSTEM and administrators.
@@ -498,20 +510,20 @@ are never executed locally.
 
 ## Fleet setup
 
-Each serving machine runs a collector; each viewer's collector pulls its paired
+Each serving machine runs the Driga service; each viewer's Driga service pulls its paired
 peers. Pairing is directional: repeat in the other direction if both machines
 should see each other. Use an explicitly configured private LAN or overlay
 address (for example, a VPN interface); no particular overlay is required.
 
-On the peer, stop an existing collector before starting a foreground server:
+On the peer, stop the Driga service (`driga service stop`) before starting a foreground server:
 
 ```sh
 driga service stop                 # if installed/running
-driga collect --serve --listen <private-ip>:7411
+driga service run --serve --listen <private-ip>:7411
 ```
 
 For persistent serving, put this in the peer's configuration and restart its
-service (or run `driga collect`):
+service (or run `driga service run`):
 
 ```toml
 [fleet]
@@ -528,7 +540,7 @@ the six-digit code displayed by **both terminals**, and answer `y` on each:
 driga fleet enroll --allow-ack           # omit --allow-ack for read-only access
 # Viewer terminal:
 driga fleet peers add <private-ip>:7411 --name vm-1
-driga app                         # or driga service install / driga collect
+driga app                         # or driga service install / driga service run
 driga machines
 driga fleet peers list
 driga agents --machine vm-1
@@ -559,7 +571,7 @@ For a bastion-only host, listen on the peer's loopback and tunnel from the viewe
 
 ```sh
 # Peer, in place of the private listener:
-driga collect --serve --listen 127.0.0.1:7411
+driga service run --serve --listen 127.0.0.1:7411
 # Viewer, keep this SSH connection running (optionally add -J <bastion>):
 ssh -N -L 7411:127.0.0.1:7411 <host>
 # Pair through the tunnel while enrollment is open on the peer:
@@ -582,10 +594,10 @@ become stale after 45 seconds without contact; last-known rows remain visible.
 Epoch/retention changes trigger a new snapshot. Clock skew over 60 seconds warns
 in `driga machines`.
 
-Before enrolling a cloned VM, stop its collector and run
+Before enrolling a cloned VM, stop its Driga service and run
 `driga machines reset-id` **on the clone**, then restart and re-pair. This creates a
 new machine ID and certificate and invalidates old pairings. `driga fleet rekey`
-rotates only the certificate, also requiring a stopped collector and re-pairing.
+rotates only the certificate, also requiring a stopped Driga service and re-pairing.
 On a viewer that reports the rotated peer as untrusted, deliberately remove the
 peer, reopen enrollment on the serving peer, then add it again using its new
 device ID (or compare pairing codes). Purging is unnecessary: retained history
@@ -605,7 +617,7 @@ AF_UNIX limits. Directories must be real, owned by the current user and mode
 `0700` on Unix; Windows uses a private owner DACL. Unix sockets use mode `0600`.
 Chat is optional: failure to create its socket logs a warning and appears in
 doctor while collecting and serving continue. Fix the reported path or
-permissions and restart the collector to retry Chat.
+permissions and restart the Driga service to retry Chat.
 
 ## Cleanup
 
@@ -731,19 +743,20 @@ keep user settings, hooks, plugins and other MCP servers out. If Claude lacks
 `--permission-prompts`, Chat stays read-only and explains why once per conversation.
 
 `driga ask` stays read-only: it has no action cards. The ordinary `driga mcp`
-server for your own agents also stays read-only. Chat’s private `mcp --chat`
+server for your own agents offers read views and dashboard writes, with no actions
+on agent sessions or the machine. Chat’s private `mcp --chat`
 child supplies its action tools and permission bridge.
 
-The collector owns the broker and its local socket, using the shared directory
+The Driga service owns the broker and its local socket, using the shared directory
 rule described in Fleet setup. The app, TUI and ask connect locally; the app opens
-Chat once its collector's broker answers. Without a collector, the opening
+Chat once its service's broker answers. Without the Driga service, the opening
 client runs a private in-process broker and labels it **conversations end with it**.
-No driga conversation history survives that client. With a collector, conversation
+No driga conversation history survives that client. With the Driga service, conversation
 IDs, vendor resume IDs and capture-filtered messages persist in SQLite for 30 days;
 interrupted work is marked interrupted after restart and is never replayed to the
 agent automatically. Clients resume from a cursor over bounded ordered events;
-an expired cursor or collector restart sends a replacement snapshot. The app and
-TUI reload the local broker key after a collector restart.
+an expired cursor or service restart sends a replacement snapshot. The app and
+TUI reload the local broker key after the Driga service restart.
 
 Your explicitly submitted question is scrubbed and sent to Claude. Context and
 MCP evidence pass the capture policy before reaching the agent. Driga retains no
@@ -758,38 +771,52 @@ vendor connection.
 
 ## Desktop app
 
-Driga is an app plus a CLI. The app collects, notifies and shows the dashboard;
-the CLI (`driga`, `driga top`, scripting, MCP) comes with it.
+Driga is an app plus a CLI, both clients of the Driga service: the app shows
+dashboards and Chat, and the CLI (`driga`, `driga top`, scripting, MCP) comes
+with it.
 
 ```sh
 driga app    # open Driga, or bring the running app forward
 ```
 
 The app runs in a native window with the system webview and opens no network
-port. It updates live as its collector writes. The View menu switches between
-Flow (Cmd+1), Projects (Cmd+2), Machines (Cmd+3) and Chat (Cmd+K); Windows and
-Linux use Ctrl. Flow has Map, Timeline and Sessions views, with Needs you and
-retained Activity history. Chat opens as a contextual panel on `c`; Machines
-includes process and disk reclamation. Stop and other confirmations use native
-dialogs. Help → Keyboard Shortcuts lists the page keys.
+port. It opens on Home, a dashboard that fills the window, with Chat docked
+beside it and a row of metrics above: by default Need you, To review, Possibly
+stuck, Leftover processes and Reclaimable. Click a metric to ask Chat about it.
+Change the row by asking Chat ("add cost today to the header"), or remove a
+metric in Edit. The header holds only single numbers, eight at most.
+
+Home shows the inbox with pending permission prompts (Allow or Deny), leftover
+process trees, sessions that look stuck, every session, and memory. Panels take
+the rows their content needs and stretch to leave no empty space; long lists
+scroll inside their panel. Chat opens with suggested questions. Ask it for a
+view and it answers with live panels: add them to the open dashboard, or save
+them as a new one. Chat can also create, edit or delete dashboards for you;
+open one from the picker in the header. In Edit, drag and resize panels, remove
+them, or delete the dashboard; resetting Home brings back the default. Every
+save is a version Chat can restore.
+
+Panel rows act as the TUI does: open or stop a local session, kill a verified
+idle process tree, remove a ready cleanup candidate, summarize a project. Stop
+and other changes ask a native dialog first.
 
 The menu bar item (the notification area on Windows, the tray on Linux) is an
 icon only: it gains a dot while anything needs you, and its tooltip and menu
-say how many. The menu lists the first five, says who is collecting and quits
-Driga. On macOS the Dock icon shows the count as a badge, and appears only
+say how many. The menu lists the first five, says whether the Driga service
+runs and quits the app; the service keeps running. On macOS the Dock icon shows the count as a badge, and appears only
 while a window is open. Settings (Cmd+,) sets the theme (`ui.theme`), the tray icon
 (`app.tray`) and launch at login (`app.launch_at_login`). A second launch,
 `driga app` included, brings the running window forward.
 
 When an upgrade such as `brew upgrade` replaces Driga's executable, the
-running app stops its collector and relaunches on the new version. On Linux the
+running app relaunches on the new version and restarts the Driga service on it. On Linux the
 app needs GTK 3, WebKitGTK and, for the tray, an AppIndicator library and a
 desktop with a StatusNotifierItem host; Linux desktop support is best effort.
 
 ## MCP registration
 
-`driga mcp` exposes read-only tools over stdio with the same schema-2 view
-envelopes as `--json`. Reading never acknowledges inbox items. Run a collector for
+`driga mcp` exposes read tools and dashboard writes over stdio. Read tools use the same schema-2 view
+envelopes as `--json`. Reading never acknowledges inbox items. Run the Driga service for
 history and merged fleet data; without one, tools use labelled snapshot mode.
 Keep the installed `driga` binary on the MCP client's PATH.
 
@@ -812,8 +839,8 @@ Select local data with `machine: "local"` in each tool request. MCP startup acce
 
 ## Optional OTLP intake
 
-Enable the collector's loopback receiver in Driga configuration, then restart the
-collector:
+Enable the Driga service's loopback receiver in Driga configuration, then run
+`driga service restart`:
 
 ```toml
 [intake]
@@ -851,7 +878,7 @@ Use `driga doctor` for received, accepted/matched, rejected/unmatched and unused
 metric data point counts, alongside HTTP request failures and content drops.
 
 To undo, preview then remove Driga's intact exporter settings, disable
-`intake.otlp`, and restart the collector:
+`intake.otlp`, and restart the Driga service:
 
 ```sh
 driga hooks uninstall --otlp claude --dry-run
@@ -911,26 +938,26 @@ contrast on the background; fills and bars keep the official colours.
 
 ### Answer Claude permission prompts
 
-With the collector running, `driga hooks install claude` offers a settings diff
+With the Driga service running, `driga hooks install claude` offers a settings diff
 that includes `PermissionRequest` with a 660-second timeout. Repair updates it;
 uninstall removes it. Restart existing Claude sessions after changing hooks.
 
 Pending local Claude prompts appear above the inbox waits with the session,
 tool, and exact input. In the TUI select a prompt and press `y` to allow or `n`
-to deny (`a` remains attach); Enter opens the full input. In the app's inbox use
+to deny (`a` remains attach); Enter opens the full input. In the app's Chat brief use
 Allow or Deny.
 
 Action-enabled Chat's `list_prompts` shows inputs only with `capture_text = "snippets"`;
 other capture policies show tool metadata. `answer_prompt(id, allow)` uses the
 same action gate as other Chat actions: Confirm and Auto require a card;
-Full auto runs it immediately. The standalone `driga mcp` stays read-only.
+Full auto runs it immediately. The standalone `driga mcp` can edit Driga dashboards; machine and agent actions remain exclusive to Chat.
 
 Prompts live in memory only, never in the database, logs or fleet. Claude
 permission notifications retain only the tool and needs-you metadata, even with
 snippets capture. First answer
 wins. A matching transcript tool result retires a terminal-answered prompt within
 about a second; session end, hook exit and ten minutes also retire it. Any error,
-timeout or absent collector exits the hook successfully without output, leaving
+timeout or absent Driga service exits the hook successfully without output, leaving
 the terminal to decide. Denials say “Denied from driga”. Driga never creates
 “always allow” rules or emits `updatedPermissions`. Codex, Copilot, Gemini and
 paired-machine prompts are outside this feature.
@@ -969,14 +996,14 @@ contains related sessions; selecting a session never selects the whole family.
 | `top` | Interactive terminal dashboard; `--tab=flow\|projects\|machines`, `--theme=system\|light\|dark`, `--machine`, `--project`, `--since`, `--snapshot`, `--no-color`. |
 | `app` | Open the Driga desktop app, or bring the running one forward. |
 | `ask <question>...` | One-shot Chat question; `--machine`, `--project`, `--json`. |
-| `mcp` | Serve read-only MCP tools over stdio; `--snapshot` forces one-shot collection for read tools without history. |
+| `mcp` | Serve collected views and editable dashboards over MCP stdio; `--snapshot` forces one-shot collection for read tools without history. |
 | `doctor` | Setup/collection diagnostics; `--json`. |
 | `init` | Optional setup, previewing changes; `--yes/-y` accepts each prompt. |
 | `config path` / `config show` / `config edit` | Configuration path, values, or editor; only `path` supports `--json`. |
-| `collect` | Collector; `--once`, `--serve`, `--listen`, `--cpu-profile`, `--profile-for`. Explicit `--serve=false` overrides configuration. `--once` cannot serve; `--listen` requires serving. |
-| `service install` / `start` / `stop` / `restart` / `status` | Manage the collector service on a headless machine. |
+| `service run` | Run the Driga service in the foreground, as `drigad` does; `--once`, `--serve`, `--listen`, `--cpu-profile`, `--profile-for`. Explicit `--serve=false` overrides configuration. `--once` cannot serve; `--listen` requires serving. |
+| `service install` / `start` / `stop` / `restart` / `status` | Install and manage the Driga service; the app installs it on first launch. |
 | `service logs [-f]` | Show logs; `--follow/-f` is scoped to this command. |
-| `service uninstall` | Remove the collector service. |
+| `service uninstall` | Remove the Driga service. |
 | `hooks install [<adapter>]` / `hooks uninstall [<adapter>]` | Adapter defaults to `all`; positional `claude\|codex\|copilot\|all`. `--dry-run`, `--yes/-y`, `--otlp`, `--traces` (requires OTLP). |
 | `hooks status [<adapter>]` | Adapter defaults to `all`; `--otlp` selects telemetry status. |
 | `fleet peers list` | Trusted data-source machines; `--json`. |
@@ -986,7 +1013,7 @@ contains related sessions; selecting a session never selects the whole family.
 | `fleet viewers revoke <viewer>` | Confirm viewer revocation; `--yes/-y`. |
 | `fleet enroll` | Open pairing window; `--allow-viewer`, `--allow-ack`, `--window`. Headless enrollment requires the viewer device ID; `--yes/-y` also requires that ID. |
 | `fleet rekey` | Confirm identity regeneration, invalidating all pairings; `--yes/-y`. |
-| `fleet id` / `fleet status` | Device ID or collector serving state; `--json`. |
+| `fleet id` / `fleet status` | Device ID or the Driga service's serving state; `--json`. |
 | `version` / `--version` | Build metadata or version discovery; `version` supports `--json`. |
 
 Read-view options are `--machine`, `--project`, `--since`, `--snapshot`,
@@ -1006,7 +1033,7 @@ Exit codes: **0** success; **1** failure, refusal, or partial completion;
 returns 1 if any item fails, with completed/skipped/failed counts in text or JSON.
 
 Hidden integration interfaces are unchanged: `hook <adapter> <event>`, `feed`,
-`dev`, `mcp --chat`, and the collector's scheduled-service flags. MCP tool names
+`dev`, `mcp --chat`, and the Driga service's scheduled-service flags. MCP tool names
 and fields, configuration keys (including `inbox`), `DRIGA_*` environment names,
 JSON field names, Chat action tool names/records and `[[session:N]]`
 citations retain their contracts. MCP `get_agent` maps to `agents show`,
@@ -1047,6 +1074,6 @@ There are no aliases, deprecation shims, or legacy command spellings.
 | `version` only | `version` and `--version` |
 
 Machine reset, fleet rekey, peer removal and viewer revocation now require
-confirmation or `--yes/-y`. Restart collectors after upgrading. Previously
+confirmation or `--yes/-y`. Restart the Driga service after upgrading. Previously
 issued desktop notifications still contain the removed `jump` spelling; dismiss
 those notifications. Newly issued notifications use `driga inbox jump`.

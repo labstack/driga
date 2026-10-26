@@ -58,15 +58,15 @@ func TestAlertFleetAndLocalCapturePolicies(t *testing.T) {
 				if local == "snippets" && share == feed.Snippets {
 					want += " · private command"
 				}
-				if len(n.notes) != 1 || n.notes[0].Body != want || n.notes[0].ItemID != "" {
-					t.Fatalf("notes=%+v; want %q without local click", n.notes, want)
+				if len(n.notes) != 1 || n.notes[0].Body != want || n.notes[0].ItemID != "wait" {
+					t.Fatalf("notes=%+v; want %q with scoped app click", n.notes, want)
 				}
 			})
 		}
 	}
 }
 
-func TestAlertRemoteIDCollisionHasNoLocalClick(t *testing.T) {
+func TestAlertRemoteIDCollisionPreservesMachineTarget(t *testing.T) {
 	d, st, _, _ := setup(t)
 	n := &fakeNotifier{}
 	d.Notifier = n
@@ -85,7 +85,7 @@ func TestAlertRemoteIDCollisionHasNoLocalClick(t *testing.T) {
 	if err := alertInbox(context.Background(), d, st); err != nil {
 		t.Fatal(err)
 	}
-	if len(n.notes) != 1 || n.notes[0].ItemID != "" {
+	if len(n.notes) != 1 || n.notes[0].ItemID != "same" || n.notes[0].MachineID != "peer" {
 		t.Fatal(n.notes)
 	}
 }

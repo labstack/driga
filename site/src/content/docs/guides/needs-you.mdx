@@ -28,7 +28,7 @@ stay in the inbox and pending waits close.
 
 <Steps>
 
-1. Run the collector: open the Driga app, or `driga service install` on a
+1. Run the Driga service: open the Driga app, or `driga service install` on a
    headless machine.
 2. Install the Claude hooks, which include `PermissionRequest` with a
    660-second timeout:
@@ -50,7 +50,7 @@ tool and exact input.
 
 The first answer wins, whether it comes from Driga or the terminal. A prompt
 answered in the terminal retires from Driga within about a second; session end,
-hook exit and ten minutes also retire it. If the collector is absent, times out
+hook exit and ten minutes also retire it. If the Driga service is absent, times out
 or errors, the hook exits successfully with no output and the terminal decides
 as usual.
 

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"reflect"
 	"slices"
 	"testing"
 )
@@ -43,5 +44,14 @@ func TestAppHandOffCommand(t *testing.T) {
 	cmd := handOffCommand("/Users/someone/Applications/Driga.app", []string{"PATH=/bin", "DRIGA_DATA_DIR=/data dir", "DRIGA_APP=1", "DRIGA_CONFIG="})
 	if want := []string{"open", "--env", "DRIGA_DATA_DIR=/data dir", "--env", "DRIGA_CONFIG=", "-a", "/Users/someone/Applications/Driga.app"}; !slices.Equal(cmd.Args, want) {
 		t.Fatalf("hand-off runs %q, want %q", cmd.Args, want)
+	}
+}
+
+func TestNotificationHandOffKeepsTarget(t *testing.T) {
+	target := `{"item_id":"w","machine_id":"peer"}`
+	cmd := handOffCommand("/Applications/Driga.app", nil, "app", "--notification", target)
+	want := []string{"open", "-a", "/Applications/Driga.app", "-n", "--args", "app", "--notification", target}
+	if !reflect.DeepEqual(cmd.Args, want) {
+		t.Fatal(cmd.Args)
 	}
 }

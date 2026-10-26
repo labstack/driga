@@ -351,6 +351,11 @@ func visibleSessions(ss []model.Session, all bool, now time.Time) []model.Sessio
 	return result
 }
 
+// liveSessionWait is the shared inbox and board rule for a wait needing the user.
+func liveSessionWait(item model.InboxItem, s model.Session, known bool, now time.Time) bool {
+	return attention.Active(item) && known && s.EndedAt == nil && s.Label == "waiting" && len(visibleSessions([]model.Session{s}, false, now)) > 0
+}
+
 // Inbox reads events; no acknowledgment or spool mutation occurs here.
 func inboxLocal(r Reader, f Filter, now time.Time) (InboxView, error) {
 	v := InboxView{Rows: []InboxRow{}}
@@ -373,6 +378,34 @@ func inboxLocal(r Reader, f Filter, now time.Time) (InboxView, error) {
 	for _, s := range ss {
 		byID[s.ID] = s
 	}
+	var checkouts map[int64]model.Worktree
+	var edited map[int64][]model.FileTouch
+	review := func(s model.Session) (*model.Worktree, []string, error) {
+		if checkouts == nil {
+			wts, err := r.Worktrees(0)
+			if err != nil {
+				return nil, nil, err
+			}
+			checkouts = make(map[int64]model.Worktree, len(wts))
+			for _, w := range wts {
+				checkouts[w.ID] = w
+			}
+			if edited, err = r.SessionFiles(now.Add(-7 * 24 * time.Hour)); err != nil {
+				return nil, nil, err
+			}
+		}
+		var checkout *model.Worktree
+		if s.WorktreeID != nil {
+			if w, ok := checkouts[*s.WorktreeID]; ok {
+				checkout = &w
+			}
+		}
+		var files []string
+		for _, f := range edited[s.ID] {
+			files = append(files, f.Path)
+		}
+		return checkout, files, nil
+	}
 	for _, item := range items {
 		if item.Kind == "worker_finished" {
 			continue
@@ -381,7 +414,7 @@ func inboxLocal(r Reader, f Filter, now time.Time) (InboxView, error) {
 			item = attention.Policy(item, f.CaptureText)
 		}
 		s, known := byID[item.SessionID]
-		historical := item.Kind == "waiting" && (item.EndedAt != nil || item.AckedAt != nil || !known || (s.EndedAt != nil || s.Label != "waiting" || len(visibleSessions([]model.Session{s}, false, now)) == 0))
+		historical := item.Kind == "waiting" && !liveSessionWait(item, s, known, now)
 		if !f.All {
 			if historical {
 				continue
@@ -397,7 +430,13 @@ func inboxLocal(r Reader, f Filter, now time.Time) (InboxView, error) {
 		if f.Project != "" && !sessionProject(s, repos, f.Project) {
 			continue
 		}
-		v.Rows = append(v.Rows, InboxRow{Historical: historical, MachineID: r.MachineID(), InboxItem: item, Age: max(0, now.Sub(item.TS)), Waited: attention.Waited(item, now), Project: projectName(s, repos), Adapter: s.Adapter, Title: s.Title, Branch: s.Branch})
+		row := InboxRow{Historical: historical, MachineID: r.MachineID(), InboxItem: item, Age: max(0, now.Sub(item.TS)), Waited: attention.Waited(item, now), Project: projectName(s, repos), Adapter: s.Adapter, Title: s.Title, Branch: s.Branch}
+		if item.Kind == "finished" && known && !historical {
+			if row.Checkout, row.Files, err = review(s); err != nil {
+				return v, err
+			}
+		}
+		v.Rows = append(v.Rows, row)
 	}
 	return v, nil
 }
@@ -610,8 +649,8 @@ func summaryLocal(r Reader, f Filter, now time.Time) (SummaryView, error) {
 				v.Working++
 			case "waiting":
 				v.Waiting++
-			case "stalled":
-				v.Stalled++
+			case "stuck":
+				v.Stuck++
 			}
 			count(row.Children)
 		}

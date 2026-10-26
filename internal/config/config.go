@@ -19,7 +19,7 @@ type Config struct {
 	Roots           []string
 	RootDepth       int
 	Exclude         []string
-	StalledAfter    time.Duration
+	StuckAfter      time.Duration
 	OrphanMinAge    time.Duration
 	CaptureText     string
 	OpenCmd         string

@@ -4,20 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"html"
-	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/labstack/driga/internal/cleanup"
 	"github.com/labstack/driga/internal/flowtest"
 	"github.com/labstack/driga/internal/store"
 	"github.com/labstack/driga/internal/tui"
 	"github.com/labstack/driga/internal/view"
 	"github.com/labstack/driga/internal/viewer"
-	"github.com/labstack/driga/internal/web"
 )
 
 type selectedFlowSource struct {
@@ -62,26 +58,6 @@ func TestFlowSnapshotMatchesAllSurfaces(t *testing.T) {
 
 	source := viewer.NewStoreSource(st, t.TempDir(), view.Filter{All: true})
 	source.Now = func() time.Time { return flowtest.Now.Add(5 * time.Second) }
-	server, err := web.New(source, web.Options{CleanupList: func(context.Context) ([]cleanup.Candidate, error) { return nil, nil }})
-	if err != nil {
-		t.Fatal(err)
-	}
-	r := httptest.NewRequest("GET", fmt.Sprintf("/flow/%d", id), nil)
-	response := httptest.NewRecorder()
-	server.ServeHTTP(response, r)
-	if response.Code != 200 {
-		t.Fatalf("web: %d %s", response.Code, response.Body)
-	}
-	page := response.Body.String()
-	if !strings.Contains(page, expected.Evidence) {
-		t.Error("web agreement/hidden count differs from fixture")
-	}
-	for _, row := range expected.Rows {
-		if !strings.Contains(page, `title="`+html.EscapeString(row.Reading)+`"`) {
-			t.Errorf("web missing signal %s = %q", row.Name, row.Reading)
-		}
-	}
-
 	m := tui.New(selectedFlowSource{source, id}, tui.Options{NoColor: true, DataDir: t.TempDir(), Now: source.Now})
 	initMsg := m.Init()()
 	if batch, ok := initMsg.(tea.BatchMsg); ok {

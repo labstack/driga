@@ -1,0 +1,36 @@
+/* Host-only styles Mantine's theme does not cover: the self-hosted fonts and
+   the wordmark mask. Colors are theme variables only. */
+@font-face { font-family: "IBM Plex Sans"; src: url("/static/fonts/ibm-plex-sans-latin-400-normal.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+@font-face { font-family: "IBM Plex Sans"; src: url("/static/fonts/ibm-plex-sans-latin-600-normal.woff2") format("woff2"); font-weight: 500 700; font-display: swap; }
+@font-face { font-family: "IBM Plex Mono"; src: url("/static/fonts/ibm-plex-mono-latin-400-normal.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+@font-face { font-family: "IBM Plex Mono"; src: url("/static/fonts/ibm-plex-mono-latin-600-normal.woff2") format("woff2"); font-weight: 500 700; font-display: swap; }
+
+body { font-variant-numeric: tabular-nums; }
+
+.wordmark { display: block; width: 44px; height: 18px; background: var(--driga-text); mask: url("/static/brand/wordmark.svg") left center / contain no-repeat; }
+
+.react-grid-item.react-grid-placeholder { background: var(--mantine-color-brand-filled); opacity: 0.15; border-radius: var(--mantine-radius-md); }
+
+.editing .panel-handle { cursor: grab; }
+.editing .mantine-Card-root { border-style: dashed; }
+
+/* Row actions: the row runs its primary action; its ⋯ menu shows on hover,
+   keyboard focus or an open menu, and always on touch screens. */
+.row-act { cursor: pointer; }
+.row-act:focus-visible { outline: 2px solid var(--mantine-color-brand-filled); outline-offset: -2px; }
+.row-hover { transition: background-color 120ms ease-out; }
+.row-hover:hover { background: var(--driga-hover); }
+.row-menu { opacity: 0; transition: opacity 120ms ease-out; }
+tr:hover .row-menu, tr:focus-within .row-menu, .row-hover:hover .row-menu, .row-hover:focus-within .row-menu, .row-menu[aria-expanded="true"], .row-menu:focus-visible { opacity: 1; }
+@media (pointer: coarse) { .row-menu { opacity: 1; } }
+
+/* A panel the header just pointed at. */
+.panel-shown { box-shadow: 0 0 0 2px var(--mantine-color-brand-filled); transition: box-shadow 150ms ease-out; }
+
+.search-button { padding: 6px 10px; border: 1px solid var(--driga-border); border-radius: var(--mantine-radius-md); color: var(--driga-muted); transition: background-color 120ms ease-out; }
+.search-button:hover { background: var(--driga-hover); }
+.mantine-Spotlight-action[data-selected] { background: var(--driga-hover); color: var(--driga-text); }
+.mantine-Spotlight-action:not([data-selected]):not(:hover) .search-hint { visibility: hidden; }
+
+.split-handle { width: 6px; margin: 0 -3px; position: relative; z-index: 2; cursor: col-resize; background: transparent; transition: background-color 120ms ease-out; outline: none; }
+.split-handle:hover, .split-handle[data-separator="active"], .split-handle:focus-visible { background: var(--mantine-color-brand-filled); }

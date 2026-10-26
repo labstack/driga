@@ -8,9 +8,10 @@
 **See what your coding agents are doing, and what needs you.**
 
 Driga is a desktop app and a CLI for AI coding agent sessions, like Docker
-Desktop with `docker`. The app collects in the background, notifies you when an
-agent waits, and shows the dashboard; the `driga` CLI comes with it and opens
-the terminal UI. It runs on macOS and Linux. Windows: experimental, including
+Desktop with `docker`. The Driga service, `drigad`, runs in the background from
+login: it collects, notifies you when an agent waits, hosts Chat and runs
+actions, whether or not a window is open. The app and the `driga` terminal UI
+are its views; the app installs the service on first launch. It runs on macOS and Linux. Windows: experimental, including
 orphan kill and worktree cleanup.
 It brings agent activity, project status, an attention inbox, orphaned helpers, and machine health into one place.
 
@@ -47,8 +48,8 @@ sends notifications under its own name. Hooks keep using the stable Homebrew
 `driga` link. After `brew upgrade`, a running app restarts itself on
 the new version.
 
-If you installed the collector service with an earlier release, the app
-removes it on its first launch, says so once, and runs the collector itself.
+If you installed the Driga service with an earlier release, the app
+removes it on its first launch, says so once, and runs the Driga service itself.
 
 On Windows (experimental), use Scoop:
 
@@ -76,7 +77,7 @@ CGO_ENABLED=0 go build ./cmd/driga
 
 Keep Git on PATH and the installed binary at a stable absolute path before
 setting up hooks or a service. On a machine without a desktop, install the CLI
-alone and run the collector as a service with `driga service install`. CalVer
+alone and run the Driga service as a service with `driga service install`. CalVer
 tags use the year as their major number; Go module major-version rules prevent
 `go install ...@<tag>` with this module path. Use a package, archive, or source checkout.
 
@@ -85,12 +86,12 @@ tags use the year as their major number; Go module major-version rules prevent
 Windows 10 1809+ and Windows 11 have native snapshots, foreground collection,
 read commands, the TUI, MCP, OTLP intake and fleet interfaces, plus:
 
-- The `Driga.exe` app, which runs the collector, sits in the notification
+- The `Driga.exe` app, which installs the Driga service, sits in the notification
   area and starts at logon; Scoop adds a Start menu shortcut and puts the CLI,
   `bin\driga.exe`, on PATH.
-- For a machine without the app, a per-user Task Scheduler collector at logon:
-  `driga service install`, `uninstall`, `start`, `stop`, `status`, `restart`,
-  and `logs [-f]`; no elevation.
+- The Driga service, `bin\drigad.exe`, as a per-user Task Scheduler task at
+  logon: `driga service install`, `uninstall`, `start`, `stop`, `status`,
+  `restart`, and `logs [-f]`; no elevation.
 - Previewed Claude, Codex and Copilot hook installation with absolute executable paths.
 - Native plain toast alerts (no PowerShell); doctor reports availability.
 - Terminal jumps/open in Windows Terminal, falling back to a new Command Prompt.
@@ -99,7 +100,7 @@ read commands, the TUI, MCP, OTLP intake and fleet interfaces, plus:
 - Confirmed cleanup of verified linked worktrees into the Recycle Bin, with
   the same revalidation and audit logging as Unix cleanup.
 
-Logs live at `%LOCALAPPDATA%\driga\logs\collector.log`. Keep `driga.exe` at a
+Logs live at `%LOCALAPPDATA%\driga\logs\service.log`. Keep `driga.exe` at a
 stable path before installing. Phase 3 is feature-complete pending real-hardware
 verification; Windows remains **experimental**. TCP/UDP probes cover IPv4 and IPv6;
 open-file evidence uses bounded Restart Manager queries. Claude scratch cleanup
@@ -114,15 +115,15 @@ See [Windows setup details](docs/usage.md#windows-experimental).
 ## Quick start
 
 ```sh
-driga app       # open the desktop app: collector, notifications, dashboard
+driga app       # open the desktop app; its first launch installs the Driga service
 driga           # opens the terminal viewer (driga top)
 driga doctor    # check setup
 ```
 
-On a headless machine, `driga service install` runs the same collector as a
-per-user service instead of the app.
+On a headless machine, `driga service install` installs the Driga service
+without the app.
 
-Without a collector, Driga takes a disposable snapshot and shows
+Without the Driga service, Driga takes a disposable snapshot and shows
 `snapshot · no history`. That collection writes no persistent database. One
 agent in one repository works without configuring roots or a service.
 
@@ -131,7 +132,7 @@ are optional steps. On macOS and Windows it points to the app for collection;
 on Linux it offers to install the service. Session working directories also
 contribute to repository discovery; there are no default scanning roots.
 
-The collector's first import marks older events as already seen. Reading an
+The Driga service's first import marks older events as already seen. Reading an
 inbox item never acknowledges it; use the Flow Activity controls in the TUI or `driga inbox ack <item-id>`.
 
 ### Scripting and agents

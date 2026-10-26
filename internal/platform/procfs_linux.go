@@ -54,5 +54,8 @@ func (p procFS) Machine(ctx context.Context) (model.MachineSample, error) {
 	}
 	s.DiskFree = usage.Free
 	s.DiskTotal = usage.Total
+	if err := machineCPU(ctx, &s); err != nil {
+		return s, err
+	}
 	return s, ctx.Err()
 }

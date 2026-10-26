@@ -54,14 +54,14 @@ func TestAgentsSplitThresholdAndCursor(t *testing.T) {
 func TestAgentDetailUsesStateColors(t *testing.T) {
 	s := fixture()
 	d := s.snap.AgentDetails[1]
-	d.Label = "stalled"
+	d.Label = "stuck"
 	s.snap.AgentDetails[1] = d
 	m := setup(t, s, Options{}).(*app)
 	m.tab = 0
 	m.rebuild()
 	m.opts.NoColor = false
 	key(m, tea.KeyEnter)
-	if !strings.Contains(m.View().Content, view.StateStyle("stalled", false).Render("stalled")) {
+	if !strings.Contains(m.View().Content, view.StateStyle("stuck", false).Render("stuck")) {
 		t.Fatalf("detail state lacks red: %q", m.View().Content)
 	}
 }

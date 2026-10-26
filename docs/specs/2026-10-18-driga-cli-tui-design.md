@@ -124,8 +124,8 @@ already-known ahead/behind state. Bound root traversal and avoid fetching.
 ### 7.1 Agent states
 
 Keep liveness, activity, completion events, and attention requests as separate
-facts. Display `working`, `waiting`, `idle`, `stalled?`, `finished`, `ended`, `dead`, or
-`unknown` with evidence and observation time. `stalled?` expresses suspected
+facts. Display `working`, `waiting`, `idle`, `stuck`, `finished`, `ended`, `dead`, or
+`unknown` with evidence and observation time. `stuck` expresses suspected
 inactivity, not proof of failure. `ended` identifies normal session termination
 or conversation replacement; `dead` requires an open turn at process loss or
 crash evidence. `finished` describes unread turn completion, whose inbox event

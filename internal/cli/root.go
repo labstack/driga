@@ -56,12 +56,11 @@ type Root struct {
 	Top        TopCmd      `cmd:"" help:"Open the interactive session viewer."`
 	App        AppCmd      `cmd:"" help:"Open the Driga desktop app, or focus it."`
 	Ask        AskCmd      `cmd:"" help:"Ask a one-shot Chat question through Claude and driga's read-only tools."`
-	MCP        MCPCmd      `cmd:"" name:"mcp" help:"Serve read-only MCP tools over stdio."`
+	MCP        MCPCmd      `cmd:"" name:"mcp" help:"Serve collected views and editable dashboards over MCP stdio."`
 	Doctor     DoctorCmd   `cmd:"" help:"Check setup and collection health."`
 	Init       InitCmd     `cmd:"" help:"Guide optional setup."`
 	Config     ConfigCmd   `cmd:"" help:"Inspect or edit configuration."`
-	Collect    CollectCmd  `cmd:"" help:"Run the collector (what launchd runs)."`
-	Service    ServiceCmd  `cmd:"" help:"Manage the collector service."`
+	Service    ServiceCmd  `cmd:"" help:"Run or manage the Driga service (drigad)."`
 	Hooks      HooksCmd    `cmd:"" help:"Manage agent hooks."`
 	Fleet      FleetCmd    `cmd:"" help:"Inspect fleet identity, serving status and viewers."`
 	Hook       HookCmd     `cmd:"" hidden:"" help:"Record an agent hook."`

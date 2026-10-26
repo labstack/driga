@@ -32,9 +32,9 @@ func TestLaunchdPlistBundleAndDevelopment(t *testing.T) {
 		name, path, executable string
 		bundle                 bool
 	}{
-		{"development", "/opt/dev & tools/driga", "/opt/dev & tools/driga", false},
-		{"bundle", bundled, bundled, true},
-		{"Homebrew symlink", link, bundled, true},
+		{"development", "/opt/dev & tools/driga", "/opt/dev & tools/drigad", false},
+		{"bundle", bundled, DaemonPath(bundled), true},
+		{"Homebrew symlink", link, DaemonPath(bundled), true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			c := configForOS(tc.path, "darwin")
@@ -58,7 +58,7 @@ func TestLaunchdPlistBundleAndDevelopment(t *testing.T) {
 			}
 			arrays := plist.Dict.Arrays
 			args := arrays[len(arrays)-1].Strings
-			if len(args) != 3 || args[0] != tc.executable || args[1] != "collect" || args[2] != "--owner=service" {
+			if len(args) != 2 || args[0] != tc.executable || args[1] != "--owner=service" {
 				t.Fatalf("ProgramArguments: %v", args)
 			}
 			associated := strings.Contains(string(body), "AssociatedBundleIdentifiers")

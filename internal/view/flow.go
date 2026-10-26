@@ -227,7 +227,7 @@ func defaultFlowLead(sessions []model.Session, since time.Time) *model.Session {
 		switch s.Label {
 		case "waiting":
 			return 3
-		case "stalled":
+		case "stuck":
 			return 2
 		case "working":
 			return 1

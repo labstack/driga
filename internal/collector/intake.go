@@ -154,7 +154,7 @@ func labelSession(tx *store.Tx, d Deps, s *model.Session, idx derive.ProcIndex, 
 	if err := intakeInput(tx, *s, events, &in, now); err != nil {
 		return err
 	}
-	mixSession(s, in, d.Cfg.StalledAfter, now)
+	mixSession(s, in, d.Cfg.StuckAfter, now)
 	if s.Label == "ended" {
 		return tx.CloseAttentionBefore(s.ID, *s.EndedAt)
 	}
@@ -163,8 +163,8 @@ func labelSession(tx *store.Tx, d Deps, s *model.Session, idx derive.ProcIndex, 
 
 // mixSession folds lifecycle evidence independently of persistence. Unseen
 // completion display does not change whether a session is live for orphans.
-func mixSession(s *model.Session, in derive.StateInput, stalledAfter time.Duration, now time.Time) {
-	mixed := derive.LabelWithEvidence(in, now, derive.Thresholds{StalledAfter: stalledAfter})
+func mixSession(s *model.Session, in derive.StateInput, stuckAfter time.Duration, now time.Time) {
+	mixed := derive.LabelWithEvidence(in, now, derive.Thresholds{StuckAfter: stuckAfter})
 	s.Mixer = &mixed
 	s.Label, s.Heuristic, s.Evidence = mixed.Verdict, mixed.Heuristic, mixed.Evidence
 	s.LastPromptAt = in.LastUserPrompt

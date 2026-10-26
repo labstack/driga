@@ -58,8 +58,8 @@ func FlowStateName(label string) string {
 	switch label {
 	case "waiting":
 		return "needs you"
-	case "stalled":
-		return "stalled?"
+	case "stuck":
+		return "stuck"
 	case "":
 		return "unknown"
 	}
@@ -72,7 +72,7 @@ func FlowGlyph(label string) string {
 		return "▶"
 	case "waiting":
 		return "◆"
-	case "stalled":
+	case "stuck":
 		return "‖"
 	case "idle":
 		return "○"
@@ -89,7 +89,7 @@ func FlowHeadPattern(label string) rune {
 		return '╼'
 	case "waiting":
 		return '▒'
-	case "stalled":
+	case "stuck":
 		return '┄'
 	case "idle":
 		return '·'

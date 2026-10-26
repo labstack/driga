@@ -1,7 +1,7 @@
 ---
 title: First run
 description: Run Driga without setup, then open the app (or install the service on a headless machine) and add agent hooks for history, alerts and prompt answering.
-summary: Snapshot mode with no setup, guided setup with driga init, the desktop app or the collector service, and installing agent hooks.
+summary: Snapshot mode with no setup, guided setup with driga init, the desktop app or the Driga service, and installing agent hooks.
 read_when:
   - You just installed Driga and want to see your sessions.
   - You want history, desktop alerts or permission prompt answering.
@@ -16,7 +16,7 @@ driga            # the terminal UI: Flow, Projects and Machines
 driga summary    # one-screen text summary
 ```
 
-Without a collector, Driga takes a disposable snapshot and says
+Without the Driga service, Driga takes a disposable snapshot and says
 `snapshot · no history`. Nothing is written to a database. One agent in one
 repository works without configuring roots or a service: session working
 directories are enough to discover repositories.
@@ -43,12 +43,12 @@ directories are enough to discover repositories.
    driga doctor
    ```
 
-   The app runs the collector as its own child process, sends notifications
-   and starts at login. Closing its window keeps it collecting in the menu bar
-   or tray; Quit stops the collector. On macOS and Windows its first launch
-   removes a collector service installed earlier and says so once.
+   The app installs the per-user Driga service and makes sure it is running.
+   The service collects and posts alerts independently of the app. Closing the
+   window or choosing Quit leaves the service running. Installation removes
+   only legacy collector jobs from earlier releases.
 
-   On a headless machine, install the collector service instead:
+   On a headless machine, install the same service from the CLI:
 
    ```sh
    driga service install
@@ -56,8 +56,8 @@ directories are enough to discover repositories.
    ```
 
    The service is a per-user LaunchAgent on macOS, a systemd user service on
-   Linux and a Task Scheduler task on Windows. Do not install it where the app
-   runs. Either way, the first import marks older events as already seen.
+   Linux and a Task Scheduler task on Windows. The first import marks older
+   events as already seen.
 
 3. **Install agent hooks** for attention events, Claude permission prompts and
    Copilot sessions. Preview the diff first:
@@ -87,7 +87,7 @@ Reading an inbox item never acknowledges it. Acknowledge with
 
 ## Service commands
 
-On a headless machine, manage the collector service with:
+On a headless machine, manage the Driga service with:
 
 ```sh
 driga service status
@@ -98,9 +98,9 @@ driga service restart
 driga service uninstall
 ```
 
-On macOS the label is `run.driga.collector` and logs are at
-`~/Library/Logs/driga/collector.log`. On Linux, `driga service logs -f` wraps
-`journalctl --user -u run.driga.collector`.
+On macOS the label is `run.driga.service` and logs are at
+`~/Library/Logs/driga/service.log`. On Linux, `driga service logs -f` wraps
+`journalctl --user -u driga`.
 
 ## Undo
 

@@ -10,8 +10,10 @@ func TestStaticErrorsKeepHeaders(t *testing.T) {
 	for _, tc := range []struct {
 		path, rangeHeader string
 		code              int
-	}{{"/static/missing", "", 404}, {"/static/app.js", "bytes=999999999-", 416}} {
+	}{{"/static/missing", "", 404}, {"/static/brand/favicon.svg", "bytes=999999999-", 416}} {
 		r := httptest.NewRequest("GET", tc.path, nil)
+		r.Host = "127.0.0.1:47801"
+		r.Header.Set("Origin", "http://127.0.0.1:47801")
 		r.Header.Set("Range", tc.rangeHeader)
 		w := httptest.NewRecorder()
 		s.ServeHTTP(w, r)

@@ -91,7 +91,7 @@ func snapshotRows[T any](ctx context.Context, tx *sql.Tx, table, machine, suffix
 				continue
 			}
 			// Wire names and historical SQL columns are separate contracts.
-			columns := map[string]string{"commit_used_bytes": "commit_used", "commit_limit_bytes": "commit_limit", "mem_total_bytes": "mem_total", "mem_used_bytes": "mem_used", "mem_compressed_bytes": "mem_compressed", "swap_used_bytes": "swap_used", "swap_total_bytes": "swap_total", "disk_free_bytes": "disk_free", "cpu_ms": "cpu_seconds", "rss_bytes": "rss", "footprint_bytes": "footprint", "swap_bytes": "swap", "rss_total_bytes": "rss_total", "first_seen_at": "first_seen", "last_seen_at": "last_seen", "proc_started_at": "proc_start", "oldest_dirty_modified_at": "oldest_dirty_mtime", "occurred_at": "ts", "sampled_at": "ts"}
+			columns := map[string]string{"commit_used_bytes": "commit_used", "commit_limit_bytes": "commit_limit", "mem_total_bytes": "mem_total", "mem_used_bytes": "mem_used", "mem_compressed_bytes": "mem_compressed", "swap_used_bytes": "swap_used", "swap_total_bytes": "swap_total", "disk_free_bytes": "disk_free", "disk_total_bytes": "disk_total", "cpu_ms": "cpu_seconds", "rss_bytes": "rss", "footprint_bytes": "footprint", "swap_bytes": "swap", "rss_total_bytes": "rss_total", "first_seen_at": "first_seen", "last_seen_at": "last_seen", "proc_started_at": "proc_start", "oldest_dirty_modified_at": "oldest_dirty_mtime", "occurred_at": "ts", "sampled_at": "ts"}
 			if column, ok := columns[name]; ok {
 				name = column
 			}

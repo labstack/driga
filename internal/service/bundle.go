@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // BundlePath identifies our CLI's app layout, including when invoked via a
@@ -14,7 +15,7 @@ func BundlePath(binPath string) string {
 	if resolved, err := filepath.EvalSymlinks(binPath); err == nil {
 		binPath = resolved
 	}
-	if filepath.Base(binPath) != "driga" || filepath.Base(filepath.Dir(binPath)) != "MacOS" {
+	if base := filepath.Base(binPath); base != "driga" && base != "drigad" || filepath.Base(filepath.Dir(binPath)) != "MacOS" {
 		return ""
 	}
 	contents := filepath.Dir(filepath.Dir(binPath))
@@ -32,6 +33,25 @@ func ExecutablePath(binPath string) string {
 		return filepath.Join(app, "Contents", "MacOS", "driga")
 	}
 	return binPath
+}
+
+// DaemonPath is the drigad executable that sits beside a driga executable:
+// drigad for driga, drigad-dev for driga-dev, drigad.exe for driga.exe. It
+// is the same program; started under that name it runs the Driga service.
+func DaemonPath(binPath string) string {
+	dir, base := filepath.Split(binPath)
+	ext := filepath.Ext(base)
+	name := strings.TrimSuffix(base, ext)
+	if rest, ok := strings.CutPrefix(name, "driga"); ok && !strings.HasPrefix(rest, "d") {
+		return filepath.Join(dir, "drigad"+rest+ext)
+	}
+	return binPath
+}
+
+// IsDaemon reports whether an executable name is drigad's.
+func IsDaemon(binPath string) bool {
+	name := strings.TrimSuffix(filepath.Base(binPath), filepath.Ext(binPath))
+	return name == "drigad" || strings.HasPrefix(name, "drigad-")
 }
 
 // PlistStale is a read-only diagnostic. Compare path strings, not inode identity:
@@ -76,7 +96,7 @@ func PlistStale(path, binPath string) (bool, error) {
 				continue
 			}
 			if start.Name.Local != "array" {
-				return false, errors.New("collector plist expects an array for " + key)
+				return false, errors.New("service plist expects an array for " + key)
 			}
 			var array struct {
 				Strings []string `xml:"string"`
@@ -98,9 +118,9 @@ func PlistStale(path, binPath string) (bool, error) {
 		}
 	}
 	if executable == "" {
-		return false, errors.New("collector plist has no ProgramArguments executable")
+		return false, errors.New("service plist has no ProgramArguments executable")
 	}
-	return executable != ExecutablePath(binPath) || (BundlePath(binPath) != "" && !associated), nil
+	return executable != DaemonPath(ExecutablePath(binPath)) || (BundlePath(binPath) != "" && !associated), nil
 }
 
 // plistEnv is the value the collector plist at path sets for the environment

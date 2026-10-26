@@ -6,17 +6,33 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/labstack/driga/internal/secfile"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
+
+	"github.com/labstack/driga/internal/scrub"
+	"github.com/labstack/driga/internal/secfile"
+	"github.com/labstack/driga/internal/self"
 
 	"github.com/labstack/driga/internal/config"
 	"github.com/labstack/driga/internal/llm"
 )
 
-var ReadTools = []string{"get_flow", "get_activity", "get_summary", "list_agents", "get_agent", "list_projects", "inspect_project", "list_inbox", "list_conflicts", "list_orphans", "get_machine", "list_machines", "inspect_setup", "list_cleanup_candidates"}
+var ReadTools = []string{"get_flow", "get_activity", "get_summary", "list_agents", "get_agent", "list_projects", "inspect_project", "list_inbox", "list_conflicts", "list_orphans", "get_machine", "list_machines", "inspect_setup", "list_cleanup_candidates", "describe_panels", "show_panels", "open_dashboard", "list_dashboards", "list_dashboard_versions"}
+
+// NativeTools are the claude built-in tools Chat may use when it can act:
+// reading files and its own task list. It never runs commands or changes
+// files; what Chat changes goes through Driga's own tools and their cards.
+var NativeTools = []string{"Read", "Glob", "Grep", "TodoWrite"}
+
+// DashboardWrites are the bounded dashboard changes Chat may pre-approve.
+// Replacing or restoring a whole dashboard goes through the permission bridge.
+var DashboardWrites = []string{"create_dashboard", "edit_dashboard"}
+
+// MaxDashboardCreates bounds automatic dashboard creation within one turn.
+const MaxDashboardCreates = 4
 
 func readTool(name string) bool {
 	for _, t := range ReadTools {
@@ -51,7 +67,7 @@ func (a *Claude) probe(ctx context.Context) (llm.Claude, error) {
 	}
 	return c, err
 }
-func (a *Claude) Run(ctx context.Context, r Request, emit func(Delta) error) error {
+func (a *Claude) Run(ctx context.Context, r Request, emit func(Delta) error) (err error) {
 	c, err := a.probe(ctx)
 	if err != nil {
 		return err
@@ -73,7 +89,7 @@ func (a *Claude) Run(ctx context.Context, r Request, emit func(Delta) error) err
 	defer os.Remove(f.Name())
 	exe := a.Executable
 	if exe == "" {
-		exe, err = os.Executable()
+		exe, err = self.Executable()
 		if err != nil {
 			f.Close()
 			return err
@@ -103,13 +119,16 @@ func (a *Claude) Run(ctx context.Context, r Request, emit func(Delta) error) err
 	}
 	nativeTools := ""
 	if actions {
-		nativeTools = "default"
+		nativeTools = strings.Join(NativeTools, ",")
 		// Claude permits reads in cwd itself; pre-allowing read tools would
 		// also bypass the permission bridge for paths outside that directory.
 		tools = append(tools, "TodoWrite", "mcp__driga__list_prompts")
+		for _, t := range DashboardWrites {
+			tools = append(tools, "mcp__driga__"+t)
+		}
 	}
 	// --safe-mode also drops --mcp-config servers; empty setting sources keep
-	// user hooks, plugins and MCP out while the explicit driga collect --server loads.
+	// user hooks, plugins and MCP out while the explicit Driga service loads.
 	args := []string{"-p", "--setting-sources", "", "--strict-mcp-config", "--mcp-config", f.Name(), "--tools", nativeTools, "--allowedTools", strings.Join(tools, ","), "--name", "driga-internal", "--output-format", "stream-json", "--verbose", "--include-partial-messages"}
 	if actions {
 		args = append(args, "--permission-prompts", "host", "--permission-prompt-tool", "mcp__driga__approve")
@@ -120,6 +139,7 @@ func (a *Claude) Run(ctx context.Context, r Request, emit func(Delta) error) err
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	s := stream{emit: emit, cancel: cancel, actions: actions}
+	defer func() { err = errors.Join(err, s.flushCards()) }()
 	run := c.RunIn
 	if actions {
 		run = c.RunChatIn
@@ -165,7 +185,28 @@ type stream struct {
 	tools                             map[string]bool
 	actions                           bool
 	connected, partial, printed, done bool
-	err                               error
+	// gap is set when a new model message starts after text was shown, so
+	// its text begins a new paragraph rather than running on.
+	gap bool
+	// cards are panel tool calls waiting for their result, by tool use id.
+	cards   map[string]card
+	creates int
+	// unavailable calls can occur on resume. A refused result is harmless;
+	// a successful or missing result must fail the turn rather than disappear.
+	unavailable map[string]string
+	// offered is the tools claude's init event listed, all of them ones
+	// Chat accepts; nil until it arrives.
+	offered map[string]bool
+	err     error
+}
+
+// text emits reply text, starting a new paragraph after an earlier message.
+func (s *stream) text(t string) error {
+	if s.gap {
+		t, s.gap = "\n\n"+t, false
+	}
+	s.printed = true
+	return s.emit(Delta{Text: t})
 }
 
 const maxLine = 1 << 20
@@ -205,6 +246,7 @@ func (s *stream) line(line []byte) error {
 		Message       struct {
 			Content []struct {
 				Type, Text, Name, ID string
+				Input                json.RawMessage `json:"input"`
 				ToolUseID            string          `json:"tool_use_id"`
 				Content              json.RawMessage `json:"content"`
 				IsError              bool            `json:"is_error"`
@@ -235,10 +277,12 @@ func (s *stream) line(line []byte) error {
 		if !s.connected {
 			return errors.New("driga MCP server did not connect; refusing Chat")
 		}
+		s.offered = map[string]bool{}
 		for _, tool := range e.Tools {
 			if !s.validTool(tool) {
 				return fmt.Errorf("unexpected tool %q; Chat requires driga read tools only", tool)
 			}
+			s.offered[tool] = true
 		}
 	}
 	switch e.Type {
@@ -263,23 +307,29 @@ func (s *stream) line(line []byte) error {
 		if e.Event.Type == "message_start" {
 			s.partial = false
 			s.partialText = ""
+			s.gap = s.printed
 		}
 		if e.Event.Type == "content_block_start" && e.Event.ContentBlock.Type == "tool_use" {
-			if !s.validTool(e.Event.ContentBlock.Name) {
-				return errors.New("agent attempted a tool outside driga read tools")
-			}
 			return s.tool(e.Event.ContentBlock.ID, e.Event.ContentBlock.Name)
 		}
 		if e.Event.Type == "content_block_delta" && e.Event.Delta.Type == "text_delta" {
 			s.partial = true
 			s.partialText += e.Event.Delta.Text
-			s.printed = true
-			return s.emit(Delta{Text: e.Event.Delta.Text})
+			return s.text(e.Event.Delta.Text)
 		}
 	case "user":
 		for _, content := range e.Message.Content {
 			if content.Type == "tool_result" {
+				if name, ok := s.unavailable[content.ToolUseID]; ok {
+					delete(s.unavailable, content.ToolUseID)
+					if !content.IsError {
+						return fmt.Errorf("agent used unavailable tool %q without a refusal", name)
+					}
+				}
 				if err := s.emit(Delta{ToolUseID: content.ToolUseID, ToolResult: string(content.Content), Failed: content.IsError}); err != nil {
+					return err
+				}
+				if err := s.settle(content.ToolUseID, content.Content, content.IsError); err != nil {
 					return err
 				}
 			}
@@ -295,6 +345,9 @@ func (s *stream) line(line []byte) error {
 				if err := s.tool(content.ID, content.Name); err != nil {
 					return err
 				}
+				if err := s.panel(content.ID, content.Name, content.Input); err != nil {
+					return err
+				}
 			}
 		}
 		full := text.String()
@@ -306,14 +359,16 @@ func (s *stream) line(line []byte) error {
 			}
 		}
 		if full != "" {
-			s.printed = true
-			if err := s.emit(Delta{Text: full}); err != nil {
+			if err := s.text(full); err != nil {
 				return err
 			}
 		}
 		s.partial = false
 		s.partialText = ""
 	case "result":
+		if len(s.unavailable) != 0 {
+			return errors.New("agent attempted an unavailable tool without a result")
+		}
 		if e.IsError {
 			return errors.New("bad claude output: final result reports an error")
 		}
@@ -321,6 +376,9 @@ func (s *stream) line(line []byte) error {
 			return errors.New("bad claude output: missing result text")
 		}
 		s.done = true
+		if err := s.flushCards(); err != nil {
+			return err
+		}
 		if !s.printed {
 			if err := s.emit(Delta{Text: *e.Result}); err != nil {
 				return err
@@ -344,6 +402,19 @@ func (s *stream) finish() error {
 
 func (s *stream) tool(id, name string) error {
 	if !s.validTool(name) {
+		// A model resuming a conversation may still ask for a tool it once
+		// had. Continue only once claude explicitly refuses that unavailable
+		// tool; a successful result must never be silently dropped.
+		if s.offered != nil && !s.offered[name] {
+			if id == "" || len(s.unavailable) >= 256 {
+				return errors.New("invalid unavailable tool call in Chat turn")
+			}
+			if s.unavailable == nil {
+				s.unavailable = map[string]string{}
+			}
+			s.unavailable[id] = name
+			return nil
+		}
 		return errors.New("agent attempted a tool outside driga read tools")
 	}
 	if s.tools == nil {
@@ -355,10 +426,122 @@ func (s *stream) tool(id, name string) error {
 	if len(s.tools) >= 256 {
 		return errors.New("too many tool calls in Chat turn")
 	}
+	if name == "mcp__driga__create_dashboard" {
+		if s.creates >= MaxDashboardCreates {
+			return errors.New("too many dashboard creates in Chat turn")
+		}
+		s.creates++
+	}
 	if id != "" {
 		s.tools[id] = true
 	}
 	return s.emit(Delta{Tool: name})
+}
+
+// panelTools render as a live card in the app's conversation.
+var panelTools = []string{"show_panels", "open_dashboard", "create_dashboard", "edit_dashboard", "replace_dashboard", "restore_dashboard_version"}
+
+// maxPanelInput bounds a card's spec; a larger one stays a tool line.
+const maxPanelInput = 128 << 10
+
+// card is what the app shows for a panel tool call: the tool and its input,
+// which the app runs again for live data, and what came of it. Saved names
+// the dashboard a write saved; Error is why the call failed, such as a
+// rejected draft.
+type card struct {
+	Tool  string          `json:"tool"`
+	Input json.RawMessage `json:"input"`
+	Saved *struct {
+		ID      string `json:"id"`
+		Version int    `json:"version"`
+	} `json:"saved,omitempty"`
+	Error  string `json:"error,omitempty"`
+	Status string `json:"status,omitempty"`
+}
+
+// flushCards retains unresolved calls in deterministic order on every exit.
+// No result means the write's outcome is unknown, including after cancellation.
+func (s *stream) flushCards() error {
+	ids := make([]string, 0, len(s.cards))
+	for id := range s.cards {
+		ids = append(ids, id)
+	}
+	slices.Sort(ids)
+	var result error
+	for _, id := range ids {
+		c := s.cards[id]
+		delete(s.cards, id)
+		c.Status = "unknown"
+		c.Error = "Outcome unknown: no tool result was received"
+		raw, err := json.Marshal(c)
+		if err == nil {
+			err = s.emit(Delta{Panel: raw})
+		}
+		result = errors.Join(result, err)
+	}
+	return result
+}
+
+// panel holds a panel tool call until its result says what came of it.
+func (s *stream) panel(id, name string, input json.RawMessage) error {
+	tool, ok := strings.CutPrefix(name, "mcp__driga__")
+	if !ok || !slices.Contains(panelTools, tool) || len(input) == 0 || len(input) > maxPanelInput || !json.Valid(input) {
+		return nil
+	}
+	if s.cards == nil {
+		s.cards = map[string]card{}
+	}
+	s.cards[id] = card{Tool: tool, Input: input}
+	return nil
+}
+
+// settle emits a held card with its result.
+func (s *stream) settle(id string, result json.RawMessage, failed bool) error {
+	c, ok := s.cards[id]
+	if !ok {
+		return nil
+	}
+	delete(s.cards, id)
+	text := resultText(result)
+	if failed {
+		c.Error = scrub.Snippet(text)
+	} else if c.Tool != "show_panels" && c.Tool != "open_dashboard" {
+		// Driga's saved dashboard tools send the saved fragment as both JSON
+		// text and structured content, including its identity and version.
+		var f struct {
+			ID      string `json:"id"`
+			Version int    `json:"version"`
+		}
+		if json.Unmarshal([]byte(text), &f) == nil && f.ID != "" {
+			c.Saved = &struct {
+				ID      string `json:"id"`
+				Version int    `json:"version"`
+			}{f.ID, f.Version}
+		}
+	}
+	b, err := json.Marshal(c)
+	if err != nil {
+		return err
+	}
+	return s.emit(Delta{Panel: b})
+}
+
+// resultText is a tool result's text: claude sends it as a string or as
+// content blocks.
+func resultText(raw json.RawMessage) string {
+	var text string
+	if json.Unmarshal(raw, &text) == nil {
+		return text
+	}
+	var blocks []struct{ Type, Text string }
+	_ = json.Unmarshal(raw, &blocks)
+	var b strings.Builder
+	for _, block := range blocks {
+		if block.Type == "text" {
+			b.WriteString(block.Text)
+		}
+	}
+	return b.String()
 }
 
 func (s *stream) validTool(name string) bool {
@@ -369,11 +552,37 @@ func (s *stream) validTool(name string) bool {
 		return false
 	}
 	if !strings.HasPrefix(name, "mcp__") {
-		return true
+		// ToolSearch is how claude loads deferred tool definitions.
+		return name == "ToolSearch" || slices.Contains(NativeTools, name)
 	}
 	switch name {
+	case "mcp__driga__create_dashboard", "mcp__driga__edit_dashboard", "mcp__driga__replace_dashboard", "mcp__driga__restore_dashboard_version", "mcp__driga__delete_dashboard":
+		return true
 	case "mcp__driga__list_prompts", "mcp__driga__answer_prompt", "mcp__driga__ack_inbox", "mcp__driga__jump", "mcp__driga__kill", "mcp__driga__cleanup", "mcp__driga__summarize", "mcp__driga__approve":
 		return true
 	}
 	return false
+}
+
+// PanelTitle names a panel card for surfaces that cannot render it.
+func PanelTitle(card string) string {
+	var c struct {
+		Tool  string `json:"tool"`
+		Input struct {
+			ID        string `json:"id"`
+			Dashboard struct {
+				Name string `json:"name"`
+			} `json:"dashboard"`
+		} `json:"input"`
+	}
+	if json.Unmarshal([]byte(card), &c) != nil {
+		return "panel"
+	}
+	switch {
+	case c.Input.Dashboard.Name != "":
+		return c.Input.Dashboard.Name
+	case c.Input.ID != "":
+		return "dashboard " + c.Input.ID
+	}
+	return "panel"
 }

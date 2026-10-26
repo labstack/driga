@@ -3,6 +3,7 @@ package chat
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -297,7 +298,7 @@ echo '{"type":"result","result":"ok"}'`
 			raw, _ := os.ReadFile(record + ".args")
 			args := string(raw)
 			if support {
-				for _, want := range []string{"--tools\ndefault\n", "--permission-prompts\nhost\n", "--permission-prompt-tool\nmcp__driga__approve\n", "TodoWrite,mcp__driga__list_prompts"} {
+				for _, want := range []string{"--tools\nRead,Glob,Grep,TodoWrite\n", "--permission-prompts\nhost\n", "--permission-prompt-tool\nmcp__driga__approve\n", "TodoWrite,mcp__driga__list_prompts"} {
 					if !strings.Contains(args, want) {
 						t.Fatal(want, args)
 					}
@@ -332,6 +333,188 @@ echo '{"type":"result","result":"ok"}'`
 			raw, _ = os.ReadFile(record + ".args")
 			if strings.Contains(string(raw), "--permission-prompt") || strings.Contains(string(raw), "mcp__driga__list_prompts") || !strings.Contains(string(raw), "--tools\n\n") {
 				t.Fatal("ask enabled actions")
+			}
+		})
+	}
+}
+
+// Text from a second model message, after a tool call, starts a new
+// paragraph instead of running on from the first: "gate.I didn't".
+func TestClaudeSeparatesConsecutiveMessages(t *testing.T) {
+	a, _ := fakeCLI(t, flags, `echo '{"type":"system","subtype":"init","mcp_servers":[{"name":"driga","status":"connected"}]}'
+echo '{"type":"stream_event","event":{"type":"message_start"}}'
+echo '{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"Sending it through the gate."}}}'
+echo '{"type":"assistant","message":{"content":[{"type":"text","text":"Sending it through the gate."}]}}'
+echo '{"type":"stream_event","event":{"type":"message_start"}}'
+echo '{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"It was declined."}}}'
+echo '{"type":"assistant","message":{"content":[{"type":"text","text":"It was declined."}]}}'
+echo '{"type":"result","result":"It was declined."}'`)
+	var text strings.Builder
+	if err := a.Run(context.Background(), Request{}, func(d Delta) error { text.WriteString(d.Text); return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if got := text.String(); got != "Sending it through the gate.\n\nIt was declined." {
+		t.Fatalf("text = %q", got)
+	}
+}
+
+// A dashboard write's card waits for its result: a save names the
+// dashboard and version it saved, a rejected draft says why.
+func TestPanelCardsCarryWhatTheWriteDid(t *testing.T) {
+	help := flags + "\n  --permission-prompts <mode>  Host prompts\n  --permission-prompt-tool <tool>  Prompt tool"
+	a, _ := fakeCLI(t, help, `echo '{"type":"system","subtype":"init","mcp_servers":[{"name":"driga","status":"connected"}]}'
+echo '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1","name":"mcp__driga__create_dashboard","input":{"dashboard":{"name":"Memory","panels":[]}}},{"type":"tool_use","id":"t2","name":"mcp__driga__edit_dashboard","input":{"id":"home","operations":[]}}]}}'
+echo '{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":"{\"dashboard\":{\"name\":\"Memory\",\"panels\":[]},\"id\":\"memory-0e6be9\",\"version\":1,\"results\":[]}"},{"type":"tool_result","tool_use_id":"t2","is_error":true,"content":"invalid_spec: panels[0].source: unknown source"}]}}'
+echo '{"type":"result","result":"done"}'`)
+	var cards []card
+	r := Request{Socket: "private.sock", Conversation: "conv", Token: "random-token"}
+	if err := a.Run(context.Background(), r, func(d Delta) error {
+		if len(d.Panel) > 0 {
+			var c card
+			if err := json.Unmarshal(d.Panel, &c); err != nil {
+				return err
+			}
+			cards = append(cards, c)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if len(cards) != 2 {
+		t.Fatalf("cards = %+v", cards)
+	}
+	byTool := map[string]card{cards[0].Tool: cards[0], cards[1].Tool: cards[1]}
+	if c := byTool["create_dashboard"]; c.Saved == nil || c.Saved.ID != "memory-0e6be9" || c.Saved.Version != 1 || c.Error != "" {
+		t.Fatalf("create card = %+v", c)
+	}
+	if c := byTool["edit_dashboard"]; c.Saved != nil || !strings.Contains(c.Error, "unknown source") {
+		t.Fatalf("edit card = %+v", c)
+	}
+}
+
+func TestDashboardReplacementRequiresPermissionBridge(t *testing.T) {
+	a, record := fakeCLI(t, flags+"\n --permission-prompts <host> Host prompts", `echo '{"type":"system","subtype":"init","mcp_servers":[{"name":"driga","status":"connected"}]}'
+echo '{"type":"result","result":"ok"}'`)
+	if err := a.Run(context.Background(), Request{Socket: "private.sock", Conversation: "conv", Token: "token"}, func(Delta) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(record + ".args")
+	if err != nil {
+		t.Fatal(err)
+	}
+	args := strings.Split(string(raw), "\n")
+	var allowed string
+	for i, arg := range args {
+		if arg == "--allowedTools" && i+1 < len(args) {
+			allowed = args[i+1]
+		}
+	}
+	for _, tool := range []string{"replace_dashboard", "restore_dashboard_version"} {
+		if strings.Contains(allowed, "mcp__driga__"+tool) {
+			t.Fatalf("whole-dashboard write bypasses permission bridge: %s", allowed)
+		}
+	}
+	if !strings.Contains(allowed, "mcp__driga__create_dashboard") || !strings.Contains(allowed, "mcp__driga__edit_dashboard") {
+		t.Fatalf("bounded dashboard writes disappeared: %s", allowed)
+	}
+}
+
+func TestDashboardCreatesAreBoundedPerTurn(t *testing.T) {
+	body := `echo '{"type":"system","subtype":"init","mcp_servers":[{"name":"driga","status":"connected"}],"tools":["mcp__driga__create_dashboard"]}'` + "\n"
+	for i := 0; i < 5; i++ {
+		body += fmt.Sprintf(`echo '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"create-%d","name":"mcp__driga__create_dashboard","input":{"dashboard":{"name":"Draft","panels":[]}}}]}}'`+"\n", i)
+	}
+	body += `echo '{"type":"result","result":"done"}'`
+	a, _ := fakeCLI(t, flags+"\n --permission-prompts <host> Host prompts", body)
+	err := a.Run(context.Background(), Request{Socket: "private.sock", Conversation: "conv", Token: "token"}, func(Delta) error { return nil })
+	if err == nil || !strings.Contains(err.Error(), "too many dashboard creates") {
+		t.Fatalf("unbounded automatic dashboard creation: %v", err)
+	}
+}
+
+func TestUnavailableToolCannotReportSuccessOrDisappear(t *testing.T) {
+	for _, result := range []string{
+		`echo '{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"bad","content":"command succeeded"}]}}'`,
+		"",
+	} {
+		a, _ := fakeCLI(t, flags, `echo '{"type":"system","subtype":"init","mcp_servers":[{"name":"driga","status":"connected"}],"tools":["mcp__driga__get_summary"]}'
+echo '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"bad","name":"Bash","input":{"command":"forged"}}]}}'
+`+result+`
+echo '{"type":"result","result":"done"}'`)
+		if err := a.Run(context.Background(), Request{}, func(Delta) error { return nil }); err == nil || !strings.Contains(err.Error(), "unavailable tool") {
+			t.Fatalf("unavailable tool was silently dropped: %v", err)
+		}
+	}
+}
+
+func TestPendingPanelCardsAreUnknownAndOrderedOnEveryExit(t *testing.T) {
+	for _, outcome := range []string{"success", "invalid", "process-error", "cancel"} {
+		t.Run(outcome, func(t *testing.T) {
+			body := `echo '{"type":"system","subtype":"init","mcp_servers":[{"name":"driga","status":"connected"}],"tools":["mcp__driga__open_dashboard"]}'
+echo '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"z","name":"mcp__driga__open_dashboard","input":{"id":"last"}},{"type":"tool_use","id":"a","name":"mcp__driga__open_dashboard","input":{"id":"first"}},{"type":"text","text":"Waiting for the results"}]}}'
+`
+			switch outcome {
+			case "success":
+				body += `echo '{"type":"result","result":"done"}'`
+			case "invalid":
+				body += "echo invalid-json"
+			case "process-error":
+				body += "exit 7"
+			case "cancel":
+				body += "/bin/sleep 60"
+			}
+			a, _ := fakeCLI(t, flags, body)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			var cards []struct {
+				Input         struct{ ID string }
+				Status, Error string
+				Saved         json.RawMessage
+			}
+			started := make(chan struct{})
+			done := make(chan error, 1)
+			go func() {
+				done <- a.Run(ctx, Request{}, func(d Delta) error {
+					if d.Text == "Waiting for the results" {
+						close(started)
+					}
+					if len(d.Panel) > 0 {
+						var c struct {
+							Input         struct{ ID string }
+							Status, Error string
+							Saved         json.RawMessage
+						}
+						if err := json.Unmarshal(d.Panel, &c); err != nil {
+							return err
+						}
+						cards = append(cards, c)
+					}
+					return nil
+				})
+			}()
+			if outcome == "cancel" {
+				select {
+				case <-started:
+					cancel()
+				case <-time.After(3 * time.Second):
+					t.Fatal("fake did not reach pending cards")
+				}
+			}
+			select {
+			case err := <-done:
+				if (err == nil) != (outcome == "success") {
+					t.Fatalf("unexpected %s result: %v", outcome, err)
+				}
+			case <-time.After(4 * time.Second):
+				t.Fatal("fake did not exit")
+			}
+			if len(cards) != 2 || cards[0].Input.ID != "first" || cards[1].Input.ID != "last" {
+				t.Fatalf("pending cards lost or emitted out of order: %+v", cards)
+			}
+			for _, c := range cards {
+				if c.Status != "unknown" || !strings.Contains(c.Error, "Outcome unknown") || len(c.Saved) != 0 {
+					t.Fatalf("missing result presented as success: %+v", c)
+				}
 			}
 		})
 	}

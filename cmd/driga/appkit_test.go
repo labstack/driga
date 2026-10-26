@@ -8,13 +8,11 @@ func TestUsesAppKit(t *testing.T) {
 		want bool
 	}{
 		{nil, false},
-		{[]string{"collect"}, true},
-		{[]string{"collect", "--once"}, true},
-		{[]string{"collect", "--notify-fd", "3"}, false},
-		{[]string{"collect", "--notify-fd=3"}, false},
-		{[]string{"collect", "--notify-fd=0"}, false},
-		{[]string{"--no-color", "collect", "--notify-fd", "3"}, false},
-		{[]string{"collect", "--cpu-profile=notify-fd"}, true},
+		{[]string{"service", "run"}, true},
+		{[]string{"service", "run", "--once"}, true},
+		{[]string{"--no-color", "service", "run"}, true},
+		{[]string{"service", "status"}, false},
+		{[]string{"service"}, false},
 		{[]string{"top"}, false},
 		{[]string{"doctor"}, false},
 		{[]string{"app"}, false},
@@ -34,7 +32,7 @@ func TestAppMode(t *testing.T) {
 		{[]string{"app"}, true},
 		{nil, false},
 		{[]string{"app", "--help"}, false},
-		{[]string{"collect"}, false},
+		{[]string{"service", "run"}, false},
 		{[]string{"top"}, false},
 	} {
 		if got := appMode(tt.args); got != tt.want {

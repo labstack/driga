@@ -1,2 +1,5 @@
 # Desktop entries are parsed line by line on Linux; keep them LF on every checkout.
 *.desktop text eol=lf
+# Generated JSON is compared byte for byte with Go output on every OS.
+ui/src/fixtures/fragments.json text eol=lf
+ui/src/theme/palette.json text eol=lf

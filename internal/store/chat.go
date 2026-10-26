@@ -94,3 +94,22 @@ func (s *Store) RedactChat(ctx context.Context) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE messages SET text='' WHERE machine_id=? AND role!='tool'`, s.MachineID())
 	return err
 }
+
+// InternalChatSessions is the broker's explicit CLI identity set. Unlike the
+// conversation picker, this query is not capped to its most recent 100 rows.
+func (s *Store) InternalChatSessions() ([]string, error) {
+	rows, err := s.db.QueryContext(s.ctx, "SELECT DISTINCT session_id FROM conversations WHERE machine_id=? AND session_id<>''", s.MachineID())
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}

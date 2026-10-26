@@ -2,6 +2,7 @@
 package attention
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -33,7 +34,13 @@ type CommandRunner struct{}
 func ConfigureCommand(cmd *exec.Cmd) { configureCommand(cmd) }
 
 func (CommandRunner) Run(ctx context.Context, name string, args ...string) ([]byte, error) {
+	return CommandRunner{}.RunInput(ctx, nil, name, args...)
+}
+
+// RunInput keeps notification identifiers out of process arguments.
+func (CommandRunner) RunInput(ctx context.Context, input []byte, name string, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Stdin = bytes.NewReader(input)
 	configureCommand(cmd)
 	cmd.WaitDelay = 50 * time.Millisecond
 	cmd.Env = append(os.Environ(), "DRIGA_INTERNAL=1")

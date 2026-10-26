@@ -13,7 +13,7 @@ generated: true
 Driga reads `config.toml` and the process environment. Precedence is explicit
 flags, then environment, then the TOML file, then the defaults below. Empty
 environment values count as unset, and dotenv files are never loaded. An
-unknown `DRIGA_*` name is an error. Restart the collector after changing its
+unknown `DRIGA_*` name is an error. Restart the Driga service after changing its
 configuration; the CLI and hooks reload on every invocation.
 
 Find and edit the file with `driga config path`, `driga config show` and
@@ -28,7 +28,7 @@ variable.
 | [`roots`](#roots) | list | empty | file only |
 | [`root_depth`](#root_depth) | int | `3` | `DRIGA_ROOT_DEPTH` |
 | [`exclude`](#exclude) | list | `**/node_modules`, `**/.tmp/**` | file only |
-| [`stalled_after`](#stalled_after) | duration | `10m` | `DRIGA_STALLED_AFTER` |
+| [`stuck_after`](#stuck_after) | duration | `10m` | `DRIGA_STUCK_AFTER` |
 | [`orphan_min_age`](#orphan_min_age) | duration | `10m` | `DRIGA_ORPHAN_MIN_AGE` |
 | [`capture_text`](#capture_text) | string | `titles` | `DRIGA_CAPTURE_TEXT` |
 | [`open_cmd`](#open_cmd) | string | empty | `DRIGA_OPEN_CMD` |
@@ -94,13 +94,13 @@ Repository discovery exclusions.
 |---|---|---|---|
 | list | `**/node_modules`, `**/.tmp/**` | file-only; empty = no exclusions | file only |
 
-### stalled_after
+### stuck_after
 
 Quiet busy-session threshold.
 
 | Type | Default | Allowed | Environment |
 |---|---|---|---|
-| duration | `10m` | 0..2562047h47m16.854775807s; zero = default 10m | `DRIGA_STALLED_AFTER` |
+| duration | `10m` | 0..2562047h47m16.854775807s; zero = default 10m | `DRIGA_STUCK_AFTER` |
 
 ### orphan_min_age
 

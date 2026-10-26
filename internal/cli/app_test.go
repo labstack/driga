@@ -38,6 +38,7 @@ func TestAppLaunch(t *testing.T) {
 		{"command at login", "", true, []string{"top"}, false},
 		{"app", "", false, []string{"app"}, true},
 		{"app help", "", false, []string{"app", "--help"}, false},
+		{"notification", "", false, []string{"app", "--notification", `{}`}, true},
 		{"other value", "0", false, nil, false},
 	} {
 		if got := appLaunch(env(tt.env), tt.login, tt.args); got != tt.want {
@@ -109,7 +110,7 @@ func TestAppCommandRunsDesktop(t *testing.T) {
 	if env != "" {
 		t.Fatalf("app started with DRIGA_APP=%q", env)
 	}
-	if got.OpenSource == nil || got.Supervisor == nil || got.Version != "test-version" {
+	if got.OpenSource == nil || got.Version != "test-version" {
 		t.Fatalf("options: %+v", got)
 	}
 	if opened != 0 {
@@ -120,7 +121,7 @@ func TestAppCommandRunsDesktop(t *testing.T) {
 		t.Fatalf("open source: %v, %v, opened %d", source, err, opened)
 	}
 	closeSource()
-	if got.Web.SessionAction == nil || got.Web.CleanupList == nil || got.Web.Activity == nil || got.Web.Machine != "all" {
+	if got.Web.Action == nil || got.Web.CleanupList == nil || got.Web.Activity == nil {
 		t.Fatalf("page handlers: %+v", got.Web)
 	}
 }
@@ -148,5 +149,13 @@ func TestAppCommandStartsWithBadConfig(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got.Config, config.Default()) {
 		t.Fatal("the app did not start with the default settings")
+	}
+}
+
+func TestNotificationLaunchIsNotHandedOffTwice(t *testing.T) {
+	t.Setenv("DRIGA_APP", "1")
+	defer func() { systemLaunch = false }()
+	if !AppLaunch([]string{"app", "--notification", `{"item_id":"w","machine_id":"peer"}`}) || !systemLaunch {
+		t.Fatal("a Launch Services notification was treated as another CLI launch")
 	}
 }

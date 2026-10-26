@@ -1,0 +1,22 @@
+/* The Fleet view's few styles Mantine's props cannot express: the body that
+   scrolls as a whole below the lg breakpoint, where the inspector sits under
+   the chart, and the chart card that scrolls on its own beside it above;
+   hover-only row actions and the selected row's rule. Colors are theme
+   variables only. */
+.fleet-body { flex: 1; min-height: 0; overflow: auto; }
+.fleet-chart { flex: none; min-width: 0; display: flex; flex-direction: column; overflow: visible; }
+@media (min-width: 75em) {
+  .fleet-body { overflow: visible; }
+  .fleet-chart { flex: 1; overflow: auto; }
+}
+.fleet-row-actions { opacity: 0; transition: opacity 120ms ease-out; }
+tr:hover .fleet-row-actions, tr:focus-within .fleet-row-actions { opacity: 1; }
+@media (pointer: coarse) { .fleet-row-actions { opacity: 1; } }
+/* The selected row keeps its surface, so its muted text stays AA, and takes
+   Canon's selected-row bar plus the title's pressed look. */
+.fleet-row[data-selected="true"] > td:first-child { box-shadow: inset 3px 0 0 var(--mantine-color-brand-filled); }
+.fleet-row-title[aria-pressed="true"] { box-shadow: 0 0 0 1px var(--mantine-color-brand-filled); }
+.fleet-row-title { display: block; max-width: 100%; border-radius: var(--mantine-radius-sm); }
+.fleet-row-title:focus-visible { outline: 2px solid var(--mantine-color-brand-filled); outline-offset: 1px; }
+
+@media (prefers-reduced-motion: reduce) { .fleet-row-actions { transition: none; } }

@@ -3,6 +3,7 @@ package actions
 import (
 	"context"
 	"fmt"
+	"github.com/labstack/driga/internal/self"
 	"os"
 	"path/filepath"
 	"time"
@@ -35,7 +36,7 @@ func InboxJump(g Environment, id string, runner attention.Runner, goos string) e
 		if err != nil {
 			return err
 		}
-		bin, err := os.Executable()
+		bin, err := self.Executable()
 		if err != nil {
 			return err
 		}

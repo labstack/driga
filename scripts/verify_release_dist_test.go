@@ -165,7 +165,7 @@ end
 	if err := os.MkdirAll(binDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	writeFixtureFile(t, filepath.Join(binDir, "dpkg-deb"), "#!/bin/sh\nprintf '%s\\n' ' ./usr/bin/driga'\n", 0o700)
+	writeFixtureFile(t, filepath.Join(binDir, "dpkg-deb"), "#!/bin/sh\nprintf '%s\\n' ' ./usr/bin/driga' ' ./usr/bin/drigad'\n", 0o700)
 	// These packaging fixtures deliberately contain fake executables. The real
 	// PE parser and generated resources are exercised in windows-resources.
 	writeFixtureFile(t, filepath.Join(binDir, "go"), "#!/bin/sh\n[ \"$1\" = test ] && [ \"$2\" = ./scripts/windows-resources ]\n", 0o700)
@@ -209,7 +209,7 @@ func writeTarGzipFixture(t *testing.T, path, version string) {
 		name string
 		body string
 		mode int64
-	}{{"LICENSE", "license\n", 0o644}, {"NOTICE", "notice\n", 0o644}, {"README.md", "fixture\n", 0o644}, {"driga", "binary\n", 0o755}, {"third-party/fonts-LICENSE.txt", "fonts\n", 0o644}, {"third-party/vendor-LICENSES.txt", "vendor\n", 0o644}}
+	}{{"LICENSE", "license\n", 0o644}, {"NOTICE", "notice\n", 0o644}, {"README.md", "fixture\n", 0o644}, {"driga", "binary\n", 0o755}, {"drigad", "binary\n", 0o755}, {"third-party/app-THIRD-PARTY.txt", "app\n", 0o644}, {"third-party/fonts-LICENSE.txt", "fonts\n", 0o644}, {"third-party/panels-THIRD-PARTY.txt", "panels\n", 0o644}}
 	if strings.Contains(filepath.Base(path), "_darwin_") {
 		// Assemble a synthetic app without running signing tools or launchd.
 		root := t.TempDir()
@@ -219,6 +219,7 @@ func writeTarGzipFixture(t *testing.T, path, version string) {
 			t.Fatal(err)
 		}
 		writeFixtureFile(t, filepath.Join(binDir, "driga"), "fixture", 0o700)
+		writeFixtureFile(t, filepath.Join(binDir, "drigad"), "fixture", 0o700)
 		cmd := exec.CommandContext(t.Context(), "python3", "macos-app.py", app, version)
 		cmd.Env = releaseTestEnv(t)
 		if out, err := cmd.CombinedOutput(); err != nil {
@@ -230,17 +231,17 @@ func writeTarGzipFixture(t *testing.T, path, version string) {
 			mode int64
 		}
 		for _, entry := range entries {
-			if entry.name != "driga" {
+			if entry.name != "driga" && entry.name != "drigad" {
 				bundled = append(bundled, entry)
 			}
 		}
-		for _, name := range []string{"Info.plist", "Resources/Driga.icns", "MacOS/driga"} {
+		for _, name := range []string{"Info.plist", "Resources/Driga.icns", "MacOS/driga", "MacOS/drigad"} {
 			body, err := os.ReadFile(filepath.Join(app, "Contents", filepath.FromSlash(name)))
 			if err != nil {
 				t.Fatal(err)
 			}
 			mode := int64(0o644)
-			if name == "MacOS/driga" {
+			if strings.HasPrefix(name, "MacOS/") {
 				mode = 0o755
 			}
 			bundled = append(bundled, struct {
@@ -278,7 +279,7 @@ func writeZipFixture(t *testing.T, path string) {
 		t.Fatal(err)
 	}
 	writer := zip.NewWriter(file)
-	for _, name := range []string{"Driga.exe", "LICENSE", "NOTICE", "README.md", "bin/driga.exe", "third-party/fonts-LICENSE.txt", "third-party/vendor-LICENSES.txt"} {
+	for _, name := range []string{"Driga.exe", "LICENSE", "NOTICE", "README.md", "bin/driga.exe", "bin/drigad.exe", "third-party/app-THIRD-PARTY.txt", "third-party/fonts-LICENSE.txt", "third-party/panels-THIRD-PARTY.txt"} {
 		entry, err := writer.Create(name)
 		if err != nil {
 			t.Fatal(err)
@@ -367,7 +368,7 @@ func TestReleaseDistVerifierRejectsMissingBundledNotices(t *testing.T) {
 		t.Fatal(err)
 	}
 	writer := zip.NewWriter(file)
-	for _, name := range []string{"Driga.exe", "LICENSE", "NOTICE", "README.md", "bin/driga.exe", "third-party/fonts-LICENSE.txt"} {
+	for _, name := range []string{"Driga.exe", "LICENSE", "NOTICE", "README.md", "bin/driga.exe", "bin/drigad.exe", "third-party/fonts-LICENSE.txt"} {
 		entry, err := writer.Create(name)
 		if err != nil {
 			t.Fatal(err)

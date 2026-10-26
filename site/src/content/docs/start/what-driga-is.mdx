@@ -14,16 +14,16 @@ waiting for you, what finished, and what was left behind.
 Driga is an app plus a CLI, the way Docker Desktop comes with `docker`:
 
 - **Desktop app** — Driga.app on macOS, `Driga.exe` on Windows, and a desktop
-  entry on Linux. It runs the collector, sends notifications that open the
+  entry on Linux. It runs the Driga service, sends notifications that open the
   session they are about, sits in the menu bar or tray, and shows Flow,
   Projects and Machines in a native window. `driga app` opens it from a
   terminal.
 - **Terminal UI** — `driga` (or `driga top`), with Flow, Projects and Machines tabs.
 - **For scripts and agents** — `driga agents`, `driga inbox` and the other read
   commands print one snapshot as a table or versioned JSON, actions confirm
-  before they change anything, and `driga mcp` serves read-only MCP tools.
+  before they change anything, and `driga mcp` serves read views and editable Driga dashboards.
 
-A machine without a desktop installs the CLI alone and runs the collector as a
+A machine without a desktop installs the CLI alone and runs the Driga service as a
 service (`driga service install`).
 
 ## What it reads
@@ -58,7 +58,7 @@ CPU by session, orphaned helper processes, and disk that agents left behind.
 | `working` | The agent is in a turn. |
 | `waiting` | The agent needs you: an attention request or permission prompt. |
 | `idle` | Alive, between turns. |
-| `stalled?` | A busy session has been quiet longer than `stalled_after`; suspected, not proven. |
+| `stuck` | A busy session has been quiet longer than `stuck_after`; suspected, not proven. |
 | `finished` | A completed turn you have not read, in a continuing session. |
 | `ended` | The process exited with no open turn, a session-end hook arrived, or the conversation was replaced. |
 | `dead` | An interrupted open turn or crash evidence. |

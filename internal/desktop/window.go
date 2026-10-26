@@ -61,12 +61,6 @@ func (h *windowHost) Command(name string, arg any) {
 	h.run("window.drigaCommand(" + string(n) + "," + string(a) + ")")
 }
 
-// Navigate shows the window and loads path, one of the app's pages.
-func (h *windowHost) Navigate(path string) {
-	p, _ := json.Marshal(path)
-	h.run("window.location.assign(" + string(p) + ")")
-}
-
 // Closed forgets the window once it has closed.
 func (h *windowHost) Closed(p page) {
 	h.mu.Lock()
@@ -176,12 +170,16 @@ func confirmDialog(message string) (text, detail string, buttons []string) {
 	return text, detail, []string{"OK", "Cancel"}
 }
 
-// external reports whether a link leaves the app for the browser: any web
-// page but the app's own, which WebView2 serves at http://mygo.localhost.
+// internalNavigation permits only the app's exact origins. WebView2 uses
+// HTTP on Windows; the other platforms use the mygo protocol.
+func internalNavigation(raw string) bool {
+	u, err := url.Parse(raw)
+	return err == nil && u.User == nil && (u.Scheme == "mygo" && u.Host == "localhost" || u.Scheme == "http" && u.Host == "mygo.localhost")
+}
+
+// external reports whether a blocked navigation can open in the browser.
+// Other schemes are cancelled without being handed to an external opener.
 func external(raw string) bool {
 	u, err := url.Parse(raw)
-	if err != nil || u.Scheme != "http" && u.Scheme != "https" {
-		return false
-	}
-	return u.Hostname() != "mygo.localhost"
+	return err == nil && u.User == nil && u.Host != "" && (u.Scheme == "http" || u.Scheme == "https") && !internalNavigation(raw)
 }

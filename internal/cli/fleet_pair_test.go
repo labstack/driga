@@ -75,7 +75,7 @@ func TestFleetIdentityMaintenanceRequiresStoppedCollector(t *testing.T) {
 		t.Fatal(err)
 	}
 	var out, errs bytes.Buffer
-	if code := run([]string{"fleet", "rekey", "--yes"}, "test", strings.NewReader(""), &out, &errs); code == 0 || !strings.Contains(errs.String(), "stop the collector") {
+	if code := run([]string{"fleet", "rekey", "--yes"}, "test", strings.NewReader(""), &out, &errs); code == 0 || !strings.Contains(errs.String(), "stop the Driga service") {
 		t.Fatalf("%d %s", code, &errs)
 	}
 	lock.Close()

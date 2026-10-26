@@ -24,12 +24,16 @@ type Reader interface {
 	SessionHandoffs(int64, time.Time, time.Time) ([]model.CompletionEvent, error)
 	Summaries(int64) ([]model.Summary, error)
 	SessionFiles(time.Time) (map[int64][]model.FileTouch, error)
+	PanelEvents(string, string, time.Time) ([]model.Event, error)
+	AllPanelEvents(time.Time) ([]model.Event, error)
 	Events(string, string, time.Time) ([]model.Event, error)
 	RecentEvents(time.Time, int) ([]model.Event, error)
 	Inbox(time.Time, bool) ([]model.InboxItem, error)
 	Orphans() ([]model.Orphan, error)
 	LatestSample() (model.MachineSample, error)
 	Samples(time.Time) ([]model.MachineSample, error)
+	PromptIntervals(time.Time) ([]store.PromptInterval, error)
+	PanelPolls(time.Time) ([]store.PanelPoll, error)
 	EventCounts(time.Time, time.Time) ([]store.EventCount, error)
 	BoardEvidence(time.Time, time.Time) ([]model.Event, map[int64][]store.ObservationMinute, error)
 	ObservationMinutes(int64, time.Time) ([]store.ObservationMinute, error)
@@ -252,6 +256,10 @@ type InboxRow struct {
 	Adapter string        `json:"adapter"`
 	Title   string        `json:"title"`
 	Branch  string        `json:"branch"`
+	// Checkout and Files are what a finished turn left to review: the
+	// session's worktree as last scanned, and the files it edited.
+	Checkout *model.Worktree `json:"checkout,omitzero"`
+	Files    []string        `json:"files,omitempty"`
 }
 
 // InboxView lists attention and completion events without acknowledging them.
@@ -322,7 +330,7 @@ type SummaryView struct {
 	Agents    int                 `json:"agents"`
 	Working   int                 `json:"working"`
 	Waiting   int                 `json:"waiting"`
-	Stalled   int                 `json:"stalled"`
+	Stuck     int                 `json:"stuck"`
 	Inbox     int                 `json:"inbox"`
 	Sample    model.MachineSample `json:"sample"`
 	Orphans   int                 `json:"orphans"`
@@ -347,6 +355,7 @@ type MachineFresh struct {
 
 // MachineRow lists a known machine, cached counts, and clock health.
 type MachineRow struct {
+	Sample *model.MachineSample `json:"sample"`
 	model.Machine
 	Agents      int           `json:"agents"`
 	Inbox       int           `json:"inbox"`

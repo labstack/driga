@@ -2,6 +2,9 @@ package mcp_test
 
 import (
 	"context"
+	"slices"
+
+	drigamcp "github.com/labstack/driga/internal/mcp"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"strings"
 	"testing"
@@ -16,6 +19,10 @@ func TestMCPCleanupReadOnly(t *testing.T) {
 	}
 	found := false
 	for _, tool := range r.Tools {
+		// Dashboard writes change only Driga's own dashboards.
+		if slices.Contains(drigamcp.DashboardTools, tool.Name) {
+			continue
+		}
 		if tool.Annotations == nil || !tool.Annotations.ReadOnlyHint {
 			t.Fatal("mutating tool", tool.Name)
 		}

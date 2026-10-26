@@ -17,7 +17,7 @@ var Now = time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
 // The finished fanout is newest; the waiting family needs attention first.
 func SeedDefault(tx *store.Tx) (int64, error) {
 	var want int64
-	for i, label := range []string{"working", "waiting", "waiting", "stalled", "finished"} {
+	for i, label := range []string{"working", "waiting", "waiting", "stuck", "finished"} {
 		id, err := tx.UpsertSession(model.Session{SessionObs: model.SessionObs{
 			Adapter: "claude", ExternalID: fmt.Sprintf("default-%d", i), Origin: "interactive",
 			PID: int32(100 + i), Title: "default " + label, LastActivityAt: Now.Add(time.Duration(i-5) * time.Minute),
@@ -50,7 +50,7 @@ func Input() derive.StateInput {
 }
 
 func Expected() model.StateMixer {
-	return derive.LabelWithEvidence(Input(), Now, derive.Thresholds{StalledAfter: 20 * time.Minute})
+	return derive.LabelWithEvidence(Input(), Now, derive.Thresholds{StuckAfter: 20 * time.Minute})
 }
 
 // Seed models a cached mixer from older derivation code, alongside the inputs
@@ -75,7 +75,7 @@ func Seed(tx *store.Tx) (int64, error) {
 	}
 	// Use the wire shape so this fixture also compiles before inputs are retained.
 	fields["input"] = in
-	fields["stalled_after_ms"] = (20 * time.Minute).Milliseconds()
+	fields["stuck_after_ms"] = (20 * time.Minute).Milliseconds()
 	raw, err = json.Marshal(fields)
 	if err != nil {
 		return 0, err

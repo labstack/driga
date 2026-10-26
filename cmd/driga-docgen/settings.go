@@ -45,7 +45,7 @@ func renderSettings() string {
 	b.WriteString("Driga reads `config.toml` and the process environment. Precedence is explicit\n")
 	b.WriteString("flags, then environment, then the TOML file, then the defaults below. Empty\n")
 	b.WriteString("environment values count as unset, and dotenv files are never loaded. An\n")
-	b.WriteString("unknown `DRIGA_*` name is an error. Restart the collector after changing its\n")
+	b.WriteString("unknown `DRIGA_*` name is an error. Restart the Driga service after changing its\n")
 	b.WriteString("configuration; the CLI and hooks reload on every invocation.\n\n")
 	b.WriteString("Find and edit the file with `driga config path`, `driga config show` and\n")
 	b.WriteString("`driga config edit`. List settings are file-only and have no environment\n")

@@ -24,6 +24,7 @@ import (
 // DevCmd contains hidden, on-demand format discovery commands.
 type DevCmd struct {
 	AgySchema DevAgySchemaCmd `cmd:"" help:"Inspect agy database schemas without printing values."`
+	Serve     DevServeCmd     `cmd:"" help:"Serve the app's page on a loopback port, for developing the UI in a browser."`
 }
 
 // DevAgySchemaCmd reads only conversation database schema and row counts.

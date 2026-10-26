@@ -52,9 +52,20 @@ jobs:
           tar -xzf "$archive" just
           sudo install -m 0755 just /usr/local/bin/just
           rm -f "$archive" just
+          bun=1.4.3
+          curl -fsSL --retry 3 -o bun.zip "https://github.com/oven-sh/bun/releases/download/bun-v${bun}/bun-linux-x64.zip"
+          echo "3e730528d89775f03f87f05c06787c4df4099d0a37f3f252e7b829cb23816e18  bun.zip" | sha256sum --check --strict -
+          unzip -q bun.zip
+          sudo install -m 0755 bun-linux-x64/bun /usr/local/bin/bun
+          rm -rf bun.zip bun-linux-x64
           go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
           go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      # The catalog check runs stories in Chromium; the pinned Playwright
+      # installs the browser it was built against.
+      - name: Install Chromium for the catalog check
+        timeout-minutes: 10
+        run: cd ui && bun install --frozen-lockfile && bun x playwright install --with-deps chromium
       - uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
           distribution: goreleaser

@@ -77,7 +77,7 @@ func TestMacNativeMappingAndConcurrentAuthorization(t *testing.T) {
 		t.Fatal(f)
 	}
 	first := f.requests[0]
-	if first.Title != n.Title || first.Body != n.Body || first.Sound != n.Sound || first.ItemID != n.ItemID || first.MachineID != n.MachineID || first.Identifier == "" || first.ThreadIdentifier != first.Identifier {
+	if first.Title != n.Title || first.Body != n.Body || first.Sound != n.Sound || first.ItemID != n.ItemID || first.MachineID != n.MachineID || first.Kind != n.Kind || first.Identifier == "" || first.ThreadIdentifier != first.Identifier {
 		t.Fatal(first)
 	}
 	for _, next := range f.requests {
@@ -151,7 +151,7 @@ func TestMacUnconfiguredBackendUnavailable(t *testing.T) {
 	}
 }
 
-func TestNativeNotificationClickUsesArgv(t *testing.T) {
+func TestNativeNotificationClickKeepsIdentifiersOutOfArgv(t *testing.T) {
 	var calls [][]string
 	r := runnerFunc(func(_ context.Context, name string, args ...string) ([]byte, error) {
 		calls = append(calls, append([]string{name}, args...))
@@ -160,19 +160,19 @@ func TestNativeNotificationClickUsesArgv(t *testing.T) {
 	const path, item = "/opt/Driga's app/driga", "item '$(bad) with spaces"
 	for _, action := range []string{notificationDefaultAction, "com.apple.UNNotificationDismissActionIdentifier"} {
 		for _, id := range []string{item, ""} {
-			if err := notificationResponse(t.Context(), r, path, action, id); err != nil {
+			if err := notificationResponse(t.Context(), r, path, action, id, "local", ""); err != nil {
 				t.Fatal(err)
 			}
 		}
 	}
-	if !reflect.DeepEqual(calls, [][]string{{path, "inbox", "jump", item}}) {
+	if !reflect.DeepEqual(calls, [][]string{{path, "app", "--notification-stdin"}, {path, "app", "--notification-stdin"}}) {
 		t.Fatal(calls)
 	}
 }
 
 func TestDrigaAppExecutable(t *testing.T) {
 	root := t.TempDir()
-	for _, rel := range []string{"Driga.app/Contents/MacOS/driga", "bin/driga", "Other.app/Contents/MacOS/driga", "Driga.app/Contents/MacOS/other"} {
+	for _, rel := range []string{"Driga.app/Contents/MacOS/driga", "Driga.app/Contents/MacOS/drigad", "bin/driga", "Other.app/Contents/MacOS/driga", "Driga.app/Contents/MacOS/other"} {
 		path := filepath.Join(root, filepath.FromSlash(rel))
 		if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 			t.Fatal(err)
@@ -180,7 +180,7 @@ func TestDrigaAppExecutable(t *testing.T) {
 		if err := os.WriteFile(path, nil, 0600); err != nil {
 			t.Fatal(err)
 		}
-		if drigaAppExecutable(path) != (rel == "Driga.app/Contents/MacOS/driga") {
+		if drigaAppExecutable(path) != (rel == "Driga.app/Contents/MacOS/driga" || rel == "Driga.app/Contents/MacOS/drigad") {
 			t.Fatal(rel)
 		}
 	}
@@ -247,5 +247,33 @@ func TestMacRequestPermissionAsksOnceBeforeAnyAlert(t *testing.T) {
 	}
 	if f.authorizations != 3 {
 		t.Fatalf("authorizations = %d; a refusal must be re-checked on the next alert", f.authorizations)
+	}
+}
+
+// A click on the service's notification jumps through the CLI beside it,
+// never by starting drigad again.
+func TestServiceNotificationClickRunsTheCLI(t *testing.T) {
+	var calls [][]string
+	r := runnerFunc(func(_ context.Context, name string, args ...string) ([]byte, error) {
+		calls = append(calls, append([]string{name}, args...))
+		return nil, nil
+	})
+	if err := notificationResponse(t.Context(), r, filepath.FromSlash("/Applications/Driga.app/Contents/MacOS/drigad"), notificationDefaultAction, "w1", "local", ""); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(calls, [][]string{{filepath.FromSlash("/Applications/Driga.app/Contents/MacOS/driga"), "app", "--notification-stdin"}}) {
+		t.Fatal(calls)
+	}
+}
+
+func TestMachineSummaryClickKeepsItsKind(t *testing.T) {
+	var args []string
+	r := runnerFunc(func(_ context.Context, _ string, a ...string) ([]byte, error) { args = a; return nil, nil })
+	if err := notificationResponse(t.Context(), r, "/app/driga", notificationDefaultAction, "", "local", "machine_health"); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"app", "--notification-stdin"}
+	if !reflect.DeepEqual(args, want) {
+		t.Fatal(args)
 	}
 }

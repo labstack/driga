@@ -50,14 +50,14 @@ type StateInput struct {
 
 // StateMixer is saved atomically with its verdict and the label-pass inputs.
 type StateMixer struct {
-	Input          *StateInput   `json:"input,omitzero"`
-	StalledAfterMS int64         `json:"stalled_after_ms,omitzero"`
-	Verdict        string        `json:"verdict"`
-	Heuristic      bool          `json:"heuristic"`
-	Evidence       string        `json:"evidence"`
-	Agreement      int           `json:"agreement"`
-	ObservedAt     time.Time     `json:"observed_at"`
-	Rows           []StateSignal `json:"rows"`
+	Input        *StateInput   `json:"input,omitzero"`
+	StuckAfterMS int64         `json:"stuck_after_ms,omitzero"`
+	Verdict      string        `json:"verdict"`
+	Heuristic    bool          `json:"heuristic"`
+	Evidence     string        `json:"evidence"`
+	Agreement    int           `json:"agreement"`
+	ObservedAt   time.Time     `json:"observed_at"`
+	Rows         []StateSignal `json:"rows"`
 }
 
 func (v StateMixer) MarshalJSON() ([]byte, error) {

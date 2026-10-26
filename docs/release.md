@@ -168,13 +168,16 @@ Linux CI consumes the committed ICNS and validates every representation.
 
 [Apple's helper documentation](https://developer.apple.com/documentation/servicemanagement/updating-helper-executables-from-earlier-versions-of-macos)
 explains the organization-name fallback and `AssociatedBundleIdentifiers`.
-On a headless Mac, `service install` resolves a bundled executable, associates `run.driga`, registers
-the app with Launch Services, and atomically repairs an existing stale plist.
-It stops a running collector before replacing its stale definition; the CLI
-then starts it. Reinstalling a current definition is harmless. Development
-binaries outside the app retain their ordinary path and have no association.
-The executable and app have the same signing team because the CLI is the app's
-main executable. Registration matters: Apple requires Launch Services to know
+`service install`, which the app runs on launch, points the launch agent at
+the bundle's `drigad`, associates `run.driga`, registers the app with Launch
+Services, and atomically repairs an existing stale plist. It stops a running
+service before replacing its stale definition, then starts it. Reinstalling a
+current definition is harmless. It first removes the `run.driga.collector`
+agent earlier releases installed. Development binaries outside the app keep
+their ordinary path and have no association; a `driga-dev` build installs as
+`run.driga.service.dev`, so it never takes over the release's service. `drigad`
+is a copy of the main executable that the bundle script places in
+`Contents/MacOS` and signs before the bundle, so both share the app's team. Registration matters: Apple requires Launch Services to know
 the associated app.
 
 The entire release job runs on GitHub-hosted `macos-15`. An OSS per-build post
@@ -211,11 +214,10 @@ which installs the bundle into `/Applications`. The `binaries` setting emits
 `binary "#{appdir}/Driga.app/Contents/MacOS/driga"`, linking the CLI into
 `$(brew --prefix)/bin/driga` from inside the installed app. This is ordinary
 Ruby cask generation, not GoReleaser's Pro `app`/DMG feature. The caveats
-describe opening the app and no longer mention `driga service install`: the
-app collects in the background and registers its own login item on first
-launch. A launchd service from an earlier release is removed by the app's
-first launch, which says so once and then starts its own collector when the
-service's collector has released the lock.
+describe opening the app: its first launch installs the Driga service, which
+collects from login whether or not the app is open, and removes the collector
+agent an earlier release installed. After an upgrade, the relaunched app
+restarts the service on the new version.
 
 A real signed release and macOS installation are still needed to qualify
 Gatekeeper, offline staple validation, Homebrew upgrade and app relaunch, and

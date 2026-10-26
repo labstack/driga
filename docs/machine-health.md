@@ -18,8 +18,7 @@ accounting of kernel memory or unreadable tasks.
 
 The TUI Machines tab (`2`, or `driga top --tab machines`) expands an app with
 Right and collapses it with Left. Enter shows process details, including memory
-measures and attribution proofs. The web `/machines` page uses keyboard-accessible
-native disclosure controls. Both preserve the existing compact table/pane styles.
+measures and attribution proofs. It keeps the existing compact table and pane styles.
 
 ## Agents first
 
@@ -104,8 +103,8 @@ invent a threshold or send a critical-pressure warning from PSI alone.
 
 `memory_bytes` is the memory amount used for app ranking. Per-process
 `rss_bytes`, `footprint_bytes` and `swap_bytes` retain the individual readings.
-App CPU sums the collector's existing process deltas (100% is one core).
-The first sample after a collector restart can have zero CPU deltas.
+App CPU sums the Driga service's existing process deltas (100% is one core).
+The first sample after the Driga service restart can have zero CPU deltas.
 
 App grouping walks the sampled parent chain to the nearest enclosing `.app`
 bundle, using the same bundle rule as terminal alert jumps. Nested helper
@@ -184,7 +183,7 @@ project. This feature never signals a process. No cleanup action is added.
 
 ### Observed trends
 
-The collector observes the first successful process sample of each minute,
+The Driga service observes the first successful process sample of each minute,
 reusing the existing scan and logical server/launcher grouping. `mcp_groups`
 interns machine, host PID/start, and command key once; `mcp_labels` interns
 host/command display strings. `mcp_states` references their integer IDs, so
@@ -198,7 +197,7 @@ has gaps. Scans feed run endpoints to the trend builder: repeated intermediate
 states cannot change starts, ends, identity completeness, or rate math. Missing
 commands receive one zero sample, including when their host exits. Failed scans
 and machine-only passes add no process evidence. Restarting a host starts a new
-history, even if its PID is reused; restarting the collector preserves history.
+history, even if its PID is reused; restarting the Driga service preserves history.
 
 `mcp_servers.trends` reports up to ten host/command histories from 24 hours by
 default; `--full` reports every retained history. Each command
@@ -272,12 +271,10 @@ Health text survives the titles-only policy, since it contains operational
 readings rather than agent transcript text. Banner text is short; the inbox
 keeps the detailed explanation and uses decimal GB/MB for sizes.
 
-On macOS, Driga.app sends native UserNotifications with Driga's name and icon.
-A local single-item notification click runs `driga inbox jump <id>` through its
-delegate while the collector is running. Unbundled builds have no macOS alerts.
-The stored destination is `machine`. On macOS, the click opens Terminal and runs
-the installed executable's `top --tab machines`; on Linux, a manual jump uses
-`x-terminal-emulator -e`. This avoids requiring a running web server. As with
-existing Linux alerts, notify-send itself has no click action. A click does not
-acknowledge the item. No notification is sent by tests; their runners/notifiers
-are injected and subprocess PATHs are restricted.
+On macOS, the Driga service posts native UserNotifications using the installed
+Driga.app's name and icon, including while its window is closed. A machine
+warning click opens the app's Fleet page. Session alerts open the matching
+session when it is still available; otherwise the app opens Inbox. Clicking
+never acknowledges an item. Unbundled builds have no macOS alerts. Linux's
+notify-send has no click action. Tests inject runners and notifiers and never
+post notifications.

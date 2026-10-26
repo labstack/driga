@@ -61,7 +61,7 @@ func TestWindowsWatchCommands(t *testing.T) {
 	previous := newInboxRunner
 	newInboxRunner = func() attention.Runner { return windowsNoCLI{} }
 	t.Cleanup(func() { newInboxRunner = previous })
-	for _, args := range [][]string{{"collect", "--once"}, {"agents", "--snapshot", "--json"}, {"projects", "--snapshot", "--json"}, {"machines", "show", "--snapshot", "--json"}, {"inbox", "--snapshot", "--json"}, {"doctor", "--json"}} {
+	for _, args := range [][]string{{"service", "run", "--once"}, {"agents", "--snapshot", "--json"}, {"projects", "--snapshot", "--json"}, {"machines", "show", "--snapshot", "--json"}, {"inbox", "--snapshot", "--json"}, {"doctor", "--json"}} {
 		var out, errout bytes.Buffer
 		if code := run(args, "test", strings.NewReader(""), &out, &errout); code != 0 {
 			t.Fatalf("%v: %d %s %s", args, code, &out, &errout)

@@ -64,7 +64,7 @@ func MacNotificationStatus() (string, error) {
 	case 1:
 		return "", ErrNotificationsDenied
 	case 0:
-		return "native, not asked yet: macOS asks when the collector starts", nil
+		return "native, not asked yet: macOS asks when the Driga service starts", nil
 	case -1:
 		return "native UserNotifications (Driga); permission unknown", nil
 	}
@@ -172,11 +172,13 @@ func startMacNotifications(exe string) (objc.ID, *macNotificationCenter, error) 
 					action := goString(response.Send(objc.RegisterName("actionIdentifier")))
 					info := response.Send(objc.RegisterName("notification")).Send(objc.RegisterName("request")).Send(objc.RegisterName("content")).Send(objc.RegisterName("userInfo"))
 					item := goString(info.Send(objc.RegisterName("objectForKey:"), nsString("itemID")))
+					machine := goString(info.Send(objc.RegisterName("objectForKey:"), nsString("machineID")))
+					kind := goString(info.Send(objc.RegisterName("objectForKey:"), nsString("kind")))
 					completeNativeBlock(completion)
 					go func() {
 						ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 						defer cancel()
-						_ = notificationResponse(ctx, CommandRunner{}, exe, action, item)
+						_ = notificationResponse(ctx, CommandRunner{}, exe, action, item, machine, kind)
 					}()
 				}},
 			{Cmd: objc.RegisterName("userNotificationCenter:willPresentNotification:withCompletionHandler:"),
@@ -243,6 +245,7 @@ func (c *macNotificationCenter) Add(ctx context.Context, n NativeNotificationReq
 		info := nsClass("NSMutableDictionary").Send(objc.RegisterName("dictionary"))
 		info.Send(objc.RegisterName("setObject:forKey:"), nsString(n.ItemID), nsString("itemID"))
 		info.Send(objc.RegisterName("setObject:forKey:"), nsString(n.MachineID), nsString("machineID"))
+		info.Send(objc.RegisterName("setObject:forKey:"), nsString(n.Kind), nsString("kind"))
 		content.Send(objc.RegisterName("setUserInfo:"), info)
 		request := nsClass("UNNotificationRequest").Send(objc.RegisterName("requestWithIdentifier:content:trigger:"), nsString(n.Identifier), content, objc.ID(0))
 		block := objc.NewBlock(func(_ objc.Block, err objc.ID) {

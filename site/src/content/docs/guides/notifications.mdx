@@ -1,7 +1,7 @@
 ---
 title: Notifications
 description: Get a desktop alert when a session needs you, allow Driga in macOS System Settings, and tune or turn off alerts.
-summary: Desktop alerts from the Driga app on macOS, Linux and Windows, the macOS notification permission, click actions, the headless service, health warnings and alert settings.
+summary: Desktop alerts from the Driga service on macOS, Linux and Windows, the macOS notification permission, click actions, the headless service, health warnings and alert settings.
 read_when:
   - You expected a desktop alert and did not get one.
   - You want fewer alerts, later alerts, or none.
@@ -10,17 +10,16 @@ read_when:
 Driga raises a desktop alert when a session needs you. The alert shows the
 session title or project and why it needs you, within your capture policy.
 
-Alerts come from the Driga app, which runs the collector and posts what it
-raises. Keep Driga running: closing its window leaves it collecting in the
-menu bar or tray, and it starts at login.
-
+The Driga service posts alerts whether or not the app is open. The app installs
+and starts that service; closing its window or choosing Quit leaves collection
+and alerts running.
 ```sh
 driga app
 ```
 
 Clicking an alert brings Driga forward on the session it is about, without
-acknowledging it, also when the window was closed. Summaries and machine
-warnings open the window. Clicks work the same on macOS, Linux and Windows.
+acknowledging it, also when the window was closed. Machine warnings open Fleet; summaries open Inbox. Linux notify-send alerts
+have no click action.
 
 ## macOS
 
@@ -45,25 +44,22 @@ inbox.
 
 ## Linux and Windows
 
-The app's alerts use the desktop's notification service on Linux and native
+The service uses the desktop's notification service on Linux and native
 toasts on Windows, where Focus Assist or notification policy can suppress
 them. `driga doctor` reports availability.
 
 ## Headless machines
 
-Without the app, the collector service posts alerts itself:
+The same service runs on machines where the app is closed or not installed:
 
 ```sh
 driga service install
 ```
 
-On macOS it uses the installed Driga.app's identity, and clicking a local
-item's notification runs `driga inbox jump <item-id>` without acknowledging
-it. A jump selects a proven tmux pane, focuses a proven Terminal or iTerm
-window when `inbox.jump_terminal = true`, or prints a resume command. Machine
-warnings open Terminal on the Machines tab. Batch summaries and remote alerts
-have no click action. Linux uses `notify-send`, and Windows uses plain toasts
-with a per-user `LabStack.Driga` identity; neither has click actions.
+macOS alerts still require the installed Driga.app identity. A session click
+opens the app on that session when available, otherwise Inbox; a machine
+warning opens Fleet. Linux uses `notify-send`, which has no click actions.
+Windows uses native toasts; Focus Assist and notification policy still apply.
 
 ## Health warnings
 

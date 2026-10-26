@@ -16,7 +16,9 @@ build:
     CGO_ENABLED=0 go build -trimpath \
       -ldflags "-s -w -X main.version=${version} -X main.commit=$(git rev-parse HEAD) -X main.date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
       -o bin/driga ./cmd/driga
-    echo "built bin/driga (${version})"
+    # drigad, the Driga service, is the same program under its own name.
+    ln -f bin/driga bin/drigad
+    echo "built bin/driga and bin/drigad (${version})"
 
 # Put the built binary on PATH, deliberately; it may shadow an installed release.
 install: build
@@ -25,6 +27,7 @@ install: build
     dir="${DRIGA_INSTALL_DIR:-${HOME}/.local/bin}"
     mkdir -p "$dir"
     install -m 0755 bin/driga "$dir/driga"
+    ln -f "$dir/driga" "$dir/drigad"
     echo "installed $dir/driga ($("$dir/driga" version | head -1)); first on PATH: $(command -v driga)"
 
 # Remove the checkout build (never the copy on PATH).
@@ -34,7 +37,7 @@ clean:
 # ---------- Verification ----------
 
 # Local pre-commit gate.
-check: _fmt-check tidy-check vet generate-check docs-check test
+check: _fmt-check tidy-check vet generate-check docs-check ui-check test
     @echo "All checks passed"
 
 # Adds race, vulnerability, workflow and release-snapshot checks.
@@ -83,6 +86,57 @@ docs:
 # Fail when a committed reference page is behind the code it documents.
 docs-check:
     go run ./cmd/driga-docgen --check
+
+# ---------- App UI ----------
+
+# Install the UI's dependencies from the lockfile.
+ui-deps:
+    cd ui && bun install --frozen-lockfile
+
+# Develop the app's UI in a browser at http://127.0.0.1:5173/app/: Vite
+# hot-reloads the UI and sends the API to driga dev serve, which restarts when
+# Go files change (with watchexec on PATH). It reads the data directory the
+# environment names, as every driga command does.
+dev: ui-deps
+    #!/usr/bin/env bash
+    set -euo pipefail
+    trap 'kill 0' EXIT
+    if command -v watchexec >/dev/null; then
+      watchexec --restart --exts go --watch cmd --watch internal -- go run ./cmd/driga dev serve &
+    else
+      go run ./cmd/driga dev serve &
+    fi
+    cd ui && bun --bun vite
+
+# Typecheck and build the app's dashboard host and the panels MCP App into
+# internal/web/app and internal/mcp/apps. Both are committed, so a Go build
+# needs no JavaScript toolchain; rebuild after changing ui/.
+ui: ui-deps
+    cd ui && bun run build
+
+# Review the UI in Storybook, locally only (Canon design.md): every
+# component, panel, page and flow over a fictional fleet. Never published.
+design port="6506": ui-deps
+    cd ui && bun run design -p {{port}}
+
+# The catalog check: every story, its play, accessibility and the layout
+# check, in Chromium, in both schemes.
+design-check: ui-deps
+    cd ui && bun run design-check
+
+# Test and rebuild the UI, run the catalog, and fail when the build in git
+# (staged counts) is behind ui/.
+ui-check: ui design-check
+    #!/usr/bin/env bash
+    set -euo pipefail
+    (cd ui && bun run test)
+    built=(internal/web/app internal/mcp/apps)
+    stale="$(git diff --name-only -- "${built[@]}"; git ls-files --others --exclude-standard -- "${built[@]}")"
+    if [[ -n "$stale" ]]; then
+      echo "$stale" >&2
+      echo "The UI build in git is behind ui/; add the rebuilt files above." >&2
+      exit 1
+    fi
 
 # ---------- Documentation site ----------
 

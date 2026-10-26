@@ -34,7 +34,7 @@ func newWindowsService(bin string) (Controller, error) {
 		return nil, err
 	}
 	sid := user.User.Sid.String()
-	return &taskService{bin: bin, sid: sid, name: `\Driga\` + sid + `\Driga collector`, dataDir: config.DataDir(), run: runScheduler}, nil
+	return &taskService{bin: bin, sid: sid, name: `\Driga\` + sid + `\Driga service` + variantName(), dataDir: config.DataDir(), run: runScheduler}, nil
 }
 
 func runScheduler(_ string, args ...string) ([]byte, error) {
@@ -86,7 +86,7 @@ func (s *taskService) Install() error {
 			env = append(env, key+"="+value)
 		}
 	}
-	b, err := taskXML(s.bin, s.sid, s.dataDir, env...)
+	b, err := taskXML(DaemonPath(s.bin), s.sid, s.dataDir, env...)
 	if err != nil {
 		return err
 	}
@@ -244,4 +244,12 @@ func PrepareScheduled(dataDir string, env ...string) error {
 	// process's window (ShowWindow can affect a shared console).
 	windows.NewLazySystemDLL("kernel32.dll").NewProc("FreeConsole").Call()
 	return os.Setenv("DRIGA_DATA_DIR", dataDir)
+}
+
+// variantName marks a development copy's task, as "Driga service (dev)".
+func variantName() string {
+	if v := strings.TrimPrefix(Variant(), "-"); v != "" {
+		return " (" + v + ")"
+	}
+	return ""
 }

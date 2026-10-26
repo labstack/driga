@@ -10,7 +10,7 @@ import (
 // handOffApp opens Driga.app through Launch Services when a command line
 // starts the app from its bundle, so the app runs with the bundle's identity
 // for its login item and notifications. It reports whether it handed off.
-func handOffApp(system bool) (bool, error) {
+func handOffApp(system bool, launchArgs ...string) (bool, error) {
 	exe, err := os.Executable()
 	if err != nil {
 		return false, err
@@ -22,7 +22,7 @@ func handOffApp(system bool) (bool, error) {
 	if !handsOff(system, exe) {
 		return false, nil
 	}
-	return true, handOffCommand(appBundle(exe), os.Environ()).Run()
+	return true, handOffCommand(appBundle(exe), os.Environ(), launchArgs...).Run()
 }
 
 // handOffCommand opens bundle by its path: another copy of Driga.app, such
@@ -30,14 +30,19 @@ func handOffApp(system bool) (bool, error) {
 // does not pass on the caller's environment, so the DRIGA_* variables naming
 // the data, config and settings go along explicitly. A running app keeps
 // its own.
-func handOffCommand(bundle string, environ []string) *exec.Cmd {
+func handOffCommand(bundle string, environ []string, launchArgs ...string) *exec.Cmd {
 	args := []string{}
 	for _, entry := range environ {
 		if strings.HasPrefix(entry, "DRIGA_") && !strings.HasPrefix(entry, "DRIGA_APP=") {
 			args = append(args, "--env", entry)
 		}
 	}
-	return exec.Command("open", append(args, "-a", bundle)...)
+	args = append(args, "-a", bundle)
+	if len(launchArgs) > 0 {
+		args = append(args, "-n", "--args")
+		args = append(args, launchArgs...)
+	}
+	return exec.Command("open", args...)
 }
 
 // handsOff reports whether to hand off: a launch not made by the system, of

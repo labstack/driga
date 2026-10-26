@@ -153,7 +153,10 @@ func (darwinPlatform) Machine(ctx context.Context) (model.MachineSample, error) 
 			sample.PressureFree = percent
 		}
 	}
-	return sample, nil
+	if err := machineCPU(ctx, &sample); err != nil {
+		return sample, err
+	}
+	return sample, ctx.Err()
 }
 
 func (darwinPlatform) Cwds(ctx context.Context, pids []int32) (map[int32]string, error) {

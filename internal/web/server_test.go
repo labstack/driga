@@ -2,12 +2,10 @@ package web
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"net/http/httptest"
 	"path/filepath"
+	"regexp"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -83,6 +81,8 @@ func fixture(t *testing.T) (*Server, *store.Store, int64, int64) {
 
 func request(s *Server, method, target string) *httptest.ResponseRecorder {
 	r := httptest.NewRequest(method, target, nil)
+	r.Host = "127.0.0.1:47801"
+	r.Header.Set("Origin", "http://127.0.0.1:47801")
 	w := httptest.NewRecorder()
 	s.ServeHTTP(w, r)
 	return w
@@ -96,14 +96,14 @@ func TestMethods(t *testing.T) {
 			t.Errorf("%s: %d", method, w.Code)
 		}
 	}
-	if w := request(s, "HEAD", "/"); w.Code != 200 || w.Body.Len() != 0 {
+	if w := request(s, "HEAD", "/app/"); w.Code != 200 || w.Body.Len() != 0 {
 		t.Errorf("HEAD: %d %s", w.Code, w.Body)
 	}
 }
 
 func TestHeaders(t *testing.T) {
 	s, _, _, _ := fixture(t)
-	for _, path := range []string{"/", "/agents", "/static/app.js"} {
+	for _, path := range []string{"/", "/missing", "/static/fonts/ibm-plex-sans-latin-400-normal.woff2"} {
 		w := request(s, "GET", path)
 		for key, value := range map[string]string{
 			"Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'",
@@ -116,92 +116,26 @@ func TestHeaders(t *testing.T) {
 	}
 }
 
-func TestPagesAndEscaping(t *testing.T) {
-	s, _, agent, project := fixture(t)
-	for _, path := range []string{"/", "/agents", fmt.Sprint("/agents/", agent), "/projects", fmt.Sprint("/projects/", project), "/inbox", "/orphans", "/machines", "/cleanup"} {
-		t.Run(path, func(t *testing.T) {
-			w := request(s, "GET", path)
-			if w.Code != 200 || !strings.Contains(w.Body.String(), "<!DOCTYPE html>") {
-				t.Fatalf("%d %s", w.Code, w.Body)
-			}
-			if strings.Contains(w.Body.String(), title) {
-				t.Fatal("unescaped stored script")
-			}
-			if path == "/" || path == "/agents" || path == fmt.Sprint("/agents/", agent) {
-				if !strings.Contains(w.Body.String(), "&lt;script&gt;alert(1)&lt;/script&gt;") {
-					t.Fatal("escaped title missing")
-				}
-			}
-		})
-	}
-	r := httptest.NewRequest("GET", "/agents", nil)
-	r.Header.Set("HX-Request", "true")
-	w := httptest.NewRecorder()
-	s.ServeHTTP(w, r)
-	if w.Code != 200 || strings.Contains(w.Body.String(), "<!DOCTYPE") || !strings.Contains(w.Body.String(), "&lt;script&gt;") {
-		t.Fatalf("fragment: %d %s", w.Code, w.Body)
-	}
-}
-
-func TestRecentFinishedSessionWithAllOnHomeAndAgents(t *testing.T) {
-	s, st, _, project := fixture(t)
-	if err := st.Tx(context.Background(), func(tx *store.Tx) error {
-		_, err := tx.UpsertSession(model.Session{SessionObs: model.SessionObs{Adapter: "claude", ExternalID: "finished", Title: "Recently finished", LastActivityAt: time.Now()}, RepoID: &project, Label: "finished", EndedAt: timePointer(time.Now())})
-		return err
-	}); err != nil {
-		t.Fatal(err)
-	}
-	for _, path := range []string{"/?all=1", "/agents?all=1"} {
-		w := request(s, "GET", path)
-		if !strings.Contains(w.Body.String(), "Recently finished") {
-			t.Errorf("%s lacks recent completion", path)
+// The app's page allows Mantine's style element by a nonce that is new on
+// every response and matches the one the page hands to Mantine.
+func TestAppPageStyleNonce(t *testing.T) {
+	s, _, _, _ := fixture(t)
+	nonce := regexp.MustCompile(`style-src 'self' 'nonce-([A-Za-z0-9+/=]{24})'`)
+	var seen []string
+	for range 2 {
+		w := request(s, "GET", "/app/")
+		m := nonce.FindStringSubmatch(w.Header().Get("Content-Security-Policy"))
+		if w.Code != 200 || m == nil || !strings.Contains(w.Body.String(), `name="driga-style-nonce" content="`+m[1]+`"`) || strings.Contains(w.Body.String(), "__DRIGA_STYLE_NONCE__") {
+			t.Fatalf("app page: %d %q", w.Code, w.Header().Get("Content-Security-Policy"))
 		}
-	}
-}
-
-func timePointer(t time.Time) *time.Time { return &t }
-
-func TestMachineScope(t *testing.T) {
-	s, st, localAgent, _ := fixture(t)
-	var peerAgent int64
-	err := st.Tx(context.Background(), func(tx *store.Tx) error {
-		peer := tx.ForMachine("peer")
-		if err := peer.UpsertMachine(model.Machine{Name: "Workshop", Hostname: "worker", DeviceID: "ABCDEF123456", State: "live", LastContactAt: time.Now()}); err != nil {
-			return err
+		if strings.Replace(w.Header().Get("Content-Security-Policy"), " 'nonce-"+m[1]+"'", "", 1) != csp {
+			t.Errorf("policy beyond the nonce: %q", w.Header().Get("Content-Security-Policy"))
 		}
-		var err error
-		peerAgent, err = peer.UpsertSession(model.Session{SessionObs: model.SessionObs{ExternalID: "peer-session", Adapter: "codex", Title: "Peer work", LastActivityAt: time.Now()}, Label: "working"})
-		return err
-	})
-	if err != nil {
-		t.Fatal(err)
+		seen = append(seen, m[1])
 	}
-	s.opts.Machine = "abcde"
-	w := request(s, "GET", "/agents")
-	if w.Code != 200 || !strings.Contains(w.Body.String(), "Peer work") || strings.Contains(w.Body.String(), "&lt;script&gt;") {
-		t.Fatalf("default scope: %d %s", w.Code, w.Body)
+	if seen[0] == seen[1] {
+		t.Error("the nonce repeats")
 	}
-	if w := request(s, "GET", fmt.Sprint("/agents/", localAgent, "?machine=peer")); w.Code != 404 {
-		t.Errorf("out-of-scope detail: %d", w.Code)
-	}
-	if w := request(s, "GET", fmt.Sprint("/agents/", peerAgent, "?machine=peer")); w.Code != 200 {
-		t.Errorf("peer detail: %d %s", w.Code, w.Body)
-	}
-	if w := request(s, "GET", "/?machine=unknown"); w.Code != 400 {
-		t.Errorf("unknown scope: %d", w.Code)
-	}
-}
-
-type initiallyUnavailable struct {
-	Source
-	seen atomic.Bool
-}
-
-func (s *initiallyUnavailable) DataVersion(ctx context.Context) (int64, error) {
-	if !s.seen.Swap(true) {
-		return 0, errors.New("temporarily unavailable")
-	}
-	return s.Source.DataVersion(ctx)
 }
 
 func TestMuxRetainsPathAndMethodResponses(t *testing.T) {
@@ -216,7 +150,7 @@ func TestMuxRetainsPathAndMethodResponses(t *testing.T) {
 		{"GET", "/missing//page", 404, ""},
 		{"GET", "/chat/api/../unknown", 503, ""},
 		{"GET", "/flow.json/", 404, ""},
-		{"GET", "/static%2ftheme.css", 200, ""},
+		{"GET", "/static%2ffonts/ibm-plex-mono-latin-400-normal.woff2", 200, ""},
 		{"GET", "/chat/api/send", 405, "POST"},
 		{"DELETE", "/chat/api/send", 405, "GET, HEAD"},
 	} {

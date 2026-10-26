@@ -35,9 +35,6 @@ func newUpgradeWatch(exe, version string) *upgradeWatch {
 	return &upgradeWatch{exe: exe, version: version, stat: modTime, read: installedVersion}
 }
 
-// errUpgradePending holds collector restarts while the executable changed.
-var errUpgradePending = errors.New("waiting for Driga to restart after an update")
-
 // start records the executable as it is now.
 func (w *upgradeWatch) start() {
 	stamp, _ := w.stat(w.exe)

@@ -17,7 +17,7 @@ type FleetCmd struct {
 	Enroll  FleetEnrollCmd  `cmd:"" help:"Open a bounded pairing window."`
 	Rekey   FleetRekeyCmd   `cmd:"" help:"Regenerate identity; invalidate all pairings."`
 	ID      FleetIDCmd      `cmd:"" help:"Print this machine's fleet device ID."`
-	Status  FleetStatusCmd  `cmd:"" help:"Show the serving collector's live state."`
+	Status  FleetStatusCmd  `cmd:"" help:"Show the serving Driga service's live state."`
 }
 
 // FleetIDCmd loads or creates the local identity.
@@ -43,7 +43,7 @@ type FleetStatusCmd struct{ JSONOptions }
 func (FleetStatusCmd) Run(g *Globals) error {
 	resp, err := fleet.Control(context.Background(), config.DataDir(), fleet.ControlRequest{Op: "status"})
 	if err != nil {
-		return fmt.Errorf("fleet collector unavailable: %w", err)
+		return fmt.Errorf("the Driga service is unavailable: %w", err)
 	}
 	if g.JSON {
 		return json.NewEncoder(g.Stdout).Encode(resp.Status)

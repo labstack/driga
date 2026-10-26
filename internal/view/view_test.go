@@ -90,7 +90,7 @@ func TestFreshnessStale(t *testing.T) {
 
 func TestSummaryLineFormat(t *testing.T) {
 	s := fixture(t, func(tx *store.Tx) error {
-		for _, label := range []string{"working", "waiting", "stalled"} {
+		for _, label := range []string{"working", "waiting", "stuck"} {
 			if _, err := tx.UpsertSession(model.Session{SessionObs: model.SessionObs{Adapter: "test", ExternalID: label, StartedAt: testNow, LastActivityAt: testNow}, Label: label, Heuristic: true}); err != nil {
 				return err
 			}
@@ -111,7 +111,7 @@ func TestSummaryLineFormat(t *testing.T) {
 	if err := Render(&out, v, RenderOpts{Envelope: Envelope{Mode: "daemon"}}); err != nil {
 		t.Fatal(err)
 	}
-	want := "3 agents (1 working, 1 waiting, 1 stalled?) · inbox 1 · swap 15.0G/16.0G · load 2/8 · orphans 1 ~512.0M · daemon\n"
+	want := "3 agents (1 working, 1 waiting, 1 stuck) · inbox 1 · swap 15.0G/16.0G · load 2/8 · orphans 1 ~512.0M · daemon\n"
 	if out.String() != want {
 		t.Fatalf("got %q, want %q", out.String(), want)
 	}

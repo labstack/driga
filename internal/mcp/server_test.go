@@ -16,10 +16,12 @@ import (
 
 	"github.com/alecthomas/kong"
 	"github.com/labstack/driga/internal/cli"
+	drigamcp "github.com/labstack/driga/internal/mcp"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/platform"
 	"github.com/labstack/driga/internal/store"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
+	"slices"
 )
 
 type toolCase struct {
@@ -268,6 +270,9 @@ func TestToolDescriptionsSayReadsNeverAck(t *testing.T) {
 		want[tc.name] = true
 	}
 	for _, tool := range r.Tools {
+		if slices.Contains(drigamcp.DashboardTools, tool.Name) {
+			continue // Panel tools return fragments, not read envelopes.
+		}
 		if !want[tool.Name] {
 			t.Fatalf("unexpected tool %s", tool.Name)
 		}
@@ -368,7 +373,7 @@ func TestMachinesUsesStaleCache(t *testing.T) {
 		t.Fatalf("mode=%v", e["mode"])
 	}
 	data := e["data"].(map[string]any)
-	if len(data["rows"].([]any)) != 2 || data["warning"] != "viewer collector not running" {
+	if len(data["rows"].([]any)) != 2 || data["warning"] != "this machine's Driga service is not running" {
 		t.Fatalf("cached machines: %+v", data)
 	}
 }

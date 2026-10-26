@@ -21,7 +21,7 @@ type launchdController struct {
 
 func newLaunchdController(controller Controller, binPath string) *launchdController {
 	return &launchdController{Controller: controller, binPath: binPath,
-		plistPath: filepath.Join(config.ExpandHome("~"), "Library", "LaunchAgents", "run.driga.collector.plist"),
+		plistPath: filepath.Join(config.ExpandHome("~"), "Library", "LaunchAgents", Label("darwin")+".plist"),
 		register: func(app string) error {
 			// Apple requires Launch Services to know the associated bundle,
 			// wherever Driga.app was installed.

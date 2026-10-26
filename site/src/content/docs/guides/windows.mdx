@@ -1,7 +1,7 @@
 ---
 title: Windows
-description: What Driga supports on Windows 10 and 11 today, how the collector, hooks, alerts and cleanup differ, and what is still unverified.
-summary: Experimental Windows support - Task Scheduler collector, hook forms, toasts, terminal jumps, orphan kill and Recycle Bin cleanup, and known limits.
+description: What Driga supports on Windows 10 and 11 today, how the Driga service, hooks, alerts and cleanup differ, and what is still unverified.
+summary: Experimental Windows support - the Driga service as a Task Scheduler task, hook forms, toasts, terminal jumps, orphan kill and Recycle Bin cleanup, and known limits.
 read_when:
   - You run coding agents on Windows and want to know what works.
   - A Windows hook, alert or cleanup behaves differently from macOS or Linux.
@@ -17,19 +17,19 @@ Windows 10 1809+ and Windows 11 have native snapshots, foreground collection,
 the read commands, the terminal UI, the desktop app, MCP, OTLP intake and
 fleet. Install with [Scoop](/start/install).
 
-## Collector
+## The Driga service
 
-`Driga.exe`, the app, runs the CLI next to it, `bin\driga.exe`, as its
-collector without a console window. It sits in the notification area, shows
+`Driga.exe`, the app, installs the Driga service, `bin\drigad.exe`, from the CLI
+next to it, `bin\driga.exe`. It sits in the notification area, shows
 how many sessions need you in its tooltip and menu, and starts at logon. Scoop
 adds a Start menu shortcut for Driga and puts `bin\driga.exe` on `PATH` as
 `driga`; `driga app` opens the app from a terminal.
 
-On a machine without the app, `driga service install` registers a per-user
-Task Scheduler task, **Driga collector**, that runs at logon with least
+`driga service install`, which the app runs, registers a per-user Task
+Scheduler task, **Driga service**, that runs `drigad.exe` at logon with least
 privilege. It needs no password, elevation or PowerShell. `start`, `stop`,
 `restart`, `status`, `logs [-f]` and `uninstall` work as on other platforms. Logs are at
-`%LOCALAPPDATA%\driga\logs\collector.log`, bounded to 10 MiB plus one rotated
+`%LOCALAPPDATA%\driga\logs\service.log`, bounded to 10 MiB plus one rotated
 file.
 
 The task records the home, temporary-directory and Driga path overrides at

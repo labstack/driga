@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/driga/internal/collector"
 	"github.com/labstack/driga/internal/view"
 )
 
@@ -25,9 +24,9 @@ func find(menu []MenuSpec, label string) (MenuSpec, bool) {
 
 func TestMenuModelTopLevel(t *testing.T) {
 	for goos, want := range map[string][]string{
-		"darwin":  {"Driga", "Edit", "View", "Window", "Help"},
-		"windows": {"Driga", "Edit", "View", "Window", "Help"},
-		"linux":   {"Driga", "Edit", "View", "Window", "Help"},
+		"darwin":  {"Driga", "File", "Edit", "View", "Window", "Help"},
+		"windows": {"Driga", "File", "Edit", "View", "Window", "Help"},
+		"linux":   {"Driga", "File", "Edit", "View", "Window", "Help"},
 	} {
 		var got []string
 		for _, item := range MenuModel(goos) {
@@ -43,15 +42,12 @@ func TestMenuModelAccelerators(t *testing.T) {
 	for goos, mod := range map[string]string{"darwin": "Cmd", "windows": "Ctrl", "linux": "Ctrl"} {
 		menu := MenuModel(goos)
 		for label, want := range map[string]struct{ key, command string }{
-			"Settings…":          {mod + "+,", CommandSettings},
-			"Flow":               {mod + "+1", "view:flow"},
-			"Projects":           {mod + "+2", "view:projects"},
-			"Machines":           {mod + "+3", "view:machines"},
-			"Chat":               {mod + "+K", "view:chat"},
-			"Reload":             {mod + "+R", CommandReload},
-			"Find":               {mod + "+F", CommandFind},
-			"Keyboard Shortcuts": {"", CommandKeys},
-			"Documentation":      {"", CommandDocs},
+			"Settings…":     {mod + "+,", CommandSettings},
+			"Back":          {mod + "+[", CommandBack},
+			"Forward":       {mod + "+]", CommandForward},
+			"Reload":        {mod + "+R", CommandReload},
+			"Find":          {mod + "+F", CommandFind},
+			"Documentation": {"", CommandDocs},
 		} {
 			item, ok := find(menu, label)
 			if !ok {
@@ -109,28 +105,28 @@ func TestTrayMenuModel(t *testing.T) {
 	for i := 1; i <= 7; i++ {
 		needs = append(needs, view.BoardRow{Title: fmt.Sprintf("session %d", i), Node: view.FlowNode{ID: int64(i)}})
 	}
-	menu := TrayMenuModel(needs, Status{Collecting: true})
+	menu := TrayMenuModel(needs, Status{Running: true})
 	var labels []string
 	for _, item := range menu {
 		if !item.Separator {
 			labels = append(labels, item.Label)
 		}
 	}
-	want := []string{"Open Driga", "7 need you", "session 1", "session 2", "session 3", "session 4", "session 5", "Collecting", "Quit"}
+	want := []string{"Open Driga", "7 need you", "session 1", "session 2", "session 3", "session 4", "session 5", "Driga service running", "Settings…", "About Driga", "Quit"}
 	if strings.Join(labels, "|") != strings.Join(want, "|") {
 		t.Fatalf("tray menu %q; want %q", labels, want)
 	}
 	if item, _ := find(menu, "session 3"); item.Command != "session:3" {
 		t.Errorf("need opens %q", item.Command)
 	}
-	if item, _ := find(menu, "Collecting"); !item.Disabled {
+	if item, _ := find(menu, "Driga service running"); !item.Disabled {
 		t.Error("status line is clickable")
 	}
 	if item, _ := find(menu, "Quit"); item.Role != "quit" {
 		t.Error("Quit has no quit role")
 	}
 	empty := TrayMenuModel(nil, Status{})
-	if _, ok := find(empty, "0 need you"); ok || len(empty) != 5 {
+	if _, ok := find(empty, "0 need you"); ok || len(empty) != 8 {
 		t.Errorf("empty tray menu %+v", empty)
 	}
 }
@@ -140,15 +136,12 @@ func TestStatusLine(t *testing.T) {
 		status Status
 		want   string
 	}{
-		{Status{Collecting: true}, "Collecting"},
-		{Status{}, "Starting the collector…"},
-		{Status{Owner: collector.Owner{Kind: "service", PID: 42}}, "Collected by the background service (pid 42)"},
-		{Status{Owner: collector.Owner{Kind: "manual", PID: 7}}, "Collected by driga collect (pid 7)"},
-		{Status{Owner: collector.Owner{Kind: "app", PID: 9}}, "Collected by another Driga app (pid 9)"},
-		{Status{Owner: collector.Owner{Kind: "unknown", PID: 3}}, "Collected by another process (pid 3)"},
-		{Status{Err: errors.New("collector exited: exit status 1")}, "Collector error: collector exited: exit status 1"},
-		{Status{Collecting: true, Err: errors.New("login shell: timeout")}, "Collecting · login shell: timeout"},
-		{Status{Err: errors.New(strings.Repeat("x", 200))}, "Collector error: " + strings.Repeat("x", 62) + "…"},
+		{Status{Running: true}, "Driga service running"},
+		{Status{}, "Starting the Driga service…"},
+		{Status{RestartPending: true, Running: true}, "Restart Driga to finish updating"},
+		{Status{Err: errors.New("driga service install: denied")}, "Driga service: driga service install: denied"},
+		{Status{Running: true, Err: errors.New("login shell: timeout")}, "Driga service running · login shell: timeout"},
+		{Status{Err: errors.New(strings.Repeat("x", 200))}, "Driga service: " + strings.Repeat("x", 64) + "…"},
 	} {
 		if got := StatusLine(tc.status); got != tc.want {
 			t.Errorf("StatusLine(%+v) = %q; want %q", tc.status, got, tc.want)
@@ -179,6 +172,33 @@ func TestExternalLinks(t *testing.T) {
 	} {
 		if got := external(raw); got != want {
 			t.Errorf("external(%q) = %v; want %v", raw, got, want)
+		}
+	}
+}
+
+// Forged origins and non-web schemes must not replace the privileged app page
+// or be handed to the operating system's external opener.
+func TestNavigationFailsClosed(t *testing.T) {
+	for _, raw := range []string{
+		"file:///etc/passwd", "custom://launch", "javascript:alert(1)",
+		"data:text/html,hello", "about:blank", "/flow", "//evil.example/app/",
+		"mygo://evil.example/app/", "mygo://localhost.evil/app/",
+		"mygo://localhost:123/app/", "mygo://user@localhost/app/",
+		"http://mygo.localhost:123/app/", "http://user@mygo.localhost/app/",
+		"https://mygo.localhost/app/", "http://mygo.localhost.evil/app/", "%zz",
+	} {
+		if internalNavigation(raw) {
+			t.Errorf("forged navigation allowed: %q", raw)
+		}
+	}
+	for _, raw := range []string{"file:///etc/passwd", "custom://launch", "javascript:alert(1)", "mygo://evil.example/app/", "http://user@mygo.localhost/app/"} {
+		if external(raw) {
+			t.Errorf("unsafe URL sent to external opener: %q", raw)
+		}
+	}
+	for _, raw := range []string{"mygo://localhost/app/", "http://mygo.localhost/app/?view=fleet#session"} {
+		if !internalNavigation(raw) || external(raw) {
+			t.Errorf("app origin blocked or opened externally: %q", raw)
 		}
 	}
 }

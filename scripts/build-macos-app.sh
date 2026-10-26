@@ -10,6 +10,9 @@ snapshot=${4:?snapshot flag required}
 contents=$(dirname "$(dirname "$binary")")
 app=$(dirname "$contents")
 build_dir=$(dirname "$app")
+# drigad, the Driga service, is the same program under the name it runs as
+# the service by. It sits beside driga so launchd attributes it to Driga.app.
+cp "$binary" "$contents/MacOS/drigad"
 python3 scripts/macos-app.py "$app" "$version"
 
 if [ "$snapshot" != true ]; then
@@ -22,7 +25,10 @@ if [ "$snapshot" != true ]; then
   # Credentials go to notarytool directly: a keychain profile stored in the
   # temporary keychain is not found by later notarytool calls on runners.
   notary=(--key "$DRIGA_NOTARY_KEY" --key-id "$DRIGA_NOTARY_KEY_ID" --issuer "$DRIGA_NOTARY_ISSUER")
-  # Signing the outer bundle also signs its main executable and seals resources.
+  # drigad is a second executable, signed first; signing the outer bundle
+  # then signs its main executable and seals resources.
+  codesign --force --sign "$DRIGA_SIGNING_IDENTITY" --keychain "$DRIGA_SIGNING_KEYCHAIN" \
+    --options runtime --timestamp "$contents/MacOS/drigad"
   codesign --force --sign "$DRIGA_SIGNING_IDENTITY" --keychain "$DRIGA_SIGNING_KEYCHAIN" \
     --options runtime --timestamp "$app"
   codesign --verify --deep --strict --verbose=2 "$app"

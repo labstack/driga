@@ -110,7 +110,7 @@ func (m *app) boardAccept(r view.BoardRow) bool {
 		return false
 	}
 
-	states := []string{"", "waiting", "working", "stalled"}
+	states := []string{"", "waiting", "working", "stuck"}
 	if m.boardFilter > 0 && r.State != states[m.boardFilter] {
 		return false
 	}
@@ -291,7 +291,9 @@ func (m *app) boardLayout() (string, []flowHit) {
 		mode = "Map"
 	}
 	add("Flow  [m Map] [t Timeline] [s Sessions] · " + mode + " · last 60m")
-	add(fmt.Sprintf("◆ %d needs you   ▶ %d   ‖ %d   ○ %d   ✓ %d", len(b.Needs), b.Pulse["working"], b.Pulse["stalled"], b.Pulse["idle"], b.Pulse["finished"]))
+	hcounts := view.HeaderCounts(m.snap.Inbox, m.snap.Agents, m.snap.Orphans, m.snap.Summary)
+	add(fmt.Sprintf("Need you %d · To review %d · Stuck %d", hcounts.NeedYou+m.extraPrompts(), hcounts.ToReview, hcounts.Stuck))
+	add(fmt.Sprintf("Leftover %d · Reclaimable %s · Memory %s/%s", hcounts.Leftover, view.HumanBytes(hcounts.Reclaimable), view.HumanBytes(hcounts.MemoryUsed), view.HumanBytes(hcounts.MemoryTotal)))
 	add(view.BoardSpark(b.Spark) + " events/min · updated " + duration(max(time.Duration(0), m.opts.Now().Sub(b.ObservedAt))) + " ago")
 	add(fmt.Sprintf("NEEDS YOU · %d · oldest first", len(b.Needs)))
 	idx := 0
@@ -306,7 +308,7 @@ func (m *app) boardLayout() (string, []flowHit) {
 		if m.flowAttention {
 			pre = "› "
 		}
-		add(pre + "◆ " + r.Title + " · " + r.Node.Project + " · " + r.Age)
+		add(pre + "◆ " + clean(r.Title+" · "+r.Node.Project) + " · " + r.Age)
 		command := r.Command
 		if command == "" {
 			command = r.WaitReason
@@ -325,13 +327,13 @@ func (m *app) boardLayout() (string, []flowHit) {
 			}
 		}
 		add("  " + action)
-		hits = append(hits, flowHit{y: 4, width: w, height: max(1, len(lines)-3), index: -idx - 1})
+		hits = append(hits, flowHit{y: 5, width: w, height: max(1, len(lines)-3), index: -idx - 1})
 		shown := 1
 		for i, r := range b.Needs {
 			if i == idx || shown >= 3 {
 				continue
 			}
-			add("  ◆ " + r.Title + " · " + r.Node.Project + " · " + r.Age)
+			add("  ◆ " + clean(r.Title+" · "+r.Node.Project) + " · " + r.Age)
 			shown++
 		}
 		if len(b.Needs) > shown {
@@ -371,7 +373,7 @@ func (m *app) boardLayout() (string, []flowHit) {
 	} else {
 		// Lip Gloss owns the tree connectors; the same preorder supplies hit targets.
 		for _, g := range b.Groups {
-			t := tree.New().Root(g.Name)
+			t := tree.New().Root(clean(g.Name))
 			branch := map[string]*tree.Tree{}
 			indices := []int{}
 			for i, r := range rows {
@@ -404,7 +406,16 @@ func (m *app) boardLayout() (string, []flowHit) {
 			break
 		}
 	}
-	reserved := 6
+	selectedRow := m.boardSelected()
+	detailW := w
+	if panelW > 0 {
+		detailW = panelW - 4
+	}
+	var panelDetails []string
+	if selectedRow != nil {
+		panelDetails = m.boardPanelDetails(*selectedRow, detailW)
+	}
+	reserved := 6 + len(panelDetails)
 	if panelW > 0 {
 		reserved = 0
 	}
@@ -422,8 +433,15 @@ func (m *app) boardLayout() (string, []flowHit) {
 		add("  No sessions in this window")
 	}
 	detail := []string{}
-	if r := m.boardSelected(); r != nil {
-		detail = append(detail, r.Title+" · "+view.FlowJoin(r.Node.Project, r.Node.Adapter)+" · "+r.State)
+	if r := selectedRow; r != nil {
+		// Normalize session text before wrapping or building trees: controls
+		// must occupy spaces, never introduce lines or affect frame padding.
+		detail = append(detail, clean(r.Title+" · "+view.FlowJoin(r.Node.Project, r.Node.Adapter)+" · "+r.State))
+		detail = append(detail, panelDetails...)
+		familyLimit := 5
+		if len(panelDetails) > 0 {
+			familyLimit = max(1, min(familyLimit, (h-len(panelDetails)-7)/2))
+		}
 		family := tree.New().Root("−60m                  now")
 		familyNodes := map[string]*tree.Tree{}
 		shown := 0
@@ -434,11 +452,11 @@ func (m *app) boardLayout() (string, []flowHit) {
 					continue
 				}
 				total++
-				if shown >= 5 {
+				if shown >= familyLimit {
 					continue
 				}
 				shown++
-				text := member.Glyph + " " + member.Title + "\n" + view.BoardStrip(member, max(8, panelW-10))
+				text := member.Glyph + " " + clean(member.Title) + "\n" + view.BoardStrip(member, max(8, panelW-10))
 				node := tree.New().Root(text)
 				familyNodes[member.Key] = node
 				if parent := familyNodes[member.Parent]; parent != nil {
@@ -453,20 +471,10 @@ func (m *app) boardLayout() (string, []flowHit) {
 			detail = append(detail, fmt.Sprintf("+%d more · open session", total-shown))
 		}
 		if r.Node.LastTool != "" {
-			detail = append(detail, "now   "+r.Node.LastTool)
-		}
-		if len(r.Files) > 0 {
-			names := []string{}
-			for _, f := range r.Files {
-				names = append(names, f.Path)
-			}
-			detail = append(detail, "files "+strings.Join(names, " · "))
-			for _, name := range r.Overlaps {
-				detail = append(detail, "┄ "+name+" · same file")
-			}
+			detail = append(detail, "now   "+clean(r.Node.LastTool))
 		}
 		if tools := view.BoardTools(*r); tools != "" {
-			detail = append(detail, "tools "+tools+" · last hour")
+			detail = append(detail, "tools "+clean(tools)+" · last hour")
 		}
 		if r.Cost != nil {
 			detail = append(detail, "cost "+boardMoney(r.Cost)+" · retained window")
@@ -485,13 +493,16 @@ func (m *app) boardLayout() (string, []flowHit) {
 		return strings.Join(joined, "\n"), hits
 	}
 	add(strings.Repeat("─", w))
-	if r := m.boardSelected(); r != nil {
-		add(r.Title + " · " + r.Node.Adapter + " · " + r.State)
+	if r := selectedRow; r != nil {
+		add(clean(r.Title + " · " + r.Node.Adapter + " · " + r.State))
+		for _, line := range panelDetails {
+			add(line)
+		}
 		if r.Node.LastTool != "" {
-			add("now " + r.Node.LastTool)
+			add("now " + clean(r.Node.LastTool))
 		}
 		if tools := view.BoardTools(*r); tools != "" {
-			add(tools + " · last hour")
+			add(clean(tools) + " · last hour")
 		}
 		if r.Cost != nil {
 			add("cost " + boardMoney(r.Cost) + " · retained window")
@@ -500,6 +511,85 @@ func (m *app) boardLayout() (string, []flowHit) {
 	add("Enter Open session · J Terminal · K Stop · c Ask Chat · Tab Needs you · / Find")
 
 	return strings.Join(lines, "\n"), hits
+}
+
+// boardPanelDetails reads the same captured outcomes and project-relative
+// paths as Fleet's inspector. Session ids are local to their machine.
+func (m *app) boardPanelDetails(r view.BoardRow, width int) []string {
+	var selected *view.SessionPanel
+	for i := range m.snap.SessionPanels {
+		d := &m.snap.SessionPanels[i]
+		if d.ID == r.Node.ID && d.MachineID == r.Node.MachineID {
+			selected = d
+			break
+		}
+	}
+	if selected == nil {
+		return nil
+	}
+	var lines []string
+	turns := selected.Turns[max(0, len(selected.Turns)-30):]
+	if len(turns) > 0 {
+		var strip strings.Builder
+		for _, turn := range turns {
+			glyph := "?"
+			switch turn {
+			case "ok":
+				glyph = "✓"
+			case "waited":
+				glyph = "◆"
+			case "failed":
+				glyph = "×"
+			}
+			strip.WriteString(glyph)
+		}
+		word := "turns"
+		if len(turns) == 1 {
+			word = "turn"
+		}
+		lines = append(lines, fmt.Sprintf("%d %s · %s", len(turns), word, strip.String()), "✓ went through · ◆ waited · × failed")
+	}
+	if len(selected.Files) > 0 {
+		word := "files"
+		if len(selected.Files) == 1 {
+			word = "file"
+		}
+		lines = append(lines, fmt.Sprintf("%d %s", len(selected.Files), word))
+		project := map[int64]bool{}
+		for _, n := range m.snap.BoardData.Nodes {
+			if n.MachineID == r.Node.MachineID && n.Project == r.Node.Project && n.Project != "" {
+				project[n.ID] = true
+			}
+		}
+		shared := map[string][]int64{}
+		for _, d := range m.snap.SessionPanels {
+			if d.MachineID != r.Node.MachineID || d.ID == r.Node.ID || !project[d.ID] {
+				continue
+			}
+			for _, file := range d.Files {
+				shared[file] = append(shared[file], d.ID)
+			}
+		}
+		for _, file := range selected.Files[:min(3, len(selected.Files))] {
+			suffix := ""
+			if ids := shared[file]; len(ids) > 0 {
+				sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+				names := make([]string, len(ids))
+				for i, id := range ids {
+					names[i] = fmt.Sprintf("#%d", id)
+				}
+				suffix = " · also " + strings.Join(names, ", ")
+			}
+			lines = append(lines, truncate(clean(file), max(1, width-lipgloss.Width(suffix)))+suffix)
+		}
+		if len(selected.Files) > 3 {
+			lines = append(lines, fmt.Sprintf("+%d more files · Enter Open", len(selected.Files)-3))
+		}
+	}
+	if len(lines) == 0 {
+		return nil
+	}
+	return strings.Split(wrapText(strings.Join(lines, "\n"), width), "\n")
 }
 
 func (m *app) boardTrack(track string) string {
@@ -535,4 +625,12 @@ func (m *app) selectFlowView(key string) tea.Cmd {
 	m.flowOffset = 0
 	m.rebuild()
 	return nil
+}
+
+func (m *app) extraPrompts() int {
+	ids := make([]int64, 0, len(m.prompts))
+	for _, p := range m.prompts {
+		ids = append(ids, p.SessionID)
+	}
+	return view.ExtraPrompts(m.snap.Inbox, m.snap.Agents, m.localMachine(), ids)
 }

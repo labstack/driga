@@ -254,6 +254,11 @@ func (m *app) chatView() string {
 			lines = append(lines, card, "")
 			continue
 		}
+		if row.Role == "panel" {
+			// The app renders panels as cards; the terminal names them.
+			lines = append(lines, view.TokenStyle("tool", m.opts.NoColor).Render("  ▦ "+chat.PanelTitle(row.Text)+" · open the Driga app to see it"), "")
+			continue
+		}
 		if row.Role == "tool" {
 			tools++
 			if m.chatTools {
@@ -310,7 +315,7 @@ func (m *app) chatView() string {
 		lines = append(lines, dim.Render(fmt.Sprintf("▸ tools used · %d · ctrl+t expand/collapse", tools)))
 	}
 	if len(lines) == 0 {
-		lines = append(lines, dim.Render("Ask what needs you, why a session is stalled, or what this screen means."))
+		lines = append(lines, dim.Render("Ask what needs you, why a session is stuck, or what this screen means."))
 	}
 	context := m.chatContextLine()
 	m.chatInput.SetWidth(max(1, m.width-4))

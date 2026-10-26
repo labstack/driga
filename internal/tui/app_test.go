@@ -548,7 +548,7 @@ func TestInitialSnapshotLoadingMessage(t *testing.T) {
 	defer s.Close()
 	m := New(s, Options{DataDir: home, NoColor: true})
 	_ = m.Init() // Leave collection pending to inspect the first frame.
-	if text := m.View().Content; !strings.Contains(text, "Collecting a snapshot (no collector running)…") || strings.Contains(text, "Loading…") {
+	if text := m.View().Content; !strings.Contains(text, "Collecting a snapshot (the Driga service is not running)…") || strings.Contains(text, "Loading…") {
 		t.Fatal(text)
 	}
 	m = New(fixture(), Options{DataDir: home, NoColor: true})

@@ -17,8 +17,8 @@ func TestStrictConfiguration(t *testing.T) {
 		{"[fleet]\nlitsen = 'x'", "fleet.litsen"},
 		{"[adapters.claude]\nenabeld = true", "adapters.claude.enabeld"},
 		{"[adapters.typo]\nenabled = true", "adapters.typo"},
-		{"stuck_after = '1m'", "stuck_after"},
-		{"stalled_after = '-1s'", "stalled_after"},
+		{"stalled_after = '1m'", "stalled_after"},
+		{"stuck_after = '-1s'", "stuck_after"},
 		{"orphan_min_age = '-1s'", "orphan_min_age"},
 		{"[cleanup]\nlow_disk_bytes = '2GiB'", "cleanup.low_disk_bytes"},
 	} {
@@ -123,10 +123,10 @@ func TestConfigAndSpoolXDGPaths(t *testing.T) {
 }
 
 func TestZeroDurations(t *testing.T) {
-	t.Setenv("DRIGA_STALLED_AFTER", "0s")
+	t.Setenv("DRIGA_STUCK_AFTER", "0s")
 	t.Setenv("DRIGA_ORPHAN_MIN_AGE", "0s")
 	c, err := Load(filepath.Join(t.TempDir(), "missing"))
-	if err != nil || c.StalledAfter != 10*time.Minute || c.OrphanMinAge != 0 {
+	if err != nil || c.StuckAfter != 10*time.Minute || c.OrphanMinAge != 0 {
 		t.Fatal(c, err)
 	}
 	t.Setenv("DRIGA_FLEET_ENROLL_WINDOW", "0s")
@@ -200,7 +200,7 @@ func TestFlagPrecedenceBeforeRelatedValidation(t *testing.T) {
 
 func TestAllScalarEnvironmentMappings(t *testing.T) {
 	for _, tc := range []struct{ name, value string }{
-		{"DRIGA_ROOT_DEPTH", "0"}, {"DRIGA_STALLED_AFTER", "2m"}, {"DRIGA_ORPHAN_MIN_AGE", "3m"},
+		{"DRIGA_ROOT_DEPTH", "0"}, {"DRIGA_STUCK_AFTER", "2m"}, {"DRIGA_ORPHAN_MIN_AGE", "3m"},
 		{"DRIGA_CAPTURE_TEXT", "snippets"}, {"DRIGA_OPEN_CMD", "code {cwd}"}, {"DRIGA_NO_SERVICE_HINT", "true"},
 		{"DRIGA_ADAPTERS_CLAUDE_ENABLED", "false"}, {"DRIGA_ADAPTERS_CODEX_ENABLED", "false"}, {"DRIGA_ADAPTERS_GEMINI_ENABLED", "false"},
 		{"DRIGA_SUMMARIES_ENABLED", "true"}, {"DRIGA_SUMMARIES_MODEL", "custom"},
@@ -231,7 +231,7 @@ func TestAllScalarEnvironmentMappings(t *testing.T) {
 
 func TestInvalidEnvironmentRangesAreRedacted(t *testing.T) {
 	for _, tc := range []struct{ name, value string }{
-		{"DRIGA_STALLED_AFTER", "-1ns"}, {"DRIGA_ORPHAN_MIN_AGE", "-1h"}, {"DRIGA_CLEANUP_WORKTREE_IDLE", "999999999999h"},
+		{"DRIGA_STUCK_AFTER", "-1ns"}, {"DRIGA_ORPHAN_MIN_AGE", "-1h"}, {"DRIGA_CLEANUP_WORKTREE_IDLE", "999999999999h"},
 		{"DRIGA_MACHINE_DISK_FREE_MIN", "18446744073709551616"}, {"DRIGA_MACHINE_DISK_FREE_MIN", "-1GiB"},
 		{"DRIGA_ROOT_DEPTH", "-1"}, {"DRIGA_CAPTURE_TEXT", "private-value"},
 		{"DRIGA_FLEET_ENROLL_WINDOW", "11m"},
@@ -243,5 +243,12 @@ func TestInvalidEnvironmentRangesAreRedacted(t *testing.T) {
 				t.Fatal(err)
 			}
 		})
+	}
+}
+
+func TestOldStalledEnvironmentIsRejected(t *testing.T) {
+	t.Setenv("DRIGA_STALLED_AFTER", "1m")
+	if _, err := Load(filepath.Join(t.TempDir(), "missing")); err == nil || !strings.Contains(err.Error(), "DRIGA_STALLED_AFTER") {
+		t.Fatalf("old threshold alias accepted: %v", err)
 	}
 }

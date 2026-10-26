@@ -198,7 +198,7 @@ func TestAlertCandidatesRemoteReplayAndMetadataExpiry(t *testing.T) {
 		if err := alertInbox(context.Background(), d, st); err != nil {
 			t.Fatal(err)
 		}
-		if len(n.notes) != 1 || n.notes[0].ItemID != "" || n.notes[0].Body != "Peer task · waiting for input · from Editor" {
+		if len(n.notes) != 1 || n.notes[0].ItemID != "remote" || n.notes[0].MachineID != "peer" || n.notes[0].Body != "Peer task · waiting for input · from Editor" {
 			t.Fatal(n.notes)
 		}
 	}

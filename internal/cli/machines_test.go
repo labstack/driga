@@ -126,7 +126,7 @@ func TestMachinesCommandUsesCachedRows(t *testing.T) {
 		t.Fatal(e)
 	}
 	out, _ := readRun(t, "machines")
-	for _, want := range []string{"NAME", "vm", "stale", "viewer collector not running", "connection lost"} {
+	for _, want := range []string{"NAME", "vm", "stale", "this machine's Driga service is not running", "connection lost"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q: %s", want, out)
 		}

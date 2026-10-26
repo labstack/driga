@@ -10,8 +10,9 @@ from pathlib import Path
 
 def assemble(app, version):
     contents = app / "Contents"
-    if not (contents / "MacOS/driga").is_file():
-        raise ValueError("bundle executable is missing")
+    for name in ("driga", "drigad"):
+        if not (contents / "MacOS" / name).is_file():
+            raise ValueError(f"bundle executable {name} is missing")
     # CFBundleVersion is numeric; the user-facing version retains the alpha or
     # snapshot suffix. CalVer's three numeric components come from the tag.
     match = re.fullmatch(r"(\d+\.\d+\.\d+)(?:-[A-Za-z0-9.-]+)?", version)

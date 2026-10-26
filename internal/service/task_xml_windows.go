@@ -40,7 +40,7 @@ func taskXML(bin, sid, dataDir string, env ...string) ([]byte, error) {
 	}
 	escape := func(s string) string { var b strings.Builder; _ = xml.EscapeText(&b, []byte(s)); return b.String() }
 	// Task Scheduler passes these arguments directly to the process, without a shell.
-	args := `collect --owner=service --scheduled --service-data-dir ` + windows.EscapeArg(dataDir)
+	args := `--owner=service --scheduled --service-data-dir ` + windows.EscapeArg(dataDir)
 	for _, value := range env {
 		key, _, ok := strings.Cut(value, "=")
 		if !ok || !scheduledEnvKey(key) || strings.ContainsAny(value, "\x00\r\n\"") {
@@ -50,7 +50,7 @@ func taskXML(bin, sid, dataDir string, env ...string) ([]byte, error) {
 	}
 	return []byte(`<?xml version="1.0" encoding="UTF-8"?>
 <Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
- <RegistrationInfo><Description>Driga per-user collector</Description></RegistrationInfo>
+ <RegistrationInfo><Description>Driga service</Description></RegistrationInfo>
  <Triggers><LogonTrigger><Enabled>true</Enabled><UserId>` + escape(sid) + `</UserId></LogonTrigger></Triggers>
  <Principals><Principal id="User"><UserId>` + escape(sid) + `</UserId><LogonType>InteractiveToken</LogonType><RunLevel>LeastPrivilege</RunLevel></Principal></Principals>
  <Settings>

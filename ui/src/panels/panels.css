@@ -1,0 +1,10 @@
+/* The few styles Mantine's theme does not cover: hidden text and Markdown in
+   text panels. Colors are theme variables only. */
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+.markdown p { margin: 0 0 8px; }
+.markdown ul { margin: 0 0 8px; padding-left: 18px; }
+
+.markdown table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; font-size: var(--mantine-font-size-xs); }
+.markdown th, .markdown td { padding: 2px 8px 2px 0; text-align: left; vertical-align: top; }
+.markdown th { white-space: nowrap; }

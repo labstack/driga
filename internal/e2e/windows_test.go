@@ -53,6 +53,8 @@ func TestWindowsEndToEnd(t *testing.T) {
 			t.Fatalf("build %s: %v\n%s", build.pkg, err, out)
 		}
 	}
+	// Releases ship drigad.exe beside driga.exe; the service runs it.
+	must(t, os.Link(s.bin, filepath.Join(buildDir, "drigad.exe")))
 	t.Run("Snapshot attribution", func(t *testing.T) {
 		f := s.isolate(t)
 		agent := f.agent(t)
@@ -61,7 +63,7 @@ func TestWindowsEndToEnd(t *testing.T) {
 	t.Run("Foreground collector", func(t *testing.T) {
 		f := s.isolate(t)
 		agent := f.agent(t)
-		collector := f.start(t, f.bin, "collect")
+		collector := f.start(t, f.bin, "service", "run")
 		var last []byte
 		t.Cleanup(func() {
 			if t.Failed() {
@@ -104,7 +106,7 @@ func TestWindowsEndToEnd(t *testing.T) {
 			}
 		})
 		installOut, installErr := f.try("", "service", "install")
-		installed = installErr == nil || strings.Contains(installErr.Error(), "installed collector; start with")
+		installed = installErr == nil || strings.Contains(installErr.Error(), "installed the Driga service; start it with")
 		if installErr != nil {
 			t.Fatalf("install scheduled collector: %v %s", installErr, installOut)
 		}
@@ -119,7 +121,7 @@ func TestWindowsEndToEnd(t *testing.T) {
 		// The task must record the isolation; Scheduler does not inherit our environment.
 		token, err := windows.GetCurrentProcessToken().GetTokenUser()
 		must(t, err)
-		task := `\Driga\` + token.User.Sid.String() + `\Driga collector`
+		task := `\Driga\` + token.User.Sid.String() + `\Driga service`
 		out := f.external(t, "", "schtasks.exe", "/Query", "/TN", task, "/XML")
 		// schtasks emits UTF-16 on some Windows versions. Decode before checking paths.
 		text := decodeSchedulerXML(out)
@@ -200,7 +202,7 @@ func TestWindowsEndToEnd(t *testing.T) {
 		if len(events) != 1 || events[0].SessionID != "windows-e2e" || events[0].Event != "Notification" || !pathx.Equal(events[0].Cwd, f.repo) {
 			t.Fatalf("installed hook did not reach isolated spool: %+v", events)
 		}
-		f.run(t, "", "collect", "--once")
+		f.run(t, "", "service", "run", "--once")
 		st, err := store.Open(filepath.Join(f.data, "driga.db"), store.ReadOnly)
 		must(t, err)
 		must(t, st.Tx(context.Background(), func(tx *store.Tx) error {
@@ -326,7 +328,7 @@ func TestWindowsEndToEnd(t *testing.T) {
 		}
 		old := time.Now().Add(-30 * 24 * time.Hour)
 		must(t, os.Chtimes(index, old, old))
-		f.run(t, "", "collect", "--once")
+		f.run(t, "", "service", "run", "--once")
 		var envelope struct{ Data []cleanup.Candidate }
 		must(t, json.Unmarshal(f.run(t, "", "cleanup", "--kind", "worktree", "--why", "--json"), &envelope))
 		var candidate cleanup.Candidate

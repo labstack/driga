@@ -44,12 +44,11 @@ confirmation exits `2` when stdin is not a terminal unless `--yes` is passed.
 | [`driga top`](#driga-top) | Open the interactive session viewer. |
 | [`driga app`](#driga-app) | Open the Driga desktop app, or focus it. |
 | [`driga ask`](#driga-ask) | Ask a one-shot Chat question through Claude and driga's read-only tools. |
-| [`driga mcp`](#driga-mcp) | Serve read-only MCP tools over stdio. |
+| [`driga mcp`](#driga-mcp) | Serve collected views and editable dashboards over MCP stdio. |
 | [`driga doctor`](#driga-doctor) | Check setup and collection health. |
 | [`driga init`](#driga-init) | Guide optional setup. |
 | [`driga config`](#driga-config) | Inspect or edit configuration. |
-| [`driga collect`](#driga-collect) | Run the collector (what launchd runs). |
-| [`driga service`](#driga-service) | Manage the collector service. |
+| [`driga service`](#driga-service) | Run or manage the Driga service (drigad). |
 | [`driga hooks`](#driga-hooks) | Manage agent hooks. |
 | [`driga fleet`](#driga-fleet) | Inspect fleet identity, serving status and viewers. |
 | [`driga version`](#driga-version) | Print the driga version. |
@@ -504,10 +503,10 @@ driga ask <question>... [flags]
 
 ## driga mcp
 
-Serve read-only MCP tools over stdio.
+Serve collected views and editable dashboards over MCP stdio.
 
 ```text
-Read-only MCP server on stdio. Reading never acknowledges inbox items; snapshot mode has no history.
+MCP server on stdio: read collected views and create or edit Driga dashboards. Reading never acknowledges inbox items; snapshot mode has no history.
 
 Claude Code: claude mcp add --scope user driga -- driga mcp
 
@@ -587,12 +586,27 @@ Edit the config with $EDITOR (default vi).
 driga config edit
 ```
 
-## driga collect
+## driga service
 
-Run the collector (what launchd runs).
+Run or manage the Driga service (drigad).
+
+| Subcommand | Description |
+|---|---|
+| [`driga service run`](#driga-service-run) | Run the Driga service in the foreground (what drigad runs). |
+| [`driga service install`](#driga-service-install) | Install the Driga service as a login service and start it. |
+| [`driga service start`](#driga-service-start) | Start the Driga service. |
+| [`driga service stop`](#driga-service-stop) | Stop the Driga service. |
+| [`driga service restart`](#driga-service-restart) | Restart the Driga service. |
+| [`driga service status`](#driga-service-status) | Show whether the Driga service runs. |
+| [`driga service logs`](#driga-service-logs) | Print the Driga service's log. |
+| [`driga service uninstall`](#driga-service-uninstall) | Uninstall the Driga service. |
+
+### driga service run
+
+Run the Driga service in the foreground (what drigad runs).
 
 ```sh
-driga collect [flags]
+driga service run [flags]
 ```
 
 | Flag | Default | Description |
@@ -600,26 +614,12 @@ driga collect [flags]
 | `--serve` |  | Enable fleet serving alongside collection (overrides fleet.serve). |
 | `--listen=<listen>` |  | Fleet private IP or interface and port (requires serving). |
 | `--once` |  | Collect once into the persistent database and exit. |
-| `--cpu-profile=<cpu-profile>` |  | Write a CPU profile of the collector to this file. |
+| `--cpu-profile=<cpu-profile>` |  | Write a CPU profile of the service to this file. |
 | `--profile-for=<profile-for>` | `2m` | How long --cpu-profile records before it stops. |
-
-## driga service
-
-Manage the collector service.
-
-| Subcommand | Description |
-|---|---|
-| [`driga service install`](#driga-service-install) | Install and start the collector service. |
-| [`driga service start`](#driga-service-start) | Start the collector service. |
-| [`driga service stop`](#driga-service-stop) | Stop the collector service. |
-| [`driga service restart`](#driga-service-restart) | Restart the collector service. |
-| [`driga service status`](#driga-service-status) | Show collector service status. |
-| [`driga service logs`](#driga-service-logs) | Print collector logs. |
-| [`driga service uninstall`](#driga-service-uninstall) | Uninstall the collector service. |
 
 ### driga service install
 
-Install and start the collector service.
+Install the Driga service as a login service and start it.
 
 ```sh
 driga service install
@@ -627,7 +627,7 @@ driga service install
 
 ### driga service start
 
-Start the collector service.
+Start the Driga service.
 
 ```sh
 driga service start
@@ -635,7 +635,7 @@ driga service start
 
 ### driga service stop
 
-Stop the collector service.
+Stop the Driga service.
 
 ```sh
 driga service stop
@@ -643,7 +643,7 @@ driga service stop
 
 ### driga service restart
 
-Restart the collector service.
+Restart the Driga service.
 
 ```sh
 driga service restart
@@ -651,7 +651,7 @@ driga service restart
 
 ### driga service status
 
-Show collector service status.
+Show whether the Driga service runs.
 
 ```sh
 driga service status
@@ -659,7 +659,7 @@ driga service status
 
 ### driga service logs
 
-Print collector logs.
+Print the Driga service's log.
 
 ```sh
 driga service logs [flags]
@@ -667,11 +667,11 @@ driga service logs [flags]
 
 | Flag | Default | Description |
 |---|---|---|
-| `-f, --follow` |  | Follow collector log output. |
+| `-f, --follow` |  | Follow the log. |
 
 ### driga service uninstall
 
-Uninstall the collector service.
+Uninstall the Driga service.
 
 ```sh
 driga service uninstall
@@ -752,7 +752,7 @@ Inspect fleet identity, serving status and viewers.
 | [`driga fleet enroll`](#driga-fleet-enroll) | Open a bounded pairing window. |
 | [`driga fleet rekey`](#driga-fleet-rekey) | Regenerate identity; invalidate all pairings. |
 | [`driga fleet id`](#driga-fleet-id) | Print this machine's fleet device ID. |
-| [`driga fleet status`](#driga-fleet-status) | Show the serving collector's live state. |
+| [`driga fleet status`](#driga-fleet-status) | Show the serving Driga service's live state. |
 
 ### driga fleet peers
 
@@ -890,7 +890,7 @@ driga fleet id [flags]
 
 ### driga fleet status
 
-Show the serving collector's live state.
+Show the serving Driga service's live state.
 
 ```sh
 driga fleet status [flags]

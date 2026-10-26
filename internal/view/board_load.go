@@ -2,11 +2,13 @@ package view
 
 import (
 	"fmt"
+	"slices"
+	"time"
+
 	"github.com/labstack/driga/internal/attention"
 	"github.com/labstack/driga/internal/derive"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/store"
-	"time"
 )
 
 // LoadBoardSnapshot reads overview evidence once per machine, in the caller's
@@ -17,7 +19,24 @@ func LoadBoardSnapshot(r Reader, f Filter, now time.Time) (BoardSnapshot, error)
 		b.Remote[mr.MachineID()] = mr.MachineID() != r.MachineID()
 		return loadBoardMachine(mr, f, now, &b)
 	})
+	slices.SortFunc(b.History, func(x, y HistoryRow) int { return y.EndedAt.Compare(x.EndedAt) })
+	if len(b.History) > HistoryLimit {
+		b.History = b.History[:HistoryLimit]
+	}
 	return b, err
+}
+
+// sessionTitle is what the board calls a session: its title, else its last
+// prompt, else a neutral name when the capture policy keeps no text.
+func sessionTitle(s model.Session, capture string) string {
+	title := s.Title
+	if title == "" {
+		title = s.LastPrompt
+	}
+	if capture == "none" || title == "" {
+		title = flowAttentionTitle(s, "", capture)
+	}
+	return title
 }
 
 func loadBoardMachine(mr Reader, f Filter, now time.Time, b *BoardSnapshot) error {
@@ -44,13 +63,25 @@ func loadBoardMachine(mr Reader, f Filter, now time.Time, b *BoardSnapshot) erro
 	}
 	byWait := map[int64][]FlowWait{}
 	jumps := map[int64]*model.InboxJump{}
+	byID := make(map[int64]model.Session, len(sessions))
+	for _, s := range sessions {
+		byID[s.ID] = s
+	}
 	for _, item := range inbox {
 		if item.Kind != "waiting" {
 			continue
 		}
 		item = attention.Policy(item, f.CaptureText)
-		byWait[item.SessionID] = append(byWait[item.SessionID], flowWait(item))
-		if attention.Active(item) {
+		wait := flowWait(item)
+		s, known := byID[item.SessionID]
+		live := liveSessionWait(item, s, known, now)
+		// Closed spans remain timeline history; only live open waits can
+		// change a row's current state or supply its wait reason and jump.
+		if wait.EndedAt == nil && !live {
+			continue
+		}
+		byWait[item.SessionID] = append(byWait[item.SessionID], wait)
+		if live {
 			jumps[item.SessionID] = item.Jump
 		}
 	}
@@ -65,17 +96,17 @@ func loadBoardMachine(mr Reader, f Filter, now time.Time, b *BoardSnapshot) erro
 		b.Files[BoardKey(FlowNode{MachineID: mr.MachineID(), ID: id})] = touches
 	}
 	for _, s := range sessions {
+		if s.EndedAt != nil && s.ParentID == nil && s.EndedAt.After(now.Add(-HistoryWindow)) {
+			h := HistoryRow{MachineID: mr.MachineID(), ID: s.ID, Title: sessionTitle(s, f.CaptureText), Project: projectName(s, repos), Branch: s.Branch, Adapter: s.Adapter, StartedAt: s.StartedAt, EndedAt: *s.EndedAt}
+			if j := attention.ResolveJump(s, "", nil); j != nil {
+				h.Resume = "cd " + shellQuote(s.Cwd) + " && " + j.Command
+			}
+			b.History = append(b.History, h)
+		}
 		if s.EndedAt != nil && s.EndedAt.Before(now.Add(-time.Hour)) {
 			continue
 		}
-		title := s.Title
-		if title == "" {
-			title = s.LastPrompt
-		}
-		if f.CaptureText == "none" || title == "" {
-			title = flowAttentionTitle(s, "", f.CaptureText)
-		}
-		n := FlowNode{Cwd: s.Cwd, StartedFrom: s.StartedFrom, MachineID: mr.MachineID(), ID: s.ID, ExternalID: s.ExternalID, ParentID: s.ParentID, StartedAt: s.StartedAt, EndedAt: s.EndedAt, Adapter: s.Adapter, Title: title, Project: projectName(s, repos), Branch: s.Branch, Label: s.Label, Mixer: derive.SessionMixer(s), LastActivityAt: s.LastActivityAt, Events: byEvent[s.Adapter+":"+s.ExternalID], Waits: byWait[s.ID], Observed: flowObserved(observed[s.ID], now, 240), Jump: attention.ResolveJump(s, "", nil)}
+		n := FlowNode{Cwd: s.Cwd, StartedFrom: s.StartedFrom, MachineID: mr.MachineID(), ID: s.ID, ExternalID: s.ExternalID, ParentID: s.ParentID, StartedAt: s.StartedAt, EndedAt: s.EndedAt, Adapter: s.Adapter, Title: sessionTitle(s, f.CaptureText), Project: projectName(s, repos), Branch: s.Branch, Label: s.Label, Mixer: derive.SessionMixer(s), LastActivityAt: s.LastActivityAt, Events: byEvent[s.Adapter+":"+s.ExternalID], Waits: byWait[s.ID], Observed: flowObserved(observed[s.ID], now, 240), Jump: attention.ResolveJump(s, "", nil)}
 		if jumps[s.ID] != nil {
 			n.Jump = jumps[s.ID]
 		}

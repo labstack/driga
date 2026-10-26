@@ -12,8 +12,8 @@ import (
 // LabelWithEvidence runs the state table once and explains its four inputs.
 // Rows may disagree: a recent Stop does not override newer busy/tool activity.
 func LabelWithEvidence(in StateInput, now time.Time, th Thresholds) model.StateMixer {
-	if th.StalledAfter <= 0 {
-		th.StalledAfter = 10 * time.Minute
+	if th.StuckAfter <= 0 {
+		th.StuckAfter = 10 * time.Minute
 	}
 	if in.Obs.Adapter == "copilot" && in.Obs.RegistryStatus != "" {
 		in.LastHook, in.LastHookAt = in.Obs.RegistryStatus, in.Obs.LastActivityAt
@@ -31,14 +31,14 @@ func LabelWithEvidence(in StateInput, now time.Time, th Thresholds) model.StateM
 		}
 	}
 	verdict, heuristic, evidence := label(in, now, th)
-	m := model.StateMixer{Verdict: verdict, Heuristic: heuristic, Evidence: evidence, ObservedAt: now, Input: &in, StalledAfterMS: th.StalledAfter.Milliseconds()}
+	m := model.StateMixer{Verdict: verdict, Heuristic: heuristic, Evidence: evidence, ObservedAt: now, Input: &in, StuckAfterMS: th.StuckAfter.Milliseconds()}
 	add := func(name, reading string, at time.Time, available bool) {
 		row := model.StateSignal{Name: name, Reading: reading, At: at}
 		if available {
 			row.Strength = 1
 			if !at.IsZero() {
 				row.Age = max(time.Duration(0), now.Sub(at))
-				row.Strength = 1 / (1 + float64(row.Age)/float64(th.StalledAfter))
+				row.Strength = 1 / (1 + float64(row.Age)/float64(th.StuckAfter))
 			}
 		}
 		m.Rows = append(m.Rows, row)
@@ -138,15 +138,15 @@ func LabelWithEvidence(in StateInput, now time.Time, th Thresholds) model.StateM
 			support[1] = in.LastStop != nil && in.LastStop.After(in.LastUserPrompt) && !in.Unseen
 			support[3] = available && alive
 		case "working":
-			support[0] = in.Obs.RegistryStatus == "busy" && age < th.StalledAfter
-			tool := in.LastToolResult != nil && !in.LastToolResult.Before(in.Obs.LastActivityAt) && (in.LastStop == nil || in.LastToolResult.After(*in.LastStop)) && now.Sub(*in.LastToolResult) < th.StalledAfter
-			api := in.LastAPIRequest != nil && in.LastAPIRequest.After(in.Obs.LastActivityAt) && (in.LastStop == nil || in.LastAPIRequest.After(*in.LastStop)) && now.Sub(*in.LastAPIRequest) < th.StalledAfter
+			support[0] = in.Obs.RegistryStatus == "busy" && age < th.StuckAfter
+			tool := in.LastToolResult != nil && !in.LastToolResult.Before(in.Obs.LastActivityAt) && (in.LastStop == nil || in.LastToolResult.After(*in.LastStop)) && now.Sub(*in.LastToolResult) < th.StuckAfter
+			api := in.LastAPIRequest != nil && in.LastAPIRequest.After(in.Obs.LastActivityAt) && (in.LastStop == nil || in.LastAPIRequest.After(*in.LastStop)) && now.Sub(*in.LastAPIRequest) < th.StuckAfter
 			support[2] = in.Obs.PID != 0 && (tool || api)
 			if strings.HasPrefix(evidence, "OTLP") || strings.HasPrefix(evidence, "API") {
 				deciding = "telemetry"
 			}
-		case "stalled":
-			support[0] = in.Obs.RegistryStatus == "busy" && age >= th.StalledAfter
+		case "stuck":
+			support[0] = in.Obs.RegistryStatus == "busy" && age >= th.StuckAfter
 			support[3] = available && alive && in.Proc.CPUPercent < 1
 		case "dead", "ended":
 			support[0] = in.Obs.PID == 0 && in.Obs.RegistryStatus != ""
@@ -154,7 +154,7 @@ func LabelWithEvidence(in StateInput, now time.Time, th Thresholds) model.StateM
 		case "unknown":
 			// Missing/unrecognized registry state is negative evidence for unknown.
 			support[0] = true
-			support[3] = available && alive && in.Obs.RegistryStatus == "busy" && age >= th.StalledAfter && in.Proc.CPUPercent >= 1
+			support[3] = available && alive && in.Obs.RegistryStatus == "busy" && age >= th.StuckAfter && in.Proc.CPUPercent >= 1
 		}
 	case "codex", "gemini":
 		deciding = "process"
@@ -170,10 +170,10 @@ func LabelWithEvidence(in StateInput, now time.Time, th Thresholds) model.StateM
 				support[3] = !alive && in.Obs.TurnOpen
 			case "working":
 				support[3] = alive && age < time.Minute
-			case "stalled":
-				support[3] = alive && in.Obs.TurnOpen && age >= th.StalledAfter
+			case "stuck":
+				support[3] = alive && in.Obs.TurnOpen && age >= th.StuckAfter
 			case "unknown":
-				support[3] = alive && in.Obs.TurnOpen && age >= time.Minute && age < th.StalledAfter
+				support[3] = alive && in.Obs.TurnOpen && age >= time.Minute && age < th.StuckAfter
 			}
 		}
 	case "agy":
@@ -202,7 +202,7 @@ func LabelWithEvidence(in StateInput, now time.Time, th Thresholds) model.StateM
 // stored label. Sessions without a label pass expose unavailable signals.
 func SessionMixer(s model.Session) model.StateMixer {
 	if s.Mixer != nil && s.Mixer.Input != nil {
-		return LabelWithEvidence(*s.Mixer.Input, s.Mixer.ObservedAt, Thresholds{StalledAfter: time.Duration(s.Mixer.StalledAfterMS) * time.Millisecond})
+		return LabelWithEvidence(*s.Mixer.Input, s.Mixer.ObservedAt, Thresholds{StuckAfter: time.Duration(s.Mixer.StuckAfterMS) * time.Millisecond})
 	}
 	m := model.StateMixer{Verdict: s.Label, Heuristic: s.Heuristic, Evidence: s.Evidence}
 	for _, name := range []string{"registry", "hooks", "telemetry", "process"} {

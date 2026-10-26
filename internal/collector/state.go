@@ -11,18 +11,20 @@ import (
 // State retains sampling and process ownership evidence between passes. It is
 // private to a collector run and is never written to disk.
 type State struct {
-	mu        sync.Mutex
-	prev      map[int32]model.Proc
-	prevAt    time.Time
-	cwds      map[int32]cwdResult
-	cwdsAt    time.Time
-	cwdNext   int
-	spawn     map[string]int64
-	gitFullAt time.Time
+	mu          sync.Mutex
+	prev        map[int32]model.Proc
+	prevAt      time.Time
+	prevMachine model.MachineSample
+	cwds        map[int32]cwdResult
+	cwdsAt      time.Time
+	cwdNext     int
+	spawn       map[string]int64
+	gitFullAt   time.Time
 	// procs is the process table this run last wrote, or nil before the first
 	// successful scan, when the stored rows are the only source.
-	procs []model.Proc
-	logs  map[string]logBaseline
+	procs     []model.Proc
+	logs      map[string]logBaseline
+	panelSeen map[string]bool
 }
 
 type cwdResult struct {
@@ -32,7 +34,7 @@ type cwdResult struct {
 
 // NewState creates empty collector sampling state.
 func NewState() *State {
-	return &State{prev: make(map[int32]model.Proc), cwds: make(map[int32]cwdResult), spawn: make(map[string]int64)}
+	return &State{prev: make(map[int32]model.Proc), cwds: make(map[int32]cwdResult), spawn: make(map[string]int64), panelSeen: make(map[string]bool)}
 }
 
 // copy returns an independent working state; a failed transaction must not
@@ -43,8 +45,13 @@ func (s *State) copy() *State {
 	n := &State{prev: s.prev, spawn: s.spawn, procs: s.procs, logs: s.logs, cwds: make(map[int32]cwdResult, len(s.cwds))}
 	n.prevAt, n.cwdsAt, n.gitFullAt = s.prevAt, s.cwdsAt, s.gitFullAt
 	n.cwdNext = s.cwdNext
+	n.prevMachine = s.prevMachine
 	for k, v := range s.cwds {
 		n.cwds[k] = v
+	}
+	n.panelSeen = make(map[string]bool, len(s.panelSeen))
+	for key, seen := range s.panelSeen {
+		n.panelSeen[key] = seen
 	}
 	return n
 }

@@ -1,15 +1,15 @@
 Flow  [m Map] [t Timeline] [s Sessions] · Map · last 60m                                    │ ╭ Selected family ───────────────────────────╮
-◆ 7 needs you   ▶ 35   ‖ 7   ○ 14   ✓ 7                                                       │ Ship the release pipeline safely · monk ·  │
-          ██ events/min · updated 0s ago                                                      │ copilot · waiting                          │
-NEEDS YOU · 7 · oldest first                                                                  │ −60m                  now                  │
-  ◆ Ship the release pipeline safely · monk · 23m                                             │ └── ◆ Ship the release pipeline safely     │
-  Permission · Bash · go test ./...                                                           │     ░░━━━░░░━━━━━░░░━━━━━░◆◆◆◆◆◆◆◆◆◆◆◆◆◆   │
-  Enter open · J Terminal                                                                     │ cost $0.49 · retained window               │
-  ◆ 流れを整える 🌊 · driga · 15m                                                             │ J Terminal · Enter Open · c Ask Chat · K   │
-  ◆ Add board view · from Editor · relay · 14m                                                │ Stop                                       │
-  +4 more · Tab then j/k                                                                      ╰────────────────────────────────────────────╯
+Need you 0 · To review 1 · Stuck 0                                                            │ Ship the release pipeline safely · monk ·  │
+Leftover 1 · Reclaimable 0.0M · Memory 0.0M/0.0M                                              │ copilot · waiting                          │
+          ██ events/min · updated 0s ago                                                      │ −60m                  now                  │
+NEEDS YOU · 7 · oldest first                                                                  │ └── ◆ Ship the release pipeline safely     │
+  ◆ Ship the release pipeline safely · monk · 23m                                             │     ░░━━━░░░━━━━━░░░━━━━━░◆◆◆◆◆◆◆◆◆◆◆◆◆◆   │
+  Permission · Bash · go test ./...                                                           │ cost $0.49 · retained window               │
+  Enter open · J Terminal                                                                     │ J Terminal · Enter Open · c Ask Chat · K   │
+  ◆ 流れを整える 🌊 · driga · 15m                                                             │ Stop                                       │
+  ◆ Add board view · from Editor · relay · 14m                                                ╰────────────────────────────────────────────╯
+  +4 more · Tab then j/k
 ───────────────────────────────────────────────────────────────────────────────────────────
-driga
 ├──   ▶ 流れを整える 🌊            claude  ░━━━━░░░━━━━━░░░━━━━━░░━━━━━━░░━━━┿━ 1h 45m
 ├──   ▶ 流れを整える 🌊            claude  ░░░░░░░░░░━━━░░░━━━━━░░━━━━━━░░━━━┿━ 1h 21m
 ├──   ▶ Add board view · from Edi… claude  ░░░━━░░░━━━━━░░░━━━━━░░━━━━━━░░━━━┿━ 1h 9m

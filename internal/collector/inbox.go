@@ -270,12 +270,6 @@ func alertInbox(ctx context.Context, d Deps, st *store.Store) error {
 		}
 		previousSeen, previousLast := maps.Clone(seen), maps.Clone(last)
 		notes = attention.PlanAlerts(rows, sessions, d.Cfg.Inbox, d.Cfg.CaptureText, d.now(), seen, last)
-		// Remote IDs can collide with local IDs and cannot be jumped to here.
-		for k := range notes {
-			if notes[k].MachineID != st.MachineID() {
-				notes[k].ItemID = ""
-			}
-		}
 		for _, i := range rows {
 			if _, consumed := seen[i.MachineID+":"+i.ID]; consumed {
 				if err := tx.MarkInboxAlerted(i.MachineID, i.ID); err != nil {

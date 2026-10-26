@@ -1,6 +1,7 @@
 package view
 
 import (
+	"encoding/json"
 	"fmt"
 	"image/color"
 	"math"
@@ -16,14 +17,14 @@ type ThemeToken struct{ Name, Light, Dark string }
 
 // Palette roles come from the official Catppuccin palettes (MIT): Latte for
 // light, Mocha for dark. Where an official Latte color falls below 4.5:1 for
-// text on Latte's mantle, the panel surface and darker than base, text roles
-// use readable(), the same hue darkened just enough, so they pass on page and
-// panels alike. Tinted backgrounds are tint() mixes of the state color into base.
+// text on Latte's crust, the darkest light surface (the app's Chat column and
+// insets), text roles use readable(), the same hue darkened just enough, so
+// they pass on every surface. Tinted backgrounds are tint() mixes of the state color into base.
 var (
 	lb, mb = catppuccin.Latte.Base(), catppuccin.Mocha.Base()
 	pair   = func(l, d catppuccin.Color) [2]string { return [2]string{hex(l), hex(d)} }
 	text   = func(l, d catppuccin.Color) [2]string {
-		return [2]string{readable(l, catppuccin.Latte.Mantle()), hex(d)}
+		return [2]string{readable(l, catppuccin.Latte.Crust()), hex(d)}
 	}
 )
 
@@ -48,7 +49,7 @@ var (
 	muted    = pair(catppuccin.Latte.Subtext1(), catppuccin.Mocha.Subtext0())
 	working  = text(catppuccin.Latte.Green(), catppuccin.Mocha.Green())
 	waiting  = text(catppuccin.Latte.Yellow(), catppuccin.Mocha.Yellow())
-	stalled  = text(catppuccin.Latte.Red(), catppuccin.Mocha.Red())
+	stuck    = text(catppuccin.Latte.Red(), catppuccin.Mocha.Red())
 	idle     = text(catppuccin.Latte.Blue(), catppuccin.Mocha.Blue())
 	warn     = text(catppuccin.Latte.Peach(), catppuccin.Mocha.Peach())
 	accent   = text(catppuccin.Latte.Mauve(), catppuccin.Mocha.Mauve())
@@ -62,8 +63,8 @@ var themeTokens = append([]ThemeToken{
 	tok("ink", ink), tok("muted", muted), tok("faint", muted),
 	tok("line", pair(catppuccin.Latte.Surface0(), catppuccin.Mocha.Surface0())),
 	tok("strong", ink), tok("on-strong", onBase),
-	tok("working", working), tok("waiting", waiting), tok("stalled", stalled),
-	tok("idle", idle), tok("finished", muted), tok("crit", stalled),
+	tok("working", working), tok("waiting", waiting), tok("stuck", stuck),
+	tok("idle", idle), tok("finished", muted), tok("crit", stuck),
 	tok("warn", warn), tok("ok", idle), tok("accent", accent),
 	tok("observation", observed), tok("tool", tool), tok("ended", muted),
 }, markdownTokens...)
@@ -80,14 +81,14 @@ var consoleTokens = append([]ThemeToken{
 	tok("line", pair(catppuccin.Latte.Surface1(), catppuccin.Mocha.Surface1())),
 	tok("fg", ink), tok("mid", pair(catppuccin.Latte.Subtext1(), catppuccin.Mocha.Subtext1())),
 	tok("dim", muted), tok("accent", accent), tok("on-accent", onBase),
-	tok("working", working), tok("waiting", waiting), tok("stalled", stalled),
-	tok("idle", idle), tok("finished", muted), tok("crit", stalled), tok("warn", warn),
+	tok("working", working), tok("waiting", waiting), tok("stuck", stuck),
+	tok("idle", idle), tok("finished", muted), tok("crit", stuck), tok("warn", warn),
 	tok("observation", observed), tok("tool", tool), tok("faint", muted),
 	tok("waiting-bar", pair(catppuccin.Latte.Yellow(), catppuccin.Mocha.Yellow())),
 	tok("rail", pair(catppuccin.Latte.Surface2(), catppuccin.Mocha.Surface2())),
 	tok("waiting-bg", tint(catppuccin.Latte.Yellow(), catppuccin.Mocha.Yellow())),
 	tok("working-bg", tint(catppuccin.Latte.Green(), catppuccin.Mocha.Green())),
-	tok("stalled-bg", tint(catppuccin.Latte.Red(), catppuccin.Mocha.Red())),
+	tok("stuck-bg", tint(catppuccin.Latte.Red(), catppuccin.Mocha.Red())),
 	tok("idle-bg", tint(catppuccin.Latte.Blue(), catppuccin.Mocha.Blue())),
 	tok("finished-bg", tint(catppuccin.Latte.Subtext1(), catppuccin.Mocha.Subtext0())),
 }, markdownTokens...)
@@ -142,16 +143,38 @@ func Contrast(a, b [3]uint8) float64 {
 	return (max(x, y) + 0.05) / (min(x, y) + 0.05)
 }
 
-// ThemeCSS supports named preferences and the system default without script.
-func ThemeCSS() string {
-	var light, dark strings.Builder
-	for _, t := range consoleTokens {
-		fmt.Fprintf(&light, "--%s:%s;", t.Name, t.Light)
-		fmt.Fprintf(&dark, "--%s:%s;", t.Name, t.Dark)
+// ThemeJSON is the palette the app's UI theme is built from: the console
+// roles for each scheme, and both Catppuccin flavors by name for the colors
+// the UI needs that the console has no role for, such as chart series.
+func ThemeJSON() string {
+	roles := func(light bool) map[string]string {
+		out := map[string]string{}
+		for _, t := range consoleTokens {
+			out[t.Name] = t.Dark
+			if light {
+				out[t.Name] = t.Light
+			}
+		}
+		return out
 	}
-	return `:root,[data-theme="dark"]{` + dark.String() + "color-scheme:dark;}\n" +
-		`[data-theme="light"]{` + light.String() + "color-scheme:light;}\n" +
-		`@media (prefers-color-scheme: light){:root:not([data-theme="dark"]):not([data-theme="light"]){` + light.String() + "color-scheme:light;}}\n"
+	flavor := func(f catppuccin.Flavor) map[string]string {
+		out := map[string]string{}
+		for name, c := range map[string]catppuccin.Color{
+			"rosewater": f.Rosewater(), "flamingo": f.Flamingo(), "pink": f.Pink(), "mauve": f.Mauve(), "red": f.Red(),
+			"maroon": f.Maroon(), "peach": f.Peach(), "yellow": f.Yellow(), "green": f.Green(), "teal": f.Teal(),
+			"sky": f.Sky(), "sapphire": f.Sapphire(), "blue": f.Blue(), "lavender": f.Lavender(), "text": f.Text(),
+			"subtext1": f.Subtext1(), "subtext0": f.Subtext0(), "overlay2": f.Overlay2(), "overlay1": f.Overlay1(),
+			"overlay0": f.Overlay0(), "surface2": f.Surface2(), "surface1": f.Surface1(), "surface0": f.Surface0(),
+			"base": f.Base(), "mantle": f.Mantle(), "crust": f.Crust(),
+		} {
+			out[name] = hex(c)
+		}
+		return out
+	}
+	b, _ := json.MarshalIndent(map[string]map[string]string{
+		"light": roles(true), "dark": roles(false), "latte": flavor(catppuccin.Latte), "mocha": flavor(catppuccin.Mocha),
+	}, "", "  ")
+	return string(b) + "\n"
 }
 
 // Background detection belongs to the interactive event loop. Import-time

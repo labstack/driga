@@ -21,7 +21,7 @@ var startApp = func(cmd *exec.Cmd) error {
 // handOffApp starts Driga.exe when a command line opens the app from the
 // installed CLI, bin\driga.exe, so the app runs apart from the console. A
 // running app takes the launch over. It reports whether it handed off.
-func handOffApp(system bool) (bool, error) {
+func handOffApp(system bool, launchArgs ...string) (bool, error) {
 	if system {
 		return false, nil
 	}
@@ -29,20 +29,20 @@ func handOffApp(system bool) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return handOffTo(guiExecutable(exe))
+	return handOffTo(guiExecutable(exe), launchArgs...)
 }
 
 // handOffTo starts the app executable app, detached from this console so
 // Ctrl-C or closing the console leaves it running. An empty or missing app
 // is a development build, which runs in place.
-func handOffTo(app string) (bool, error) {
+func handOffTo(app string, launchArgs ...string) (bool, error) {
 	if app == "" {
 		return false, nil
 	}
 	if _, err := os.Stat(app); err != nil {
 		return false, nil
 	}
-	cmd := exec.Command(app)
+	cmd := exec.Command(app, launchArgs...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: windows.CREATE_NEW_PROCESS_GROUP | windows.DETACHED_PROCESS}
 	return true, startApp(cmd)
 }

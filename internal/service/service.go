@@ -1,4 +1,6 @@
-// Package service configures the optional per-user collector.
+// Package service installs and controls the Driga service: drigad, the
+// per-user process that collects, stores, hosts Chat and runs actions. The
+// app and the terminal UI are its clients.
 package service
 
 import (
@@ -17,16 +19,39 @@ func LogPath() string { return logPathForOS(runtime.GOOS) }
 
 func logPathForOS(goos string) string {
 	if goos == "windows" {
-		return filepath.Join(config.DataDir(), "logs", "collector.log")
+		return filepath.Join(config.DataDir(), "logs", "service.log")
 	}
 	if goos == "linux" {
 		root := os.Getenv("XDG_STATE_HOME")
 		if !filepath.IsAbs(root) {
 			root = filepath.Join(config.ExpandHome("~"), ".local/state")
 		}
-		return filepath.Join(root, "driga/collector.log")
+		return filepath.Join(root, "driga"+Variant(), "service.log")
 	}
-	return filepath.Join(config.ExpandHome("~"), "Library", "Logs", "driga", "collector.log")
+	return filepath.Join(config.ExpandHome("~"), "Library", "Logs", "driga"+Variant(), "service.log")
+}
+
+// Variant is what follows "driga" in this executable's name: empty for a
+// release, "-dev" for a driga-dev build. Each variant installs its own
+// service, with its own label and log, so a development copy never takes
+// over the release's.
+func Variant() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	return variantOf(exe)
+}
+
+func variantOf(exe string) string {
+	name := strings.TrimSuffix(filepath.Base(exe), filepath.Ext(exe))
+	if rest, ok := strings.CutPrefix(name, "drigad"); ok && (rest == "" || strings.HasPrefix(rest, "-")) {
+		return rest
+	}
+	if rest, ok := strings.CutPrefix(name, "driga"); ok && (rest == "" || strings.HasPrefix(rest, "-")) {
+		return rest
+	}
+	return ""
 }
 
 // EnvKeys lists the environment variables a collector started outside the
@@ -66,8 +91,8 @@ func configForOS(binPath, goos string) *ks.Config {
 		}
 	}
 	c := &ks.Config{
-		Name: "run.driga.collector", DisplayName: "Driga collector",
-		Executable: binPath, Arguments: []string{"collect", "--owner=service"}, EnvVars: env,
+		Name: Label(goos), DisplayName: "Driga Service",
+		Executable: DaemonPath(binPath), Arguments: []string{"--owner=service"}, EnvVars: env,
 		Option: ks.KeyValue{"UserService": true, "KeepAlive": true, "RunAtLoad": true,
 			"LogDirectory": filepath.Dir(logPathForOS(goos)), "LaunchdConfig": template},
 	}
@@ -76,6 +101,22 @@ func configForOS(binPath, goos string) *ks.Config {
 	}
 	return c
 }
+
+// Label names the service to the system's service manager: a launchd label
+// on macOS, a systemd user unit on Linux.
+func Label(goos string) string {
+	if goos == "linux" {
+		return "driga" + Variant()
+	}
+	if v := strings.TrimPrefix(Variant(), "-"); v != "" {
+		return "run.driga.service." + v
+	}
+	return "run.driga.service"
+}
+
+// legacyLabel is what releases before drigad installed the collector as; an
+// install removes it once.
+const legacyLabel = "run.driga.collector"
 
 // InstallHint explains how a Linux user service can survive logout.
 func InstallHint(goos string) string {
@@ -144,7 +185,7 @@ func DataDir(c Controller) (string, error) {
 type controlOnly struct{}
 
 func (controlOnly) Start(ks.Service) error {
-	return errors.New("run driga collect to execute the collector")
+	return errors.New("run drigad to run the Driga service")
 }
 func (controlOnly) Stop(ks.Service) error { return nil }
 
@@ -168,7 +209,7 @@ BUNDLE_ASSOCIATION
 `
 
 const systemdConfig = `[Unit]
-Description=Driga collector
+Description=Driga service
 
 [Service]
 ExecStart={{Path | cmdEscape}}{{range Arguments}} {{. | cmd}}{{end}}

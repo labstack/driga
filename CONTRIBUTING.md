@@ -43,10 +43,45 @@ just build        # builds ./bin/driga, which is not on PATH
 just install      # deliberately copies it to ~/.local/bin
 ```
 
+### The app's UI
+
+The app's page and the panels MCP App are built from `ui/` with [Bun](https://bun.sh):
+`just ui` installs the pinned packages, type-checks and writes both bundles into
+`internal/web/app` and `internal/mcp/apps`. The bundles are committed, so a Go
+build needs no JavaScript toolchain, but `just check` needs Bun: it runs the UI
+tests, rebuilds the bundles and fails when the committed ones are behind `ui/`.
+
+`just design` opens the UI's Storybook at http://127.0.0.1:6506, for review
+only: it is never published. The review convention covers every component,
+every kind of panel, the Home page
+and its flows, each with one Docs page of its states, over a fictional fleet
+and a fake service, so no story reaches a real Driga. Stories render the
+shipping components themselves. The panel data in `ui/src/fixtures` is Driga's
+own engine run over that fleet; `DRIGA_WRITE_STORIES=1 go test ./internal/panel`
+regenerates it, and `just check` fails when it is stale. `just design-check`
+runs every story, its play, accessibility and the layout check in Chromium,
+in both schemes at both review widths (1440 and 1024); `just check` runs it
+too, and a unit test fails when a component or a kind of panel has no story. Agents writing or changing UI add the story
+first. UI files keep the code's PascalCase names throughout the UI.
+
+`just dev` develops the UI in a browser at http://127.0.0.1:5173/app/: Vite
+hot-reloads it, and `driga dev serve` answers the API on 127.0.0.1:47801 from
+the data directory your environment names, restarting on Go changes when
+`watchexec` is installed. It is the app without its window: no native dialogs,
+menus, tray or notifications, and the browser's own confirm instead.
+
+The UI follows LabStack's Canon: Mantine components themed through
+`ui/src/theme`, Phosphor icons, TanStack Table for tables and one ECharts
+wrapper for charts. Its colors come from the console palette: after changing a
+color in `internal/view`, run `DRIGA_WRITE_THEME=1 go test ./internal/view` to
+regenerate `ui/src/theme/palette.json`. Style sheets name theme variables, never
+colors. `@labstack/ui` is a private package this public repository cannot
+install, so Driga composes its status badge and stat tile from Mantine instead.
+
 ## Verify
 
 ```sh
-just check        # gofmt, go mod tidy, vet (native and Windows), generated files, tests
+just check        # gofmt, go mod tidy, vet (native and Windows), generated files, UI, tests
 just race         # the suite under the race detector
 just ci           # what the Linux CI job runs: check, race, govulncheck, actionlint, release snapshot
 ```

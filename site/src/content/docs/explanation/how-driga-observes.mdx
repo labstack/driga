@@ -1,7 +1,7 @@
 ---
 title: How Driga observes sessions
-description: Where Driga's evidence comes from - session files, hooks, the process table, Git and optional OTLP - and how the collector, spool and snapshots fit together.
-summary: Evidence sources per agent, the collector and hook spool, snapshot mode, collection cadence, session families and how uncertain evidence is shown.
+description: Where Driga's evidence comes from - session files, hooks, the process table, Git and optional OTLP - and how the Driga service, spool and snapshots fit together.
+summary: Evidence sources per agent, the Driga service and hook spool, snapshot mode, collection cadence, session families and how uncertain evidence is shown.
 read_when:
   - You want to know why a session shows a particular label.
   - You are deciding whether to install hooks, the service or OTLP intake.
@@ -17,8 +17,8 @@ events from hooks you choose to install.
   transcripts. The Codex catalog is opened read-only. Copilot session-state
   files are not read.
 - **Hooks.** Optional commands the agent runs on lifecycle events. They append
-  events to a spool directory and exit immediately; only the collector writes
-  the database. Claude's permission hook talks to the collector's in-memory
+  events to a spool directory and exit immediately; only the Driga service writes
+  the database. Claude's permission hook talks to the Driga service's in-memory
   broker instead, so a prompt can be answered. See the
   [hooks reference](/reference/hooks).
 - **Processes.** The process table attributes processes to sessions by parent
@@ -31,19 +31,20 @@ events from hooks you choose to install.
   existing Claude sessions with metadata. Content attributes are discarded
   before storage, and it never creates sessions.
 
-Unknown or incomplete evidence is shown as such: `stalled?` is a suspicion,
+Unknown or incomplete evidence is shown as such: `stuck` is a suspicion,
 `unknown` means the evidence cannot decide, and unknown agent versions are
 parsed tolerantly and reported by `driga doctor`.
 
-## Collector and snapshots
+## The Driga service and snapshots
 
-Without a collector, every read command takes a one-shot snapshot that writes
+Without the Driga service, every read command takes a one-shot snapshot that writes
 no database and is labelled `snapshot · no history`.
 
-The collector keeps a local SQLite database. On a desktop the Driga app runs
-it as its own child process; on a headless machine `driga service install`
-runs it as a per-user service, and `driga collect` runs it in the foreground.
-Only one collector can hold a data directory.
+The Driga service, `drigad`, keeps a local SQLite database. It runs from login
+as a per-user service, whether or not the app or the terminal UI is open: the
+app installs it on first launch, `driga service install` installs it on a
+machine without the app, and `driga service run` runs it in the foreground.
+Only one service can hold a data directory.
 Idle, it samples processes and machine health every 60 seconds and Git every
 five minutes; while a viewer is open those speed up to 5, 10 and 30 seconds.
 

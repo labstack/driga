@@ -178,7 +178,7 @@ func TestSmoke(t *testing.T) {
 		t.Fatal("empty version")
 	}
 	local.run("config", "show")
-	local.run("collect", "--once")
+	local.run("service", "run", "--once")
 
 	if agents := local.data("agents", "--all"); !field(agents, "title", "Smoke title") {
 		t.Fatalf("session missing from agents: %s", agents)
@@ -233,7 +233,7 @@ func TestSmoke(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	var serveLog logBuffer
-	serve := local.cmd(ctx, "collect", "--serve")
+	serve := local.cmd(ctx, "service", "run", "--serve")
 	serve.Stdout, serve.Stderr = &serveLog, &serveLog
 	if err := serve.Start(); err != nil {
 		t.Fatal(err)
@@ -255,7 +255,7 @@ func TestSmoke(t *testing.T) {
 	local.run("fleet", "enroll", "--allow-viewer", viewerID)
 	viewer.run("fleet", "peers", "add", addr, "--name", "smoke-peer", "--device-id", peerID)
 	var viewerLog logBuffer
-	pull := viewer.cmd(ctx, "collect")
+	pull := viewer.cmd(ctx, "service", "run")
 	pull.Stdout, pull.Stderr = &viewerLog, &viewerLog
 	if err := pull.Start(); err != nil {
 		t.Fatal(err)

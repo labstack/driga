@@ -172,7 +172,7 @@ func (c InitCmd) Run(g *Globals) error {
 	text, offer := collectorSetup(runtime.GOOS)
 	fmt.Fprintln(out, text)
 	if offer {
-		yes, err = ask("Install and start the collector service?")
+		yes, err = ask("Install and start the Driga service?")
 		if err != nil {
 			return err
 		}
@@ -193,12 +193,12 @@ func (c InitCmd) Run(g *Globals) error {
 	return nil
 }
 
-// collectorSetup explains how this machine collects in the background, and
-// whether init offers to install the collector service. On macOS and Windows
-// the app collects, and removes a service installed earlier.
+// collectorSetup explains the Driga service, and init offers to install it.
+// The app installs it too, so a desktop has it from the app's first launch.
 func collectorSetup(goos string) (string, bool) {
-	if collectorHint(goos) == "driga app" {
-		return "The Driga app collects for inbox and history while it runs, and by default opens at login. Open it with driga app; it replaces a collector service installed earlier.", false
+	manager := map[string]string{"darwin": "a login item", "windows": "a scheduled task at logon", "linux": "a systemd user unit"}[goos]
+	if manager == "" {
+		manager = "a login service"
 	}
-	return "Service installation creates a per-user systemd unit and starts background collection for inbox and history. Logs: journalctl --user -u run.driga.collector. Undo: driga service uninstall.", true
+	return "The Driga service, drigad, collects for inbox and history and runs Chat, whether or not the app or the terminal UI is open. Installing it creates " + manager + ". Logs: driga service logs. Undo: driga service uninstall.", true
 }

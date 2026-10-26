@@ -1,5 +1,6 @@
 Flow  [m Map] [t Timeline] [s Sessions] · Map · last 60m
-◆ 7 needs you   ▶ 35   ‖ 7   ○ 14   ✓ 7
+Need you 0 · To review 1 · Stuck 0
+Leftover 1 · Reclaimable 0.0M · Memory 0.0M/0.0M
           ██ events/min · updated 0s ago
 NEEDS YOU · 7 · oldest first
   ◆ Ship the release pipeline safely · monk · 23m
@@ -9,7 +10,6 @@ NEEDS YOU · 7 · oldest first
   ◆ Add board view · from Editor · relay · 14m
   +4 more · Tab then j/k
 ────────────────────────────────────────────────────────────────────────────────────────────────────
-echo-pro
 ├──   ▶ Investigate cache invalidati… codex   ░░━━━━░░░━━━━━━░░░━━━━━━░░░━━━━━━░░░░━━━━━ 1h 46m
 ├──   ✓ Investigate cache invalidati… codex   ░░░░░░░░░░░░░━━░░░━━━━━━░░░━━━✓━━    ━━━━━ 1h 22m
 ├──   ○ Fix retry after reconnect     codex   ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░─ 1h 10m
