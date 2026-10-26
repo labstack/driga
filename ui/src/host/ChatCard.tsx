@@ -2,7 +2,7 @@
 // expands in place to the panels, stacked to fit the Chat column, or to a
 // full-screen view, as Fanout's chat does. Keeping a view is something you
 // ask Chat for, whose saved card then says so.
-import { Badge, Button, Group, Modal, Paper, Stack, Text, UnstyledButton } from "@mantine/core";
+import { ActionIcon, Badge, Group, Modal, Paper, Stack, Text, Tooltip, UnstyledButton } from "@mantine/core";
 import { ArrowsOut, CaretDown, CaretRight, ChartBar, FloppyDisk, SquaresFour } from "@phosphor-icons/react";
 import { Board } from "../panels/Board";
 import { useEffect, useState } from "react";
@@ -44,12 +44,18 @@ export function reading(panel: Panel, result?: Result): string {
   return `${frame.rows.length} ${frame.rows.length === 1 ? "row" : "rows"}`;
 }
 
+/** problems says how many of a card's panels failed, or nothing: what the
+ * card holds its panels say themselves. */
+export function problems(results: Result[]): string {
+  const failed = results.filter(r => r.status === "error").length;
+  return failed ? `${failed} failed` : "";
+}
+
 /** changes lists what an edit did, in the words of its operations. */
 export function changes(card: Card, before?: Dashboard): string[] {
   const title = (id: string) => before?.panels.find(p => p.id === id)?.title ?? id;
-  const panels = (n: number) => `${n} ${n === 1 ? "panel" : "panels"}`;
-  if (card.tool === "create_dashboard") return [`Created with ${panels(card.input.dashboard?.panels.length ?? 0)}`];
-  if (card.tool === "replace_dashboard") return [`Replaced with ${panels(card.input.dashboard?.panels.length ?? 0)}`];
+  if (card.tool === "create_dashboard") return ["Created"];
+  if (card.tool === "replace_dashboard") return ["Replaced"];
   if (card.tool === "restore_dashboard_version") return [`Restored version ${card.input.version ?? "?"}`];
   return (card.input.operations ?? []).map(op => {
     switch (op.op) {
@@ -102,16 +108,24 @@ export function ChatCard({ text, open: initiallyOpen, onOpen }: {
   const results = new Map(fragment.results.map(r => [r.id, r]));
   const lines = d.panels;
   const done = saved ? changes(card) : [];
+  const version = saved ? card.saved?.version ?? fragment.version : undefined;
+  const failed = problems(fragment.results);
+  const name = saved ? `Saved ${d.name}` : d.name;
   return <Paper withBorder radius="md" p="sm" style={{ background: "var(--driga-raised)" }}>
     <Stack gap={6}>
-      <UnstyledButton aria-expanded={expanded} onClick={() => setExpanded(e => !e)}>
-        <Group gap={6} wrap="nowrap">
-          {expanded ? <CaretDown size={14} aria-hidden /> : <CaretRight size={14} aria-hidden />}
-          {saved ? <FloppyDisk size={16} aria-hidden /> : <ChartBar size={16} aria-hidden />}
-          <Text size="sm" fw={600} truncate title={saved ? `Saved ${d.name}` : d.name}>{saved ? `Saved ${d.name}` : d.name}</Text>
-          <Text size="xs" c="dimmed" style={{ whiteSpace: "nowrap" }}>{saved && (card.saved?.version ?? fragment.version) ? `version ${card.saved?.version ?? fragment.version} · ` : ""}{lines.length} {lines.length === 1 ? "panel" : "panels"}</Text>
-        </Group>
-      </UnstyledButton>
+      <Group gap={4} wrap="nowrap">
+        <UnstyledButton aria-expanded={expanded} onClick={() => setExpanded(e => !e)} style={{ flex: 1, minWidth: 0 }}>
+          <Group gap={6} wrap="nowrap">
+            {expanded ? <CaretDown size={14} aria-hidden /> : <CaretRight size={14} aria-hidden />}
+            {saved ? <FloppyDisk size={16} aria-hidden /> : <ChartBar size={16} aria-hidden />}
+            <Text size="sm" fw={600} truncate title={name}>{name}</Text>
+            {version ? <Text size="xs" c="dimmed" style={{ whiteSpace: "nowrap" }}>version {version}</Text> : null}
+            {failed && <Text size="xs" c="danger" style={{ whiteSpace: "nowrap" }}>{failed}</Text>}
+          </Group>
+        </UnstyledButton>
+        {saved && <Tooltip label="Open dashboard"><ActionIcon size="sm" aria-label="Open dashboard" onClick={() => onOpen(fragment.id!)}><SquaresFour size={16} /></ActionIcon></Tooltip>}
+        <Tooltip label="Full screen"><ActionIcon size="sm" aria-label="Full screen" onClick={() => setFull(true)}><ArrowsOut size={16} /></ActionIcon></Tooltip>
+      </Group>
       {done.length > 0 && <Group gap={4}>{done.map(c => <Badge key={c} size="sm" variant="light" color="gray" tt="none">{c}</Badge>)}</Group>}
       {expanded ? <Board fragment={fragment} compact stacked bare /> : <Stack gap={2} component="ul" m={0} p={0} style={{ listStyle: "none" }}>
         {lines.slice(0, 6).map(p => {
@@ -123,12 +137,8 @@ export function ChatCard({ text, open: initiallyOpen, onOpen }: {
         })}
         {lines.length > 6 && <Text component="li" size="xs" c="dimmed">and {lines.length - 6} more</Text>}
       </Stack>}
-      <Group gap={4} mt={2}>
-        <Button size="compact-sm" variant="subtle" color="gray" leftSection={<ArrowsOut size={14} />} onClick={() => setFull(true)}>Full screen</Button>
-        {saved && <Button size="compact-sm" variant="subtle" color="gray" leftSection={<SquaresFour size={14} />} onClick={() => onOpen(fragment.id!)}>Open dashboard</Button>}
-      </Group>
     </Stack>
-    <Modal opened={full} onClose={() => setFull(false)} fullScreen title={saved ? `Saved ${d.name}` : d.name} radius={0}>
+    <Modal opened={full} onClose={() => setFull(false)} fullScreen title={name} radius={0}>
       <Board fragment={fragment} />
     </Modal>
   </Paper>;

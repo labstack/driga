@@ -49,7 +49,11 @@ export const ExpandAndCollapse: Story = {
 };
 export const FullScreen: Story = {
   play: async ({ canvas }) => {
-    await userEvent.click(await canvas.findByRole("button", { name: "Full screen" }));
+    const toggle = await canvas.findByRole("button", { name: /Memory right now/ });
+    const full = await canvas.findByRole("button", { name: "Full screen" });
+    // The card's actions sit in its header, beside its name, not under it.
+    await expect(Math.abs(full.getBoundingClientRect().top - toggle.getBoundingClientRect().top)).toBeLessThan(8);
+    await userEvent.click(full);
     const dialog = await screen.findByRole("dialog", { name: "Memory right now" });
     await waitFor(() => expect(dialog).toBeVisible());
     await expect(within(dialog).getByRole("heading", { name: "Sessions" })).toBeVisible();
@@ -60,12 +64,17 @@ export const Saved: Story = {
   play: async ({ canvas, args }) => {
     await expect(await canvas.findByText("Saved Memory")).toBeVisible();
     await expect(canvas.getByText(/version 4/)).toBeVisible();
+    // The panels below say what the card holds; the header does not count them.
+    await expect(canvas.queryByText(/\d panels?\b/)).toBeNull();
     await expect(canvas.getByText("Added Swap used on studio")).toBeVisible();
-    await userEvent.click(canvas.getByRole("button", { name: "Open dashboard" }));
+    const toggle = canvas.getByRole("button", { name: /Saved Memory/ });
+    const open = canvas.getByRole("button", { name: "Open dashboard" });
+    await expect(Math.abs(open.getBoundingClientRect().top - toggle.getBoundingClientRect().top)).toBeLessThan(8);
+    await userEvent.click(open);
     await expect(args.onOpen).toHaveBeenCalledWith("memory");
   },
 };
-export const Created: Story = { args: { text: createdCard }, play: async ({ canvas }) => { await expect(await canvas.findByText("Created with 2 panels")).toBeVisible(); } };
+export const Created: Story = { args: { text: createdCard }, play: async ({ canvas }) => { await expect(await canvas.findByText("Created")).toBeVisible(); } };
 export const DraftRejected: Story = { args: { text: rejectedCard }, play: async ({ canvas }) => { await expect(canvas.getByText("Draft rejected: Quota")).toBeVisible(); } };
 export const DeletedSince: Story = { args: { text: deletedCard }, play: async ({ canvas }) => { await expect(await canvas.findByText(/was deleted since/)).toBeVisible(); } };
 export const TextTable: Story = { args: { text: textCard, open: true }, play: async ({ canvas }) => { await expect(await canvas.findByRole("cell", { name: "atlas" })).toBeVisible(); } };

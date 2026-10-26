@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Panel, Result } from "../panels/types";
-import { changes, reading } from "./ChatCard";
+import { changes, problems, reading } from "./ChatCard";
 
 const panel = (viz: Panel["viz"]): Panel => ({ id: "p", title: "P", viz, source: "sessions" });
 const GB = 1024 ** 3;
@@ -31,8 +31,19 @@ describe("changes", () => {
       .toEqual(["Added Quota", "Removed Memory"]);
   });
   it("says what a create or restore did", () => {
-    expect(changes({ tool: "create_dashboard", input: { dashboard: { name: "monk", panels: [panel("stat"), panel("table")] } } })).toEqual(["Created with 2 panels"]);
-    expect(changes({ tool: "create_dashboard", input: { dashboard: { name: "x", panels: [panel("stat")] } } })).toEqual(["Created with 1 panel"]);
+    // The card's name and its panels already say what was saved.
+    expect(changes({ tool: "create_dashboard", input: { dashboard: { name: "monk", panels: [panel("stat"), panel("table")] } } })).toEqual(["Created"]);
+    expect(changes({ tool: "replace_dashboard", input: { id: "monk", dashboard: { name: "monk", panels: [panel("stat")] } } })).toEqual(["Replaced"]);
     expect(changes({ tool: "restore_dashboard_version", input: { id: "home", version: 3 } })).toEqual(["Restored version 3"]);
+  });
+});
+
+describe("problems", () => {
+  it("counts the panels that failed and says nothing when none did", () => {
+    const ok: Result = { id: "a", status: "ok" };
+    const bad: Result = { id: "b", status: "error", message: "unknown column" };
+    expect(problems([ok, ok])).toBe("");
+    expect(problems([ok, bad])).toBe("1 failed");
+    expect(problems([bad, bad])).toBe("2 failed");
   });
 });
