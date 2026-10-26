@@ -3,11 +3,24 @@ package tui
 import (
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/labstack/driga/internal/chat"
 	"github.com/labstack/driga/internal/store"
 )
+
+func TestChatModeWordingMatchesApp(t *testing.T) {
+	now := time.Now()
+	m := setup(t, fixture(), Options{NoColor: true, Now: func() time.Time { return now }}).(*app)
+	m.width, m.height = 100, 30
+	for mode, label := range map[chat.Mode]string{chat.Confirm: "Confirm", chat.Auto: "Auto", chat.FullAuto: "Full auto · 30m left"} {
+		m.chatMode, m.chatUntil = mode, now.Add(30*time.Minute)
+		if got := m.chatView(); !strings.Contains(got, " · "+label) {
+			t.Fatalf("mode %s: missing %q in %s", mode, label, got)
+		}
+	}
+}
 
 func TestFullAutoWarningSurvivesActivePoll(t *testing.T) {
 	client := &actionClient{}

@@ -220,7 +220,7 @@ func (m *app) chatView() string {
 	if mode == chat.FullAuto {
 		modeStyle = view.TokenStyle("crit", m.opts.NoColor)
 	}
-	label := string(mode)
+	label := map[chat.Mode]string{chat.Confirm: "Confirm", chat.Auto: "Auto", chat.FullAuto: "Full auto"}[mode]
 	if mode == chat.FullAuto && !m.chatUntil.IsZero() {
 		left := max(0, m.chatUntil.Sub(m.opts.Now()))
 		label += fmt.Sprintf(" · %dm left", int((left+time.Minute-1)/time.Minute))
