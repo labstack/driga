@@ -1,0 +1,27 @@
+/* The hover and press of a header tile, and the one allowed pulse: the
+   waiting dot, 2 s of opacity, off under reduced motion. Colors are theme
+   variables only. */
+.tile {
+  border-radius: var(--mantine-radius-md);
+  background: var(--tile-bg, transparent);
+}
+.tile:hover { background: var(--tile-hover, var(--driga-hover)); }
+.tile:active { transform: scale(0.98); }
+
+.chip {
+  border-radius: var(--mantine-radius-sm);
+  background: var(--chip-bg, var(--driga-raised));
+  border: 1px solid var(--driga-border);
+}
+.chip:hover { background: var(--driga-hover); }
+.chip:active { transform: scale(0.98); }
+
+@media (prefers-reduced-motion: no-preference) {
+  .tile, .chip { transition: background-color 150ms ease-out; }
+  .pulse { animation: pulse 2s ease-in-out infinite; }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
