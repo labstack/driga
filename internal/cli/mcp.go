@@ -18,7 +18,7 @@ import (
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// MCPCmd serves read-only tools over stdio.
+// MCPCmd serves read views and editable Driga dashboards over stdio.
 type MCPCmd struct {
 	Snapshot bool `help:"Force one-shot snapshot collection for read tools (no history)."`
 	Chat     bool `hidden:"" help:"Apply Chat capture policy to every response."`
@@ -28,7 +28,7 @@ func (c *MCPCmd) AfterApply(g *Globals) error { g.Snapshot = c.Snapshot; return 
 
 // Help documents client registration without changing client configuration.
 func (MCPCmd) Help() string {
-	return "Read-only MCP server on stdio. Reading never acknowledges inbox items; snapshot mode has no history.\n\n" +
+	return "MCP server on stdio: read collected views and create or edit Driga dashboards. Reading never acknowledges inbox items; snapshot mode has no history.\n\n" +
 		"Claude Code: claude mcp add --scope user driga -- driga mcp\n\n" +
 		"Codex configuration:\n[mcp_servers.driga]\ncommand = \"driga\"\nargs = [\"mcp\"]"
 }

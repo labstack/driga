@@ -1,4 +1,4 @@
-// Package mcp exposes Driga's read-only views over the Model Context Protocol.
+// Package mcp exposes Driga's read views and editable dashboards over MCP.
 package mcp
 
 import (

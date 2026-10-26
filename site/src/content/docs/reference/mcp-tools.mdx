@@ -231,7 +231,7 @@ Change a saved dashboard with typed operations: add, update (merge fields), remo
 
 | Input | Type | Required | Description |
 |---|---|---|---|
-| `base_version` | integer |  | Version you read; the edit fails if someone saved since. |
+| `base_version` | integer | yes | Required version you read, including 0 for an unsaved built-in; fails if someone saved since. |
 | `id` | string | yes | Dashboard id. |
 | `message` | string |  | One line describing the change, shown in history. |
 | `operations` | null or array | yes | Edits applied in order, all or none. |
@@ -265,7 +265,7 @@ Save a whole new spec for a dashboard as a new version; dragged positions of pan
 
 | Input | Type | Required | Description |
 |---|---|---|---|
-| `base_version` | integer |  | Version you read; the call fails if someone saved since. |
+| `base_version` | integer | yes | Required version you read, including 0 for an unsaved built-in; fails if someone saved since. |
 | `dashboard` | object | yes | Complete replacement spec; panels it leaves out are removed. |
 | `id` | string | yes | Dashboard id. |
 | `message` | string |  | One line describing the change, shown in history. |
@@ -276,6 +276,7 @@ Save an earlier version of a dashboard as its newest version. Nothing is lost: t
 
 | Input | Type | Required | Description |
 |---|---|---|---|
+| `base_version` | integer | yes | Required current version you read; fails if someone saved since. |
 | `id` | string | yes | Dashboard id. |
 | `version` | integer | yes | Earlier version to restore; restoring saves it as the newest version. |
 

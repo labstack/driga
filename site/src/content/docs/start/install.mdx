@@ -68,8 +68,8 @@ Scoop installs the app, `Driga.exe`, with a Start menu shortcut, and puts the
 CLI, `bin\driga.exe`, on `PATH` as `driga`. Archives with both are also on
 [GitHub Releases](https://github.com/labstack/driga/releases). Keep them at a
 stable path without shell metacharacters before installing hooks or the
-service. The app's first launch removes the Driga service task installed earlier and
-says so once.
+service. The app installs the current service. It removes only the legacy collector
+task, `\Driga\<SID>\Driga collector`, left by an earlier release.
 
 </TabItem>
 <TabItem label="From source">

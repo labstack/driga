@@ -44,7 +44,7 @@ confirmation exits `2` when stdin is not a terminal unless `--yes` is passed.
 | [`driga top`](#driga-top) | Open the interactive session viewer. |
 | [`driga app`](#driga-app) | Open the Driga desktop app, or focus it. |
 | [`driga ask`](#driga-ask) | Ask a one-shot Chat question through Claude and driga's read-only tools. |
-| [`driga mcp`](#driga-mcp) | Serve read-only MCP tools over stdio. |
+| [`driga mcp`](#driga-mcp) | Serve collected views and editable dashboards over MCP stdio. |
 | [`driga doctor`](#driga-doctor) | Check setup and collection health. |
 | [`driga init`](#driga-init) | Guide optional setup. |
 | [`driga config`](#driga-config) | Inspect or edit configuration. |
@@ -503,10 +503,10 @@ driga ask <question>... [flags]
 
 ## driga mcp
 
-Serve read-only MCP tools over stdio.
+Serve collected views and editable dashboards over MCP stdio.
 
 ```text
-Read-only MCP server on stdio. Reading never acknowledges inbox items; snapshot mode has no history.
+MCP server on stdio: read collected views and create or edit Driga dashboards. Reading never acknowledges inbox items; snapshot mode has no history.
 
 Claude Code: claude mcp add --scope user driga -- driga mcp
 

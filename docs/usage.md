@@ -41,8 +41,8 @@ an observation time, collection mode, source freshness, coverage gaps, and data.
 `doctor --json` returns diagnostic checks rather than a view envelope.
 Use `driga <command> --help` for command-specific flags.
 
-Labels are `working`, `waiting`, `idle`, `stalled?`, `finished`, `ended`, `dead`, and
-`unknown`, with evidence in session details. `stalled?` means suspected inactivity.
+Labels are `working`, `waiting`, `idle`, `stuck`, `finished`, `ended`, `dead`, and
+`unknown`, with evidence in session details. `stuck` means suspected inactivity.
 `ended` means the process exited with no open turn, a SessionEnd/sessionEnd hook
 arrived, or the conversation was replaced by `/clear` or `/resume`. `dead` requires
 an interrupted open turn or crash evidence. An unsupported adapter's exit stays
@@ -187,7 +187,7 @@ Defaults and their purpose:
 | `roots` | none | Discover from sessions; add scanning roots only when wanted. |
 | `root_depth` | `3` | Bound discovery below configured roots. |
 | `exclude` | `**/node_modules`, `**/.tmp/**` | Avoid dependency and temporary directories. |
-| `stalled_after` | `10m` | Suspect a quiet busy/mid-turn session after this interval. |
+| `stuck_after` | `10m` | Suspect a quiet busy/mid-turn session after this interval. |
 | `orphan_min_age` | `10m` | Show fresh leaks as young; withhold kill until mature. |
 | `capture_text` | `titles` | Require opt-in for prompt/handoff snippets. |
 | `fleet.serve` | `false` | Open a listener only when explicitly enabled. |
@@ -246,7 +246,7 @@ row. Default reports and critical-pressure alerts read at most 24 hours.
 
 Pre-release databases must be reset; `driga doctor` prints the exact stop/remove/start command.
 Fresh databases enable incremental auto-vacuum before creating tables. The
-the Driga service returns up to 256 free pages after each hourly retention pass.
+Driga service returns up to 256 free pages after each hourly retention pass.
 Long-lived read snapshots can delay WAL space recovery until they close.
 
 `driga doctor` warns when the database plus WAL exceeds the **500 MB**
@@ -332,7 +332,7 @@ whether or not the app or the terminal UI is open; both are its clients, as is
 `driga mcp`. It runs as a per-user LaunchAgent on macOS (`run.driga.service`), a
 systemd user unit on Linux (`driga`) and a Task Scheduler task at logon on
 Windows. A `driga-dev` build installs its own (`run.driga.service.dev`,
-`driga-dev`), so it never takes over the release's.
+`driga-dev`, and Windows task `Driga service (dev)`), so it never takes over the release's.
 
 The app's first launch installs the service, and every launch makes sure it
 runs and restarts it when it runs another version, as after an upgrade. It
@@ -743,7 +743,8 @@ keep user settings, hooks, plugins and other MCP servers out. If Claude lacks
 `--permission-prompts`, Chat stays read-only and explains why once per conversation.
 
 `driga ask` stays read-only: it has no action cards. The ordinary `driga mcp`
-server for your own agents also stays read-only. Chat’s private `mcp --chat`
+server for your own agents offers read views and dashboard writes, with no actions
+on agent sessions or the machine. Chat’s private `mcp --chat`
 child supplies its action tools and permission bridge.
 
 The Driga service owns the broker and its local socket, using the shared directory
@@ -814,7 +815,7 @@ desktop with a StatusNotifierItem host; Linux desktop support is best effort.
 
 ## MCP registration
 
-`driga mcp` exposes read-only tools over stdio with the same schema-2 view
+`driga mcp` exposes read tools and dashboard writes over stdio. Read tools use the same schema-2 view
 envelopes as `--json`. Reading never acknowledges inbox items. Run the Driga service for
 history and merged fleet data; without one, tools use labelled snapshot mode.
 Keep the installed `driga` binary on the MCP client's PATH.
@@ -949,7 +950,7 @@ Allow or Deny.
 Action-enabled Chat's `list_prompts` shows inputs only with `capture_text = "snippets"`;
 other capture policies show tool metadata. `answer_prompt(id, allow)` uses the
 same action gate as other Chat actions: Confirm and Auto require a card;
-Full auto runs it immediately. The standalone `driga mcp` stays read-only.
+Full auto runs it immediately. The standalone `driga mcp` can edit Driga dashboards; machine and agent actions remain exclusive to Chat.
 
 Prompts live in memory only, never in the database, logs or fleet. Claude
 permission notifications retain only the tool and needs-you metadata, even with
@@ -995,7 +996,7 @@ contains related sessions; selecting a session never selects the whole family.
 | `top` | Interactive terminal dashboard; `--tab=flow\|projects\|machines`, `--theme=system\|light\|dark`, `--machine`, `--project`, `--since`, `--snapshot`, `--no-color`. |
 | `app` | Open the Driga desktop app, or bring the running one forward. |
 | `ask <question>...` | One-shot Chat question; `--machine`, `--project`, `--json`. |
-| `mcp` | Serve read-only MCP tools over stdio; `--snapshot` forces one-shot collection for read tools without history. |
+| `mcp` | Serve collected views and editable dashboards over MCP stdio; `--snapshot` forces one-shot collection for read tools without history. |
 | `doctor` | Setup/collection diagnostics; `--json`. |
 | `init` | Optional setup, previewing changes; `--yes/-y` accepts each prompt. |
 | `config path` / `config show` / `config edit` | Configuration path, values, or editor; only `path` supports `--json`. |

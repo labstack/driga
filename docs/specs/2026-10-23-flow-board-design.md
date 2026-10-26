@@ -37,7 +37,7 @@ file uses a deterministic star, avoiding quadratic all-pairs edges.
 
 Historical working slices require measured transcript/CPU activity or real tool
 telemetry. A current verdict applies only at the right edge. Unknown history remains
-neutral; recorded waits are amber and stalled state caps are hatched. Tool ticks
+neutral; recorded waits are amber and stuck state caps are hatched. Tool ticks
 and counts require Claude `otlp:tool_result` or Copilot `postToolUse` events and are
 labelled **telemetry**. Codex/Gemini observation growth never becomes a tool tick.
 Cost appears only with stored cost metadata and is labelled **retained window**.
@@ -54,9 +54,9 @@ remaining workers fold into a `+N` control that opens Timeline. Timeline retains
 complete forest. Missing parents and cycles cannot hide sessions.
 
 Nodes have radius 18, a state glyph, a small agent-letter badge and a title below.
-Working is green `▶`, waiting amber `◆`, stalled red `‖`, idle blue `○`, and ended
-muted `✓`. Stalled strokes are dashed; ended strokes are dotted and faded. Recent
-stored activity controls fill opacity. Only waiting/stalled nodes show an age.
+Working is green `▶`, waiting amber `◆`, stuck red `‖`, idle blue `○`, and ended
+muted `✓`. Stuck strokes are dashed; ended strokes are dotted and faded. Recent
+stored activity controls fill opacity. Only waiting/stuck nodes show an age.
 Waiting has a static amber ring; selection has a purple ring. Regions and coordinates
 never depend on current activity or verdict, so refreshes do not move sessions.
 
