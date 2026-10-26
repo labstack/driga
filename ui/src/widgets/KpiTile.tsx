@@ -81,17 +81,18 @@ export function KpiTile({ label, sublabel, icon: Glyph, value, unit, total, capt
   const Root = onClick ? UnstyledButton : Box;
   const onContext = (e: MouseEvent) => { if (menu?.length) { e.preventDefault(); setOpen(true); } };
   const tile = <Root className="w-tile" data-size={size} data-clickable={onClick ? "" : undefined} data-selected={selected ? "true" : undefined} data-attention={tone}
-    aria-pressed={onClick && selected !== undefined ? selected : undefined} aria-keyshortcuts={shortcut} onClick={onClick} onContextMenu={onContext} title={description} px={header ? 8 : "sm"} py={header ? 4 : "sm"} miw={header ? 104 : undefined}>
+    aria-pressed={onClick && selected !== undefined ? selected : undefined} aria-keyshortcuts={shortcut} onClick={onClick} onContextMenu={onContext} title={description} px={header ? 8 : "sm"} py={header ? 1 : "sm"} miw={header ? 104 : undefined}>
     <Stack gap={header ? 2 : 4}>
       <Group gap={6} wrap="nowrap" c={tone ? tone : "var(--driga-faint)"}>
         {Glyph && <Glyph size={14} aria-hidden style={{ flex: "none" }} />}
-        <Text size="xs" fw={500} tt="uppercase" lts="0.04em" c={tone ? "var(--driga-text)" : "dimmed"} lh={1.2} truncate title={sublabel ? `${label} · ${sublabel}` : label} style={{ whiteSpace: "nowrap" }}>
-          {label}{sublabel && <> · <Text span fz="xs" fw={500} ff="monospace" tt="none" lts={0} c="dimmed">{sublabel}</Text></>}
+        <Text size="xs" fw={500} tt="uppercase" lts="0.04em" c={tone ? "var(--driga-text)" : "dimmed"} lh={header ? 1.4 : 1.2} truncate title={sublabel ? `${label} · ${sublabel}` : label} style={{ whiteSpace: "nowrap" }}>
+          {label}{sublabel && <> · <Text span fz="xs" fw={500} ff="monospace" tt="none" lts={0} lh="inherit" c="dimmed">{sublabel}</Text></>}
         </Text>
       </Group>
       <Group gap={header ? 6 : 6} wrap="nowrap" align="center">
         {tone && <ColorSwatch size={6} color={`var(--mantine-color-${tone}-filled)`} withShadow={false} aria-hidden className={attention === "waiting" ? "w-pulse" : undefined} style={{ flex: "none" }} />}
-        <Box c={zero ? "dimmed" : undefined} style={{ whiteSpace: "nowrap" }}><Measure n={value} unit={unit} total={total} size={header ? 20 : 22} /></Box>
+        {/* Plex Mono has taller text bounds on Linux; leave room above the value without growing the 56 px header. */}
+        <Box c={zero ? "dimmed" : undefined} style={{ whiteSpace: "nowrap" }}><Measure n={value} unit={unit} total={total} size={header ? 20 : 22} lineHeight={header ? 1.4 : 1.1} /></Box>
         {caption && <Text fz={12} ff="monospace" c="dimmed" lh={1.2} style={{ whiteSpace: "nowrap" }}>· {caption}</Text>}
         {detail && <VisuallyHidden> {detail}</VisuallyHidden>}
         {header && line && <Box w={72} h={20} aria-hidden style={{ flex: "none" }}>{line}</Box>}

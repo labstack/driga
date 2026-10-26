@@ -118,7 +118,7 @@ function MachinePanel({ group, onSelect }: { group: FleetMachineGroup; onSelect:
   return <Stack gap="sm">
     <Group gap={6} wrap="nowrap">
       <Glyph size={16} aria-hidden />
-      <Title order={2} fz="md" ff="monospace" lh={1.3}>{m.name}</Title>
+      <Title order={2} fz="md" ff="monospace" lh={1.6}>{m.name}</Title>
       {m.local && <Badge variant="default" size="xs">local</Badge>}
     </Group>
     <Group gap={4} wrap="nowrap">
@@ -155,7 +155,7 @@ function ProjectPanel({ project: p, data, onSelect }: { project: FleetProject; d
   const machines = machinesOfProject(data, p.id);
   const sessions = data.sessions.filter(s => s.project === p.id);
   return <Stack gap="sm">
-    <Title order={2} fz="md" ff="monospace" lh={1.3}>{p.name}</Title>
+    <Title order={2} fz="md" ff="monospace" lh={1.6}>{p.name}</Title>
     {p.repo && <Text ff="monospace" fz="xs" c="dimmed" truncate title={p.repo}>{p.repo}</Text>}
     <Stack gap={2}>
       <Label>Machines</Label>

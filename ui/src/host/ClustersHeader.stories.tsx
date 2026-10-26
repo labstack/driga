@@ -11,7 +11,7 @@ const meta = {
   component: ClustersHeader,
   args: { data: busy, filter: null, chatOpen: true, onFilter: fn(), onOpenFleet: fn(), onSearch: fn(), onToggleChat: fn(), onShow: fn(), onAsk: fn() },
   // The row as the shell holds it: 56 px on the translucent ground.
-  decorators: [Story => <Box h={56} px="md" style={{ background: "var(--driga-ground)", borderBottom: "1px solid var(--driga-border)" }}><Story /></Box>],
+  decorators: [Story => <Box h={56} px="md" data-testid="header-shell" style={{ background: "var(--driga-ground)", borderBottom: "1px solid var(--driga-border)" }}><Story /></Box>],
   parameters: {
     layout: "fullscreen",
     docs: {
@@ -156,6 +156,31 @@ export const LaptopWidth: Story = {
     await expect(fleet).toBeVisible();
     await expect(fleet).toHaveTextContent("4");
     await expect(canvas.getByRole("button", { name: /^Need you\s*3$/ })).toBeVisible();
+  },
+};
+
+/** Match Linux's taller Plex Mono bounds on every review platform. */
+export const TallFontMetrics: Story = {
+  name: "Tall font metrics",
+  beforeEach: async () => {
+    const face = new FontFace("Catalog tall mono", 'url("/static/fonts/ibm-plex-mono-latin-600-normal.woff2")', {
+      weight: "400 700", ascentOverride: "120%", descentOverride: "40%", lineGapOverride: "0%",
+    });
+    await face.load();
+    document.fonts.add(face);
+    return () => { document.fonts.delete(face); };
+  },
+  decorators: [Story => <Box h="100%" style={{ "--mantine-font-family-monospace": '"Catalog tall mono", monospace' }}><Story /></Box>],
+  parameters: { docs: { description: { story: "Linux reports taller Plex Mono text bounds. The labels and values keep their space, including the memory machine name, while every tile fits inside the 56 px shell." } } },
+  play: async ({ canvas, canvasElement }) => {
+    await expect(canvas.getByRole("button", { name: /^Memory · studio/ })).toBeVisible();
+    const shell = canvas.getByTestId("header-shell").getBoundingClientRect();
+    for (const tile of canvasElement.querySelectorAll<HTMLElement>(".w-tile")) {
+      if (!tile.checkVisibility()) continue;
+      const bounds = tile.getBoundingClientRect();
+      expect(bounds.top).toBeGreaterThanOrEqual(shell.top);
+      expect(bounds.bottom).toBeLessThanOrEqual(shell.bottom);
+    }
   },
 };
 

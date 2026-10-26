@@ -7,18 +7,18 @@ import type { Cell } from "../panels/types";
 
 /** Measure shows a number with its unit at a smaller size, as Canon's stat
  * tile does: "1.8" then "GB". */
-export function Measure({ n, unit, size = 28, total }: { n: Cell; unit?: string; size?: number; total?: Cell }) {
-  if (typeof n !== "number") return <Text ff="monospace" fz={size} fw={600} lh={1.1} c="dimmed">–</Text>;
+export function Measure({ n, unit, size = 28, total, lineHeight = 1.1 }: { n: Cell; unit?: string; size?: number; total?: Cell; lineHeight?: number }) {
+  if (typeof n !== "number") return <Text ff="monospace" fz={size} fw={600} lh={lineHeight} c="dimmed">–</Text>;
   const [number, suffix] = splitUnit(value(n, unit));
   // Out of a total, the value and the total share the total's unit: 25 / 32 GB.
   if (typeof total === "number") {
     const [whole, wholeSuffix] = splitUnit(value(total, unit));
     const [part] = splitUnit(unit === "bytes" ? sameUnit(n, total) : value(n, unit));
-    return <Text ff="monospace" fz={size} fw={600} lh={1.1} style={{ fontVariantNumeric: "tabular-nums" }}>
+    return <Text ff="monospace" fz={size} fw={600} lh={lineHeight} style={{ fontVariantNumeric: "tabular-nums" }}>
       {part}<Text span ff="monospace" fz="0.6em" fw={500} c="dimmed" mx={3}>/ {whole}</Text>{wholeSuffix && <Text span ff="monospace" fz="0.6em" fw={500} c="dimmed">{wholeSuffix}</Text>}
     </Text>;
   }
-  return <Text ff="monospace" fz={size} fw={600} lh={1.1} style={{ fontVariantNumeric: "tabular-nums" }}>
+  return <Text ff="monospace" fz={size} fw={600} lh={lineHeight} style={{ fontVariantNumeric: "tabular-nums" }}>
     {number}{suffix && <Text span ff="monospace" fz="0.6em" fw={500} c="dimmed" ml={3}>{suffix}</Text>}
   </Text>;
 }
