@@ -4,12 +4,12 @@
 import "@mantine/spotlight/styles.css";
 import { Group, Kbd, Text, UnstyledButton, VisuallyHidden } from "@mantine/core";
 import { isActionsGroup, Spotlight, spotlight, type SpotlightActionData, type SpotlightActionGroupData, type SpotlightFilterFunction } from "@mantine/spotlight";
-import { ArrowSquareOut, ChatCircle, Copy, MagnifyingGlass, SquaresFour } from "@phosphor-icons/react";
+import { ArrowSquareOut, ChatCircle, Copy, MagnifyingGlass, SquaresFour, Stack as StackIcon } from "@phosphor-icons/react";
 import { useState } from "react";
 import { duration } from "../panels/format";
 import type { Act } from "../panels/host";
-import { StatusBadge, toneOf } from "../panels/StatusBadge";
 import { rows, type Dashboard, type Fragment, type Row } from "../panels/types";
+import { StatusBadge, stateOf } from "../widgets/StatusBadge";
 import { dashboards, type Summary } from "./api";
 
 // Live sessions come from sessions; ended ones from history, two weeks back.
@@ -33,7 +33,7 @@ export function sessionActions(live: Row[], ended: Row[], now: number, act: Act,
       description: [r.project, r.branch, r.agent, r.machine, at(r) ? `active ${ago(now, r.last_activity_at)}` : ""].filter(Boolean).join(" · "),
       keywords: keywords(r),
       leftSection: <ArrowSquareOut size={16} aria-hidden />,
-      rightSection: r.state ? <StatusBadge tone={toneOf(String(r.state))} inferred={r.inferred === true}>{String(r.state)}</StatusBadge> : undefined,
+      rightSection: r.label ? <StatusBadge {...stateOf(String(r.label))} inferred={r.inferred === true || String(r.label).startsWith("~")} /> : undefined,
       onClick: () => void act({ kind: "jump", row: { ...r, session_id: r.id } }),
     })) },
     { group: "Ended sessions", actions: ended.map(r => ({
@@ -66,7 +66,9 @@ export const filter: SpotlightFilterFunction = (query, actions) => {
   return out;
 };
 
-export function Search({ list, act, ask, open, say }: { list: Summary[]; act: Act; ask: (text: string) => void; open: (id: string) => void; say: (message: string) => void }) {
+export function Search({ list, act, ask, open, onFleet, say }: { list: Summary[]; act: Act; ask: (text: string) => void; open: (id: string) => void;
+  /** onFleet opens the Fleet page, listed beside the dashboards. */
+  onFleet?: () => void; say: (message: string) => void }) {
   const [found, setFound] = useState<{ live: Row[]; ended: Row[] }>({ live: [], ended: [] });
   const [failed, setFailed] = useState(false);
   const of = (f: Fragment, id: string) => rows(f.results.find(r => r.id === id)?.frame ?? { columns: [], rows: [] });
@@ -77,6 +79,7 @@ export function Search({ list, act, ask, open, say }: { list: Summary[]; act: Ac
     navigator.clipboard.writeText(r.resume).then(() => say(`Copied the command that resumes ${title}. Paste it in a terminal.`), () => say(`Couldn't copy. Resume with: ${r.resume}`));
   };
   const boards: SpotlightActionGroupData = { group: "Dashboards", actions: list.map(d => ({ id: `dashboard-${d.id}`, label: d.name, leftSection: <SquaresFour size={16} aria-hidden />, onClick: () => open(d.id) })) };
+  const pages: SpotlightActionGroupData = { group: "Pages", actions: onFleet ? [{ id: "page-fleet", label: "Fleet", description: "Every machine, project and session, and where the memory goes", keywords: ["machines", "sessions"], leftSection: <StackIcon size={16} aria-hidden />, onClick: onFleet }] : [] };
   return <>
     <UnstyledButton className="search-button" onClick={spotlight.open} aria-keyshortcuts="Meta+K" title="Search sessions and dashboards (⌘K)">
       <Group gap={8} wrap="nowrap">
@@ -87,7 +90,7 @@ export function Search({ list, act, ask, open, say }: { list: Summary[]; act: Ac
       </Group>
     </UnstyledButton>
     <Spotlight title="Search sessions and dashboards" styles={{ actionDescription: { color: "var(--driga-text)", opacity: 1 }, actionSection: { opacity: 1 } }} shortcut={["mod + K"]} filter={filter} onSpotlightOpen={() => void load()} limit={40} highlightQuery scrollable maxHeight={480}
-      actions={[...sessionActions(found.live, found.ended, Date.now(), act, resume), ...(boards.actions.length ? [boards] : [])]}
+      actions={[...sessionActions(found.live, found.ended, Date.now(), act, resume), ...(boards.actions.length ? [boards] : []), ...(pages.actions.length ? [pages] : [])]}
       nothingFound={failed ? "Driga can't reach its service, so there is nothing to search." : "No session or dashboard matches. Sessions that ended more than two weeks ago aren't listed."}
       searchProps={{ "aria-label": "Search sessions and dashboards", leftSection: <MagnifyingGlass size={18} aria-hidden />, placeholder: "Search sessions by title, project, branch, agent or machine" }} />
   </>;

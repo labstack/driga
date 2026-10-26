@@ -60,8 +60,8 @@ shipping components themselves. The panel data in `ui/src/fixtures` is Driga's
 own engine run over that fleet; `DRIGA_WRITE_STORIES=1 go test ./internal/panel`
 regenerates it, and `just check` fails when it is stale. `just design-check`
 runs every story, its play, accessibility and Canon's layout check in Chromium,
-light and dark; `just check` runs it too, and a unit test fails when a component
-or a kind of panel has no story. Agents writing or changing UI add the story
+in both schemes at both review widths (1440 and 1024); `just check` runs it
+too, and a unit test fails when a component or a kind of panel has no story. Agents writing or changing UI add the story
 first. UI files keep the code's PascalCase names rather than Canon's kebab-case.
 
 `just dev` develops the UI in a browser at http://127.0.0.1:5173/app/: Vite

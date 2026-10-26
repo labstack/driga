@@ -1,0 +1,13 @@
+/* The hover and press of the header's own controls, the all-clear line and
+   the fleet pulse; the tiles are KPI tiles and carry their own. Colors are
+   theme variables only. */
+.tile {
+  border-radius: var(--mantine-radius-md);
+  background: transparent;
+}
+.tile:hover { background: var(--driga-hover); }
+.tile:active { transform: scale(0.98); }
+
+@media (prefers-reduced-motion: no-preference) {
+  .tile { transition: background-color 150ms ease-out; }
+}

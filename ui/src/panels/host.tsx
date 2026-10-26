@@ -10,12 +10,20 @@ export type Action = { kind: ActionKind; row: Row };
 
 export type Act = (action: Action) => Promise<void>;
 
+/** What the inbox is narrowed to from the header: what needs the person,
+ * or what finished. */
+export type InboxFilter = "waiting" | "review";
+
 export type Host = {
   act?: Act;
   /** local is the machine the app runs on; actions are offered only there. */
   local?: string;
   prompts?: Prompt[];
   answer?: (prompt: Prompt, allow: boolean) => Promise<void>;
+  /** The inbox shows only this kind while set. */
+  inboxFilter?: InboxFilter | null;
+  /** ask puts a question to Chat, when the host has one. */
+  ask?: (text: string) => void;
 };
 
 export const HostContext = createContext<Host>({});

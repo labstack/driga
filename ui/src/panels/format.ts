@@ -59,6 +59,11 @@ export function cell(c: Cell, column: Column): string {
   return String(c);
 }
 
+/** plural counts a thing: 1 file, 2 files, 3 processes. */
+export function plural(n: number, word: string): string {
+  return `${whole.format(n)} ${word}${n === 1 ? "" : word.endsWith("s") ? "es" : "s"}`;
+}
+
 /** label turns a column name into a header. */
 export function label(name: string): string {
   const words = name.replace(/_bytes$|_at$/, "").replaceAll("_", " ");

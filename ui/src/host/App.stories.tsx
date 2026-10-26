@@ -2,6 +2,7 @@ import { spotlight } from "@mantine/spotlight";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, screen, userEvent, waitFor, within } from "storybook/test";
 import { answered, awaitingApproval, prompt } from "../fixtures/chat";
+import { fleetQuiet } from "../fixtures/fleet";
 import { fragments } from "../fixtures/fragments";
 import { fakeService, type Service } from "../fixtures/service";
 import { App } from "./App";
@@ -38,8 +39,9 @@ const meta = {
     service: fakeService(),
     docs: { story: { inline: false, iframeHeight: 900 }, description: { component: "What needs you, what finished, what is running away and what is in flight, with Chat beside the board. Drag the line between them to resize Chat." } },
   },
-  // Spotlight keeps whether it is open in a module store; each story starts closed.
-  beforeEach: () => { spotlight.close(); return () => spotlight.close(); },
+  // Spotlight keeps whether it is open in a module store, and the app writes
+  // its page into the URL; each story starts closed, on Home.
+  beforeEach: () => { spotlight.close(); history.replaceState(null, "", "/app/"); return () => spotlight.close(); },
 } satisfies Meta<typeof App>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -54,12 +56,12 @@ export const NeedsYou: Story = {
 export const PermissionPrompt: Story = {
   parameters: { service: fakeService({ prompts: [prompt] }) },
   play: async ({ canvas }) => {
-    await expect(await canvas.findByText("npm run migrate -- --env staging")).toBeVisible();
+    await expect(await canvas.findByText("Bash(npm run migrate -- --env staging)")).toBeVisible();
     await expect(await canvas.findByRole("button", { name: /^Need you\s*4/ })).toBeVisible();
   },
 };
 export const AllClear: Story = {
-  parameters: { service: fakeService({ open: { home: fragments.home_quiet, header: fragments.header_quiet }, inbox: fragments.inbox_quiet }) },
+  parameters: { service: fakeService({ open: { home: fragments.home_quiet, header: fragments.header_quiet }, inbox: fragments.inbox_quiet, fleet: fleetQuiet }) },
   play: async ({ canvas }) => {
     await expect(await canvas.findByText(/^Inbox:/)).toBeVisible();
     await expect(await canvas.findByText("Nothing is waiting on you.")).toBeVisible();
@@ -80,6 +82,31 @@ export const ChatHidden: Story = {
     await expect(toggle).toHaveAttribute("aria-pressed", "false");
     await userEvent.click(toggle);
     await waitFor(() => expect(toggle).toHaveAttribute("aria-pressed", "true"));
+  },
+};
+export const Fleet: Story = {
+  parameters: { docs: { description: { story: "The fleet pulse in the header, g then f, or Search opens the Fleet page in the board's place." } } },
+  play: async ({ canvas }) => {
+    await expect(await canvas.findByRole("button", { name: /^Fleet: 3 machines/ })).toBeVisible();
+    await userEvent.keyboard("gf");
+    await expect(await canvas.findByRole("heading", { name: "Fleet", level: 1 })).toBeVisible();
+    await expect(canvas.getByText("3 machines · 4 projects · 9 sessions")).toBeVisible();
+  },
+};
+export const FilterNeedsYou: Story = {
+  name: "Filter to what needs you",
+  parameters: { docs: { description: { story: "A Need-you tile press narrows the inbox to what needs you; pressing it again shows everything." } } },
+  play: async ({ canvas }) => {
+    await expect(await canvas.findByText(/To review · 3/)).toBeVisible();
+    const tile = await canvas.findByRole("button", { name: /^Need you\s*3/ });
+    await userEvent.click(tile);
+    await expect(tile).toHaveAttribute("aria-pressed", "true");
+    await waitFor(() => expect(canvas.queryByText(/To review · 3/)).toBeNull());
+    await userEvent.click(tile);
+    await expect(await canvas.findByText(/To review · 3/)).toBeVisible();
+    await userEvent.unhover(tile);
+    tile.blur();
+    await waitFor(() => expect(screen.queryByRole("tooltip")).toBeNull());
   },
 };
 export const Editing: Story = {

@@ -5,13 +5,14 @@ import { playwright } from "@vitest/browser-playwright";
 import { defineConfig } from "vitest/config";
 import { reviewWidths } from "./.storybook/viewports.ts";
 
-// Two cells keep both schemes and the two window widths without a full
-// product of them; Chat's stories pin the Chat column width themselves.
-// Storybook's Run tests button sets VITEST_STORYBOOK; there the toolbar's
-// globals apply, so it gets one project.
+// Every scheme at every window width: a failure one scheme shows at one
+// width only (overlapping text in dark at 1440) is not caught by a diagonal.
+// Chat's stories pin the Chat column width themselves. Storybook's Run tests
+// button sets VITEST_STORYBOOK; there the toolbar's globals apply, so it
+// gets one project.
 const cells: { colorScheme: string; viewport: keyof typeof reviewWidths }[] | [undefined] = process.env.VITEST_STORYBOOK === "true"
   ? [undefined]
-  : [{ colorScheme: "light", viewport: "desktop" }, { colorScheme: "dark", viewport: "laptop" }];
+  : (["desktop", "laptop"] as const).flatMap(viewport => ["light", "dark"].map(colorScheme => ({ colorScheme, viewport })));
 
 export default defineConfig({
   test: {

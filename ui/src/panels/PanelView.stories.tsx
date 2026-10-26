@@ -1,6 +1,6 @@
 import { Box } from "@mantine/core";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect, fn, userEvent, within } from "storybook/test";
+import { expect, fn, screen, userEvent, waitFor, within } from "storybook/test";
 import { editPrompt, prompt } from "../fixtures/chat";
 import { panelOf } from "../fixtures/fragments";
 import { HostContext } from "./host";
@@ -33,9 +33,14 @@ export const TimeseriesOneLine: Story = { args: one("timeseries_one"), play: asy
 export const TimeseriesAsTable: Story = {
   args: one("timeseries_one"),
   play: async ({ canvas }) => {
-    await userEvent.click(canvas.getByRole("button", { name: "Show Swap used on studio as table" }));
+    await userEvent.click(canvas.getByRole("button", { name: "More for Swap used on studio" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "Show as table" }));
+    await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
     await expect(canvas.getByRole("columnheader", { name: /Time/ })).toBeVisible();
-    await expect(canvas.getByRole("button", { name: "Show Swap used on studio as chart" })).toHaveAttribute("aria-pressed", "true");
+    await userEvent.click(canvas.getByRole("button", { name: "More for Swap used on studio" }));
+    await expect(await screen.findByRole("menuitem", { name: "Show as chart" })).toBeInTheDocument();
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
   },
 };
 export const Bar: Story = { args: one("bar"), play: async ({ canvas }) => { await expect(canvas.getByText(/Fix the flaky checkout test #12 most/)).toBeVisible(); } };
@@ -44,7 +49,7 @@ export const Table: Story = {
   args: one("table"),
   play: async ({ canvas }) => {
     await expect(canvas.getByRole("columnheader", { name: /State/ })).toBeVisible();
-    await expect(canvas.getByLabelText("stalled?, inferred")).toBeVisible();
+    await expect(canvas.getByLabelText("stuck, inferred")).toBeVisible();
   },
 };
 export const TableSorted: Story = {
@@ -71,18 +76,27 @@ export const InboxWithPrompts: Story = {
   parameters: { host: { prompts: [prompt, editPrompt], answer: fn(async () => undefined) } },
   play: async ({ canvas }) => {
     await expect(canvas.getByText(/Permission prompts · 2/)).toBeVisible();
-    await expect(canvas.getByText("npm run migrate -- --env staging")).toBeVisible();
+    await expect(canvas.getByText("Bash(npm run migrate -- --env staging)")).toBeVisible();
   },
 };
 export const InboxReviewed: Story = {
   args: one("inbox"),
   play: async ({ canvas }) => {
-    await userEvent.click(canvas.getByRole("button", { name: "Mark Fix the flaky checkout test reviewed" }));
+    await userEvent.click(canvas.getByRole("button", { name: /^Mark reviewed · Fix the flaky checkout test/ }));
     await expect(act).toHaveBeenCalledWith(expect.objectContaining({ kind: "ack" }));
   },
 };
+export const InboxNeedsYouOnly: Story = {
+  name: "Inbox, needs you only",
+  args: one("inbox"),
+  parameters: { host: { inboxFilter: "waiting" } },
+  play: async ({ canvas }) => {
+    await expect(canvas.getByText(/Needs you · 2/)).toBeVisible();
+    await expect(canvas.queryByText(/To review/)).toBeNull();
+  },
+};
 export const Cards: Story = { args: one("cards") };
-export const Timeline: Story = { args: one("timeline") };
+export const Timeline: Story = { args: one("timeline"), play: async ({ canvas }) => { await expect(canvas.getByRole("img", { name: "Last hour" })).toBeInTheDocument(); } };
 export const Notes: Story = { args: one("text"), play: async ({ canvas }) => { await expect(canvas.getByRole("cell", { name: "harbor" })).toBeVisible(); } };
 export const Empty: Story = { args: one("empty"), play: async ({ canvas }) => { await expect(canvas.getByText("No session looks stuck.")).toBeVisible(); } };
 export const Failed: Story = { args: one("error"), play: async ({ canvas }) => { await expect(canvas.getByText(/no_such_column/)).toBeVisible(); } };

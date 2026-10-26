@@ -1,22 +1,25 @@
 // The app is a dashboard that fills the window with Chat docked beside it,
-// under the few numbers that say whether anything needs you. Every action
-// goes through the app's own checks and dialogs.
+// under the header that says whether anything needs you. The Fleet is the
+// other page. Every action goes through the app's own checks and dialogs.
 import "@mantine/notifications/styles.css";
-import { ActionIcon, AppShell, Box, Button, Group, Select, Text, Title, Tooltip } from "@mantine/core";
+import { AppShell, Box, Button, Group, Select, Text, Title } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { spotlight } from "@mantine/spotlight";
-import { ChatCircle, PencilSimple } from "@phosphor-icons/react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { PencilSimple } from "@phosphor-icons/react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Panel as Pane, Group as Split, Separator, useDefaultLayout, usePanelRef } from "react-resizable-panels";
-import { HostContext, type Act, type Host } from "../panels/host";
+import { FleetPage } from "../fleet/FleetPage";
+import { fleetOf, fleetSpec } from "../fleet/FleetSpec";
+import { HostContext, type Act, type Host, type InboxFilter } from "../panels/host";
 import type { Dashboard as Spec, Fragment, Prompt } from "../panels/types";
 import "../panels/panels.css";
 import "./host.css";
 import { action, chat, confirm, dashboards, type Operation, type Summary } from "./api";
-import { Brand } from "./Brand";
 import { Chat } from "./Chat";
+import { ClustersHeader } from "./ClustersHeader";
 import { Dashboard } from "./Dashboard";
-import { Metrics } from "./Metrics";
+import { attentionKinds, counts, headerOf, kinds, stripsOf, type AttentionKind, type HeaderTarget } from "./Header";
+import { useHistory } from "./History";
 import { Search } from "./Search";
 
 const refreshMs = 5000;
@@ -27,9 +30,18 @@ const inboxSpec: Spec = { name: "Inbox", panels: [{ id: "inbox", title: "Inbox",
 
 const homeID = "home";
 
+type Page = "board" | "fleet";
+
 function initial(): string {
   return new URLSearchParams(location.search).get("dashboard") || homeID;
 }
+
+function initialPage(): Page {
+  return new URLSearchParams(location.search).get("page") === "fleet" ? "fleet" : "board";
+}
+
+// The Home panel each header target points at.
+const targets: Record<HeaderTarget, string> = { inbox: "inbox", stuck: "stuck", leftover: "orphans", reclaim: "orphans", memory: "machine_memory" };
 
 /** showPanel scrolls a panel into view and marks it for a moment. */
 function showPanel(id: string) {
@@ -50,14 +62,22 @@ function remember(key: string, value: string) {
   try { localStorage.setItem(key, value); } catch { /* not kept */ }
 }
 
+/** typing says whether a key went to a field, where it is text, not a command. */
+function typing(target: EventTarget | null): boolean {
+  return target instanceof HTMLElement && (target.isContentEditable || /^(input|textarea|select)$/i.test(target.tagName));
+}
+
 export function App() {
   const [id, setId] = useState<string>(initial);
+  const [page, setPage] = useState<Page>(initialPage);
   const [list, setList] = useState<Summary[]>([]);
   const [header, setHeader] = useState<Fragment | null>(null);
   const [inbox, setInbox] = useState<Fragment | null>(null);
+  const [fleet, setFleet] = useState<Fragment | null>(null);
   const [fragment, setFragment] = useState<Fragment | null>(null);
   const [vars, setVars] = useState<Record<string, string>>({});
   const [editing, setEditing] = useState(false);
+  const [filter, setFilter] = useState<InboxFilter | null>(null);
   const [chatOpen, setChatOpen] = useState(() => remembered("driga-chat-open") !== "false");
   // When the board last refreshed, and whether the latest try failed.
   const [fresh, setFresh] = useState<{ at: number; failed: boolean }>({ at: 0, failed: false });
@@ -67,9 +87,10 @@ export function App() {
 
   const say = (message: string) => notifications.show({ message, autoClose: 4000, closeButtonProps: { "aria-label": "Dismiss" } });
   const load = useCallback(async () => {
-    const [h, i] = await Promise.allSettled([dashboards.open(headerID), dashboards.run(inboxSpec)]);
+    const [h, i, f] = await Promise.allSettled([dashboards.open(headerID), dashboards.run(inboxSpec), dashboards.run(fleetSpec)]);
     if (h.status === "fulfilled") setHeader(h.value);
     if (i.status === "fulfilled") setInbox(i.value);
+    if (f.status === "fulfilled") setFleet(f.value);
     // A failed fetch keeps the prompts last seen; the stale note says so.
     chat.prompts().then(setPrompts, () => undefined);
     try { setFragment(await dashboards.open(id, vars)); setFresh({ at: Date.now(), failed: false }); }
@@ -98,9 +119,26 @@ export function App() {
     if (chatOpen && pane.isCollapsed()) pane.expand();
     if (!chatOpen && !pane.isCollapsed()) pane.collapse();
   }, [chatOpen, chatPane]);
-  useEffect(() => { history.replaceState(null, "", id === homeID ? "/app/" : `/app/?dashboard=${encodeURIComponent(id)}`); }, [id]);
+  useEffect(() => { history.replaceState(null, "", page === "fleet" ? "/app/?page=fleet" : id === homeID ? "/app/" : `/app/?dashboard=${encodeURIComponent(id)}`); }, [id, page]);
 
-  const open = (next: string) => { setEditing(false); setVars({}); setId(next); };
+  // The header reads the fragment's counts, the fleet, Chat's prompts and
+  // what the app has kept of them since the page opened.
+  const fleetData = useMemo(() => fleet ? fleetOf(fleet, inbox) : null, [fleet, inbox]);
+  const attention = useMemo(() => header ? counts(header, prompts.length) : null, [header, prompts.length]);
+  const kept = useHistory(attention, fleetData);
+  const headerData = useMemo(() => header ? headerOf(header, fleetData, prompts.length, kept) : null, [header, fleetData, prompts.length, kept]);
+  const strips = useMemo(() => headerData ? stripsOf(kept, headerData.machines) : {}, [kept, headerData]);
+
+  const open = (next: string) => { setEditing(false); setVars({}); setId(next); setPage("board"); };
+  const openFleet = useCallback(() => { setEditing(false); setPage("fleet"); }, []);
+  const showOnHome = (target: HeaderTarget) => {
+    const away = id !== homeID || page !== "board";
+    if (away) open(homeID);
+    window.setTimeout(() => showPanel(targets[target]), away ? 600 : 0);
+  };
+  // A tile narrows the inbox to its kind, or points Home at the stuck sessions, which the inbox does not list.
+  const onFilter = (kind: AttentionKind) => { if (kind === "stuck") showOnHome("stuck"); else setFilter(f => f === kind ? null : kind); };
+  const askChat = (text: string) => { setChatOpen(true); setAsk({ text, at: Date.now() }); };
   const edit = async (target: string, base: number, operations: Operation[], message?: string) => {
     try {
       const next = await dashboards.edit(target, operations, base, target === headerID ? undefined : vars, message);
@@ -152,7 +190,7 @@ export function App() {
     if (!await confirm(`Delete the ${name} dashboard and its history?`)) { say("Cancelled"); return; }
     try { await dashboards.delete(fragment.id); if (fragment.id === homeID) void load(); else open(homeID); say(fragment.id === homeID ? "Home is back to the default" : `Deleted ${name}`); } catch (e) { say((e as Error).message); }
   };
-  const host: Host = { act, local: (fragment ?? header)?.local_machine, prompts, answer };
+  const host: Host = { act, local: (fragment ?? header)?.local_machine, prompts, answer, inboxFilter: filter, ask: askChat };
 
   // The app's menus drive the page through drigaCommand.
   useEffect(() => {
@@ -161,35 +199,50 @@ export function App() {
       else if (name === "back") history.back();
       else if (name === "forward") history.forward();
       else if (name === "find") spotlight.open();
+      else if (name === "view" && arg === "fleet") openFleet();
       // A session picked from the tray opens its pane, as clicking its row does.
       else if (name === "openSession" && typeof arg === "number") void act({ kind: "jump", row: { session_id: arg } });
     };
   });
 
+  // The keys beside ⌘K: 1, 2 and 3 focus the attention tiles, g then f
+  // opens the Fleet. Not while typing, and not under Search or any other
+  // modal, which own the keys while they are open.
+  useEffect(() => {
+    let g = -Infinity;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey || typing(e.target) || document.querySelector('[aria-modal="true"]')) return;
+      if (e.key === "g") { g = performance.now(); return; }
+      if (e.key === "f" && performance.now() - g < 800) { g = -Infinity; openFleet(); return; }
+      const kind = attentionKinds[Number(e.key) - 1];
+      if (kind) document.querySelector<HTMLElement>(`[aria-keyshortcuts="${kinds[kind].key}"]`)?.focus();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [openFleet]);
+
   // The brief lists the inbox only when the dashboard does not.
   const inboxPanel = inbox?.dashboard.panels[0];
   // Until the open dashboard arrives, whether it lists the inbox is unknown;
   // the brief then shows no copy of it rather than one that vanishes.
-  const listed = fragment ? fragment.dashboard.panels.some(p => p.viz === "inbox") : true;
+  const listed = page === "fleet" ? false : fragment ? fragment.dashboard.panels.some(p => p.viz === "inbox") : true;
   const brief = inboxPanel ? { panel: inboxPanel, result: inbox!.results[0], listed: !!listed } : undefined;
   const d = fragment?.dashboard;
   return <HostContext.Provider value={host}>
     <AppShell header={{ height: 56 }} padding={0}>
       <AppShell.Header px="md" style={{ background: "color-mix(in srgb, var(--driga-ground) 88%, transparent)", backdropFilter: "blur(10px)", borderColor: "var(--driga-border)" }}>
-        <Group h="100%" gap="md" wrap="nowrap">
-          <Brand />
-          <Metrics fragment={header} editing={editing} extra={{ waiting: prompts.length }} onAsk={m => { setChatOpen(true); setAsk({ text: `Tell me about "${m.panel.title}" right now.`, at: Date.now() }); }}
-            onShow={target => { if (id !== homeID) open(homeID); window.setTimeout(() => showPanel(target), id !== homeID ? 600 : 0); }}
-            onRemove={pid => header && void edit(headerID, header.version ?? 0, [{ op: "remove", id: pid }], "Removed a metric")} />
-          <Search list={list} act={act} say={say} open={open} ask={text => { setChatOpen(true); setAsk({ text, at: Date.now() }); }} />
-          <Tooltip label={chatOpen ? "Hide Chat" : "Show Chat"}>
-            <ActionIcon size="lg" variant={chatOpen ? "light" : "subtle"} color={chatOpen ? "brand" : "gray"} aria-pressed={chatOpen} aria-label="Chat" onClick={() => setChatOpen(o => !o)}><ChatCircle size={20} /></ActionIcon>
-          </Tooltip>
-        </Group>
+        <ClustersHeader data={headerData} filter={filter} chatOpen={chatOpen} onFilter={onFilter} onOpenFleet={openFleet} onSearch={spotlight.open} onToggleChat={() => setChatOpen(o => !o)}
+          onShow={showOnHome} onAsk={about => askChat(`Tell me about "${about}" right now.`)}
+          search={<Search list={list} act={act} say={say} open={open} onFleet={openFleet} ask={askChat} />} />
       </AppShell.Header>
       <AppShell.Main style={{ height: "100dvh", display: "flex" }}>
        <Split orientation="horizontal" id="driga-split" defaultLayout={split.defaultLayout} onLayoutChanged={split.onLayoutChanged} style={{ flex: 1, minWidth: 0 }}>
        <Pane id="board" minSize={360} style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+        {page === "fleet"
+          ? <Box px="md" pt="sm" pb="md" style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+            <FleetPage fragment={fleet} inbox={inbox} strips={strips} act={act} />
+          </Box>
+          : <>
         <Group justify="space-between" wrap="nowrap" gap="sm" px="md" pt="sm" pb={8}>
           <Box style={{ minWidth: 0 }}>
             <Title order={1} fz={28} fw={650} lh={1.2} style={{ letterSpacing: "-0.02em" }}>{d?.name ?? "Loading…"}</Title>
@@ -206,12 +259,13 @@ export function App() {
             <Button variant={editing ? "filled" : "default"} leftSection={<PencilSimple />} aria-pressed={editing} onClick={() => setEditing(e => !e)}>{editing ? "Done" : "Edit"}</Button>
           </Group>
         </Group>
-        {editing && <Text size="xs" c="dimmed" px="md" pb={6}>Drag panels by their title, resize from the corner, remove a header metric with its ×, or ask Chat to change any of it.</Text>}
+        {editing && <Text size="xs" c="dimmed" px="md" pb={6}>Drag panels by their title, resize from the corner, or ask Chat to change any of it.</Text>}
         <Box px="md" pb="md" style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
           {fragment ? <Dashboard fragment={fragment} editing={editing} act={act}
             onLayout={grids => { if (fragment) void edit(fragment.id!, fragment.version ?? 0, [{ op: "layout", grids }], "Moved panels"); }}
             onRemove={pid => { if (fragment) void edit(fragment.id!, fragment.version ?? 0, [{ op: "remove", id: pid }], "Removed a panel"); }} /> : <Text size="sm" c="dimmed">Loading…</Text>}
         </Box>
+          </>}
        </Pane>
        <Separator className="split-handle" aria-label="Resize Chat" />
        <Pane id="chat" panelRef={chatPane} defaultSize={400} minSize={300} maxSize="65" collapsible collapsedSize={0}

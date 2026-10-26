@@ -2,6 +2,7 @@
 // fixtures and records what was asked, and never reaches a real service.
 import type { ChatState } from "../host/api";
 import type { Dashboard, Fragment, Prompt } from "../panels/types";
+import { fleet as fleetFixture } from "./fleet";
 import { fragmentOf, fragments } from "./fragments";
 
 export type Service = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
@@ -14,6 +15,8 @@ export type ServiceOptions = {
   open?: Record<string, Fragment>;
   /** The inbox the Chat brief reads. */
   inbox?: Fragment;
+  /** What the Fleet spec returns; the busy fleet by default. */
+  fleet?: Fragment;
   prompts?: Prompt[];
   /** A Chat conversation to show; none starts Chat empty. */
   chat?: ChatState;
@@ -42,6 +45,7 @@ export function fakeService(o: ServiceOptions = {}): Service {
         const spec = body?.dashboard as Dashboard;
         if (spec.name === "Inbox") return json(o.inbox ?? fragments.inbox);
         if (spec.name === "Search") return json(fragments.search);
+        if (spec.name === "Fleet") return json(o.fleet ?? fleetFixture);
         return json(fragmentOf(spec));
       }
       case "/app/api/list": return json({ dashboards: Object.keys(open).filter(id => id !== "header").map(id => ({ id, name: open[id].dashboard.name, panels: open[id].dashboard.panels.length, version: 1 })) });

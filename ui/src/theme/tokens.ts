@@ -15,10 +15,19 @@ export type Scheme = "light" | "dark";
 const flavor = { light: palette.latte, dark: palette.mocha } as const;
 const roles = { light: palette.light, dark: palette.dark } as const;
 
-/** Surface and text roles, named by use (see Canon's visual standard). */
+/** mix blends two hex colors in sRGB: `weight` of a over b, so
+ *  mix(tone, raised, 0.12) is a 12% tint of the tone on the raised surface. */
+export function mix(a: string, b: string, weight: number): string {
+  const channel = (hex: string, i: number) => parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16);
+  return "#" + [0, 1, 2].map(i => Math.round(channel(a, i) * weight + channel(b, i) * (1 - weight)).toString(16).padStart(2, "0")).join("");
+}
+
+/** Surface and text roles, named by use (see Canon's visual standard). The
+ *  light hover is surface0 mixed half with the base, so muted text keeps AA
+ *  on a hovered row. */
 export const surfaces = {
   light: {
-    ground: flavor.light.mantle, raised: flavor.light.base, inset: flavor.light.crust, hover: flavor.light.surface0,
+    ground: flavor.light.mantle, raised: flavor.light.base, inset: flavor.light.crust, hover: mix(flavor.light.surface0, flavor.light.base, 0.5),
     border: flavor.light.surface0, borderSoft: flavor.light.crust, controlBorder: flavor.light.overlay2,
     text: roles.light.fg, muted: roles.light.dim, faint: flavor.light.overlay0,
   },
@@ -38,11 +47,15 @@ export const tones = {
 
 export type Tone = keyof typeof tones.light;
 
-/** Six fixed categorical slots for chart series, in order. None is a state
- *  hue, so a series is never read as a status; further series are muted. */
+/** Six fixed categorical slots for chart series, in order: the Catppuccin
+ *  peach, teal, pink, sky, lavender and flamingo hues, re-stepped so every
+ *  slot clears 3:1 on its surface and adjacent slots stay apart under color
+ *  blindness (the dataviz palette validator passes both sets). None is a
+ *  state hue or the accent, so a series is never read as a status or a
+ *  control; further series are muted. */
 export const series = {
-  light: [flavor.light.lavender, flavor.light.peach, flavor.light.teal, flavor.light.pink, flavor.light.sky, flavor.light.flamingo],
-  dark: [flavor.dark.lavender, flavor.dark.peach, flavor.dark.teal, flavor.dark.pink, flavor.dark.sky, flavor.dark.flamingo],
+  light: ["#b64c1a", "#1c989f", "#a40987", "#0781b4", "#3d37e6", "#b75a5b"],
+  dark: ["#c97338", "#049b8c", "#b1389a", "#069eb1", "#6e74f5", "#c97276"],
 } as const;
 
 /** Text sizes in pixels. micro is for chart axes only; nothing a person reads

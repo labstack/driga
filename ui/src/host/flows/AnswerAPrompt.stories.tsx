@@ -19,24 +19,25 @@ type Story = StoryObj<typeof meta>;
 
 export const PromptArrives: Story = {
   play: async ({ canvas }) => {
-    await expect(await canvas.findByText("npm run migrate -- --env staging")).toBeVisible();
+    await expect(await canvas.findByText("Bash(npm run migrate -- --env staging)")).toBeVisible();
     await expect(canvas.getByText("/home/dev/src/atlas")).toBeVisible();
+    await expect(canvas.getAllByText("needs approval").length).toBeGreaterThan(0);
   },
 };
 export const Allowed: Story = {
   play: async ({ canvas, step }) => {
-    const allow = (await inboxPanel(canvas)).getByRole("button", { name: "Allow" });
+    const allow = (await inboxPanel(canvas)).getByRole("button", { name: /^Approve/ });
     await step("The buttons arm after a moment, so a stray click cannot answer", async () => {
       await waitFor(() => expect(allow).toBeEnabled());
     });
     await userEvent.click(allow);
     await waitFor(() => expect(service.requests).toContainEqual({ path: "/chat/api/prompt-answer", body: { id: "prompt-1", allow: true } }));
-    await waitFor(() => expect(canvas.queryByText("npm run migrate -- --env staging")).toBeNull());
+    await waitFor(() => expect(canvas.queryByText("Bash(npm run migrate -- --env staging)")).toBeNull());
   },
 };
 export const Denied: Story = {
   play: async ({ canvas }) => {
-    const deny = (await inboxPanel(canvas)).getByRole("button", { name: "Deny" });
+    const deny = (await inboxPanel(canvas)).getByRole("button", { name: /^Deny/ });
     await waitFor(() => expect(deny).toBeEnabled());
     await userEvent.click(deny);
     await waitFor(() => expect(service.requests).toContainEqual({ path: "/chat/api/prompt-answer", body: { id: "prompt-1", allow: false } }));

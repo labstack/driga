@@ -3,7 +3,7 @@
  * status tones. Each is a virtual color that paints the console's own value in
  * each scheme, so re-hueing Driga is a change to the console palette only. */
 import { createTheme, darken, defaultVariantColorsResolver, lighten, luminance, virtualColor, type CSSVariablesResolver, type MantineColorsTuple, type VariantColorsResolver } from "@mantine/core";
-import { fonts, surfaces, tones, typeScale, type Scheme, type Tone } from "./tokens";
+import { fonts, mix, surfaces, tones, typeScale, type Scheme, type Tone } from "./tokens";
 
 /** The shade a filled surface paints: the token itself. */
 const shade = 6;
@@ -44,6 +44,24 @@ function contrastVariables(scheme: Scheme) {
   return Object.fromEntries(toneNames.map(name => [`--driga-${name}-contrast`, filledText(tones[scheme][name])]));
 }
 
+/** The tones a tint exists for: the status tones, the accent, and a neutral
+ *  for what carries no meaning. */
+export type TintTone = Tone | "neutral";
+
+/** tint is a tone at 12% over the raised surface: the one tint every tile,
+ *  chip, pill, alert and inbox rule uses, so a tinted surface never drops
+ *  the text on it below AA. Neutral tints with the faint text role. */
+export function tint(scheme: Scheme, tone: TintTone): string {
+  const s = surfaces[scheme];
+  return mix(tone === "neutral" ? s.faint : tones[scheme][tone], s.raised, 0.12);
+}
+
+export const tintTones: readonly TintTone[] = [...toneNames, "neutral"];
+
+function tintVariables(scheme: Scheme) {
+  return Object.fromEntries(tintTones.map(tone => [`--driga-tint-${tone}`, tint(scheme, tone)]));
+}
+
 function roleVariables(scheme: Scheme) {
   const s = surfaces[scheme];
   return {
@@ -53,6 +71,7 @@ function roleVariables(scheme: Scheme) {
     "--driga-border": s.border, "--driga-border-soft": s.borderSoft, "--driga-control-border": s.controlBorder,
     "--driga-text": s.text, "--driga-muted": s.muted, "--driga-faint": s.faint,
     ...contrastVariables(scheme),
+    ...tintVariables(scheme),
   };
 }
 

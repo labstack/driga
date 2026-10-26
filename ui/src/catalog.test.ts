@@ -20,6 +20,10 @@ const specimens: Record<string, string> = {
 // One story of each panel kind, by its export in Components/Panel.
 const vizStories: Record<Viz, string> = { stat: "Stat", gauge: "Gauge", timeseries: "Timeseries", bar: "Bar", table: "Table", list: "List", inbox: "Inbox", cards: "Cards", timeline: "Timeline", text: "Notes" };
 
+// What only stories, tests and fixtures may import: the fixtures folder and
+// a component's own <Name>-fixtures module.
+const fixtureImport = /(?:from|import)\s*\(?\s*["'][^"']*(?:\/fixtures\/|-fixtures)["']/;
+
 describe("catalog", () => {
   const files = Object.keys(import.meta.glob(["./**/*.tsx", "!./**/*.stories.tsx", "!./**/*.test.tsx", "!./fixtures/**"]));
   const stories = new Set(Object.keys(import.meta.glob("./**/*.stories.tsx")));
@@ -30,9 +34,9 @@ describe("catalog", () => {
   it("lists only files that exist as covered", () => {
     expect(Object.keys(covered).filter(f => !files.includes(f))).toEqual([]);
   });
-  it("keeps fixtures out of the app: only stories and tests import them", () => {
-    const sources = import.meta.glob<string>(["./**/*.{ts,tsx}", "!./**/*.stories.tsx", "!./**/*.test.{ts,tsx}", "!./fixtures/**", "!./host/flows/**"], { query: "?raw", import: "default", eager: true });
-    const importing = Object.entries(sources).filter(([, text]) => /(?:from|import)\s*\(?\s*["'][^"']*\/fixtures\//.test(text)).map(([file]) => file);
+  it("keeps fixtures out of the app: only stories, tests and fixtures import them", () => {
+    const sources = import.meta.glob<string>(["./**/*.{ts,tsx}", "!./**/*.stories.tsx", "!./**/*.test.{ts,tsx}", "!./**/*-fixtures.ts", "!./fixtures/**", "!./host/flows/**"], { query: "?raw", import: "default", eager: true });
+    const importing = Object.entries(sources).filter(([, text]) => fixtureImport.test(text)).map(([file]) => file);
     expect(importing).toEqual([]);
   });
   it("renders the app's own components: each story's component is an app export", () => {

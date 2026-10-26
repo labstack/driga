@@ -26,7 +26,7 @@ export const ToReview: Story = {
 export const MarkedReviewed: Story = {
   play: async ({ canvas }) => {
     const inbox = await inboxPanel(canvas);
-    await userEvent.click(inbox.getByRole("button", { name: "Mark Fix the flaky checkout test reviewed" }));
+    await userEvent.click(inbox.getByRole("button", { name: /^Mark reviewed · Fix the flaky checkout test/ }));
     // One row stands for both of the session's turns; both are acknowledged.
     await waitFor(() => expect(service.requests.filter(r => r.path === "/app/action").map(r => (r.body as { id: string }).id)).toEqual(["done-12a", "done-12b"]));
   },

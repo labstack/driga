@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useHost } from "../panels/host";
 import { PanelView, type Act } from "../panels/PanelView";
 import type { Panel, Result } from "../panels/types";
+import { EmptyState } from "../widgets/EmptyState";
 import { chat, type ChatAction, type ChatMessage, type ChatState } from "./api";
 import { ChatCard } from "./ChatCard";
 
@@ -40,7 +41,9 @@ function Brief({ inbox, act, ask }: { inbox?: { panel: Panel; result?: Result; l
     "Which processes can I reclaim?",
   ];
   return <Stack gap="sm">
-    <Text size="sm" c="dimmed">{prompts.length > 0 && `${prompts.length} permission ${prompts.length === 1 ? "prompt" : "prompts"} to answer. `}{waits ? `${waits} ${waits === 1 ? "session needs" : "sessions need"} you.` : prompts.length ? "" : "Nothing is waiting on you."}</Text>
+    {waits || prompts.length
+      ? <Text size="sm" c="dimmed">{prompts.length > 0 && `${prompts.length} permission ${prompts.length === 1 ? "prompt" : "prompts"} to answer. `}{waits ? `${waits} ${waits === 1 ? "session needs" : "sessions need"} you.` : ""}</Text>
+      : <EmptyState kind="all-clear" title="Nothing is waiting on you." />}
     {inbox && !inbox.listed && items > 0 && <PanelView panel={inbox.panel} result={inbox.result} act={act} />}
     <Stack gap={6} align="flex-start">{suggestions.map(s => <Button key={s} variant="default" radius="xl" leftSection={<Sparkle />} onClick={() => ask(s)} styles={{ label: { whiteSpace: "normal", textAlign: "left" } }} h="auto" py={6}>{s}</Button>)}</Stack>
   </Stack>;
@@ -151,7 +154,7 @@ export function Chat({ inbox, act, ask, onOpen, onClose }: {
           // the latest reply says it failed.
           if ((m.role === "user" || m.role === "assistant") && !m.text.trim()) {
             if (m.status === "streaming" || m.status === "queued") return null;
-            if (m.role === "assistant" && m.status === "error" && i === lastReply) return <Group key={m.id} gap="xs"><Text size="xs" c="danger">This reply failed. <Text span ff="monospace" fz="inherit">driga service logs</Text> has the error.</Text>{retry}</Group>;
+            if (m.role === "assistant" && m.status === "error" && i === lastReply) return <EmptyState key={m.id} kind="error" title="This reply failed" caption="The error is in the service's log." command="driga service logs" onRetry={sent && !active ? () => void send(sent) : undefined} />;
             if (i !== firstDropped) return null;
             return <Text key={m.id} size="xs" c="dimmed">Earlier messages aren't kept. Set <Text span ff="monospace" fz="inherit">capture_text = "snippets"</Text> to keep Chat history.</Text>;
           }
