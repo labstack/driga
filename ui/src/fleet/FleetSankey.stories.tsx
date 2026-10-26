@@ -20,7 +20,7 @@ const meta = {
     layout: "fullscreen",
     docs: {
       story: { inline: false, iframeHeight: 900 },
-      description: { component: "Link width is memory and node colour is state, so the picture answers \"where is my RAM going\" and \"what needs me\" at once. Node order never changes between refreshes: machines local first then by name, projects by name, sessions by project then state. Hovering a node lights its whole path; a waiting session's path is yellow from the machine column on; leftovers hang off each machine as a dashed pseudo-project. Spawn and file-overlap relations are glyphs on the session label (↳ and a red !) and rows in the inspector, since they would break the flow. Tree mode is the same fleet as an accessible table and the mode for the keyboard. Below 1200 px the inspector moves under the chart." },
+      description: { component: "Link width is memory, with a minimum to keep small sessions visible, and node colour is state, so the picture answers \"where is my RAM going\" and \"what needs me\" at once. Node order never changes between refreshes: machines local first then by name, projects by name, sessions by project then state. Hovering a node lights its whole path; a waiting session's path is yellow from the machine column on; leftovers hang off each machine as a dashed pseudo-project. Spawn and file-overlap relations are glyphs on the session label (↳ and a red !) and rows in the inspector, since they would break the flow. Tree mode is the same fleet as an accessible table and the mode for the keyboard. Below 1200 px the inspector moves under the chart." },
     },
   },
 } satisfies Meta<typeof FleetSankey>;
@@ -35,7 +35,7 @@ export const BusyFleet: Story = {
     await expect(canvas.getByText("· 5 need you")).toBeVisible();
     await expect(canvas.getAllByRole("button", { name: /reachable|last seen/ })).toHaveLength(3);
     await expect(canvas.getByRole("img", { name: /Fleet flow/ })).toBeVisible();
-    await expect(canvas.getByText("width = memory · colour = state")).toBeVisible();
+    await expect(canvas.getByText("width = memory (minimum shown) · colour = state")).toBeVisible();
     await expect(within(canvas.getByRole("group", { name: "Inspector" })).getByText("Nothing selected")).toBeVisible();
   },
 };
@@ -68,7 +68,7 @@ export const UnreachableMachine: Story = {
 };
 
 export const SelectedSession: Story = {
-  args: { defaultSelected: { kind: "session", id: waitingSession.id } },
+  args: { defaultSelected: { kind: "session", id: waitingSession.id, machine: waitingSession.machine } },
   parameters: { docs: { description: { story: "A waiting session selected: the inspector shows why it waits, its files, its subagent, and Reply beside Open." } } },
   play: async ({ canvas, args }) => {
     const inspector = within(canvas.getByRole("group", { name: "Inspector" }));
@@ -80,7 +80,7 @@ export const SelectedSession: Story = {
     await userEvent.click(inspector.getByRole("button", { name: "Open" }));
     await expect(args.onOpen).toHaveBeenCalledWith(waitingSession);
     await userEvent.click(inspector.getByRole("button", { name: /Review the changelog wording/ }));
-    await expect(args.onSelect).toHaveBeenCalledWith({ kind: "session", id: "118" });
+    await expect(args.onSelect).toHaveBeenCalledWith({ kind: "session", id: "118", machine: "studio" });
     await expect(inspector.getByRole("heading", { name: "Review the changelog wording" })).toBeVisible();
     await userEvent.unhover(inspector.getByRole("heading", { name: "Review the changelog wording" }));
   },
@@ -88,7 +88,7 @@ export const SelectedSession: Story = {
 
 export const TreeMode: Story = {
   args: { defaultMode: "tree" },
-  parameters: { docs: { description: { story: "The same fleet as a table: machines expand into projects into sessions, subagents one level deeper. Every row and action is a real control." } } },
+  parameters: { docs: { description: { story: "The same fleet as a table: machines expand into projects into sessions, with subagents nested under their parents. Every row and action is a real control." } } },
   play: async ({ canvas, args }) => {
     await expect(canvas.getByRole("table", { name: "Fleet tree" })).toBeVisible();
     await expect(canvas.getByRole("button", { name: "Fix the flaky lifeline test" })).toBeVisible();
@@ -96,7 +96,7 @@ export const TreeMode: Story = {
     await expect(canvas.queryByRole("button", { name: "Fix the flaky lifeline test" })).toBeNull();
     await userEvent.click(canvas.getByRole("button", { name: "Expand studio" }));
     await userEvent.click(canvas.getByRole("button", { name: "Review the changelog wording" }));
-    await expect(args.onSelect).toHaveBeenCalledWith({ kind: "session", id: "118" });
+    await expect(args.onSelect).toHaveBeenCalledWith({ kind: "session", id: "118", machine: "studio" });
     await expect(within(canvas.getByRole("group", { name: "Inspector" })).getByRole("heading", { name: "Review the changelog wording" })).toBeVisible();
     // The toggle goes both ways; the story ends in Tree mode for review.
     await userEvent.click(canvas.getByRole("radio", { name: "Flow" }));
@@ -120,7 +120,7 @@ export const AsTheServiceSendsIt: Story = {
 export const LaptopWidth: Story = {
   name: "Laptop width",
   globals: { viewport: { value: "laptop", isRotated: false } },
-  args: { defaultSelected: { kind: "session", id: waitingSession.id } },
+  args: { defaultSelected: { kind: "session", id: waitingSession.id, machine: waitingSession.machine } },
   parameters: { docs: { description: { story: "At 1024 px the inspector moves below the chart, which keeps its width." } } },
   play: async ({ canvas }) => {
     const chart = canvas.getByRole("img", { name: /Fleet flow/ });

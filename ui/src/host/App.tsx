@@ -14,7 +14,7 @@ import { HostContext, type Act, type Host, type InboxFilter } from "../panels/ho
 import type { Dashboard as Spec, Fragment, Prompt } from "../panels/types";
 import "../panels/panels.css";
 import "./host.css";
-import { action, chat, confirm, dashboards, type Operation, type Summary } from "./api";
+import { action, confirmedAction, chat, confirm, dashboards, type Operation, type Summary } from "./api";
 import { Chat } from "./Chat";
 import { ClustersHeader } from "./ClustersHeader";
 import { Dashboard } from "./Dashboard";
@@ -84,22 +84,35 @@ export function App() {
   const [prompts, setPrompts] = useState<Prompt[]>([]);
   const [ask, setAsk] = useState<{ text: string; at: number } | null>(null);
   const timer = useRef<number | undefined>(undefined);
+  const loadSequence = useRef(0);
+  const loadScope = useRef({ id, vars });
+  loadScope.current = { id, vars };
 
   const say = (message: string) => notifications.show({ message, autoClose: 4000, closeButtonProps: { "aria-label": "Dismiss" } });
   const load = useCallback(async () => {
+    if (loadScope.current.id !== id || loadScope.current.vars !== vars) return;
+    const sequence = ++loadSequence.current;
+    const current = () => loadSequence.current === sequence && loadScope.current.id === id && loadScope.current.vars === vars;
     const [h, i, f] = await Promise.allSettled([dashboards.open(headerID), dashboards.run(inboxSpec), dashboards.run(fleetSpec)]);
+    if (!current()) return;
     if (h.status === "fulfilled") setHeader(h.value);
     if (i.status === "fulfilled") setInbox(i.value);
     if (f.status === "fulfilled") setFleet(f.value);
     // A failed fetch keeps the prompts last seen; the stale note says so.
-    chat.prompts().then(setPrompts, () => undefined);
-    try { setFragment(await dashboards.open(id, vars)); setFresh({ at: Date.now(), failed: false }); }
+    chat.prompts().then(ps => { if (current()) setPrompts(ps); }, () => undefined);
+    try {
+      const next = await dashboards.open(id, vars);
+      if (!current()) return;
+      setFragment(next);
+      setFresh({ at: Date.now(), failed: false });
+    }
     catch (e) {
+      if (!current()) return;
       setFresh(f => ({ ...f, failed: true }));
       if (id !== homeID) { say((e as Error).message); setId(homeID); }
     }
   }, [id, vars]);
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { void load(); return () => { loadSequence.current++; }; }, [load]);
   // Refresh while visible; editing holds the board still.
   useEffect(() => {
     if (editing) return;
@@ -125,9 +138,9 @@ export function App() {
   // the service’s persisted history.
   const fleetData = useMemo(() => fleet ? fleetOf(fleet, inbox) : null, [fleet, inbox]);
   const kept = useMemo(() => historyOf(header), [header]);
-  const headerData = useMemo(() => header ? headerOf(header, fleetData, prompts.length, kept) : null, [header, fleetData, prompts.length, kept]);
+  const headerData = useMemo(() => header ? headerOf(header, fleetData, prompts, kept) : null, [header, fleetData, prompts, kept]);
 
-  const open = (next: string) => { setEditing(false); setVars({}); setId(next); setPage("board"); };
+  const open = (next: string) => { setEditing(false); setFragment(null); setVars({}); setId(next); setPage("board"); };
   const openFleet = useCallback(() => { setEditing(false); setPage("fleet"); }, []);
   const showOnHome = (target: HeaderTarget) => {
     const away = id !== homeID || page !== "board";
@@ -149,7 +162,7 @@ export function App() {
     const name = String(row.title ?? row.signature ?? row.project ?? row.path ?? row.id ?? "");
     // Anything that changes the machine asks the app's dialog first, as the
     // TUI does; the server refuses it otherwise.
-    const ask = async (message: string) => { const ok = await confirm(message); if (!ok) say("Cancelled"); return ok; };
+    const ask = async (message: string, body: Record<string, unknown>) => { const ok = await confirmedAction(message, body); if (!ok) say("Cancelled"); return ok; };
     try {
       switch (kind) {
         case "jump":
@@ -162,17 +175,14 @@ export function App() {
           break;
         }
         case "stop":
-          if (!await ask(`Stop ${name}? Its agent and the processes it started are ended.`)) return;
-          await action({ action: "kill", session_id: session, machine, confirmed: true }); say(`Stopped ${name}`); break;
+          if (!await ask(`Stop ${name}? Its agent and the processes it started are ended.`, { action: "kill", session_id: session, machine })) return; say(`Stopped ${name}`); break;
         case "kill":
         case "force_kill": {
           const force = kind === "force_kill";
-          if (!await ask(`${force ? "Force kill" : "Kill"} the ${name} process tree? ${force ? "Processes get SIGKILL without a chance to clean up." : "Processes get SIGTERM first."}`)) return;
-          await action({ action: "kill", id: row.id, machine, force, confirmed: true }); say(`Killed ${name}`); break;
+          if (!await ask(`${force ? "Force kill" : "Kill"} the ${name} process tree? ${force ? "Processes get SIGKILL without a chance to clean up." : "Processes get SIGTERM first."}`, { action: "kill", id: row.id, machine, force })) return; say(`Killed ${name}`); break;
         }
         case "cleanup":
-          if (!await ask(`Remove ${name}? Driga checks it again before removing it.`)) return;
-          await action({ action: "cleanup", id: row.id, machine, confirmed: true }); say(`Removed ${name}`); break;
+          if (!await ask(`Remove ${name}? Driga checks it again before removing it.`, { action: "cleanup", id: row.id, machine })) return; say(`Removed ${name}`); break;
         case "summarize": await action({ action: "summarize", project: row.path, machine }); say(`Summarizing ${name}`); return;
       }
       void load();
@@ -210,9 +220,11 @@ export function App() {
   useEffect(() => {
     let g = -Infinity;
     const onKey = (e: KeyboardEvent) => {
-      if (e.metaKey || e.ctrlKey || e.altKey || typing(e.target) || document.querySelector('[aria-modal="true"]')) return;
+      if (e.metaKey || e.ctrlKey || e.altKey || typing(e.target) || document.querySelector('[aria-modal="true"]')) { g = -Infinity; return; }
+      const followsG = performance.now() - g < 800;
+      g = -Infinity;
       if (e.key === "g") { g = performance.now(); return; }
-      if (e.key === "f" && performance.now() - g < 800) { g = -Infinity; openFleet(); return; }
+      if (e.key === "f" && followsG) { openFleet(); return; }
       const kind = attentionKinds[Number(e.key) - 1];
       if (kind) document.querySelector<HTMLElement>(`[aria-keyshortcuts="${kinds[kind].key}"]`)?.focus();
     };
@@ -267,7 +279,7 @@ export function App() {
           </>}
        </Pane>
        <Separator className="split-handle" aria-label="Resize Chat" />
-       <Pane id="chat" panelRef={chatPane} defaultSize={400} minSize={300} maxSize="65" collapsible collapsedSize={0}
+       <Pane id="chat" inert={!chatOpen} panelRef={chatPane} defaultSize={400} minSize={300} maxSize="65" collapsible collapsedSize={0}
          onResize={size => { const shown = size.inPixels > 0; if (shown !== chatOpen) setChatOpen(shown); }}
          style={{ background: "var(--driga-inset)", borderLeft: "1px solid var(--driga-border)", minWidth: 0 }}>
         {/* Chat stays mounted while collapsed, so a draft and the conversation survive. */}

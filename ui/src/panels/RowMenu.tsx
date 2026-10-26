@@ -4,7 +4,7 @@
 // red and still ask the app's confirmation first.
 import { ActionIcon, Menu } from "@mantine/core";
 import { ArrowSquareOut, Check, DotsThree, Lightning, Sparkle, StopCircle, Trash, XCircle, type Icon } from "@phosphor-icons/react";
-import type { KeyboardEvent, MouseEvent } from "react";
+import type { MouseEvent } from "react";
 import { actionLabel, type Act, type ActionKind } from "./host";
 import type { Row } from "./types";
 
@@ -16,15 +16,14 @@ export function primary(kinds: ActionKind[]): ActionKind | undefined {
   return kinds.find(k => k === "jump" || k === "open");
 }
 
-/** rowProps make a row run its primary action on click or Enter. */
+/** Row clicks run the primary action; the named menu button owns keyboard actions. */
 export function rowProps(kinds: ActionKind[], row: Row, act?: Act) {
   const kind = primary(kinds);
   if (!act || !kind) return {};
   const run = () => void act({ kind, row });
   return {
-    tabIndex: 0, title: actionLabel(kind), className: "row-act",
+    title: actionLabel(kind), className: "row-act",
     onClick: (e: MouseEvent) => { if (!(e.target as HTMLElement).closest("button, a, [role=menu]")) run(); },
-    onKeyDown: (e: KeyboardEvent) => { if (e.key === "Enter" && e.target === e.currentTarget) { e.preventDefault(); run(); } },
   };
 }
 

@@ -34,6 +34,6 @@ export function Chart({ option, label, height, small, onEvent }: { option: (t: T
   }, [small]);
   useEffect(() => {
     chart.current?.setOption(option(chartTheme(scheme)), { notMerge: true });
-  }, [option, scheme]);
+  }, [option, scheme, small]);
   return <div ref={el} role="img" aria-label={label} style={{ height: height ?? "100%", width: "100%", minHeight: small ? 0 : 80 }} />;
 }

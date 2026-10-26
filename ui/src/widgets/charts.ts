@@ -41,7 +41,7 @@ function seriesColor(s: Series, i: number, t: Theme): string {
 export function timeSeries(input: { series: Series[]; from: number; to: number; unit?: string; format: Formatter; waits?: Wait[]; events?: Event[]; peak?: boolean; label: string }, t: Theme): Option {
   const { series, from, to, format, waits = [], events = [], peak = true } = input;
   const several = series.length > 1;
-  const max = Math.max(0, ...series.flatMap(s => s.points.map(p => p[1])));
+  const max = series.reduce((peak, s) => s.points.reduce((n, p) => Math.max(n, p[1]), peak), 0);
   const primary = series[0];
   const valueAt = (at: number): number => {
     if (!primary?.points.length) return 0;
@@ -96,7 +96,7 @@ export function timeSeries(input: { series: Series[]; from: number; to: number; 
 export function heatmap(input: { rows: string[]; cols: string[]; values: number[][]; format: Formatter; label: string; unit: string }, t: Theme): Option {
   const { rows, cols, values, format, unit } = input;
   const data = values.flatMap((r, y) => r.map((v, x) => [x, y, v]));
-  const max = Math.max(1, ...data.map(d => d[2]));
+  const max = data.reduce((n,d) => Math.max(n,d[2]), 1);
   return {
     animation: false,
     aria: { enabled: true, label: { description: input.label } },

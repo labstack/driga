@@ -5,18 +5,18 @@
 import { ActionIcon, Badge, Group, Modal, Paper, Stack, Text, Tooltip, UnstyledButton } from "@mantine/core";
 import { ArrowsOut, CaretDown, CaretRight, ChartBar, FloppyDisk, SquaresFour } from "@phosphor-icons/react";
 import { Board } from "../panels/Board";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { summary } from "../panels/charts";
 import { value } from "../panels/format";
 import type { Dashboard, Fragment, Panel, Result } from "../panels/types";
-import { dashboards, type Operation } from "./api";
+import { APIError, dashboards, type Operation } from "./api";
 
 /** Card is a panel tool call: its input, and what came of it, which the
  * service reads from the tool's result: the dashboard a write saved, or why
  * the call failed. */
 export type Card = {
   tool: string; input: { id?: string; dashboard?: Dashboard; vars?: Record<string, string>; operations?: Operation[]; version?: number; message?: string };
-  saved?: { id: string; version: number }; error?: string;
+  saved?: { id: string; version: number }; error?: string; status?: string;
 };
 
 // Tools whose card is a saved dashboard rather than a one-off view.
@@ -60,7 +60,7 @@ export function changes(card: Card, before?: Dashboard): string[] {
   return (card.input.operations ?? []).map(op => {
     switch (op.op) {
       case "add": return `Added ${op.panel.title}`;
-      case "update": return `Changed ${op.panel.title ?? title(op.id)}`;
+      case "update": return `Changed ${op.panel?.title ?? title(op.id)}`;
       case "remove": return `Removed ${title(op.id)}`;
       case "layout": return "Moved panels";
       case "rename": return `Renamed to ${op.name}`;
@@ -70,17 +70,22 @@ export function changes(card: Card, before?: Dashboard): string[] {
 
 export function ChatCard({ text, open: initiallyOpen, onOpen }: {
   text: string;
-  /** open starts the card expanded, as the newest card does. */
+  /** open follows the newest card until the user chooses whether to expand it. */
   open?: boolean;
   /** onOpen opens a saved dashboard in the main area. */
   onOpen: (id: string) => void;
 }) {
   const [expanded, setExpanded] = useState(!!initiallyOpen);
+  const toggled = useRef(false);
+  useEffect(() => { if (!toggled.current) setExpanded(!!initiallyOpen); }, [initiallyOpen]);
+  const [deleted, setDeleted] = useState(false);
   const [full, setFull] = useState(false);
   const [card, setCard] = useState<Card | null>(null);
   const [fragment, setFragment] = useState<Fragment | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   useEffect(() => {
+    const control = new AbortController();
+    setProblem(null); setFragment(null); setDeleted(false);
     let c: Card;
     try { c = JSON.parse(text) as Card; } catch { setProblem("This card could not be read."); return; }
     setCard(c);
@@ -89,16 +94,17 @@ export function ChatCard({ text, open: initiallyOpen, onOpen }: {
     const id = c.saved?.id ?? c.input?.id;
     if (!spec && !id) { setProblem("This card names no dashboard."); return; }
     // A saved dashboard opens as it is now; a one-off view runs again.
-    const run = id && (saves.has(c.tool) || c.tool === "open_dashboard") ? dashboards.open(id, c.input?.vars) : dashboards.run(spec!, c.input?.vars);
-    run.then(setFragment, (e: Error) => setProblem(e.message));
+    const run = id && (saves.has(c.tool) || c.tool === "open_dashboard") ? dashboards.open(id, c.input?.vars, control.signal) : dashboards.run(spec!, c.input?.vars, control.signal);
+    run.then(f => { if (!control.signal.aborted) setFragment(f); }, (e: Error) => { if (!control.signal.aborted) { setDeleted(e instanceof APIError && e.status === 404); setProblem(e.message); } });
+    return () => control.abort();
   }, [text]);
   // A dashboard a card saved or opened may since have been deleted.
-  if (problem && card && /not found/i.test(problem) && (card.saved || card.input.id)) return <Text size="sm" c="dimmed">{card.input.dashboard?.name ?? "This dashboard"} was deleted since.</Text>;
+  if (problem && card && deleted && (card.saved || card.input.id)) return <Text size="sm" c="dimmed">{card.input.dashboard?.name ?? "This dashboard"} was deleted since.</Text>;
   if (problem) return <Text size="sm" c="danger">{problem}</Text>;
   // A write that failed saved nothing; say so and why, as a rejected draft.
   if (card?.error) return <Paper withBorder radius="md" p="sm" style={{ background: "var(--driga-raised)" }}>
     <Stack gap={4}>
-      <Text size="sm" fw={600}>{saves.has(card.tool) ? `Draft rejected: ${card.input.dashboard?.name ?? card.input.id ?? "dashboard"}` : "These panels could not run"}</Text>
+      <Text size="sm" fw={600}>{card.status === "unknown" ? `Outcome unknown: ${card.input.dashboard?.name ?? card.input.id ?? "dashboard"}` : saves.has(card.tool) ? `Draft rejected: ${card.input.dashboard?.name ?? card.input.id ?? "dashboard"}` : "These panels could not run"}</Text>
       <Text size="xs" c="dimmed" style={{ overflowWrap: "anywhere" }}>{card.error}</Text>
     </Stack>
   </Paper>;
@@ -114,7 +120,7 @@ export function ChatCard({ text, open: initiallyOpen, onOpen }: {
   return <Paper withBorder radius="md" p="sm" style={{ background: "var(--driga-raised)" }}>
     <Stack gap={6}>
       <Group gap={4} wrap="nowrap">
-        <UnstyledButton aria-expanded={expanded} onClick={() => setExpanded(e => !e)} style={{ flex: 1, minWidth: 0 }}>
+        <UnstyledButton aria-expanded={expanded} onClick={() => { toggled.current = true; setExpanded(e => !e); }} style={{ flex: 1, minWidth: 0 }}>
           <Group gap={6} wrap="nowrap">
             {expanded ? <CaretDown size={14} aria-hidden /> : <CaretRight size={14} aria-hidden />}
             {saved ? <FloppyDisk size={16} aria-hidden /> : <ChartBar size={16} aria-hidden />}

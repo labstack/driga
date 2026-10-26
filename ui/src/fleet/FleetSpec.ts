@@ -22,6 +22,17 @@ export const fleetSpec: Dashboard = {
 
 const text = (v: unknown) => (v === null || v === undefined ? "" : String(v));
 const num = (v: unknown) => (typeof v === "number" ? v : 0);
+const knownNum = (v: unknown) => (typeof v === "number" ? v : undefined);
+const sessionKey = (machine: unknown, id: unknown) => JSON.stringify([text(machine), text(id)]);
+
+function editedFiles(value: unknown): string[] {
+  try {
+    const files: unknown = JSON.parse(text(value));
+    return Array.isArray(files) ? files.filter((file): file is string => typeof file === "string") : [];
+  } catch {
+    return [];
+  }
+}
 
 /** stateFor reads a session's label as the Fleet draws it: the service's
  * states as they are, dead as stuck (its turn is open with no process), and
@@ -58,7 +69,7 @@ export function fleetOf(fragment: Fragment, inbox?: Fragment | null): FleetData 
       lastSeen: new Date(observed - num(r.last_seen)).toISOString(),
       memoryUsed: num(r.mem_used_bytes), memoryTotal: num(r.mem_total_bytes),
       cpuPercent: typeof r.cpu_percent === "number" ? r.cpu_percent : undefined,
-      diskFree: num(r.disk_free_bytes), diskTotal: num(r.disk_total_bytes),
+      diskFree: knownNum(r.disk_free_bytes), diskTotal: knownNum(r.disk_total_bytes),
       leftover: leftovers.get(id),
       memoryByRole: byRole.get(name),
     };
@@ -68,14 +79,15 @@ export function fleetOf(fragment: Fragment, inbox?: Fragment | null): FleetData 
     const name = text(r.project);
     if (name && !projects.some(p => p.id === name)) projects.push({ id: name, name, repo: text(r.path) });
   }
-  const flow = new Map(frame("flow").map(r => [text(r.id), r]));
+  const flow = new Map(frame("flow").map(r => [sessionKey(r.machine_id, r.id), r]));
   const waits = new Map<string, string>();
   for (const r of rows(inbox?.results[0]?.frame)) {
-    if (r.kind === "waiting" && num(r.session_id) > 0) waits.set(text(r.session_id), [r.reason || "waiting", r.tool, r.detail].filter(Boolean).join(" · "));
+    if (r.kind === "waiting" && text(r.session_id) && text(r.session_id) !== "0") waits.set(sessionKey(r.machine_id, r.session_id), [r.reason || "waiting", r.tool, r.detail].filter(Boolean).join(" · "));
   }
   const sessions: FleetSession[] = frame("sessions").map(r => {
     const id = text(r.id);
-    const f = flow.get(id);
+    const key = sessionKey(r.machine_id, id);
+    const f = flow.get(key);
     const read = stateFor(text(r.label));
     return {
       id, title: text(r.title) || `Session ${id}`,
@@ -83,12 +95,12 @@ export function fleetOf(fragment: Fragment, inbox?: Fragment | null): FleetData 
       agent: text(r.agent), project: text(r.project), machine: text(r.machine_id), branch: text(r.branch) || undefined,
       memory: num(r.mem_bytes),
       turns: text(r.turns).split(",").filter((t): t is "ok" | "waited" | "failed" => ["ok", "waited", "failed"].includes(t)),
-      files: r.edited ? JSON.parse(text(r.edited)) ?? [] : [],
-      parent: f && num(f.parent_id) > 0 ? text(f.parent_id) : undefined,
+      files: editedFiles(r.edited),
+      parent: f && text(f.parent_id) && text(f.parent_id) !== "0" ? text(f.parent_id) : undefined,
       lastTool: text(f?.last_tool) || undefined,
       lastActivity: text(r.last_activity_at) || fragment.observed_at,
       started: text(f?.started_at) || undefined,
-      waiting: read.state === "waiting" ? waits.get(id) ?? (text(f?.reason) || undefined) : undefined,
+      waiting: read.state === "waiting" ? waits.get(key) ?? (text(f?.reason) || undefined) : undefined,
     };
   });
   // A project a session names that the projects source does not list.

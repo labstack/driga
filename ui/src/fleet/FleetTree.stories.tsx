@@ -1,10 +1,10 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, fn, userEvent, within } from "storybook/test";
-import { busy } from "./Fleet-fixtures";
+import { busy, waitingSession } from "./Fleet-fixtures";
 import { FleetTree } from "./FleetTree";
 
 /** The Fleet as an accessible table: machines expand into projects into
- * sessions, with subagents one level deeper. */
+ * sessions, with subagents nested under their parents. */
 const meta = {
   id: "fleet-tree",
   title: "Components/Fleet/Tree",
@@ -26,18 +26,20 @@ export const Busy: Story = {
     await userEvent.click(canvas.getByRole("button", { name: "Expand laptop-02" }));
     await expect(canvas.getByRole("button", { name: "Harbor TLS rotation" })).toBeVisible();
     await userEvent.click(canvas.getByRole("button", { name: "Write the release notes" }));
-    await expect(args.onSelect).toHaveBeenCalledWith({ kind: "session", id: "113" });
+    await expect(args.onSelect).toHaveBeenCalledWith({ kind: "session", id: "113", machine: "studio" });
     await userEvent.unhover(canvas.getByRole("button", { name: "Write the release notes" }));
   },
 };
 
 export const Selected: Story = {
-  args: { selected: { kind: "session", id: "113" } },
+  args: { selected: { kind: "session", id: "113", machine: "studio" } },
   play: async ({ canvas, args }) => {
     const title = canvas.getByRole("button", { name: "Write the release notes" });
     await expect(title).toHaveAttribute("aria-pressed", "true");
-    await userEvent.click(within(title.closest("tr")!).getByRole("button", { name: "Reply" }));
-    await expect(args.onReply).toHaveBeenCalledWith(expect.objectContaining({ id: "113" }));
+    await userEvent.click(within(title.closest("tr")!).getByRole("button", { name: "Reply to Write the release notes" }));
+    await expect(args.onReply).toHaveBeenCalledWith(expect.objectContaining({ id: "113", machine: "studio" }));
+    await userEvent.click(within(title.closest("tr")!).getByRole("button", { name: "Open Write the release notes" }));
+    await expect(args.onOpen).toHaveBeenCalledWith(waitingSession);
     await userEvent.unhover(title);
   },
 };

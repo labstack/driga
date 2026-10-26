@@ -1,14 +1,18 @@
 import { normalize, type Dashboard, type Fragment, type Panel, type Prompt } from "../panels/types";
 
+export class APIError extends Error {
+  constructor(message: string, readonly status: number) { super(message); }
+}
+
 async function post<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
   const response = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal });
-  if (!response.ok) throw new Error((await response.text()).trim() || `${response.status}`);
+  if (!response.ok) throw new APIError((await response.text()).trim() || `${response.status}`, response.status);
   return response.json() as Promise<T>;
 }
 
 async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
   const response = await fetch(path, { signal });
-  if (!response.ok) throw new Error((await response.text()).trim() || `${response.status}`);
+  if (!response.ok) throw new APIError((await response.text()).trim() || `${response.status}`, response.status);
   return response.json() as Promise<T>;
 }
 
@@ -16,7 +20,7 @@ export type Summary = { id: string; name: string; panels: number; version: numbe
 
 export type Operation =
   | { op: "add"; panel: Panel; before?: string }
-  | { op: "update"; id: string; panel: Partial<Panel> }
+  | { op: "update"; id: string; panel?: Partial<Panel>; clear?: string[] }
   | { op: "remove"; id: string }
   | { op: "layout"; grids: Record<string, { x: number; y: number; w: number; h: number }> }
   | { op: "rename"; name: string };
@@ -24,21 +28,30 @@ export type Operation =
 export const dashboards = {
   list: () => post<{ dashboards: Summary[] }>("/app/api/list", {}).then(r => r.dashboards),
   open: (id: string, vars?: Record<string, string>, signal?: AbortSignal) => post<Fragment>("/app/api/open", { id, vars }, signal).then(normalize),
-  run: (dashboard: Dashboard, vars?: Record<string, string>) => post<Fragment>("/app/api/run", { dashboard, vars }).then(normalize),
+  run: (dashboard: Dashboard, vars?: Record<string, string>, signal?: AbortSignal) => post<Fragment>("/app/api/run", { dashboard, vars }, signal).then(normalize),
   create: (dashboard: Dashboard, message?: string) => post<Fragment>("/app/api/create", { dashboard, message }).then(normalize),
   delete: (id: string) => post<{ ok: boolean }>("/app/api/delete", { id }),
   edit: (id: string, operations: Operation[], base: number, vars?: Record<string, string>, message?: string) =>
     post<Fragment>("/app/api/edit", { id, operations, base_version: base, vars, message }).then(normalize),
 };
 
-/** confirm asks the app's native dialog. In a browser, under driga dev
- * serve, there is none, and the browser's own asks instead; any other
- * failure confirms nothing. */
+/** Ask the native host; unavailable or malformed confirmations fail closed. */
+async function confirmation(message: string, request?: Record<string, unknown>): Promise<{ confirmed: boolean; token?: string }> {
+  try {
+    const result = await post<{ confirmed: boolean; token?: string }>("/app/confirm", { message, request });
+    return result.confirmed === true ? result : { confirmed: false };
+  } catch { return { confirmed: false }; }
+}
 export async function confirm(message: string): Promise<boolean> {
-  const response = await fetch("/app/confirm", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message }) }).catch(() => null);
-  if (response?.status === 404) return window.confirm(message);
-  if (!response?.ok) return false;
-  return ((await response.json()) as { confirmed?: boolean }).confirmed === true;
+  return (await confirmation(message)).confirmed;
+}
+
+/** Authorize and execute exactly one request with the host's one-use token. */
+export async function confirmedAction(message: string, body: Record<string, unknown>): Promise<boolean> {
+  const answer = await confirmation(message, body);
+  if (!answer.confirmed || typeof answer.token !== "string" || answer.token.length === 0) return false;
+  await action({ ...body, token: answer.token });
+  return true;
 }
 
 /** action runs a local action through the app's checks. */

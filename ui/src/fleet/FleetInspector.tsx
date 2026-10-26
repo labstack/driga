@@ -20,7 +20,8 @@ const icons: Record<NonNullable<FleetMachine["kind"]>, Icon> = { desktop: Deskto
  * selected. Actions report through callbacks, as the Inbox's do. What the
  * service does not send yet (turns, files, a start time) is simply absent. */
 export function FleetInspector({ data, selection, onSelect, onOpen, onReply, width = 320 }: FleetActions & { data: FleetData; selection: FleetSelection | null; width?: number }) {
-  const found = selection && (selection.kind === "session" ? data.sessions.find(s => s.id === selection.id) : selection.kind === "machine" ? data.machines.find(m => m.id === selection.id) : data.projects.find(p => p.id === selection.id));
+  const selectedSessions = selection?.kind === "session" ? data.sessions.filter(s => s.id === selection.id && (!selection.machine || s.machine === selection.machine)) : [];
+  const found = selection && (selection.kind === "session" ? (selectedSessions.length === 1 ? selectedSessions[0] : undefined) : selection.kind === "machine" ? data.machines.find(m => m.id === selection.id) : data.projects.find(p => p.id === selection.id));
   // A labelled group, not a landmark: the panel belongs to the view, and two
   // views on one page would otherwise collide.
   return <Card role="group" aria-label="Inspector" w={{ base: "100%", lg: width }} padding="sm" style={{ flex: "none", display: "flex", flexDirection: "column", minHeight: 0 }}>
@@ -47,7 +48,7 @@ function Label({ children }: { children: string }) {
 
 /** SessionLink names another session, selectable, with its state dot. */
 function SessionLink({ session: s, onSelect, extra }: { session: FleetSession; onSelect: FleetActions["onSelect"]; extra?: string }) {
-  return <UnstyledButton className="fleet-row-title" onClick={() => onSelect({ kind: "session", id: s.id })} px={4} py={2}>
+  return <UnstyledButton className="fleet-row-title" onClick={() => onSelect({ kind: "session", id: s.id, machine: s.machine })} px={4} py={2}>
     <Group gap={6} wrap="nowrap">
       <ColorSwatch size={6} color={toneVar(states[s.state].tone)} withShadow={false} aria-hidden style={{ flex: "none" }} />
       <Text fz="xs" truncate title={s.title}>{s.title}</Text>
@@ -59,9 +60,9 @@ function SessionLink({ session: s, onSelect, extra }: { session: FleetSession; o
 function SessionPanel({ session: s, data, onSelect, onOpen, onReply }: FleetActions & { session: FleetSession; data: FleetData }) {
   const project = projectOf(data.projects, s.project);
   const machine = machineOf(data.machines, s.machine);
-  const children = childrenOf(data.sessions, s.id);
-  const parent = s.parent ? data.sessions.find(x => x.id === s.parent) : undefined;
-  const shared = overlapsOf(data.sessions, s.id);
+  const children = childrenOf(data.sessions.filter(x => x.machine === s.machine), s.id);
+  const parent = s.parent ? data.sessions.find(x => x.id === s.parent && x.machine === s.machine) : undefined;
+  const shared = overlapsOf(data.sessions, s.id, s.machine);
   const sharedBy = (file: string) => shared.filter(o => o.files.includes(file)).map(o => o.with);
   const quiet = Math.max(0, Date.now() - Date.parse(s.lastActivity));
   return <Stack gap="sm">
@@ -84,8 +85,8 @@ function SessionPanel({ session: s, data, onSelect, onOpen, onReply }: FleetActi
     {machine && !machine.reachable && <Text fz="xs" c="dimmed">Last known: {machine.name} was last seen {relative(machine.lastSeen)}.</Text>}
     {s.lastTool && <Text ff="monospace" fz="xs" className="w-inset" truncate title={`${s.lastTool} · ${relative(s.lastActivity)}`} style={{ display: "block" }}>{s.lastTool} · {relative(s.lastActivity)}</Text>}
     <Group gap={6}>
-      {s.turns && <Badge variant="default" size="xs" ff="monospace">{plural(s.turns.length, "turn")}</Badge>}
-      {s.files && <Badge variant="default" size="xs" ff="monospace">{plural(s.files.length, "file")}</Badge>}
+      {!!s.turns?.length && <Badge variant="default" size="xs" ff="monospace">{plural(s.turns.length, "turn")}</Badge>}
+      {!!s.files?.length && <Badge variant="default" size="xs" ff="monospace">{plural(s.files.length, "file")}</Badge>}
       <Badge variant="default" size="xs" ff="monospace">{bytes(s.memory)}</Badge>
     </Group>
     {s.turns && s.turns.length > 0 && <TrackerBar cells={turnCells(s)} label="Last 30 turns" summary={turnWords(s)} height={8} to={`turn ${Math.min(30, s.turns.length)}`} from={s.turns.length > 30 ? `turn ${s.turns.length - 29}` : "turn 1"} />}
@@ -95,11 +96,11 @@ function SessionPanel({ session: s, data, onSelect, onOpen, onReply }: FleetActi
         const others = sharedBy(f);
         return <Group key={f} gap={6} wrap="nowrap" justify="space-between">
           <Text ff="monospace" fz="xs" truncate title={f}>{f}</Text>
-          {others.length > 0 && <Badge color="danger" variant="light" size="xs" style={{ flex: "none", background: "var(--driga-tint-danger)" }} title={`Also edited by ${others.map(o => o.title).join(", ")}`}>also #{others.map(o => o.id).join(", #")}</Badge>}
+          {others.length > 0 && <Badge color="danger" variant="light" size="xs" style={{ flex: "none", background: "var(--driga-tint-danger)", color: "var(--driga-text)" }} title={`Also edited by ${others.map(o => o.title).join(", ")}`}>also #{others.map(o => o.id).join(", #")}</Badge>}
         </Group>;
       })}
     </Stack>}
-    {children.length > 0 && <Stack gap={2}><Label>Subagents</Label>{children.map(c => <SessionLink key={c.id} session={c} onSelect={onSelect} />)}</Stack>}
+    {children.length > 0 && <Stack gap={2}><Label>Subagents</Label>{children.map(c => <SessionLink key={`${c.machine}/${c.id}`} session={c} onSelect={onSelect} />)}</Stack>}
     {parent && <Stack gap={2}><Label>Spawned by</Label><SessionLink session={parent} onSelect={onSelect} /></Stack>}
     <Group gap="xs" mt={4}>
       {s.state === "waiting" && <Button onClick={() => onReply(s)}>Reply</Button>}
@@ -131,7 +132,7 @@ function MachinePanel({ group, onSelect }: { group: FleetMachineGroup; onSelect:
       {m.memoryByRole && m.memoryByRole.length > 0 && <CategoryBar label={`Agent memory on ${m.name} by owner`} segments={m.memoryByRole} total={m.memoryTotal} format={bytes} size={6} />}
     </Stack>
     {m.cpuPercent !== undefined && <Stack gap={4}><Label>CPU</Label><BarGauge value={m.cpuPercent} max={100} format={n => `${Math.round(n)}%`} label={`CPU on ${m.name}`} /></Stack>}
-    {!!m.diskTotal && <Stack gap={4}><Label>Disk</Label><BarGauge value={Math.max(0, m.diskTotal - (m.diskFree ?? 0))} max={m.diskTotal} format={bytes} label={`Disk on ${m.name}`} /></Stack>}
+    {!!m.diskTotal && m.diskFree !== undefined && <Stack gap={4}><Label>Disk</Label><BarGauge value={Math.max(0, m.diskTotal - m.diskFree)} max={m.diskTotal} format={bytes} label={`Disk on ${m.name}`} /></Stack>}
     <Stack gap={2}>
       <Label>Sessions</Label>
       {total === 0 && <Text fz="xs" c="dimmed">None</Text>}
@@ -162,7 +163,7 @@ function ProjectPanel({ project: p, data, onSelect }: { project: FleetProject; d
     </Stack>
     <Stack gap={2}>
       <Label>Sessions</Label>
-      {sessions.map(s => <SessionLink key={s.id} session={s} onSelect={onSelect} extra={`${s.label ?? states[s.state].label} · ${machineOf(data.machines, s.machine)?.name ?? s.machine}`} />)}
+      {sessions.map(s => <SessionLink key={`${s.machine}/${s.id}`} session={s} onSelect={onSelect} extra={`${s.label ?? states[s.state].label} · ${machineOf(data.machines, s.machine)?.name ?? s.machine}`} />)}
     </Stack>
   </Stack>;
 }

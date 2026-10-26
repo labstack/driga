@@ -57,7 +57,8 @@ export const PermissionPrompt: Story = {
   parameters: { service: fakeService({ prompts: [prompt] }) },
   play: async ({ canvas }) => {
     await expect(await canvas.findByText("Bash(npm run migrate -- --env staging)")).toBeVisible();
-    await expect(await canvas.findByRole("button", { name: /^Need you\s*4/ })).toBeVisible();
+    // This approval belongs to session 11, already counted by its inbox wait.
+    await expect(await canvas.findByRole("button", { name: /^Need you\s*3/ })).toBeVisible();
   },
 };
 export const AllClear: Story = {
@@ -73,7 +74,10 @@ export const ChatConversation: Story = {
 };
 export const ChatAwaitingApproval: Story = {
   parameters: { service: fakeService({ chat: awaitingApproval }) },
-  play: async ({ canvas }) => { await expect(await canvas.findByRole("button", { name: "Allow" })).toBeVisible(); },
+  play: async ({ canvas }) => {
+    await expect(await canvas.findByRole("button", { name: `Allow ${awaitingApproval.actions[0].title}` })).toBeVisible();
+    await expect(canvas.getByRole("button", { name: `Deny ${awaitingApproval.actions[0].title}` })).toBeVisible();
+  },
 };
 export const ChatHidden: Story = {
   beforeEach: () => { localStorage.setItem("driga-chat-open", "false"); },

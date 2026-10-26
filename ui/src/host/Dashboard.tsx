@@ -4,6 +4,7 @@ import "react-grid-layout/css/styles.css";
 import { ActionIcon, Box, Group, Text, Tooltip } from "@mantine/core";
 import { CheckCircle, X } from "@phosphor-icons/react";
 import { PanelView, type Act } from "../panels/PanelView";
+import { confirm } from "./api";
 import type { Fragment, Panel, Result } from "../panels/types";
 
 const rowHeight = 36;
@@ -115,15 +116,17 @@ export function packed(layout: Item[], panels: Map<string, Panel>, results: Map<
 // the board element is replaced.
 function useHeight(key: boolean) {
   const ref = useRef<HTMLDivElement>(null);
-  const [height, setHeight] = useState(0);
+  const [size, setSize] = useState({height:0,width:0});
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const observe = new ResizeObserver(() => setHeight(el.clientHeight));
+    const measure = () => setSize({height:el.clientHeight,width:el.clientWidth});
+    measure();
+    const observe = new ResizeObserver(measure);
     observe.observe(el);
     return () => observe.disconnect();
   }, [key]);
-  return { ref, height };
+  return { ref, ...size };
 }
 
 /** Dashboard is the app's board, packed to fill its space. Editing drags and
@@ -145,15 +148,16 @@ export function Dashboard({ fragment, editing, act, onLayout, onRemove }: {
   const clear = editing ? [] : fragment.dashboard.panels.filter(p => results.get(p.id)?.status === "empty");
   const gridPanels = editing ? fragment.dashboard.panels : fragment.dashboard.panels.filter(p => !clear.includes(p));
   const available = Math.max(1, Math.floor((fill.height + gap) / unit));
-  const items = packed(layoutOf(gridPanels), byId, results, fill.ref.current?.clientWidth ?? 1200, available);
+  const items = packed(layoutOf(gridPanels), byId, results, fill.width, available);
   const ref = (el: HTMLDivElement | null) => { fill.ref.current = el; containerRef.current = el; };
+  const measured = fill.height > 0 && fill.width > 0;
   if (!editing) {
     const rows = Math.max(1, ...items.map(i => i.y + i.h));
     return <>
       {clear.length > 0 && <AllClear panels={clear} results={results} />}
       {/* Rows share any height left after whole rows, so the board ends exactly at the edge. */}
       <Box ref={ref} style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateColumns: "repeat(12, minmax(0, 1fr))", gap, gridTemplateRows: `repeat(${rows}, minmax(${rowHeight}px, 1fr))` }}>
-        {items.map(it => <Box key={it.i} style={{ minWidth: 0, minHeight: 0, gridColumn: `${it.x + 1} / span ${it.w}`, gridRow: `${it.y + 1} / span ${it.h}` }}>
+        {measured && items.map(it => <Box key={it.i} style={{ minWidth: 0, minHeight: 0, gridColumn: `${it.x + 1} / span ${it.w}`, gridRow: `${it.y + 1} / span ${it.h}` }}>
           <PanelView panel={byId.get(it.i)!} result={results.get(it.i)} act={act} fill />
         </Box>)}
       </Box>
@@ -164,12 +168,12 @@ export function Dashboard({ fragment, editing, act, onLayout, onRemove }: {
     if (changed) onLayout(Object.fromEntries(next.map(n => [n.i, { x: n.x, y: n.y, w: n.w, h: n.h }])));
   };
   return <Box ref={ref} className="editing" style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
-    {mounted && <GridLayout width={width} layout={items} gridConfig={{ cols: 12, rowHeight, margin: [gap, gap], containerPadding: [0, 0] }}
+    {measured && mounted && <GridLayout width={width} layout={items} gridConfig={{ cols: 12, rowHeight, margin: [gap, gap], containerPadding: [0, 0] }}
       dragConfig={{ enabled: true, handle: ".panel-handle" }} resizeConfig={{ enabled: true }}
       onDragStop={(next: Layout) => save(next)} onResizeStop={(next: Layout) => save(next)}>
       {items.map(it => <div key={it.i} style={{ position: "relative" }}>
         <PanelView panel={byId.get(it.i)!} result={results.get(it.i)} fill />
-        <ActionIcon variant="default" pos="absolute" top={8} right={8} aria-label={`Remove ${byId.get(it.i)!.title}`} onClick={() => onRemove(it.i)}><X /></ActionIcon>
+        <ActionIcon variant="default" pos="absolute" top={8} right={8} aria-label={`Remove ${byId.get(it.i)!.title}`} onClick={() => { void confirm(`Remove ${byId.get(it.i)!.title} from this dashboard?`).then(ok => { if (ok) onRemove(it.i); }); }}><X /></ActionIcon>
       </div>)}
     </GridLayout>}
   </Box>;
@@ -178,7 +182,7 @@ export function Dashboard({ fragment, editing, act, onLayout, onRemove }: {
 /** AllClear names the panels with nothing to show, one line for all of them:
  * each title with a check, and on hover what would appear there. */
 function AllClear({ panels, results }: { panels: Panel[]; results: Map<string, Result> }) {
-  return <Group gap="lg" mb={8} px={2} aria-label="Nothing to show">
+  return <Group role="group" gap="lg" mb={8} px={2} aria-label="Nothing to show">
     {panels.map(p => <Tooltip key={p.id} label={results.get(p.id)?.message ?? p.empty ?? "Nothing matches right now."} multiline maw={300}>
       <Group gap={6} wrap="nowrap" c="dimmed">
         <CheckCircle aria-hidden />

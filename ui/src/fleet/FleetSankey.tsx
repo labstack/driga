@@ -1,7 +1,7 @@
 import "./Fleet.css";
 import { Box, Card, Flex, SegmentedControl, Stack, Text } from "@mantine/core";
 import { useUncontrolled } from "@mantine/hooks";
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { Chart, type ChartEvent } from "../panels/Chart";
 import type { Theme } from "../panels/charts";
 import type { Machine } from "../widgets/MachineCard";
@@ -36,7 +36,8 @@ export function FleetSankey({ machines, projects, sessions, strips, selected, de
   const [selection, select] = useUncontrolled<FleetSelection | null>({ value: selected, defaultValue: defaultSelected, finalValue: null, onChange: onSelect });
   const [view, setView] = useUncontrolled<FleetMode>({ value: mode, defaultValue: defaultMode, finalValue: "flow", onChange: onModeChange });
   const groups = useMemo(() => groupFleet(data), [data]);
-  const machineId = selection?.kind === "machine" ? selection.id : null;
+  const machineId = selection?.kind === "machine" && machines.some(m => m.id === selection.id) ? selection.id : null;
+  useEffect(() => { if (selection?.kind === "machine" && !machines.some(m => m.id === selection.id)) select(null); }, [machines, selection, select]);
   const shown = useMemo(() => machineId ? { machines: data.machines.filter(m => m.id === machineId), projects: data.projects, sessions: data.sessions.filter(s => s.machine === machineId) } : data, [data, machineId]);
   const option = useCallback((t: Theme) => fleetSankey(shown, t), [shown]);
   const onEvent = useCallback((_: string, p: ChartEvent) => { const s = selectionOf(p); if (s) select(s); }, [select]);
@@ -56,7 +57,7 @@ export function FleetSankey({ machines, projects, sessions, strips, selected, de
             {shown.sessions.length
               ? <Box style={{ flex: 1, minHeight: sankeyHeight(shown.sessions.length), display: "flex", flexDirection: "column" }}><Chart option={option} label="Fleet flow from machines through projects to sessions" height="100%" onEvent={onEvent} /></Box>
               : <Text fz="sm" c="dimmed" py="xl" ta="center">No sessions on this machine right now.</Text>}
-            <Text ff="monospace" fz="xs" c="dimmed" style={{ flex: "none" }}>width = memory · colour = state</Text>
+            <Text ff="monospace" fz="xs" c="dimmed" style={{ flex: "none" }}>width = memory (minimum shown) · colour = state</Text>
           </Stack>
           : <FleetTree data={shown} selected={selection} onSelect={select} onOpen={onOpen} onReply={onReply} />}
       </Card>

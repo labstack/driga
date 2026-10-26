@@ -39,7 +39,7 @@ export function PanelView({ panel, result, act: given, fill }: { panel: Panel; r
   const title = result?.title || panel.title;
   if (panel.viz === "timeseries") return <TimeseriesCard panel={panel} result={result} fill={fill} height={height} title={title} />;
   let body: ReactNode;
-  if (panel.viz === "text") body = <ScrollArea style={{ flex: 1 }} type="auto" viewportProps={scrollable}><Text component="div" size="sm" className="markdown"><Markdown remarkPlugins={[remarkGfm]}>{panel.content ?? ""}</Markdown></Text></ScrollArea>;
+  if (panel.viz === "text") body = <ScrollArea style={{ flex: 1 }} type="auto" viewportProps={scrollable}><Text component="div" size="sm" className="markdown"><Markdown remarkPlugins={[remarkGfm]} components={{ img: () => null }}>{panel.content ?? ""}</Markdown></Text></ScrollArea>;
   else if (!result) body = <Text size="sm" c="dimmed">Loading…</Text>;
   else if (result.status === "error") body = <EmptyState kind="error" title={result.message ?? "This panel could not run."} />;
   else if (panel.viz === "inbox" && host.prompts?.length) body = <Inbox frame={result.frame ?? { columns: [], rows: [] }} act={act} prompts={host.prompts} answer={host.answer} filter={host.inboxFilter} />;
@@ -309,27 +309,29 @@ export function lanesOf(frame: Frame, now: number): Lane[] {
     const end = Date.parse(String(r.ended_at ?? "")) || now;
     const read = stateOf(String(r.label ?? ""));
     const base: State = r.ended_at ? "finished" : read.state && read.state !== "waiting" ? read.state : "working";
-    const waits = (frame.spans ?? []).filter(s => s.session_id === r.id).map(w => ({ from: Date.parse(String(w.from)) || start, to: Date.parse(String(w.to ?? "")) || now })).sort((a, b) => a.from - b.from);
+    const waits = (frame.spans ?? []).filter(s => s.session_id === r.id && s.machine_id === r.machine_id).map(w => ({ from: Date.parse(String(w.from)) || start, to: Date.parse(String(w.to ?? "")) || now })).sort((a, b) => a.from - b.from);
     const segments: Lane["segments"] = [];
     let cursor = start;
     for (const w of waits) {
-      if (w.from > cursor) segments.push({ from: cursor, to: w.from, state: base });
-      segments.push({ from: Math.max(w.from, start), to: Math.min(w.to, end), state: "waiting" });
-      cursor = Math.max(cursor, w.to);
+      const from = Math.max(cursor,start,w.from), to = Math.min(end,w.to);
+      if (to <= from) continue;
+      if (from > cursor) segments.push({from:cursor,to:from,state:base});
+      segments.push({from,to,state:"waiting"});
+      cursor=to;
     }
     if (cursor < end) segments.push({ from: cursor, to: end, state: base });
-    return { id: String(r.id), name: [r.title || `Session ${r.id}`, r.agent].filter(Boolean).join(" · "), segments };
+    return { id: JSON.stringify([r.machine_id,r.id]), name: [r.title || `Session ${r.id}`, r.agent].filter(Boolean).join(" · "), segments };
   });
 }
 
 /** Timeline draws the flow's sessions as swimlanes, from the earliest start
  * to now; clicking a lane opens the session's pane. */
 function Timeline({ frame, act, title }: { frame: Frame; act?: Act; title: string }) {
-  const now = Date.now();
+  const now = useMemo(() => Date.now(), [frame]);
   const lanes = useMemo(() => lanesOf(frame, now), [frame, now]);
   const starts = lanes.flatMap(l => l.segments.map(s => s.from));
   const from = starts.length ? Math.min(...starts) : now - 3600_000;
-  const byId = new Map(rows(frame).map(r => [String(r.id), r]));
+  const byId = new Map(rows(frame).map(r => [JSON.stringify([r.machine_id,r.id]), r]));
   return <ScrollArea style={{ flex: 1 }} type="auto" viewportProps={scrollable}>
     <SessionSwimlanes lanes={lanes} from={from} to={now} now={now} label={title} onSelect={act ? id => { const r = byId.get(id); if (r) void act({ kind: "jump", row: { ...r, session_id: r.id } }); } : undefined} />
   </ScrollArea>;

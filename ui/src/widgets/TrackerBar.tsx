@@ -39,11 +39,12 @@ export function TrackerBar({ cells, label, summary, from, to, height = 12 }: Tra
   const onMove = (e: MouseEvent<HTMLDivElement>) => {
     if (!ref.current || !cells.length) return;
     const r = ref.current.getBoundingClientRect();
+    if (r.width <= 0) { setHover(null); return; }
     setHover(Math.min(cells.length - 1, Math.max(0, Math.floor(((e.clientX - r.left) / r.width) * cells.length))));
   };
   const said = summary ?? counted(cells);
   return <Stack gap={2}>
-    <Tooltip.Floating label={hover === null ? said : cells[hover].label} offset={10}>
+    <Tooltip.Floating label={hover === null ? said : cells[hover]?.label ?? said} offset={10}>
       <Box ref={ref} role="img" aria-label={`${label}: ${said}`} onMouseMove={onMove} onMouseLeave={() => setHover(null)} style={{ display: "flex", gap: 1, height, cursor: "default" }}>
         {cells.map((c, i) => <div key={i} className="w-cell" data-state={c.state ?? undefined} style={hover === i ? { outline: "1px solid var(--driga-text)", outlineOffset: 0 } : undefined} />)}
       </Box>

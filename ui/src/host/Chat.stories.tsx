@@ -50,7 +50,7 @@ export const DraftRejected: Story = { parameters: { service: service({ chat: rej
 export const AwaitingApproval: Story = {
   parameters: { service: service({ chat: awaitingApproval, onRequest: (path, body) => requests.push({ path, body }) }) },
   play: async ({ canvas }) => {
-    await userEvent.click(await canvas.findByRole("button", { name: "Deny" }));
+    await userEvent.click(await canvas.findByRole("button", { name: `Deny ${awaitingApproval.actions[0].title}` }));
     await waitFor(() => expect(requests).toContainEqual({ path: "/chat/api/decide", body: { id: "conversation-1", action: "act1", allow: false } }));
   },
 };

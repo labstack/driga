@@ -1,5 +1,9 @@
 {
  "all": {
+  "leftover_count": 2,
+  "waiting_sessions": [
+   11
+  ],
   "history": {
    "attention": [
     {
@@ -1952,7 +1956,7 @@
        ""
       ],
       [
-       "stalled?",
+       "stuck",
        "Migrate billing to the v2 events",
        "harbor",
        "feat/billing-v2",
@@ -1962,7 +1966,7 @@
        2254857830,
        16,
        "build-id",
-       "~stalled?",
+       "~stuck",
        true,
        "busy, no output for 34m, CPU idle"
       ],
@@ -2581,7 +2585,7 @@
       [
        16,
        "Migrate billing to the v2 events",
-       "~stalled?",
+       "~stuck",
        "claude",
        "harbor",
        "2026-03-14T14:05:00Z",
@@ -2592,6 +2596,7 @@
      ],
      "spans": [
       {
+       "machine_id": "studio-id",
        "session_id": 11,
        "kind": "waiting",
        "from": "2026-03-14T14:56:00Z",
@@ -2599,6 +2604,7 @@
        "reason": "permission"
       },
       {
+       "machine_id": "studio-id",
        "session_id": 11,
        "kind": "waiting",
        "from": "2026-03-14T14:25:00Z",
@@ -2606,6 +2612,7 @@
        "reason": "question"
       },
       {
+       "machine_id": "build-id",
        "session_id": 16,
        "kind": "waiting",
        "from": "2026-03-14T14:38:00Z",
@@ -2710,6 +2717,10 @@
   "local_machine": "studio-id"
  },
  "header": {
+  "leftover_count": 2,
+  "waiting_sessions": [
+   11
+  ],
   "history": {
    "attention": [
     {
@@ -3235,44 +3246,29 @@
      "title": "Need you",
      "description": "Agents waiting on you and machine warnings in effect.",
      "viz": "stat",
-     "source": "inbox",
-     "where": [
-      {
-       "column": "needs_you",
-       "value": "true"
-      }
-     ]
+     "source": "summary",
+     "measure": "sum:need_you"
     },
     {
      "id": "finished",
      "title": "To review",
      "viz": "stat",
-     "source": "inbox",
-     "where": [
-      {
-       "column": "kind",
-       "value": "finished"
-      }
-     ]
+     "source": "summary",
+     "measure": "sum:to_review"
     },
     {
      "id": "stuck",
-     "title": "Possibly stuck",
+     "title": "Stuck",
      "viz": "stat",
-     "source": "sessions",
-     "where": [
-      {
-       "column": "state",
-       "value": "stalled?"
-      }
-     ]
+     "source": "summary",
+     "measure": "sum:attention_stuck"
     },
     {
      "id": "leftover",
-     "title": "Leftover processes",
+     "title": "Leftover memory",
      "viz": "stat",
-     "source": "orphans",
-     "measure": "sum:rss_bytes"
+     "source": "summary",
+     "measure": "sum:leftover_bytes"
     },
     {
      "id": "reclaim",
@@ -3285,7 +3281,7 @@
      "id": "memory",
      "title": "Memory used",
      "viz": "stat",
-     "source": "activity",
+     "source": "local_activity",
      "measure": "max:mem_used_bytes",
      "total": "max:mem_total_bytes"
     }
@@ -3468,6 +3464,7 @@
   "local_machine": "studio-id"
  },
  "header_quiet": {
+  "leftover_count": 0,
   "history": {
    "attention": [
     {
@@ -3993,44 +3990,29 @@
      "title": "Need you",
      "description": "Agents waiting on you and machine warnings in effect.",
      "viz": "stat",
-     "source": "inbox",
-     "where": [
-      {
-       "column": "needs_you",
-       "value": "true"
-      }
-     ]
+     "source": "summary",
+     "measure": "sum:need_you"
     },
     {
      "id": "finished",
      "title": "To review",
      "viz": "stat",
-     "source": "inbox",
-     "where": [
-      {
-       "column": "kind",
-       "value": "finished"
-      }
-     ]
+     "source": "summary",
+     "measure": "sum:to_review"
     },
     {
      "id": "stuck",
-     "title": "Possibly stuck",
+     "title": "Stuck",
      "viz": "stat",
-     "source": "sessions",
-     "where": [
-      {
-       "column": "state",
-       "value": "stalled?"
-      }
-     ]
+     "source": "summary",
+     "measure": "sum:attention_stuck"
     },
     {
      "id": "leftover",
-     "title": "Leftover processes",
+     "title": "Leftover memory",
      "viz": "stat",
-     "source": "orphans",
-     "measure": "sum:rss_bytes"
+     "source": "summary",
+     "measure": "sum:leftover_bytes"
     },
     {
      "id": "reclaim",
@@ -4043,7 +4025,7 @@
      "id": "memory",
      "title": "Memory used",
      "viz": "stat",
-     "source": "activity",
+     "source": "local_activity",
      "measure": "max:mem_used_bytes",
      "total": "max:mem_total_bytes"
     }
@@ -4153,79 +4135,20 @@
      ],
      "rows": [
       [
-       25769803776
+       null
       ]
      ]
-    },
-    "trend": [
-     27380416512,
-     28454158336,
-     26575110144,
-     27648851968,
-     25769803776,
-     26843545600,
-     27917287424,
-     26038239232,
-     27111981056,
-     28185722880,
-     26306674688,
-     27380416512,
-     28454158336,
-     26575110144,
-     27648851968,
-     25769803776,
-     26843545600,
-     27917287424,
-     26038239232,
-     27111981056,
-     28185722880,
-     26306674688,
-     27380416512,
-     28454158336,
-     26575110144,
-     27648851968,
-     25769803776,
-     26843545600,
-     27917287424,
-     26038239232,
-     27111981056,
-     28185722880,
-     26306674688,
-     27380416512,
-     28454158336,
-     26575110144,
-     27648851968,
-     25769803776,
-     26843545600,
-     27917287424,
-     26038239232,
-     27111981056,
-     28185722880,
-     26306674688,
-     27380416512,
-     28454158336,
-     26575110144,
-     27648851968,
-     25769803776,
-     26843545600,
-     27917287424,
-     26038239232,
-     27111981056,
-     28185722880,
-     26306674688,
-     27380416512,
-     28454158336,
-     26575110144,
-     27648851968,
-     25769803776
-    ],
-    "total": 34359738368
+    }
    }
   ],
   "observed_at": "2026-03-14T15:00:00Z",
   "local_machine": "studio-id"
  },
  "home": {
+  "leftover_count": 2,
+  "waiting_sessions": [
+   11
+  ],
   "history": {
    "attention": [
     {
@@ -4802,13 +4725,13 @@
     {
      "id": "stuck",
      "title": "Quiet longer than expected",
-     "description": "Busy sessions with no new activity past stalled_after; suspected, not proven.",
+     "description": "Busy sessions with no new activity past stuck_after; suspected, not proven.",
      "viz": "table",
      "source": "sessions",
      "where": [
       {
        "column": "state",
-       "value": "stalled?"
+       "value": "stuck"
       },
       {
        "column": "project",
@@ -4828,7 +4751,7 @@
       "evidence"
      ],
      "sort": "last_activity_at",
-     "empty": "No session looks stuck. A busy session quiet past stalled_after shows here.",
+     "empty": "No session looks stuck. A busy session quiet past stuck_after shows here.",
      "width": 12,
      "height": "s"
     },
@@ -5334,8 +5257,8 @@
        "busy, no output for 34m, CPU idle",
        16,
        "build-id",
-       "~stalled?",
-       "stalled?",
+       "~stuck",
+       "stuck",
        true
       ]
      ]
@@ -5422,7 +5345,7 @@
        ""
       ],
       [
-       "stalled?",
+       "stuck",
        "Migrate billing to the v2 events",
        "harbor",
        "feat/billing-v2",
@@ -5432,7 +5355,7 @@
        2254857830,
        16,
        "build-id",
-       "~stalled?",
+       "~stuck",
        true,
        "busy, no output for 34m, CPU idle"
       ],
@@ -6223,6 +6146,7 @@
   "local_machine": "studio-id"
  },
  "home_quiet": {
+  "leftover_count": 0,
   "history": {
    "attention": [
     {
@@ -6799,13 +6723,13 @@
     {
      "id": "stuck",
      "title": "Quiet longer than expected",
-     "description": "Busy sessions with no new activity past stalled_after; suspected, not proven.",
+     "description": "Busy sessions with no new activity past stuck_after; suspected, not proven.",
      "viz": "table",
      "source": "sessions",
      "where": [
       {
        "column": "state",
-       "value": "stalled?"
+       "value": "stuck"
       },
       {
        "column": "project",
@@ -6825,7 +6749,7 @@
       "evidence"
      ],
      "sort": "last_activity_at",
-     "empty": "No session looks stuck. A busy session quiet past stalled_after shows here.",
+     "empty": "No session looks stuck. A busy session quiet past stuck_after shows here.",
      "width": 12,
      "height": "s"
     },
@@ -7055,7 +6979,7 @@
    {
     "id": "stuck",
     "status": "empty",
-    "message": "No session looks stuck. A busy session quiet past stalled_after shows here.",
+    "message": "No session looks stuck. A busy session quiet past stuck_after shows here.",
     "frame": {
      "columns": [
       {
@@ -7842,6 +7766,10 @@
   "local_machine": "studio-id"
  },
  "inbox": {
+  "leftover_count": 2,
+  "waiting_sessions": [
+   11
+  ],
   "history": {
    "attention": [
     {
@@ -8691,6 +8619,7 @@
   "local_machine": "studio-id"
  },
  "inbox_quiet": {
+  "leftover_count": 0,
   "history": {
    "attention": [
     {
@@ -9344,6 +9273,10 @@
   "local_machine": "studio-id"
  },
  "search": {
+  "leftover_count": 2,
+  "waiting_sessions": [
+   11
+  ],
   "history": {
    "attention": [
     {
@@ -9978,7 +9911,7 @@
       [
        16,
        "Migrate billing to the v2 events",
-       "~stalled?",
+       "~stuck",
        "claude",
        "harbor",
        "feat/billing-v2",
@@ -9987,7 +9920,7 @@
        2254857830,
        "2026-03-14T14:26:00Z",
        "build-id",
-       "stalled?",
+       "stuck",
        true,
        "busy, no output for 34m, CPU idle",
        "",

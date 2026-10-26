@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 import { fleet, fleetEmpty } from "../fixtures/fleet";
 import { fragments } from "../fixtures/fragments";
 import { fleetOf, stateFor } from "./FleetSpec";
+import type { Cell, Fragment, Frame } from "../panels/types";
+
+const frame = (columns: string[], values: Cell[][]): Frame => ({ columns: columns.map(name => ({ name, type: "string" })), rows: values });
+const withFrames = (frames: Record<string, Frame>): Fragment => ({ ...fleetEmpty, results: Object.entries(frames).map(([id, frame]) => ({ id, status: "ok", frame })) });
 
 const GB = 1024 ** 3;
 
@@ -32,16 +36,41 @@ describe("fleetOf", () => {
     expect(s["11"].turns).toEqual(["ok", "waited", "failed"]);
     expect(s["11"].files).toEqual(["src/upload.ts"]);
   });
+  it("preserves unknown disk measurements rather than reporting a full disk", () => {
+    const data = fleetOf(withFrames({ machines: frame(["machine_id", "disk_free_bytes", "disk_total_bytes"], [["missing", null, 500], ["full", 0, 500], ["unknown", null, null]]) }));
+    expect(data.machines[0]).toMatchObject({ diskFree: undefined, diskTotal: 500 });
+    expect(data.machines[1]).toMatchObject({ diskFree: 0, diskTotal: 500 });
+    expect(data.machines[2]).toMatchObject({ diskFree: undefined, diskTotal: undefined });
+  });
+  it("joins flow and inbox rows by machine and session, preserving string identifiers", () => {
+    const fragment = withFrames({
+      sessions: frame(["id", "machine_id", "label"], [["child", "a", "waiting"], ["child", "b", "waiting"]]),
+      flow: frame(["id", "machine_id", "parent_id", "last_tool", "started_at"], [["child", "a", "parent-a", "Edit(a)", "2026-03-14T14:00:00Z"], ["child", "b", "parent-b", "Edit(b)", "2026-03-14T14:30:00Z"]]),
+    });
+    const inbox = withFrames({ inbox: frame(["session_id", "machine_id", "kind", "reason"], [["child", "a", "waiting", "permission-a"], ["child", "b", "waiting", "permission-b"]]) });
+    const data = fleetOf(fragment, inbox);
+    expect(data.sessions[0]).toMatchObject({ machine: "a", parent: "parent-a", lastTool: "Edit(a)", started: "2026-03-14T14:00:00Z", waiting: "permission-a" });
+    expect(data.sessions[1]).toMatchObject({ machine: "b", parent: "parent-b", lastTool: "Edit(b)", started: "2026-03-14T14:30:00Z", waiting: "permission-b" });
+  });
+  it.each(["not json", '{"path":"file.go"}', "null", "42", '["file.go", null, 1]'])("validates edited paths from %s", edited => {
+    const data = fleetOf(withFrames({ sessions: frame(["id", "edited"], [[1, edited]]) }));
+    expect(data.sessions[0].files).toEqual(edited.startsWith("[") ? ["file.go"] : []);
+  });
+  it("reads last_seen as milliseconds before the RFC3339 observation", () => {
+    const data = fleetOf(withFrames({ machines: frame(["machine_id", "last_seen"], [["a", 4_000]]) }));
+    expect(Date.parse(data.machines[0].lastSeen)).toBe(Date.parse(fleetEmpty.observed_at) - 4_000);
+  });
   it("is empty when the service knows no machines", () => {
     expect(fleetOf(fleetEmpty)).toEqual({ machines: [], projects: [], sessions: [] });
   });
 });
 
 describe("stateFor", () => {
-  it("keeps the service's states, reads stalled? as inferred stuck, dead as stuck, and the rest as inferred idle", () => {
+  it("keeps the service's states, reads stuck as inferred stuck, dead as stuck, and the rest as inferred idle", () => {
     expect(stateFor("working")).toEqual({ state: "working", inferred: false });
     expect(stateFor("~working")).toEqual({ state: "working", inferred: true });
-    expect(stateFor("stalled?")).toEqual({ state: "stuck", inferred: true });
+    expect(stateFor("stuck")).toEqual({ state: "stuck", inferred: false });
+    expect(stateFor("~stuck")).toEqual({ state: "stuck", inferred: true });
     expect(stateFor("dead")).toEqual({ state: "stuck", label: "dead", inferred: true });
     expect(stateFor("unknown")).toEqual({ state: "idle", label: "unknown", inferred: true });
   });

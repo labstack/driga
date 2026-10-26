@@ -73,23 +73,35 @@ export function roots(sessions: FleetSession[]): FleetSession[] {
 
 /** overlaps finds pairs of sessions of one project editing the same file,
  * each pair once, with the files they share. */
-export function overlaps(sessions: FleetSession[]): FleetOverlap[] {
-  const out: FleetOverlap[] = [];
-  for (let i = 0; i < sessions.length; i++) {
-    for (let j = i + 1; j < sessions.length; j++) {
-      const a = sessions[i], b = sessions[j];
-      if (a.project !== b.project || !a.files || !b.files) continue;
-      const files = a.files.filter(f => b.files!.includes(f));
-      if (files.length) out.push({ a: a.id, b: b.id, files });
+export function overlapIndex(sessions: FleetSession[]): Map<FleetSession, { with: FleetSession; files: string[] }[]> {
+  const pairs = new Map<FleetSession, Map<FleetSession,string[]>>(sessions.map(s => [s, new Map()]));
+  const owners = new Map<string, FleetSession[]>();
+  for (const s of sessions) for (const file of new Set(s.files ?? [])) {
+    const key = JSON.stringify([s.machine,s.project,file]);
+    const previous = owners.get(key) ?? [];
+    for (const other of previous) {
+      for (const [a,b] of [[s,other],[other,s]]) {
+        const links = pairs.get(a)!;
+        const files = links.get(b) ?? []; files.push(file); links.set(b,files);
+      }
     }
+    previous.push(s); owners.set(key,previous);
   }
-  return out;
+  return new Map([...pairs].map(([s,others]) => [s,[...others].map(([withSession,files]) => ({with:withSession,files}))]));
 }
 
-/** overlapsOf lists the files a session shares with any other session. */
-export function overlapsOf(sessions: FleetSession[], id: string): { with: FleetSession; files: string[] }[] {
-  const byId = new Map(sessions.map(s => [s.id, s]));
-  return overlaps(sessions).filter(o => o.a === id || o.b === id).map(o => ({ with: byId.get(o.a === id ? o.b : o.a)!, files: o.files }));
+export function overlaps(sessions: FleetSession[]): FleetOverlap[] {
+  const index = overlapIndex(sessions);
+  const seen = new Set<FleetSession>();
+  return sessions.flatMap(s => {
+    seen.add(s);
+    return index.get(s)!.filter(o => !seen.has(o.with)).map(o => ({a:s.id,b:o.with.id,files:o.files}));
+  });
+}
+
+export function overlapsOf(sessions: FleetSession[], id: string, machine?: string): { with: FleetSession; files: string[] }[] {
+  const own = sessions.find(s => s.id === id && (machine === undefined || s.machine === machine));
+  return own ? overlapIndex(sessions).get(own)! : [];
 }
 
 /** turnSummary says what the last turns held, for the tracker strip; a
@@ -115,10 +127,6 @@ export function turnCells(session: FleetSession): TrackerCell[] {
 export function turnWords(session: FleetSession): string {
   const { ok, waited, failed } = turnSummary(session);
   return `${ok} went through, ${waited} waited, ${failed} failed`;
-}
-
-export function basename(path: string): string {
-  return path.slice(path.lastIndexOf("/") + 1);
 }
 
 /** sessionCaption is the one mono line under a session's title:

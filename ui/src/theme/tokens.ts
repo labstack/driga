@@ -41,8 +41,8 @@ export const surfaces = {
 /** The interactive accent and the shared status tones, per scheme. The text
  *  roles are the console's, darkened in light only as far as AA needs. */
 export const tones = {
-  light: { brand: roles.light.accent, success: roles.light.working, warning: roles.light.waiting, danger: roles.light.stalled, info: roles.light.idle },
-  dark: { brand: roles.dark.accent, success: roles.dark.working, warning: roles.dark.waiting, danger: roles.dark.stalled, info: roles.dark.idle },
+  light: { brand: roles.light.accent, success: roles.light.working, warning: roles.light.waiting, danger: roles.light.stuck, info: roles.light.idle },
+  dark: { brand: roles.dark.accent, success: roles.dark.working, warning: roles.dark.waiting, danger: roles.dark.stuck, info: roles.dark.idle },
 } as const;
 
 export type Tone = keyof typeof tones.light;

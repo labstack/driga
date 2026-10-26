@@ -37,13 +37,13 @@ export type Column = { name: string; type: "string" | "number" | "time" | "bool"
 
 export type Cell = string | number | boolean | null;
 
-export type Span = { session_id: number; kind: string; from: string | null; to: string | null; reason?: string };
+export type Span = { machine_id: string; session_id: number; kind: string; from: string | null; to: string | null; reason?: string };
 
 export type Frame = { columns: Column[]; rows: Cell[][]; spans?: Span[] };
 
 export type Result = { id: string; status: "ok" | "empty" | "error"; message?: string; frame?: Frame; trend?: (number | null)[]; total?: number | null; title?: string };
 
-export type Fragment = {
+export type Fragment = { leftover_count?: number; waiting_sessions?: number[];
   history: { attention: { ts: string; waiting: number; review: number; stuck: number | null }[] | null; polls: { machine_id: string; ts: string; state: "working" | "waiting" | "stuck" | "idle" | "quiet" | "offline" }[] | null };
   dashboard: Dashboard;
   results: Result[];

@@ -1,7 +1,7 @@
 import "./Fleet.css";
 import { ActionIcon, Badge, Button, ColorSwatch, Group, Table, Text, UnstyledButton, VisuallyHidden } from "@mantine/core";
 import { CaretDown, CaretRight, Desktop, FolderSimple, GitBranch, HardDrives, Laptop, type Icon } from "@phosphor-icons/react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { bytes, exact, plural, relative } from "../panels/format";
 import { AgentChip } from "../widgets/AgentChip";
 import { StatusBadge } from "../widgets/StatusBadge";
@@ -13,14 +13,29 @@ const icons: Record<NonNullable<FleetMachine["kind"]>, Icon> = { desktop: Deskto
 const indent = 20;
 
 /** FleetTree is the Fleet as a table: machine rows that expand into project
- * rows, which hold session rows, with subagents one level deeper. It is the
+ * rows, which hold session rows, with subagents nested under their parents. It is the
  * fully accessible mode: every row and action is a real control, and it
  * needs no pointer. Selecting a row fills the inspector. */
 export function FleetTree({ data, selected, onSelect, onOpen, onReply }: FleetActions & { data: FleetData; selected: FleetSelection | null }) {
   const groups = groupFleet(data);
+  const sessionsByMachine = new Map<string, FleetSession[]>();
+  for (const s of data.sessions) {
+    const own = sessionsByMachine.get(s.machine) ?? [];
+    own.push(s);
+    sessionsByMachine.set(s.machine, own);
+  }
+  const treeRoots = new Set([...sessionsByMachine.values()].flatMap(roots));
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const toggle = (id: string) => setCollapsed(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   const is = (kind: FleetSelection["kind"], id: string) => selected?.kind === kind && selected.id === id;
+  const sessionRows = (s: FleetSession, level: number, ancestors = new Set<FleetSession>()): ReactNode[] => {
+    if (ancestors.has(s)) return [];
+    const path = new Set(ancestors).add(s);
+    return [
+      <SessionRow key={`${s.machine}/${s.id}`} session={s} level={level} selected={is("session", s.id) && (!selected?.machine || selected.machine === s.machine)} onSelect={onSelect} onOpen={onOpen} onReply={onReply} />,
+      ...childrenOf(sessionsByMachine.get(s.machine) ?? [], s.id).flatMap(c => sessionRows(c, level + 1, path)),
+    ];
+  };
   return <Table.ScrollContainer minWidth={760} type="native">
     <Table aria-label="Fleet tree" layout="fixed">
       <Table.Thead>
@@ -41,10 +56,7 @@ export function FleetTree({ data, selected, onSelect, onOpen, onReply }: FleetAc
             <MachineRow key={g.machine.id} group={g} open={open} selected={is("machine", g.machine.id)} onToggle={() => toggle(g.machine.id)} onSelect={onSelect} />,
             ...(open ? g.projects.flatMap(p => [
               <ProjectRow key={`${g.machine.id}/${p.project.id}`} group={p} selected={is("project", p.project.id)} onSelect={onSelect} />,
-              ...roots(p.sessions).flatMap(s => [
-                <SessionRow key={s.id} session={s} level={2} selected={is("session", s.id)} onSelect={onSelect} onOpen={onOpen} onReply={onReply} />,
-                ...childrenOf(data.sessions, s.id).map(c => <SessionRow key={c.id} session={c} level={3} selected={is("session", c.id)} onSelect={onSelect} onOpen={onOpen} onReply={onReply} />),
-              ]),
+              ...p.sessions.filter(s => treeRoots.has(s)).flatMap(s => sessionRows(s, 2)),
             ]) : []),
           ];
         })}
@@ -105,7 +117,7 @@ function SessionRow({ session: s, level, selected, onSelect, onOpen, onReply }: 
     <Table.Td>
       <Group gap={4} wrap="nowrap" pl={indent * level} style={{ minWidth: 0 }}>
         {level > 2 && <Text fz="xs" c="dimmed" aria-hidden>↳</Text>}
-        <UnstyledButton className="fleet-row-title" onClick={() => onSelect({ kind: "session", id: s.id })} aria-pressed={selected} style={{ minWidth: 0 }}>
+        <UnstyledButton className="fleet-row-title" onClick={() => onSelect({ kind: "session", id: s.id, machine: s.machine })} aria-pressed={selected} style={{ minWidth: 0 }}>
           <Text fz="sm" truncate title={s.title}>{s.title}</Text>
         </UnstyledButton>
         <Text fz="xs" c="dimmed" ff="monospace" style={{ flex: "none" }}>#{s.id}</Text>
@@ -117,8 +129,8 @@ function SessionRow({ session: s, level, selected, onSelect, onOpen, onReply }: 
     <Table.Td ta="right"><Text fz="xs" ff="monospace" c="dimmed" title={exact(s.lastActivity)}>{relative(s.lastActivity)}</Text></Table.Td>
     <Table.Td>
       <Group gap={2} wrap="nowrap" justify="flex-end" className="fleet-row-actions">
-        {s.state === "waiting" && <Button size="compact-xs" variant="subtle" onClick={() => onReply(s)}>Reply</Button>}
-        <Button size="compact-xs" variant="subtle" color="gray" onClick={() => onOpen(s)}>Open</Button>
+        {s.state === "waiting" && <Button size="compact-xs" variant="subtle" aria-label={`Reply to ${s.title}`} onClick={() => onReply(s)}>Reply</Button>}
+        <Button size="compact-xs" variant="subtle" color="gray" aria-label={`Open ${s.title}`} onClick={() => onOpen(s)}>Open</Button>
       </Group>
     </Table.Td>
   </Table.Tr>;

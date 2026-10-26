@@ -70,11 +70,11 @@ export function MachineCard({ machine: m, selected, onSelect, onOpen, onReclaim 
       </Group>
     </Group>
     {m.cpuPercent !== undefined && <Stack gap={4}><Text size="xs" c="dimmed">CPU</Text><BarGauge value={m.cpuPercent} max={100} format={n => `${Math.round(n)}%`} label={`CPU on ${m.name}`} /></Stack>}
-    {m.diskTotal ? <Group gap="sm" wrap="wrap" aria-label="Pressure">
+    {m.diskTotal && m.diskFree !== undefined ? <Group gap="sm" wrap="wrap" role="group" aria-label="Pressure">
       <RingGauge value={m.memUsed} max={m.memTotal} format={bytes} label="Memory" caption={bytes(m.memUsed)} size={36} />
-      <RingGauge value={Math.max(0, m.diskTotal - (m.diskFree ?? 0))} max={m.diskTotal} format={bytes} label="Disk" caption={bytes(m.diskTotal - (m.diskFree ?? 0))} size={36} />
+      <RingGauge value={Math.max(0, m.diskTotal - m.diskFree)} max={m.diskTotal} format={bytes} label="Disk" caption={bytes(m.diskTotal - m.diskFree)} size={36} />
     </Group> : <BarGauge value={m.memUsed} max={m.memTotal} format={bytes} label={`Memory on ${m.name}`} />}
-    <Group gap={10} wrap="nowrap" aria-label={liveStates.map(k => `${m.sessions[k]} ${stateWord[k]}`).join(", ")}>
+    <Group gap={10} wrap="nowrap" role="group" aria-label={liveStates.map(k => `${m.sessions[k]} ${stateWord[k]}`).join(", ")}>
       {liveStates.map(k => <Group key={k} gap={3} wrap="nowrap" title={stateWord[k]}>
         <Box aria-hidden style={{ width: 6, height: 6, borderRadius: "50%", background: m.sessions[k] > 0 ? stateVar(k) : "transparent", boxShadow: m.sessions[k] > 0 ? undefined : `inset 0 0 0 1.5px ${stateVar(k)}`, opacity: m.sessions[k] > 0 ? 1 : 0.5 }} />
         <Text size="xs" ff="monospace" lh={1} c={m.sessions[k] > 0 ? undefined : "dimmed"}>{m.sessions[k]}</Text>

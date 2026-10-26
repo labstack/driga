@@ -38,7 +38,7 @@ function splitUnit(text: string): [string, string] {
 
 /** Sparkline is a trend beside a number: no axes, the last point marked,
  * in the accent unless the metric has a color of its own. */
-export function Sparkline({ trend, title, color }: { trend: (number | null)[]; title: string; color?: string }) {
-  const option = useCallback((t: Theme) => sparklineOption(trend, title, t, color), [trend, title, color]);
-  return <Chart option={option} label={`${title} over the last hour`} small />;
+export function Sparkline({ trend, title, color, window = "hour" }: { trend: (number | null)[]; title: string; color?: string; window?: string }) {
+  const option = useCallback((t: Theme) => sparklineOption(trend, title, t, color, window), [trend, title, color, window]);
+  return <Chart option={option} label={`${title} over the last ${window}`} small />;
 }

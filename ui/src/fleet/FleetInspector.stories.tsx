@@ -22,7 +22,7 @@ export const NothingSelected: Story = {
 };
 
 export const WaitingSession: Story = {
-  args: { selection: { kind: "session", id: waitingSession.id } },
+  args: { selection: { kind: "session", id: waitingSession.id, machine: waitingSession.machine } },
   play: async ({ canvas, args }) => {
     await expect(canvas.getByRole("heading", { name: waitingSession.title })).toBeVisible();
     await expect(canvas.getByText("Needs you")).toBeVisible();
@@ -34,19 +34,33 @@ export const WaitingSession: Story = {
 };
 
 export const WorkingSessionWithOverlap: Story = {
-  args: { selection: { kind: "session", id: "112" } },
+  args: {
+    data: { ...busy, sessions: busy.sessions.map(s => s.id === "090" ? { ...s, machine: "studio" } : s) },
+    selection: { kind: "session", id: "112", machine: "studio" },
+  },
+  parameters: { docs: { description: { story: "Two sessions on studio edit the same project-relative file. A matching path on another machine is independent." } } },
   play: async ({ canvas, args }) => {
     await expect(canvas.getByRole("heading", { name: "Fix the flaky lifeline test" })).toBeVisible();
     await expect(canvas.getByText("also #090")).toBeVisible();
     await expect(canvas.queryByRole("button", { name: "Reply" })).toBeNull();
     await userEvent.click(canvas.getByRole("button", { name: "Open" }));
-    await expect(args.onOpen).toHaveBeenCalled();
+    await expect(args.onOpen).toHaveBeenCalledWith(args.data.sessions.find(s => s.id === "112" && s.machine === "studio"));
     await userEvent.unhover(canvas.getByRole("button", { name: "Open" }));
   },
 };
 
+export const SameFileOnAnotherMachine: Story = {
+  args: { selection: { kind: "session", id: "112", machine: "studio" } },
+  parameters: { docs: { description: { story: "The same project-relative path on build-01 does not overlap a file on studio." } } },
+  play: async ({ canvas }) => {
+    await expect(canvas.getByRole("heading", { name: "Fix the flaky lifeline test" })).toBeVisible();
+    await expect(canvas.getByText("internal/lifeline/clock.go")).toBeVisible();
+    await expect(canvas.queryByText(/also #/)).toBeNull();
+  },
+};
+
 export const StuckSession: Story = {
-  args: { selection: { kind: "session", id: "104" } },
+  args: { selection: { kind: "session", id: "104", machine: "studio" } },
   play: async ({ canvas }) => {
     await expect(canvas.getByLabelText("stuck, inferred")).toBeVisible();
     await expect(canvas.getByText("busy, no output for 23m, CPU idle")).toBeVisible();
@@ -56,7 +70,7 @@ export const StuckSession: Story = {
 
 export const AsTheServiceSendsIt: Story = {
   name: "As the service sends it",
-  args: { data: bare, selection: { kind: "session", id: "104" } },
+  args: { data: bare, selection: { kind: "session", id: "104", machine: "studio" } },
   parameters: { docs: { description: { story: "No turns, no files, no start time: the strip, the Files list and the counters that would count them are absent." } } },
   play: async ({ canvas }) => {
     await expect(canvas.queryByRole("img")).toBeNull();
@@ -66,11 +80,11 @@ export const AsTheServiceSendsIt: Story = {
 };
 
 export const Subagent: Story = {
-  args: { selection: { kind: "session", id: "099" } },
+  args: { selection: { kind: "session", id: "099", machine: "build-01" } },
   play: async ({ canvas, args }) => {
     await expect(canvas.getByText("Spawned by")).toBeVisible();
     await userEvent.click(canvas.getByRole("button", { name: /Beacon alert routing/ }));
-    await expect(args.onSelect).toHaveBeenCalledWith({ kind: "session", id: "095" });
+    await expect(args.onSelect).toHaveBeenCalledWith({ kind: "session", id: "095", machine: "build-01" });
     await userEvent.unhover(canvas.getByRole("button", { name: /Beacon alert routing/ }));
   },
 };

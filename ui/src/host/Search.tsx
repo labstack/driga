@@ -76,7 +76,7 @@ export function Search({ list, act, ask, open, onFleet, say }: { list: Summary[]
   const resume = (r: Row) => {
     const title = String(r.title || `Session ${r.id}`);
     if (typeof r.resume !== "string" || !r.resume) { ask(`Tell me about session ${r.id}, "${title}": what it did and what it left uncommitted.`); return; }
-    navigator.clipboard.writeText(r.resume).then(() => say(`Copied the command that resumes ${title}. Paste it in a terminal.`), () => say(`Couldn't copy. Resume with: ${r.resume}`));
+    navigator.clipboard?.writeText(r.resume).then(() => say(`Copied the command that resumes ${title}. Paste it in a terminal.`), () => say(`Couldn't copy. Resume with: ${r.resume}`));
   };
   const boards: SpotlightActionGroupData = { group: "Dashboards", actions: list.map(d => ({ id: `dashboard-${d.id}`, label: d.name, leftSection: <SquaresFour size={16} aria-hidden />, onClick: () => open(d.id) })) };
   const pages: SpotlightActionGroupData = { group: "Pages", actions: onFleet ? [{ id: "page-fleet", label: "Fleet", description: "Every machine, project and session, and where the memory goes", keywords: ["machines", "sessions"], leftSection: <StackIcon size={16} aria-hidden />, onClick: onFleet }] : [] };

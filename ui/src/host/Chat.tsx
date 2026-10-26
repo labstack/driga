@@ -17,13 +17,29 @@ function said(result?: string): boolean {
 
 function ActionCard({ conversation, action }: { conversation: string; action: ChatAction }) {
   const pending = action.status === "pending";
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  const deciding = useRef(false);
+  const decide = async (allow: boolean) => {
+    if (deciding.current) return;
+    deciding.current = true;
+    setBusy(true);
+    setProblem(null);
+    try { await chat.decide(conversation, action.id, allow); }
+    catch (e) {
+      setProblem((e as Error).message);
+      deciding.current = false;
+      setBusy(false);
+    }
+  };
   return <Paper withBorder p="xs" radius="md" style={{ background: "var(--driga-raised)", borderColor: pending ? "var(--mantine-color-warning-filled)" : undefined }}>
     <Text size="sm" fw={600}>{action.title} <Text span size="xs" c="dimmed" fw={400}>· {action.status}</Text></Text>
     {said(action.result) && <Text size="xs" c="dimmed" mt={2}>{action.result}</Text>}
     {pending && <Group gap={6} mt="xs">
-      <Button onClick={() => void chat.decide(conversation, action.id, true)}>Allow</Button>
-      <Button variant="default" onClick={() => void chat.decide(conversation, action.id, false)}>Deny</Button>
+      <Button disabled={busy} aria-label={`Allow ${action.title}`} onClick={() => void decide(true)}>Allow</Button>
+      <Button variant="default" disabled={busy} aria-label={`Deny ${action.title}`} onClick={() => void decide(false)}>Deny</Button>
     </Group>}
+    {problem && <Text size="xs" c="danger" role="alert">{problem}</Text>}
   </Paper>;
 }
 
@@ -80,25 +96,41 @@ export function Chat({ inbox, act, ask, onOpen, onClose }: {
   const [sent, setSent] = useState("");
   const log = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
+  const sending = useRef(false);
   useEffect(() => { if (ask) { setDraft(ask.text); input.current?.focus(); } }, [ask]);
 
   useEffect(() => {
-    chat.history().then(list => { if (list.length) setId(list[0].id); }, () => undefined);
+    let mounted = true;
+    chat.history().then(list => { if (mounted && list.length && !sending.current) setId(current => current ?? list[0].id); }, () => undefined);
+    return () => { mounted = false; };
   }, []);
   useEffect(() => {
     if (!id) return;
     const control = new AbortController();
     let cursor = 0;
     const byId = new Map<string, ChatMessage>();
-    const flush = () => setMessages([...byId.values()].sort((a, b) => a.created_at.localeCompare(b.created_at)));
+    const order: string[] = [];
+    const put = (m: ChatMessage) => {
+      const previous = byId.get(m.id);
+      byId.set(m.id, m);
+      if (previous?.created_at === m.created_at) return;
+      if (previous) order.splice(order.indexOf(m.id), 1);
+      let lo = 0, hi = order.length;
+      while (lo < hi) {
+        const mid = (lo + hi) >>> 1;
+        if (byId.get(order[mid])!.created_at.localeCompare(m.created_at) <= 0) lo = mid + 1; else hi = mid;
+      }
+      order.splice(lo, 0, m.id);
+    };
+    const flush = () => setMessages(order.map(id => byId.get(id)!));
     const receive = (s: ChatState) => {
-      if (s.reset) { byId.clear(); s.messages.forEach(m => byId.set(m.id, m)); setActions(new Map(s.actions.map(a => [a.id, a]))); cursor = s.cursor; }
+      if (s.reset) { byId.clear(); order.length = 0; s.messages.forEach(put); setActions(new Map(s.actions.map(a => [a.id, a]))); cursor = s.cursor; }
       for (const e of s.events ?? []) {
         if (e.seq <= cursor) continue;
         cursor = e.seq;
         if (e.action) setActions(prev => new Map(prev).set(e.action!.id, e.action!));
         if (e.kind === "delta" && e.message_id) { const m = byId.get(e.message_id); if (m) byId.set(m.id, { ...m, text: m.text + (e.text ?? ""), html: "" }); }
-        if (e.message) byId.set(e.message.id, e.message);
+        if (e.message) put(e.message);
       }
       if (s.cursor > cursor) cursor = s.cursor;
       setActive(!!s.active);
@@ -106,7 +138,7 @@ export function Chat({ inbox, act, ask, onOpen, onClose }: {
     };
     (async () => {
       while (!control.signal.aborted) {
-        try { receive(await chat.wait(id, cursor, control.signal)); setProblem(null); }
+        try { const state = await chat.wait(id, cursor, control.signal); if (control.signal.aborted) return; receive(state); setProblem(null); }
         catch { if (control.signal.aborted) return; setProblem("Reconnecting…"); await new Promise(r => setTimeout(r, 1000)); }
       }
     })();
@@ -116,7 +148,8 @@ export function Chat({ inbox, act, ask, onOpen, onClose }: {
 
   const send = async (text: string) => {
     const trimmed = text.trim();
-    if (!trimmed) return;
+    if (!trimmed || sending.current) return;
+    sending.current = true;
     setDraft("");
     try {
       let conversation = id;
@@ -127,7 +160,7 @@ export function Chat({ inbox, act, ask, onOpen, onClose }: {
       // A send that never reached the service gives the text back.
       setDraft(d => d || trimmed);
       setProblem((e as Error).message);
-    }
+    } finally { sending.current = false; }
   };
   const retry = sent && !active ? <Button size="compact-xs" variant="default" onClick={() => void send(sent)}>Retry</Button> : null;
 
@@ -163,7 +196,7 @@ export function Chat({ inbox, act, ask, onOpen, onClose }: {
           if (m.role === "action") { const a = actions.get(m.id); return a && id ? <ActionCard key={m.id} conversation={id} action={a} /> : null; }
           if (m.role === "user") return <Paper key={m.id} px="sm" py={6} radius="lg" maw="85%" style={{ alignSelf: "flex-end", background: "var(--driga-hover)", whiteSpace: "pre-wrap" }}><Text size="sm">{m.text}</Text></Paper>;
           const failed = m.role === "assistant" && m.status === "error" && i === lastReply;
-          return <Box key={m.id} fz="sm" className="markdown" c={failed ? "danger" : undefined}>{m.html ? <div dangerouslySetInnerHTML={{ __html: m.html }} /> : <Text size="sm" c="inherit">{m.text}</Text>}{failed && retry && <Box mt={4}>{retry}</Box>}</Box>;
+          return <Box key={m.id} aria-live={m.role === "assistant" && i === lastReply ? "polite" : undefined} aria-atomic={false} fz="sm" className="markdown" c={failed ? "danger" : undefined}>{m.html ? <div dangerouslySetInnerHTML={{ __html: m.html }} /> : <Text size="sm" c="inherit">{m.text}</Text>}{failed && retry && <Box mt={4}>{retry}</Box>}</Box>;
         })}
         {active && <Text size="xs" c="dimmed">Working…</Text>}
         {problem && <Text size="xs" c="danger">{problem}</Text>}

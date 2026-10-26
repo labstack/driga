@@ -31,14 +31,12 @@ export function stateVar(state: State): string {
 }
 
 /** stateOf reads a session label as the service sends it: a leading ~ marks
- * an inferred one, and "stalled?" is the heuristic form of stuck, so it is
- * stuck and inferred. A label that is no state (dead, unknown, ended) keeps
+ * an inferred one. A label that is no state (dead, unknown, ended) keeps
  * its word and draws neutral. */
 export function stateOf(label: string): { state?: State; label: string; inferred: boolean } {
   const inferred = label.startsWith("~");
   const word = label.replace(/^~/, "");
-  if (word === "stalled?") return { state: "stuck", label: "stuck", inferred: true };
-  const state = word in stateWord ? word as State : undefined;
+  const state = Object.hasOwn(stateWord, word) ? word as State : undefined;
   return { state, label: word, inferred };
 }
 
@@ -78,7 +76,7 @@ export function StatusBadge({ state, variant = "dot", label, inferred, pulse, to
       {word}
     </Badge>;
   }
-  return <Group gap={6} wrap="nowrap" aria-label={name} title={name} style={{ display: "inline-flex" }}>
+  return <Group role="img" gap={6} wrap="nowrap" aria-label={name} title={name} style={{ display: "inline-flex" }}>
     {mark}
     <Text size="xs" fw={500} lh={1.2} style={{ whiteSpace: "nowrap", borderBottom: inferred ? "1px dashed var(--driga-faint)" : undefined }}>{inferred ? `~${word}` : word}</Text>
   </Group>;

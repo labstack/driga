@@ -6,7 +6,7 @@ import { escape, sankey, type Option, type SankeyLink, type SankeyNode, type The
 import { bytes, plural, relative } from "../panels/format";
 import { fonts, typeScale } from "../theme/tokens";
 import { agentLabel } from "../widgets/types";
-import { childrenOf, groupFleet, machinesOfProject, overlapsOf, sortedMachines } from "./FleetModel";
+import { childrenOf, groupFleet, machinesOfProject, overlapIndex, needsYou, sortedMachines } from "./FleetModel";
 import { states, type FleetData, type FleetSelection } from "./FleetTypes";
 
 /** sankeyHeight gives every session row room, and never less than a panel. */
@@ -22,7 +22,9 @@ export function selectionOf(params: { dataType?: string; name?: string; data?: u
   const [prefix, id] = [name.slice(0, 2), name.slice(2)];
   if (prefix === "m:" || prefix === "l:") return { kind: "machine", id };
   if (prefix === "p:") return { kind: "project", id };
-  if (prefix === "s:") return { kind: "session", id };
+  if (prefix === "s:") {
+    try { const key: unknown = JSON.parse(id); if (Array.isArray(key) && key.length === 2 && key.every(x => typeof x === "string")) return { kind:"session", machine:key[0],id:key[1] }; } catch { /* Invalid chart identity selects nothing. */ }
+  }
   return null;
 }
 
@@ -40,6 +42,7 @@ function rich(text: string): string {
 export function fleetSankey(data: FleetData, t: Theme): Option {
   const c = { ...t.states, brand: t.brand, machine: t.line, leftover: t.muted };
   const groups = groupFleet(data);
+  const overlaps = overlapIndex(data.sessions);
   const machines = sortedMachines(data.machines);
   const projects = [...new Set(data.sessions.map(s => s.project))].map(id => data.projects.find(p => p.id === id) ?? { id, name: id, repo: "" }).sort((a, b) => a.name.localeCompare(b.name));
   const total = data.sessions.reduce((n, s) => n + s.memory, 0) + machines.reduce((n, m) => n + (m.leftover?.memory ?? 0), 0);
@@ -86,11 +89,11 @@ export function fleetSankey(data: FleetData, t: Theme): Option {
       if (!pg) continue;
       links.push({ source: `m:${g.machine.id}`, target: `p:${p.id}`, value: Math.max(pg.memory, floor), tip: `${escape(g.machine.name)} → ${escape(p.name)}: ${escape(bytes(pg.memory))} in ${plural(pg.sessions.length, "session")}`, lineStyle: pg.waiting ? needs : quiet });
       for (const s of pg.sessions) {
-        const kids = childrenOf(data.sessions, s.id).length;
-        const shared = overlapsOf(data.sessions, s.id);
+        const kids = childrenOf(data.sessions.filter(x => x.machine === s.machine), s.id).length;
+        const shared = overlaps.get(s) ?? [];
         const marks = `${kids ? ` {dim|↳${kids}}` : ""}${shared.length ? " {bang|!}" : ""}`;
         nodes.push({
-          name: `s:${s.id}`, depth: 2,
+          name: `s:${JSON.stringify([s.machine,s.id])}`, depth: 2,
           text: `${rich(s.title)}${marks}{dim| · ${rich(s.agent)} · ${bytes(s.memory)}}`,
           tip: [
             `<b>${escape(s.title)}</b>`,
@@ -103,15 +106,15 @@ export function fleetSankey(data: FleetData, t: Theme): Option {
           ].filter(Boolean).join("<br>"),
           itemStyle: { color: c[s.state] },
         });
-        links.push({ source: `p:${p.id}`, target: `s:${s.id}`, value: Math.max(s.memory, floor), tip: `${escape(p.name)} → ${escape(s.title)}: ${escape(bytes(s.memory))}`, lineStyle: s.state === "waiting" ? needs : quiet });
+        links.push({ source: `p:${p.id}`, target: `s:${JSON.stringify([s.machine,s.id])}`, value: Math.max(s.memory, floor), tip: `${escape(p.name)} → ${escape(s.title)}: ${escape(bytes(s.memory))}`, lineStyle: s.state === "waiting" ? needs : quiet });
       }
     }
   }
 
-  const need = data.sessions.filter(s => s.state === "waiting" || s.state === "stuck").length;
+  const need = needsYou(data.sessions);
   return sankey({
     nodes, links,
-    description: `Fleet flow: ${plural(machines.length, "machine")}, ${plural(projects.length, "project")}, ${plural(data.sessions.length, "session")}, ${need} needing you. Link width is memory, node colour is state.`,
+    description: `Fleet flow: ${plural(machines.length, "machine")}, ${plural(projects.length, "project")}, ${plural(data.sessions.length, "session")}, ${need} needing you. Link width is memory, with a minimum width for visibility; node colour is state.`,
     rich: { dim: { color: t.muted, fontFamily: fonts.mono, fontSize: typeScale.small }, bang: { color: c.stuck, fontWeight: 700, fontFamily: fonts.mono, fontSize: typeScale.small } },
   }, t);
 }

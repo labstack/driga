@@ -161,12 +161,12 @@ export function timeseries(frame: Frame, panel: Panel, t: Theme): Option {
 
 /** sparkline draws a stat's trend: no axes or labels, the last point
  * marked, in the accent unless the metric has a color of its own. */
-export function sparkline(trend: (number | null)[], title: string, t: Theme, color?: string): Option {
+export function sparkline(trend: (number | null)[], title: string, t: Theme, color?: string, window = "hour"): Option {
   const line = color ?? t.brand;
   const points = trend.map((n, i) => [i, n]);
   return {
     animation: false,
-    aria: { enabled: true, label: { description: `${title} over the last hour` } },
+    aria: { enabled: true, label: { description: `${title} over the last ${window}` } },
     grid: { left: 1, right: 3, top: 3, bottom: 3 },
     xAxis: { type: "value", show: false, min: 0, max: Math.max(1, trend.length - 1) },
     yAxis: { type: "value", show: false, scale: true },

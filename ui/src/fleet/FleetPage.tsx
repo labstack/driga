@@ -20,16 +20,19 @@ export function FleetPage({ fragment, inbox, act }: {
   act?: Act;
 }) {
   const data = useMemo(() => fragment ? fleetOf(fragment, inbox) : null, [fragment, inbox]);
+  const kept = useMemo(() => historyOf(fragment), [fragment]);
+  const servedStrips = useMemo(() => data ? stripsOf(kept, machinesOf(data, kept.polls)) : {}, [kept,data]);
+  const { projects,cols,values } = useMemo(() => {
+    const hours = rows(fragment?.results.find(r => r.id === "heatmap")?.frame);
+    const projects = [...new Set(hours.map(r => String(r.series)))];
+    const times = [...new Set(hours.map(r => String(r.ts)))].sort();
+    const byTime = new Map(hours.map(r => [JSON.stringify([r.series,r.ts]),Number(r.value ?? 0)]));
+    return {projects,cols:times.map(t => new Date(t).toLocaleTimeString([], { hour: "2-digit", hour12: false })),values:projects.map(p => times.map(t => byTime.get(JSON.stringify([p,t])) ?? 0))};
+  }, [fragment]);
   if (!data) return <Text size="sm" c="dimmed">Loading…</Text>;
-  const open = (s: FleetSession) => { if (act) void act({ kind: "jump", row: { session_id: Number(s.id), machine_id: s.machine } }); };
-  const kept = historyOf(fragment);
-  const servedStrips = stripsOf(kept, machinesOf(data, kept.polls));
-  const hours = rows(fragment?.results.find(r => r.id === "heatmap")?.frame);
-  const projects = [...new Set(hours.map(r => String(r.series)))];
-  const times = [...new Set(hours.map(r => String(r.ts)))].sort();
-  const values = projects.map(p => times.map(t => Number(hours.find(r => r.series === p && r.ts === t)?.value ?? 0)));
+  const open = (s: FleetSession) => { const id=Number(s.id); if (act && Number.isSafeInteger(id) && id > 0) void act({ kind:"jump",row:{session_id:id,machine_id:s.machine} }); };
   return <Stack gap="sm" style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
     <Box style={{ flex: 1, minHeight: 600 }}><FleetSankey {...data} strips={servedStrips} onSelect={() => undefined} onOpen={open} onReply={open} /></Box>
-    {projects.length > 0 && <Box py="sm"><Text size="xs" fw={600} c="dimmed" mb={6}>Tool calls by project · last 24 hours</Text><Heatmap rows={projects} cols={times.map(t => new Date(t).toLocaleTimeString([], { hour: "2-digit", hour12: false }))} values={values} format={String} unit="tool calls" label="Tool calls by project, last 24 hours" /></Box>}
+    {projects.length > 0 && <Box py="sm"><Text size="xs" fw={600} c="dimmed" mb={6}>Tool calls by project · last 24 hours</Text><Heatmap rows={projects} cols={cols} values={values} format={String} unit="tool calls" label="Tool calls by project, last 24 hours" /></Box>}
   </Stack>;
 }

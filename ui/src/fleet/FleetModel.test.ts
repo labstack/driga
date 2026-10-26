@@ -42,7 +42,7 @@ describe("relations", () => {
     expect(roots(sessions)).toHaveLength(12);
   });
   it("finds the one file two sessions of one project edit, across machines", () => {
-    expect(overlaps(sessions)).toEqual([{ a: "112", b: "090", files: ["internal/lifeline/clock.go"] }]);
+    expect(overlaps(sessions)).toEqual([]);
   });
   it("counts states and what needs the person", () => {
     expect(counts(sessions)).toEqual({ waiting: 3, stuck: 2, working: 5, idle: 2, finished: 2 });

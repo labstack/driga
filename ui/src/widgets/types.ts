@@ -27,7 +27,7 @@ export const agentName: Record<Agent, string> = { claude: "Claude Code", codex: 
 /** agentOf reads the family of an adapter name the service sends, if it is
  * one Driga knows; an unknown family draws as neutral. */
 export function agentOf(name: string | undefined): Agent | undefined {
-  return name && name in agentName ? name as Agent : undefined;
+  return name && Object.hasOwn(agentName, name) ? name as Agent : undefined;
 }
 
 /** agentLabel names an agent family, or repeats an unknown adapter's name. */

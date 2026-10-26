@@ -31,6 +31,8 @@ const json = (value: unknown, status = 200) => new Response(JSON.stringify(value
 export function fakeService(o: ServiceOptions = {}): Service {
   const open: Record<string, Fragment> = { header: fragments.header, home: fragments.home, ...o.open };
   let waited = false;
+  let confirmation = 0;
+  const tokens = new Map<string,string>();
   return async (input, init) => {
     const url = new URL(String(input instanceof Request ? input.url : input), "http://story.invalid");
     const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : undefined;
@@ -51,8 +53,21 @@ export function fakeService(o: ServiceOptions = {}): Service {
       case "/app/api/list": return json({ dashboards: Object.keys(open).filter(id => id !== "header").map(id => ({ id, name: open[id].dashboard.name, panels: open[id].dashboard.panels.length, version: 1 })) });
       case "/app/api/edit": case "/app/api/create": return json({ ...open[String(body?.id ?? "home")] ?? fragments.home, version: 2 });
       case "/app/api/delete": return json({ ok: true });
-      case "/app/action": return json({ ok: true });
-      case "/app/confirm": return json({ confirmed: true });
+      case "/app/action": {
+        const {token,...request}=body ?? {};
+        if (request.action === "kill" || request.action === "cleanup" || request.action === "ack_inbox" && request.all) {
+          const approved=typeof token === "string" ? tokens.get(token) : undefined;
+          if (typeof token === "string") tokens.delete(token);
+          if (approved !== JSON.stringify(request)) return json({error:"Confirm the action first"},403);
+        }
+        return json({ok:true});
+      }
+      case "/app/confirm": {
+        if (!body?.request) return json({confirmed:true});
+        const token=`story-confirmation-${++confirmation}`;
+        tokens.set(token,JSON.stringify(body.request));
+        return json({confirmed:true,token});
+      }
       case "/chat/api/history": return json(o.chat ? [{ id: o.chat.conversation.id }] : []);
       case "/chat/api/prompts": return json(o.prompts ?? []);
       case "/chat/api/new": return json({ id: "conversation-1" });

@@ -62,7 +62,7 @@ export type FleetSession = {
   waiting?: string;
 };
 
-export type FleetSelection = { kind: "machine" | "project" | "session"; id: string };
+export type FleetSelection = { kind: "machine" | "project" | "session"; id: string; machine?: string };
 
 export type FleetData = { machines: FleetMachine[]; projects: FleetProject[]; sessions: FleetSession[] };
 

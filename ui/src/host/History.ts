@@ -8,5 +8,5 @@ export function historyOf(fragment: Fragment | null): Kept {
   const attention = fragment.history.attention ?? [];
   const polls: Kept["polls"] = {};
   for (const p of fragment.history.polls ?? []) (polls[p.machine_id] ??= []).push(p.state);
-  return { attention: Object.fromEntries(attentionKinds.map(k => [k, attention.map(p => p[k]).filter((n): n is number => n !== null)])) as Kept["attention"], polls };
+  return { attention: Object.fromEntries(attentionKinds.map(k => [k, attention.map(p => p[k])])) as Kept["attention"], polls };
 }

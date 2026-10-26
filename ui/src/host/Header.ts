@@ -5,7 +5,7 @@ import { Eye, HandWaving, Hourglass, type Icon } from "@phosphor-icons/react";
 import type { ReactNode } from "react";
 import type { FleetData } from "../fleet/FleetTypes";
 import { bytes, relative } from "../panels/format";
-import type { Fragment } from "../panels/types";
+import type { Prompt, Fragment } from "../panels/types";
 import type { Polarity } from "../widgets/DeltaChip";
 import type { Machine as MachineCard } from "../widgets/MachineCard";
 import { liveStates, type LiveState } from "../widgets/types";
@@ -28,7 +28,7 @@ export const kinds: Record<AttentionKind, { label: string; tone: "warning" | "in
 
 /** One attention count: its value now, its readings over the last hour
  * and its change over that hour. */
-export type Attention = { count: number; trend: number[]; delta: number };
+export type Attention = { count: number; trend: (number | null)[]; delta: number };
 
 /** One poll of a machine: its worst session state then, quiet when it ran
  * none, offline when Driga could not reach it. */
@@ -52,8 +52,8 @@ export type Machine = {
 export type LocalMemory = { machine: string; used: number; total: number; trend: (number | null)[]; delta: number };
 
 /** Chores rather than alarms: leftover process trees and what they hold,
- * and the bytes a cleanup would reclaim. The count is known only when the
- * fleet has been read. */
+ * and the bytes a cleanup would reclaim. The count comes directly from the service, independently of the
+ * paginated Fleet tables. */
 export type Hygiene = { leftover: { count?: number; bytes: number }; reclaimable: number };
 
 export type HeaderData = {
@@ -151,14 +151,14 @@ export function stat(fragment: Fragment, id: string): number | null {
 }
 
 /** History served by the service: each attention count's last hour and each machine's last polls. */
-export type Kept = { attention: Record<AttentionKind, number[]>; polls: Record<string, Poll[]> };
+export type Kept = { attention: Record<AttentionKind, (number | null)[]>; polls: Record<string, Poll[]> };
 
 export const nothingKept: Kept = { attention: { waiting: [], review: [], stuck: [] }, polls: {} };
 
 /** counts reads the three attention counts the header fragment and Chat's
  * prompts give: waits plus prompts, finished turns, sessions that look stuck. */
-export function counts(header: Fragment, prompts: number): Record<AttentionKind, number> {
-  return { waiting: (stat(header, "waiting") ?? 0) + prompts, review: stat(header, "finished") ?? 0, stuck: stat(header, "stuck") ?? 0 };
+export function counts(header: Fragment, prompts: Prompt[]): Record<AttentionKind, number> {
+  return { waiting: (stat(header, "waiting") ?? 0) + prompts.filter(p => !p.session_id || !header.waiting_sessions?.includes(p.session_id)).length, review: stat(header, "finished") ?? 0, stuck: stat(header, "stuck") ?? 0 };
 }
 
 /** machineOf reads one fleet machine with its sessions by state. */
@@ -178,21 +178,20 @@ export function pollOf(m: Machine): Poll {
  * and memory, the fleet's machines, Chat's prompts, and the service history.
  * Without the fleet the header still shows its counts, with the local
  * machine named by its id and no dots. */
-export function headerOf(header: Fragment, fleet: FleetData | null, prompts: number, kept: Kept): HeaderData {
+export function headerOf(header: Fragment, fleet: FleetData | null, prompts: Prompt[], kept: Kept): HeaderData {
   const now = counts(header, prompts);
   const attention = Object.fromEntries(attentionKinds.map(k => {
     const trend = kept.attention[k];
-    return [k, { count: now[k], trend, delta: trend.length > 1 ? trend[trend.length - 1] - trend[0] : 0 }];
+    return [k, { count: now[k], trend, delta: trend.length > 1 && trend[trend.length - 1] !== null && trend[0] !== null ? trend[trend.length - 1]! - trend[0]! : 0 }];
   })) as Record<AttentionKind, Attention>;
   const machines = fleet ? machinesOf(fleet, kept.polls) : [];
   const local = machines.find(m => m.local) ?? fleet?.machines.find(m => m.id === header.local_machine);
   const memory = header.results.find(r => r.id === "memory");
   const trend = memory?.trend ?? [];
   const known = trend.filter((n): n is number => typeof n === "number");
-  const leftoverTrees = fleet?.machines.reduce((n, m) => n + (m.leftover?.trees ?? 0), 0);
   return {
     attention,
-    hygiene: { leftover: { count: fleet ? leftoverTrees : undefined, bytes: stat(header, "leftover") ?? 0 }, reclaimable: stat(header, "reclaim") ?? 0 },
+    hygiene: { leftover: { count: header.leftover_count, bytes: stat(header, "leftover") ?? 0 }, reclaimable: stat(header, "reclaim") ?? 0 },
     memory: { machine: local?.name ?? header.local_machine ?? "this machine", used: stat(header, "memory") ?? 0, total: memory?.total ?? 0, trend, delta: known.length > 1 ? known[known.length - 1] - known[0] : 0 },
     machines,
     checkedAt: header.observed_at,

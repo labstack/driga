@@ -101,7 +101,7 @@ export function SessionCard({ session: s, compact, selected, onOpen, onApprove }
       </Stack>
       <Stack gap={6} w={140} align="stretch" justify="space-between" style={{ flex: "none" }}>
         <Box h={36} w={120} style={{ alignSelf: "flex-end" }} title="Tool calls per minute, last 30 minutes">
-          {s.trend && s.trend.length > 1 ? <Sparkline trend={s.trend} title={`${s.title}: tool calls per minute`} color={line} /> : <Text size="xs" c="dimmed" ta="right">no calls yet</Text>}
+          {s.trend && s.trend.length > 1 ? <Sparkline window="30 minutes" trend={s.trend} title={`${s.title}: tool calls per minute`} color={line} /> : <Text size="xs" c="dimmed" ta="right">no calls yet</Text>}
         </Box>
         {action && <Box style={{ alignSelf: "flex-end" }}>{action}</Box>}
       </Stack>

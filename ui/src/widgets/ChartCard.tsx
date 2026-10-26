@@ -15,6 +15,8 @@ import { value } from "../panels/format";
 import { timeSeries, type Event, type Series, type Wait } from "./charts";
 import { EmptyState } from "./EmptyState";
 
+const EMPTY_SERIES: Series[] = [];
+
 export type Range = "1h" | "6h" | "24h";
 
 export type ChartCardProps = {
@@ -55,12 +57,12 @@ export type ChartCardProps = {
 
 const ranges: Range[] = ["1h", "6h", "24h"];
 
-export function ChartCard({ id, title, info, caption, range, onRange, series = [], from = 0, to = 0, unit, waits, events, peak, option: given, state = "ready", message, onRetry, actions, children, height = 200, headingOrder = 3, headerClassName }: ChartCardProps) {
+export function ChartCard({ id, title, info, caption, range, onRange, series = EMPTY_SERIES, from = 0, to = 0, unit, waits, events, peak, option: given, state = "ready", message, onRetry, actions, children, height = 200, headingOrder = 3, headerClassName }: ChartCardProps) {
   const own = useId();
   const headingId = id ? `panel-${id}` : own;
   const format = useCallback((n: number) => value(n, unit), [unit]);
   const label = info ? `${title}: ${info}` : title;
-  const shown = state === "empty" ? [] : series;
+  const shown = state === "empty" ? EMPTY_SERIES : series;
   const option = useCallback((t: Theme) => given ? given(t) : timeSeries({ series: shown, from, to, unit, format, waits, events, peak, label }, t), [given, shown, from, to, unit, format, waits, events, peak, label]);
   const fill = height === "fill";
   const px = fill ? undefined : height;
