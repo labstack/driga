@@ -25,6 +25,7 @@ type Reader interface {
 	Summaries(int64) ([]model.Summary, error)
 	SessionFiles(time.Time) (map[int64][]model.FileTouch, error)
 	PanelEvents(string, string, time.Time) ([]model.Event, error)
+	AllPanelEvents(time.Time) ([]model.Event, error)
 	Events(string, string, time.Time) ([]model.Event, error)
 	RecentEvents(time.Time, int) ([]model.Event, error)
 	Inbox(time.Time, bool) ([]model.InboxItem, error)
@@ -329,7 +330,7 @@ type SummaryView struct {
 	Agents    int                 `json:"agents"`
 	Working   int                 `json:"working"`
 	Waiting   int                 `json:"waiting"`
-	Stalled   int                 `json:"stalled"`
+	Stuck     int                 `json:"stuck"`
 	Inbox     int                 `json:"inbox"`
 	Sample    model.MachineSample `json:"sample"`
 	Orphans   int                 `json:"orphans"`
@@ -354,7 +355,7 @@ type MachineFresh struct {
 
 // MachineRow lists a known machine, cached counts, and clock health.
 type MachineRow struct {
-	Sample model.MachineSample `json:"sample"`
+	Sample *model.MachineSample `json:"sample"`
 	model.Machine
 	Agents      int           `json:"agents"`
 	Inbox       int           `json:"inbox"`

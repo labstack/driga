@@ -21,7 +21,7 @@ func TestFlowSharedDefault(t *testing.T) {
 }
 
 func TestFlowDefaultAttentionOrder(t *testing.T) {
-	for _, labels := range [][2]string{{"waiting", "stalled"}, {"stalled", "working"}, {"working", "finished"}} {
+	for _, labels := range [][2]string{{"waiting", "stuck"}, {"stuck", "working"}, {"working", "finished"}} {
 		t.Run(labels[0]+"_before_"+labels[1], func(t *testing.T) {
 			var want int64
 			st := fixture(t, func(tx *store.Tx) error {

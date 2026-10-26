@@ -1,7 +1,8 @@
 package collector
 
 import (
-	"os"
+	"context"
+	"github.com/labstack/driga/internal/store"
 	"path/filepath"
 	"testing"
 
@@ -16,7 +17,7 @@ func TestChatOwnSessionIsNotCollected(t *testing.T) {
 	chat.ExternalID, chat.PID, chat.Title = "chat", 0, model.ChatPreamble+" Explain collected state"
 	// Before its first prompt is read, Chat is known by where it runs.
 	data := t.TempDir()
-	if err := os.WriteFile(filepath.Join(data, "chat.key"), []byte("k"), 0o600); err != nil {
+	if err := st.SaveConversation(context.Background(), store.Conversation{ID: "our-chat", SessionID: "chat", CreatedAt: d.now(), UpdatedAt: d.now()}); err != nil {
 		t.Fatal(err)
 	}
 	early := a.obs[0]
@@ -27,7 +28,7 @@ func TestChatOwnSessionIsNotCollected(t *testing.T) {
 	for _, s := range sessions(t, st) {
 		ids = append(ids, s.ExternalID)
 	}
-	if len(ids) != 1 || ids[0] != "one" {
-		t.Fatalf("sessions = %v, want only the person's agent", ids)
+	if len(ids) != 2 || ids[0] == "chat" || ids[1] == "chat" {
+		t.Fatalf("sessions = %v, want the person's agents, including their project named chat", ids)
 	}
 }

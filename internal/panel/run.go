@@ -52,14 +52,16 @@ type Result struct {
 // Fragment is a dashboard with its results: what a tool returns and an MCP
 // App or the app's dashboard renders.
 type Fragment struct {
-	History    view.PanelHistoryView `json:"history"`
-	Dashboard  Dashboard             `json:"dashboard"`
-	Results    []Result              `json:"results"`
-	Vars       map[string]string     `json:"vars,omitempty"`
-	Options    map[string][]string   `json:"options,omitempty"`
-	ObservedAt string                `json:"observed_at"`
-	ID         string                `json:"id,omitempty"`
-	Version    int                   `json:"version,omitempty"`
+	LeftoverCount   int                   `json:"leftover_count"`
+	WaitingSessions []int64               `json:"waiting_sessions,omitempty"`
+	History         view.PanelHistoryView `json:"history"`
+	Dashboard       Dashboard             `json:"dashboard"`
+	Results         []Result              `json:"results"`
+	Vars            map[string]string     `json:"vars,omitempty"`
+	Options         map[string][]string   `json:"options,omitempty"`
+	ObservedAt      string                `json:"observed_at"`
+	ID              string                `json:"id,omitempty"`
+	Version         int                   `json:"version,omitempty"`
 	// LocalMachine is the machine the app runs on; actions act only there.
 	LocalMachine string `json:"local_machine"`
 }
@@ -85,7 +87,7 @@ func Run(snap viewer.Snapshot, req RunRequest) (Fragment, error) {
 		base[source] = r
 		return r
 	}
-	f := Fragment{History: snap.PanelHistory, Dashboard: req.Dashboard, Results: []Result{}, Vars: vars, Options: options(req.Dashboard, rows), ObservedAt: snap.ObservedAt.UTC().Format(time.RFC3339), LocalMachine: snap.LocalMachineID}
+	f := Fragment{LeftoverCount: view.HeaderCounts(snap.Inbox, snap.Agents, snap.Orphans, snap.Summary).Leftover, WaitingSessions: view.WaitingSessions(snap.Inbox, snap.LocalMachineID), History: snap.PanelHistory, Dashboard: req.Dashboard, Results: []Result{}, Vars: vars, Options: options(req.Dashboard, rows), ObservedAt: snap.ObservedAt.UTC().Format(time.RFC3339), LocalMachine: snap.LocalMachineID}
 	for _, p := range req.Dashboard.Panels {
 		if len(req.Panels) > 0 && !slices.Contains(req.Panels, p.ID) {
 			continue
@@ -153,7 +155,7 @@ func runPanel(p Panel, vars map[string]string, rows func(string) [][]any) Result
 		frame = timeseries(s, data, p)
 	case p.Viz == "timeline":
 		frame = timeline(s, data, p, rows("waits"))
-	case p.By != "":
+	case p.By != "" && (p.Viz == "bar" || p.Viz == "table"):
 		frame = grouped(s, data, p)
 	default:
 		frame = project(s, data, p)
@@ -232,7 +234,12 @@ func match(cell any, op, value string) bool {
 	case "ne":
 		return text != value
 	case "in":
-		return slices.Contains(strings.Split(value, ","), text)
+		for _, item := range strings.Split(value, ",") {
+			if strings.TrimSpace(item) == text {
+				return true
+			}
+		}
+		return false
 	case "contains":
 		return strings.Contains(strings.ToLower(text), strings.ToLower(value))
 	case "gt", "lt":
@@ -483,16 +490,17 @@ func timeline(s schema, data [][]any, p Panel, waits [][]any) Frame {
 		}
 	}
 	frame := project(s, data, p)
-	shown := map[float64]bool{}
+	shown := map[sessionKey]bool{}
+	machine := slices.IndexFunc(frame.Columns, func(c Column) bool { return c.Name == "machine_id" })
 	id := slices.IndexFunc(frame.Columns, func(c Column) bool { return c.Name == "id" })
 	for _, r := range frame.Rows {
 		if n, ok := r[id].(float64); ok {
-			shown[n] = true
+			shown[sessionKey{fmt.Sprint(r[machine]), int64(n)}] = true
 		}
 	}
 	for _, w := range waits {
-		if n, ok := w[0].(float64); ok && shown[n] {
-			frame.Spans = append(frame.Spans, Span{SessionID: n, Kind: "waiting", From: w[6], To: w[7], Reason: fmt.Sprint(w[4])})
+		if n, ok := w[0].(float64); ok && shown[sessionKey{fmt.Sprint(w[9]), int64(n)}] {
+			frame.Spans = append(frame.Spans, Span{SessionID: n, MachineID: fmt.Sprint(w[9]), Kind: "waiting", From: w[6], To: w[7], Reason: fmt.Sprint(w[4])})
 		}
 	}
 	return frame

@@ -9,7 +9,7 @@ import (
 )
 
 // Attention keeps the newest unacknowledged event and the session identity together.
-// Inbox is nil for a waiting/stalled session with no unacknowledged event.
+// Inbox is nil for a waiting/stuck session with no unacknowledged event.
 type Attention struct {
 	MachineID                                                string
 	ID                                                       int64
@@ -24,7 +24,7 @@ type sessionKey struct {
 }
 
 // NeedsYou selects one item per machine/session, newest first. Current waiting
-// and stalled sessions remain visible even when no inbox event was collected.
+// and stuck sessions remain visible even when no inbox event was collected.
 func NeedsYou(inbox []InboxRow, agents []AgentRow, details map[int64]AgentView) []Attention {
 	items := map[sessionKey]Attention{}
 	rows := map[sessionKey]AgentRow{}
@@ -49,7 +49,7 @@ func NeedsYou(inbox []InboxRow, agents []AgentRow, details map[int64]AgentView) 
 	}
 	for key, a := range rows {
 		state := strings.TrimSuffix(strings.TrimPrefix(a.Label, "~"), "?")
-		if _, ok := items[key]; ok || state != "waiting" && state != "stalled" {
+		if _, ok := items[key]; ok || state != "waiting" && state != "stuck" {
 			continue
 		}
 		at := a.LastActivityAt
@@ -99,7 +99,7 @@ func NeedsYou(inbox []InboxRow, agents []AgentRow, details map[int64]AgentView) 
 		if label == "" {
 			label = a.Label
 		}
-		if state := strings.TrimSuffix(strings.TrimPrefix(label, "~"), "?"); state == "waiting" || state == "stalled" {
+		if state := strings.TrimSuffix(strings.TrimPrefix(label, "~"), "?"); state == "waiting" || state == "stuck" {
 			item.State = label
 		}
 		if item.Summary == "" {
@@ -187,7 +187,7 @@ func StateCounts(agents []AgentRow) []StateCount {
 		counts[strings.TrimSuffix(strings.TrimPrefix(a.Label, "~"), "?")]++
 	}
 	result := []StateCount{}
-	for _, label := range []string{"working", "waiting", "stalled", "idle", "finished", "ended", "dead", "unknown"} {
+	for _, label := range []string{"working", "waiting", "stuck", "idle", "finished", "ended", "dead", "unknown"} {
 		if counts[label] > 0 {
 			result = append(result, StateCount{label, counts[label]})
 		}

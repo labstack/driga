@@ -1,6 +1,7 @@
 package view
 
 import (
+	"fmt"
 	"github.com/labstack/driga/internal/model"
 	"time"
 )
@@ -26,7 +27,7 @@ type PanelHistoryView struct {
 // AttentionAt reconstructs unread completions (one per session), waits and
 // active machine warnings at a historical instant, including later acknowledgments.
 func AttentionAt(items []model.InboxItem, at time.Time) (waiting, review int) {
-	finished := map[int64]bool{}
+	finished := map[string]bool{}
 	for _, i := range items {
 		if i.TS.After(at) || i.AckedAt != nil && !i.AckedAt.After(at) || i.EndedAt != nil && !i.EndedAt.After(at) {
 			continue
@@ -34,7 +35,11 @@ func AttentionAt(items []model.InboxItem, at time.Time) (waiting, review int) {
 		switch i.Kind {
 		case "finished":
 			if !i.TS.Before(at.Add(-24 * time.Hour)) {
-				finished[i.SessionID] = true
+				key := fmt.Sprintf("%s/%d", i.MachineID, i.SessionID)
+				if i.SessionID == 0 {
+					key = i.MachineID + "/item/" + i.ID
+				}
+				finished[key] = true
 			}
 		case "waiting":
 			waiting++
@@ -78,7 +83,16 @@ func PanelHistory(r Reader, f Filter, now time.Time) (PanelHistoryView, error) {
 			p.Waiting += w
 			for _, prompt := range prompts {
 				if !prompt.StartedAt.After(at) && (prompt.EndedAt == nil || prompt.EndedAt.After(at)) {
-					p.Waiting++
+					duplicate := false
+					for _, item := range items {
+						if prompt.SessionID > 0 && item.SessionID == prompt.SessionID && item.Kind == "waiting" && !item.TS.After(at) && (item.EndedAt == nil || item.EndedAt.After(at)) && (item.AckedAt == nil || item.AckedAt.After(at)) {
+							duplicate = true
+							break
+						}
+					}
+					if !duplicate {
+						p.Waiting++
+					}
 				}
 			}
 			p.Review += review
@@ -88,10 +102,10 @@ func PanelHistory(r Reader, f Filter, now time.Time) (PanelHistoryView, error) {
 					j = n
 				}
 			}
-			if j < 0 {
+			if j < 0 || at.Sub(polls[j].TS) >= time.Minute {
 				unknownStuck[i] = true
 			}
-			if j >= 0 {
+			if j >= 0 && at.Sub(polls[j].TS) < time.Minute {
 				if p.Stuck == nil {
 					p.Stuck = new(int)
 				}

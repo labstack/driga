@@ -289,7 +289,7 @@ func (p *Puller) connect(ctx context.Context) error {
 
 func (p *Puller) follow(parent context.Context) (result error) {
 	// Coalesce changes before starting; a change after this point cancels the
-	// request, including one stalled before its response headers arrive.
+	// request, including one stuck before its response headers arrive.
 	select {
 	case <-p.changed:
 	default:

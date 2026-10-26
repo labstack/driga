@@ -41,8 +41,8 @@ func Home() Dashboard {
 				Empty: "Nothing needs you. Agents waiting on you, and sessions that finished, show here."},
 			{ID: "orphans", Title: "Leftover process trees", Description: "Helper processes whose agent is gone. Only verified idle trees can be stopped.", Viz: "list", Source: "orphans", Columns: []string{"signature", "processes", "rss_bytes", "verified"}, Sort: "-rss_bytes", Where: []Filter{{Column: "machine", Value: "$machine"}}, Width: 5, Height: "m",
 				Empty: "No leftover processes. Helper trees an agent left running after it ended show here."},
-			{ID: "stuck", Title: "Quiet longer than expected", Description: "Busy sessions with no new activity past stalled_after; suspected, not proven.", Viz: "table", Source: "sessions", Columns: []string{"title", "agent", "project", "machine", "last_activity_at", "evidence"}, Sort: "last_activity_at", Where: with(Filter{Column: "state", Value: "stalled?"}), Width: 12, Height: "s",
-				Empty: "No session looks stuck. A busy session quiet past stalled_after shows here."},
+			{ID: "stuck", Title: "Quiet longer than expected", Description: "Busy sessions with no new activity past stuck_after; suspected, not proven.", Viz: "table", Source: "sessions", Columns: []string{"title", "agent", "project", "machine", "last_activity_at", "evidence"}, Sort: "last_activity_at", Where: with(Filter{Column: "state", Value: "stuck"}), Width: 12, Height: "s",
+				Empty: "No session looks stuck. A busy session quiet past stuck_after shows here."},
 			{ID: "sessions", Title: "Sessions", Viz: "table", Source: "sessions", Columns: []string{"state", "title", "project", "branch", "agent", "machine", "last_activity_at", "mem_bytes"}, Where: with(), Width: 12, Height: "m",
 				Empty: "No live sessions. Agent sessions on your machines show here while they run."},
 			{ID: "memory", Title: "Memory by project, this machine", Description: "Memory held by agents and the processes they started, on this machine only; other machines don't report it yet.", Viz: "bar", Source: "costs", By: "project", Measure: "sum:mem_bytes", Width: 6, Height: "m"},
@@ -60,12 +60,12 @@ func Header() Dashboard {
 		Name:        "Header",
 		Description: "The numbers shown above Chat in the app. Only stat panels.",
 		Panels: []Panel{
-			{ID: "waiting", Title: "Need you", Description: "Agents waiting on you and machine warnings in effect.", Viz: "stat", Source: "inbox", Where: []Filter{{Column: "needs_you", Value: "true"}}},
-			{ID: "finished", Title: "To review", Viz: "stat", Source: "inbox", Where: []Filter{{Column: "kind", Value: "finished"}}},
-			{ID: "stuck", Title: "Possibly stuck", Viz: "stat", Source: "sessions", Where: []Filter{{Column: "state", Value: "stalled?"}}},
-			{ID: "leftover", Title: "Leftover processes", Viz: "stat", Source: "orphans", Measure: "sum:rss_bytes"},
+			{ID: "waiting", Title: "Need you", Description: "Agents waiting on you and machine warnings in effect.", Viz: "stat", Source: "summary", Measure: "sum:need_you"},
+			{ID: "finished", Title: "To review", Viz: "stat", Source: "summary", Measure: "sum:to_review"},
+			{ID: "stuck", Title: "Stuck", Viz: "stat", Source: "summary", Measure: "sum:attention_stuck"},
+			{ID: "leftover", Title: "Leftover memory", Viz: "stat", Source: "summary", Measure: "sum:leftover_bytes"},
 			{ID: "reclaim", Title: "Reclaimable", Viz: "stat", Source: "summary", Measure: "sum:reclaim_bytes"},
-			{ID: "memory", Title: "Memory used", Viz: "stat", Source: "activity", Measure: "max:mem_used_bytes", Total: "max:mem_total_bytes"},
+			{ID: "memory", Title: "Memory used", Viz: "stat", Source: "local_activity", Measure: "max:mem_used_bytes", Total: "max:mem_total_bytes"},
 		},
 	}
 }

@@ -115,6 +115,11 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 			}
 			return tx.SetSourceOK(name, now)
 		}
+		for external := range collected.internalChats {
+			if err := tx.RemoveInternalChat(external); err != nil {
+				return err
+			}
+		}
 		hooks, err := writeSpool(d, tx, collected.spool, now, source)
 		if err != nil {
 			return err
@@ -211,6 +216,13 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 				}
 			}
 			if err == nil {
+				var cpuErr error
+				if sample.CPUError != "" {
+					cpuErr = errors.New(sample.CPUError)
+				}
+				if err := source("machine_cpu", cpuErr); err != nil {
+					return err
+				}
 				if sample.TS.IsZero() {
 					sample.TS = now
 				}
@@ -259,6 +271,21 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 			byKey[sessionKey(s.Adapter, s.ExternalID)] = i
 		}
 
+		// A stored row is not a transcript fold. Only a successful adapter
+		// observation establishes the baseline after collection restarts.
+		panelObserved := make(map[string]bool)
+		for _, result := range collected.adapters {
+			if result.err != nil {
+				continue
+			}
+			for _, observation := range result.obs {
+				adapter := observation.Adapter
+				if adapter == "" {
+					adapter = result.name
+				}
+				panelObserved[sessionKey(adapter, observation.ExternalID)] = true
+			}
+		}
 		for i := range ss {
 			s := &ss[i]
 			if procsOK && s.StartedFrom == "" && !s.Hosted && s.EndedAt == nil && s.Label != "dead" && s.Label != "ended" && !s.ProcStart.IsZero() {
@@ -292,17 +319,25 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 					return err
 				}
 			}
+			key := sessionKey(s.Adapter, s.ExternalID)
+			seenPanel := work.panelSeen[key]
 			for _, event := range s.Events {
+				if !store.RetainPanelEvent(event, now) {
+					continue
+				}
 				event.Adapter, event.ExternalID, event.MachineID = s.Adapter, s.ExternalID, tx.MachineID()
 				inserted, err := tx.RecordPanelEvent(event)
 				if err != nil {
 					return err
 				}
-				if inserted {
+				if inserted && seenPanel {
 					if err := appendFeed(tx, feed.Event, event, share, now); err != nil {
 						return err
 					}
 				}
+			}
+			if panelObserved[key] {
+				work.panelSeen[key] = true
 			}
 			if err := tx.ReplaceSessionFiles(s.ID, s.FilesTouched); err != nil {
 				return err
@@ -505,6 +540,7 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 		state.spawn, state.gitFullAt = work.spawn, work.gitFullAt
 		state.procs = work.procs
 		state.logs = work.logs
+		state.panelSeen = work.panelSeen
 	}
 	if err == nil {
 		err = alertInbox(ctx, d, st)

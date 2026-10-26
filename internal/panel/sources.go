@@ -40,6 +40,7 @@ type Frame struct {
 
 // Span is one stretch of a session's timeline, such as a wait on a person.
 type Span struct {
+	MachineID string  `json:"machine_id"`
 	SessionID float64 `json:"session_id"`
 	Kind      string  `json:"kind"`
 	From      any     `json:"from"`
@@ -102,14 +103,14 @@ var sources = map[string]schema{
 		},
 	},
 	"sessions": {
-		description: "Every live agent session, workers included, with last 30 completed turn outcomes (comma-separated ok, waited, failed), files count and edited (JSON array of project-relative captured paths), ordered by state (waiting, then stalled? or dead, working, idle, finished, other) and newest first within each. label is Driga's raw label (a leading ~ marks an inferred one); state is the label without the mark, inferred says whether it was inferred, and evidence is why",
+		description: "Every live agent session, workers included, with last 30 completed turn outcomes (comma-separated ok, waited, failed), files count and edited (JSON array of project-relative captured paths), ordered by state (waiting, then stuck or dead, working, idle, finished, other) and newest first within each. label is Driga's raw label (a leading ~ marks an inferred one); state is the label without the mark, inferred says whether it was inferred, and evidence is why",
 		columns:     []Column{col("id", Number), col("title", String), col("label", String), col("agent", String), col("project", String), col("branch", String), col("machine", String), col("age", Number, "duration"), col("mem_bytes", Number, "bytes"), col("last_activity_at", Time), col("machine_id", String), col("state", String), col("inferred", Bool), col("evidence", String), col("turns", String), col("files", Number, "count"), col("edited", String)},
 		build: func(s viewer.Snapshot) [][]any {
 			var rows [][]any
 			var walk func([]view.AgentRow)
 			walk = func(agents []view.AgentRow) {
 				for _, a := range agents {
-					rows = append(rows, []any{float64(a.ID), sessionTitle(a.Title, a.Adapter, a.Project, a.Branch), a.Label, a.Adapter, a.Project, a.Branch, a.MachineName, ms(a.Age), bytesKnown(a.Mem), stamp(a.LastActivityAt), a.MachineID, strings.TrimPrefix(a.Label, "~"), a.Heuristic || strings.HasPrefix(a.Label, "~"), a.Evidence, turnsFor(s, a.ID), filesCount(s, a.ID), filesFor(s, a.ID)})
+					rows = append(rows, []any{float64(a.ID), sessionTitle(a.Title, a.Adapter, a.Project, a.Branch), a.Label, a.Adapter, a.Project, a.Branch, a.MachineName, ms(a.Age), bytesKnown(a.Mem), stamp(a.LastActivityAt), a.MachineID, strings.TrimPrefix(a.Label, "~"), a.Heuristic || strings.HasPrefix(a.Label, "~"), a.Evidence, turnsFor(s, a.MachineID, a.ID), filesCount(s, a.MachineID, a.ID), filesFor(s, a.MachineID, a.ID)})
 					walk(a.Children)
 				}
 			}
@@ -232,18 +233,18 @@ var sources = map[string]schema{
 		description: "Memory and CPU each live session costs on this machine",
 		columns:     []Column{col("session_id", Number), col("agent", String), col("project", String), col("mem_bytes", Number, "bytes"), col("cpu_percent", Number, "percent"), col("processes", Number, "count"), col("title", String)},
 		build: func(s viewer.Snapshot) [][]any {
-			titles := map[int64]string{}
+			titles := map[sessionKey]string{}
 			var walk func([]view.AgentRow)
 			walk = func(agents []view.AgentRow) {
 				for _, a := range agents {
-					titles[a.ID] = sessionTitle(a.Title, a.Adapter, a.Project, a.Branch)
+					titles[sessionKey{a.MachineID, a.ID}] = sessionTitle(a.Title, a.Adapter, a.Project, a.Branch)
 					walk(a.Children)
 				}
 			}
 			walk(s.Agents.Rows)
 			rows := make([][]any, 0, len(s.Machine.SessionCosts))
 			for _, c := range s.Machine.SessionCosts {
-				rows = append(rows, []any{float64(c.SessionID), c.Adapter, c.Project, float64(c.Memory), c.CPUPercent, float64(len(c.Processes)), cmp.Or(titles[c.SessionID], sessionTitle("", c.Adapter, c.Project, ""))})
+				rows = append(rows, []any{float64(c.SessionID), c.Adapter, c.Project, float64(c.Memory), c.CPUPercent, float64(len(c.Processes)), cmp.Or(titles[sessionKey{s.LocalMachineID, c.SessionID}], sessionTitle("", c.Adapter, c.Project, ""))})
 			}
 			return rows
 		},
@@ -293,7 +294,7 @@ var sources = map[string]schema{
 	},
 	"waits": {
 		description: "Spans when a session waited on a person, from the flow window",
-		columns:     []Column{col("session_id", Number), col("title", String), col("project", String), col("agent", String), col("reason", String), col("detail", String), col("started_at", Time), col("ended_at", Time)},
+		columns:     []Column{col("session_id", Number), col("title", String), col("project", String), col("agent", String), col("reason", String), col("detail", String), col("started_at", Time), col("ended_at", Time), col("machine", String), col("machine_id", String)},
 		build: func(s viewer.Snapshot) [][]any {
 			names := machineNames(s)
 			var rows [][]any
@@ -303,7 +304,7 @@ var sources = map[string]schema{
 					if w.EndedAt != nil {
 						ended = stamp(*w.EndedAt)
 					}
-					rows = append(rows, []any{float64(n.ID), n.Title, n.Project, n.Adapter, w.Reason, w.Detail, stamp(w.StartedAt), ended, names[n.MachineID]})
+					rows = append(rows, []any{float64(n.ID), n.Title, n.Project, n.Adapter, w.Reason, w.Detail, stamp(w.StartedAt), ended, names[n.MachineID], n.MachineID})
 				}
 			}
 			return rows
@@ -315,19 +316,38 @@ var sources = map[string]schema{
 		build: func(s viewer.Snapshot) [][]any {
 			rows := make([][]any, 0, len(s.Machines.Rows))
 			for _, m := range s.Machines.Rows {
-				rows = append(rows, []any{m.MachineID, view.MachineName(m.Machine), view.MachineState(m.Machine, s.LocalMachineID, s.ObservedAt), m.OS, float64(m.Agents), float64(m.Inbox), ms(m.LastSeenAge), float64(m.Sample.MemUsed), float64(m.Sample.MemTotal), float64(m.Sample.DiskFree), float64(m.Sample.DiskTotal), cpuValue(m.Sample.CPUPercent)})
+				row := []any{m.MachineID, view.MachineName(m.Machine), view.MachineState(m.Machine, s.LocalMachineID, s.ObservedAt), m.OS, float64(m.Agents), float64(m.Inbox), ms(m.LastSeenAge), nil, nil, nil, nil, nil}
+				if m.Sample != nil {
+					row[7], row[8], row[9], row[10], row[11] = float64(m.Sample.MemUsed), float64(m.Sample.MemTotal), float64(m.Sample.DiskFree), bytesKnown(m.Sample.DiskTotal), cpuValue(m.Sample.CPUPercent)
+				}
+				rows = append(rows, row)
 			}
 			return rows
 		},
 	},
 	"summary": {
 		description: "One row of totals for the selected machines",
-		columns:     []Column{col("agents", Number, "count"), col("working", Number, "count"), col("waiting", Number, "count"), col("stalled", Number, "count"), col("inbox", Number, "count"), col("orphans", Number, "count"), col("reclaim_bytes", Number, "bytes"), col("mem_used_bytes", Number, "bytes"), col("mem_total_bytes", Number, "bytes"), col("disk_free_bytes", Number, "bytes"), col("load1", Number), col("disk_total_bytes", Number, "bytes"), col("cpu_percent", Number, "percent")},
+		columns:     []Column{col("agents", Number, "count"), col("working", Number, "count"), col("waiting", Number, "count"), col("stuck", Number, "count"), col("inbox", Number, "count"), col("orphans", Number, "count"), col("reclaim_bytes", Number, "bytes"), col("mem_used_bytes", Number, "bytes"), col("mem_total_bytes", Number, "bytes"), col("disk_free_bytes", Number, "bytes"), col("load1", Number), col("disk_total_bytes", Number, "bytes"), col("cpu_percent", Number, "percent"), col("need_you", Number, "count"), col("to_review", Number, "count"), col("attention_stuck", Number, "count"), col("leftover", Number, "count"), col("leftover_bytes", Number, "bytes")},
 		build: func(s viewer.Snapshot) [][]any {
+			h := view.HeaderCounts(s.Inbox, s.Agents, s.Orphans, s.Summary)
 			v := s.Summary
-			return [][]any{{float64(v.Agents), float64(v.Working), float64(v.Waiting), float64(v.Stalled), float64(v.Inbox), float64(v.Orphans), float64(v.Reclaim), float64(v.Sample.MemUsed), float64(v.Sample.MemTotal), float64(v.Sample.DiskFree), v.Sample.Load1, float64(v.Sample.DiskTotal), cpuValue(v.Sample.CPUPercent)}}
+			return [][]any{{float64(v.Agents), float64(v.Working), float64(v.Waiting), float64(v.Stuck), float64(v.Inbox), float64(v.Orphans), float64(v.Reclaim), float64(v.Sample.MemUsed), float64(v.Sample.MemTotal), float64(v.Sample.DiskFree), v.Sample.Load1, float64(v.Sample.DiskTotal), cpuValue(v.Sample.CPUPercent), float64(h.NeedYou), float64(h.ToReview), float64(h.Stuck), float64(h.Leftover), float64(h.LeftoverBytes)}}
 		},
 	},
+}
+
+func init() {
+	activity := sources["activity"]
+	sources["local_activity"] = schema{description: "Health history for the summary machine only", columns: activity.columns, build: func(s viewer.Snapshot) [][]any {
+		local := s
+		local.Activity.Machines = nil
+		for _, machine := range s.Activity.Machines {
+			if machine.MachineID == s.Summary.MachineID {
+				local.Activity.Machines = append(local.Activity.Machines, machine)
+			}
+		}
+		return activity.build(local)
+	}}
 }
 
 // SourceNames lists the sources in a stable order.
@@ -375,7 +395,7 @@ func urgency(state string) int {
 	switch state {
 	case "waiting":
 		return 0
-	case "stalled?", "dead":
+	case "stuck", "dead":
 		return 1
 	case "working":
 		return 2
@@ -428,25 +448,25 @@ func cpuValue(v *float64) any {
 	return *v
 }
 
-func turnsFor(s viewer.Snapshot, id int64) string {
+func turnsFor(s viewer.Snapshot, machine string, id int64) string {
 	for _, d := range s.SessionPanels {
-		if d.ID == id {
+		if d.ID == id && d.MachineID == machine {
 			return strings.Join(d.Turns, ",")
 		}
 	}
 	return ""
 }
-func filesCount(s viewer.Snapshot, id int64) float64 {
+func filesCount(s viewer.Snapshot, machine string, id int64) float64 {
 	for _, d := range s.SessionPanels {
-		if d.ID == id {
+		if d.ID == id && d.MachineID == machine {
 			return float64(len(d.Files))
 		}
 	}
 	return 0
 }
-func filesFor(s viewer.Snapshot, id int64) string {
+func filesFor(s viewer.Snapshot, machine string, id int64) string {
 	for _, d := range s.SessionPanels {
-		if d.ID == id {
+		if d.ID == id && d.MachineID == machine {
 			if len(d.Files) == 0 {
 				return "[]"
 			}
@@ -455,4 +475,9 @@ func filesFor(s viewer.Snapshot, id int64) string {
 		}
 	}
 	return "[]"
+}
+
+type sessionKey struct {
+	machine string
+	id      int64
 }

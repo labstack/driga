@@ -87,7 +87,7 @@ func TestFlowSessionHandoffsAndMachineAttention(t *testing.T) {
 		if err != nil {
 			return
 		}
-		other, e := tx.UpsertSession(model.Session{SessionObs: model.SessionObs{Adapter: "codex", ExternalID: "other"}, Label: "stalled"})
+		other, e := tx.UpsertSession(model.Session{SessionObs: model.SessionObs{Adapter: "codex", ExternalID: "other"}, Label: "stuck"})
 		if e != nil {
 			return e
 		}

@@ -10,12 +10,12 @@ import (
 
 func TestJSONContract(t *testing.T) {
 	at := time.Date(2026, 10, 19, 12, 0, 0, 123, time.FixedZone("offset", -7*3600))
-	e := Envelope{Schema: 2, ObservedAt: at, Data: AgentRow{Label: "stalled", Heuristic: true, Age: 1500 * time.Millisecond, Mem: 123, LastActivityAt: at}}
+	e := Envelope{Schema: 2, ObservedAt: at, Data: AgentRow{Label: "stuck", Heuristic: true, Age: 1500 * time.Millisecond, Mem: 123, LastActivityAt: at}}
 	b, err := json.Marshal(e)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{`"schema":2`, `"age_ms":1500`, `"mem_bytes":123`, `"heuristic":true`, `"label":"stalled"`, `2026-10-19T19:00:00.000000123Z`} {
+	for _, want := range []string{`"schema":2`, `"age_ms":1500`, `"mem_bytes":123`, `"heuristic":true`, `"label":"stuck"`, `2026-10-19T19:00:00.000000123Z`} {
 		if !strings.Contains(string(b), want) {
 			t.Errorf("missing %s in %s", want, b)
 		}

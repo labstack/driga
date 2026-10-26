@@ -97,8 +97,8 @@ func tailEvent(e model.Event, machineID, machine, description string) TailEvent 
 		state = "ended"
 	case "notification", "waiting", "permissionrequest":
 		state = "waiting"
-	case "stalled", "error", "otlp:api_error":
-		state = "stalled"
+	case "stuck", "error", "otlp:api_error":
+		state = "stuck"
 	case "sessionstart", "turn", "tool", "pretooluse", "posttooluse", "userpromptsubmit", "otlp:api_request", "otlp:tool_result":
 		state = "working"
 	}

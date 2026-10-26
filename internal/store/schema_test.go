@@ -32,7 +32,7 @@ func TestFreshBaseline(t *testing.T) {
 		t.Fatal(err)
 	}
 	rows.Close()
-	if !reflect.DeepEqual(versions, []int{0, 1, 2, 3, 4}) {
+	if !reflect.DeepEqual(versions, []int{0, 1, 2, 3, 4, 5}) {
 		t.Fatal(versions)
 	}
 	for pragma, want := range map[string]int{"user_version": 1, "auto_vacuum": 2, "foreign_keys": 1} {

@@ -14,7 +14,7 @@ import (
 
 func TestDefaults(t *testing.T) {
 	c := config.Default()
-	if c.RootDepth != 3 || c.StalledAfter != 10*time.Minute || c.OrphanMinAge != 10*time.Minute {
+	if c.RootDepth != 3 || c.StuckAfter != 10*time.Minute || c.OrphanMinAge != 10*time.Minute {
 		t.Fatal(c)
 	}
 	if c.CaptureText != "titles" || len(c.Roots) != 0 {
@@ -46,7 +46,7 @@ func TestLoadOverrides(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	p := filepath.Join(t.TempDir(), "c.toml")
-	body := "stalled_after = \"3m\"\nroots = [\"~/code\"]\ncapture_text = \"snippets\"\n[adapters.codex]\nenabled = false\n"
+	body := "stuck_after = \"3m\"\nroots = [\"~/code\"]\ncapture_text = \"snippets\"\n[adapters.codex]\nenabled = false\n"
 	if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +54,7 @@ func TestLoadOverrides(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.StalledAfter != 3*time.Minute || c.CaptureText != "snippets" {
+	if c.StuckAfter != 3*time.Minute || c.CaptureText != "snippets" {
 		t.Fatal(c)
 	}
 	if diff := cmp.Diff([]string{filepath.Join(home, "code")}, c.Roots); diff != "" {

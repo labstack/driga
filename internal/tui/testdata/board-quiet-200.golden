@@ -1,10 +1,11 @@
 Flow  [m Map] [t Timeline] [s Sessions] · Map · last 60m                                                                                          │ ╭ Selected family ─────────────────────────────────╮
-◆ 0 needs you   ▶ 0   ‖ 0   ○ 2   ✓ 0                                                                                                               │ Add board view · from Editor · driga · claude ·  │
-             events/min · updated 0s ago                                                                                                            │ idle                                             │
-NEEDS YOU · 0 · oldest first                                                                                                                        │ −60m                  now                        │
-  Nothing needs you                                                                                                                                 │ └── ○ Add board view · from Editor               │
-─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────   │               ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░─   │
-driga                                                                                                                                               │ files /synthetic/driga/board.go                  │
-└── › ○ Add board view · from Editor       claude                      ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░─ 45m           │ J Terminal · Enter Open · c Ask Chat · K Stop    │
-echo-pro                                                                                                                                            ╰──────────────────────────────────────────────────╯
+Need you 0 · To review 1 · Stuck 0                                                                                                                  │ Add board view · from Editor · driga · claude ·  │
+Leftover 1 · Reclaimable 0.0M · Memory 0.0M/0.0M                                                                                                    │ idle                                             │
+             events/min · updated 0s ago                                                                                                            │ −60m                  now                        │
+NEEDS YOU · 0 · oldest first                                                                                                                        │ └── ○ Add board view · from Editor               │
+  Nothing needs you                                                                                                                                 │               ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░─   │
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────   │ J Terminal · Enter Open · c Ask Chat · K Stop    │
+driga                                                                                                                                               ╰──────────────────────────────────────────────────╯
+└── › ○ Add board view · from Editor       claude                      ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░─ 45m
+echo-pro
 └──   ○ Fix retry after reconnect          codex                     ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░─ 46m

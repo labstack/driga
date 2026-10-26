@@ -49,7 +49,7 @@ var (
 	muted    = pair(catppuccin.Latte.Subtext1(), catppuccin.Mocha.Subtext0())
 	working  = text(catppuccin.Latte.Green(), catppuccin.Mocha.Green())
 	waiting  = text(catppuccin.Latte.Yellow(), catppuccin.Mocha.Yellow())
-	stalled  = text(catppuccin.Latte.Red(), catppuccin.Mocha.Red())
+	stuck    = text(catppuccin.Latte.Red(), catppuccin.Mocha.Red())
 	idle     = text(catppuccin.Latte.Blue(), catppuccin.Mocha.Blue())
 	warn     = text(catppuccin.Latte.Peach(), catppuccin.Mocha.Peach())
 	accent   = text(catppuccin.Latte.Mauve(), catppuccin.Mocha.Mauve())
@@ -63,8 +63,8 @@ var themeTokens = append([]ThemeToken{
 	tok("ink", ink), tok("muted", muted), tok("faint", muted),
 	tok("line", pair(catppuccin.Latte.Surface0(), catppuccin.Mocha.Surface0())),
 	tok("strong", ink), tok("on-strong", onBase),
-	tok("working", working), tok("waiting", waiting), tok("stalled", stalled),
-	tok("idle", idle), tok("finished", muted), tok("crit", stalled),
+	tok("working", working), tok("waiting", waiting), tok("stuck", stuck),
+	tok("idle", idle), tok("finished", muted), tok("crit", stuck),
 	tok("warn", warn), tok("ok", idle), tok("accent", accent),
 	tok("observation", observed), tok("tool", tool), tok("ended", muted),
 }, markdownTokens...)
@@ -81,14 +81,14 @@ var consoleTokens = append([]ThemeToken{
 	tok("line", pair(catppuccin.Latte.Surface1(), catppuccin.Mocha.Surface1())),
 	tok("fg", ink), tok("mid", pair(catppuccin.Latte.Subtext1(), catppuccin.Mocha.Subtext1())),
 	tok("dim", muted), tok("accent", accent), tok("on-accent", onBase),
-	tok("working", working), tok("waiting", waiting), tok("stalled", stalled),
-	tok("idle", idle), tok("finished", muted), tok("crit", stalled), tok("warn", warn),
+	tok("working", working), tok("waiting", waiting), tok("stuck", stuck),
+	tok("idle", idle), tok("finished", muted), tok("crit", stuck), tok("warn", warn),
 	tok("observation", observed), tok("tool", tool), tok("faint", muted),
 	tok("waiting-bar", pair(catppuccin.Latte.Yellow(), catppuccin.Mocha.Yellow())),
 	tok("rail", pair(catppuccin.Latte.Surface2(), catppuccin.Mocha.Surface2())),
 	tok("waiting-bg", tint(catppuccin.Latte.Yellow(), catppuccin.Mocha.Yellow())),
 	tok("working-bg", tint(catppuccin.Latte.Green(), catppuccin.Mocha.Green())),
-	tok("stalled-bg", tint(catppuccin.Latte.Red(), catppuccin.Mocha.Red())),
+	tok("stuck-bg", tint(catppuccin.Latte.Red(), catppuccin.Mocha.Red())),
 	tok("idle-bg", tint(catppuccin.Latte.Blue(), catppuccin.Mocha.Blue())),
 	tok("finished-bg", tint(catppuccin.Latte.Subtext1(), catppuccin.Mocha.Subtext0())),
 }, markdownTokens...)

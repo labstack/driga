@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"sort"
 	"strings"
 	"time"
@@ -106,6 +107,19 @@ func (b *Broker) WaitPrompt(ctx context.Context, in Prompt) (PromptDecision, err
 	} else {
 		in.SessionID = 0
 	}
+	// Persist the interval before offering the prompt: an answer must never
+	// turn a history-write failure into a successful approval. Inputs stay in
+	// memory, and store I/O stays outside the broker lock.
+	in.CreatedAt = time.Now().UTC()
+	if err := b.st.StartPromptHistory(ctx, in.ID, in.SessionID, in.CreatedAt); err != nil {
+		logPromptHistoryFailure("start", err)
+		return PromptDecision{}, fmt.Errorf("record prompt wait: %w", err)
+	}
+	defer func() {
+		if err := b.st.EndPromptHistory(context.WithoutCancel(ctx), in.ID, time.Now().UTC()); err != nil {
+			logPromptHistoryFailure("end", err)
+		}
+	}()
 	b.mu.Lock()
 	if b.closed || ctx.Err() != nil {
 		b.mu.Unlock()
@@ -122,7 +136,6 @@ func (b *Broker) WaitPrompt(ctx context.Context, in Prompt) (PromptDecision, err
 		b.mu.Unlock()
 		return PromptDecision{}, errors.New("prompt unavailable")
 	}
-	in.CreatedAt = time.Now().UTC()
 	in.Input = append(json.RawMessage(nil), in.Input...)
 	ttl := b.promptTTL
 	if ttl == 0 {
@@ -134,22 +147,12 @@ func (b *Broker) WaitPrompt(ctx context.Context, in Prompt) (PromptDecision, err
 	b.prompts[in.ID] = p
 	b.wakePromptWatcher()
 	b.mu.Unlock()
-	// Only timestamps are durable; permission inputs stay in memory. Store I/O
-	// runs outside the broker lock so answering an unrelated prompt stays fast.
-	historyErr := b.st.StartPromptHistory(ctx, in.ID, in.CreatedAt)
-	defer func() { _ = b.st.EndPromptHistory(context.WithoutCancel(ctx), in.ID, time.Now().UTC()) }()
 	var out PromptDecision
 	var err error
-	if historyErr != nil {
-		cancel()
-	}
 	select {
 	case out = <-p.answer:
 	case <-wait.Done():
-		err = historyErr
-		if err == nil {
-			err = ctx.Err()
-		} // Expiry, unlike hook cancellation, is a normal retirement.
+		err = ctx.Err() // Expiry, unlike hook cancellation, is a normal retirement.
 	case <-b.ctx.Done():
 		err = b.ctx.Err()
 	}
@@ -167,6 +170,10 @@ func (b *Broker) WaitPrompt(ctx context.Context, in Prompt) (PromptDecision, err
 	default:
 	}
 	return out, err
+}
+
+func logPromptHistoryFailure(operation string, err error) {
+	slog.Warn("Chat prompt history failed", "operation", operation, "error_type", fmt.Sprintf("%T", err))
 }
 
 // Only pending hooks need the collector-end fallback. Idle TUI and web brokers
@@ -214,6 +221,11 @@ func (b *Broker) watchPromptChanges(start func() (<-chan time.Time, func())) {
 }
 
 func (b *Broker) refreshPrompts() {
+	type discoveredPrompt struct {
+		id      string
+		pending *pendingPrompt
+		started time.Time
+	}
 	b.mu.Lock()
 	sessions := map[string]bool{}
 	for _, p := range b.prompts {
@@ -225,10 +237,13 @@ func (b *Broker) refreshPrompts() {
 		if err != nil {
 			continue
 		}
+		var links []discoveredPrompt
 		b.mu.Lock()
 		for id, p := range b.prompts {
 			if p.Session == session && p.Cwd == s.Cwd {
-				p.SessionID = s.ID
+				if p.SessionID != s.ID {
+					links = append(links, discoveredPrompt{id: id, pending: p, started: p.CreatedAt})
+				}
 				if s.EndedAt != nil {
 					delete(b.prompts, id)
 					b.wakePromptWatcher()
@@ -237,6 +252,20 @@ func (b *Broker) refreshPrompts() {
 			}
 		}
 		b.mu.Unlock()
+		for _, link := range links {
+			// Bind the durable interval before publishing its session link.
+			// A failed write is retried on the next tick, and a blocked store
+			// never prevents the user from answering or retiring a prompt.
+			if err := b.st.LinkPromptHistory(b.ctx, link.id, link.started, s.ID); err != nil {
+				logPromptHistoryFailure("link", err)
+				continue
+			}
+			b.mu.Lock()
+			if b.prompts[link.id] == link.pending {
+				link.pending.SessionID = s.ID
+			}
+			b.mu.Unlock()
+		}
 	}
 }
 

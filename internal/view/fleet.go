@@ -121,7 +121,9 @@ func Machines(r Reader, now time.Time, scopes ...store.Scope) (MachinesView, err
 		if err != nil && !errors.Is(err, store.ErrNotFound) {
 			return err
 		}
-		row.Sample = sample
+		if err == nil {
+			row.Sample = &sample
+		}
 		if m.ClockSkewMS > 60000 || m.ClockSkewMS < -60000 {
 			row.SkewWarning = fmt.Sprintf("clock skew %s (> 60s)", time.Duration(m.ClockSkewMS)*time.Millisecond)
 		}
@@ -346,7 +348,7 @@ func Summary(r Reader, f Filter, now time.Time, scopes ...store.Scope) (SummaryV
 		v.Agents += a.Agents
 		v.Working += a.Working
 		v.Waiting += a.Waiting
-		v.Stalled += a.Stalled
+		v.Stuck += a.Stuck
 		v.Orphans += a.Orphans
 		v.Reclaim += a.Reclaim
 		if first || m.MachineID == r.MachineID() {

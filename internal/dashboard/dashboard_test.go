@@ -25,7 +25,7 @@ func TestHeaderExistsBeforeItIsSaved(t *testing.T) {
 		t.Fatalf("list = %+v, %v", list, err)
 	}
 	var problems panel.Problems
-	if _, err := s.Edit(panel.HeaderID, []Operation{{Op: "add", Panel: &panel.Panel{ID: "t", Title: "T", Viz: "table", Source: "sessions"}}}, 0, you, ""); !errors.As(err, &problems) || problems[0].Path != fmt.Sprintf("panels[%d].viz", len(edited.Spec.Panels)) {
+	if _, err := s.Edit(panel.HeaderID, []Operation{{Op: "add", Panel: &panel.Panel{ID: "t", Title: "T", Viz: "table", Source: "sessions"}}}, edited.Version, you, ""); !errors.As(err, &problems) || problems[0].Path != fmt.Sprintf("panels[%d].viz", len(edited.Spec.Panels)) {
 		t.Fatalf("table in header = %v", err)
 	}
 }
@@ -52,10 +52,10 @@ func TestEditVersionsAndRestore(t *testing.T) {
 		t.Fatalf("stale edit = %v", err)
 	}
 	var problems panel.Problems
-	if _, err := s.Edit(r.ID, []Operation{{Op: "update", ID: "mem", Panel: &panel.Panel{Viz: "pie"}}}, 0, you, ""); !errors.As(err, &problems) {
+	if _, err := s.Edit(r.ID, []Operation{{Op: "update", ID: "mem", Panel: &panel.Panel{Viz: "pie"}}}, r.Version, you, ""); !errors.As(err, &problems) {
 		t.Fatalf("invalid edit = %v", err)
 	}
-	restored, err := s.Restore(r.ID, 1, you)
+	restored, err := s.Restore(r.ID, 1, r.Version, you)
 	if err != nil || restored.Version != 3 || len(restored.Spec.Panels) != 1 || restored.Spec.Panels[0].Title != "Waits" {
 		t.Fatalf("restore = %+v, %v", restored, err)
 	}
@@ -63,7 +63,7 @@ func TestEditVersionsAndRestore(t *testing.T) {
 	if err != nil || len(versions) != 3 || versions[0].Version != 3 || versions[2].Author.Kind != "agent" {
 		t.Fatalf("versions = %+v, %v", versions, err)
 	}
-	if _, err := s.Restore(r.ID, 3, you); !errors.Is(err, ErrAlreadyLatest) {
+	if _, err := s.Restore(r.ID, 3, restored.Version, you); !errors.Is(err, ErrAlreadyLatest) {
 		t.Fatalf("restore current = %v", err)
 	}
 	if _, err := s.Get("../etc"); !errors.Is(err, ErrNotFound) {
@@ -75,7 +75,7 @@ func TestReplaceKeepsDraggedLayout(t *testing.T) {
 	s := New(t.TempDir())
 	spec := panel.Dashboard{Name: "Board", Panels: []panel.Panel{{ID: "a", Title: "A", Viz: "stat", Source: "inbox"}}}
 	r, _ := s.Create(spec, you, "")
-	r, _ = s.Edit(r.ID, []Operation{{Op: "layout", Grids: map[string]Grid{"a": {X: 3, Y: 0, W: 3, H: 2}}}}, 0, you, "")
+	r, _ = s.Edit(r.ID, []Operation{{Op: "layout", Grids: map[string]Grid{"a": {X: 3, Y: 0, W: 3, H: 2}}}}, r.Version, you, "")
 	r, err := s.Replace(r.ID, spec, r.Version, Author{Kind: "agent"}, "")
 	if err != nil || r.Spec.Panels[0].Grid == nil || r.Spec.Panels[0].Grid.X != 3 {
 		t.Fatalf("replace = %+v, %v", r.Spec.Panels, err)

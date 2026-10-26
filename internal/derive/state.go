@@ -12,7 +12,7 @@ import (
 
 // Thresholds controls how long a busy session can be quiet before suspicion.
 type Thresholds struct {
-	StalledAfter time.Duration
+	StuckAfter time.Duration
 }
 
 // StateInput combines adapter, process, hook, and acknowledgment observations.
@@ -20,9 +20,6 @@ type StateInput = model.StateInput
 
 // Display adds the display marker to a heuristic label.
 func Display(label string, heuristic bool) string {
-	if label == "stalled" {
-		label = "stalled?"
-	}
 	if heuristic {
 		return "~" + label
 	}
@@ -37,12 +34,12 @@ func Label(in StateInput, now time.Time, th Thresholds) (string, bool, string) {
 
 func label(in StateInput, now time.Time, th Thresholds) (label string, heuristic bool, evidence string) {
 	defer func() {
-		if (label == "working" || label == "stalled") && in.LastAPIError != "" {
+		if (label == "working" || label == "stuck") && in.LastAPIError != "" {
 			evidence += "; " + in.LastAPIError
 		}
 	}()
-	if th.StalledAfter <= 0 {
-		th.StalledAfter = 10 * time.Minute
+	if th.StuckAfter <= 0 {
+		th.StuckAfter = 10 * time.Minute
 	}
 	age := now.Sub(in.Obs.LastActivityAt)
 	quiet := "no log growth " + stateDuration(age)
@@ -86,8 +83,8 @@ func label(in StateInput, now time.Time, th Thresholds) (label string, heuristic
 				if gone {
 					break
 				}
-				if now.Sub(in.LastLifecycleAt) >= th.StalledAfter {
-					return "stalled", false, "hook turn open, no log growth " + stateDuration(now.Sub(in.LastLifecycleAt))
+				if now.Sub(in.LastLifecycleAt) >= th.StuckAfter {
+					return "stuck", false, "hook turn open, no log growth " + stateDuration(now.Sub(in.LastLifecycleAt))
 				}
 				return "working", false, "hook UserPromptSubmit"
 			case "Stop":
@@ -145,8 +142,8 @@ func label(in StateInput, now time.Time, th Thresholds) (label string, heuristic
 			}
 		case "busy":
 			if live {
-				if age >= th.StalledAfter {
-					return "stalled", false, "Copilot turn open, " + quiet
+				if age >= th.StuckAfter {
+					return "stuck", false, "Copilot turn open, " + quiet
 				}
 				return "working", false, "Copilot turn activity"
 			}
@@ -196,24 +193,24 @@ func label(in StateInput, now time.Time, th Thresholds) (label string, heuristic
 		if in.LastNotification != nil && in.LastNotification.After(in.Obs.LastActivityAt) && in.LastNotification.After(cleared) {
 			return "waiting", false, "Notification newer than last activity"
 		}
-		if in.Obs.PID != 0 && in.LastToolResult != nil && !in.LastToolResult.Before(in.Obs.LastActivityAt) && (in.LastStop == nil || in.LastToolResult.After(*in.LastStop)) && now.Sub(*in.LastToolResult) < th.StalledAfter {
+		if in.Obs.PID != 0 && in.LastToolResult != nil && !in.LastToolResult.Before(in.Obs.LastActivityAt) && (in.LastStop == nil || in.LastToolResult.After(*in.LastStop)) && now.Sub(*in.LastToolResult) < th.StuckAfter {
 			return "working", false, "OTLP activity " + stateDuration(now.Sub(*in.LastToolResult)) + " ago"
 		}
-		if in.Obs.PID != 0 && in.LastAPIRequest != nil && in.LastAPIRequest.After(in.Obs.LastActivityAt) && (in.LastStop == nil || in.LastAPIRequest.After(*in.LastStop)) && now.Sub(*in.LastAPIRequest) < th.StalledAfter {
+		if in.Obs.PID != 0 && in.LastAPIRequest != nil && in.LastAPIRequest.After(in.Obs.LastActivityAt) && (in.LastStop == nil || in.LastAPIRequest.After(*in.LastStop)) && now.Sub(*in.LastAPIRequest) < th.StuckAfter {
 			return "working", false, "API call " + stateDuration(now.Sub(*in.LastAPIRequest)) + " ago"
 		}
 		if in.Obs.RegistryStatus == "busy" {
-			if age < th.StalledAfter {
+			if age < th.StuckAfter {
 				return "working", false, "busy, " + quiet
 			}
 			if in.Proc == nil {
-				return "stalled", false, "busy, " + quiet + ", no process sample"
+				return "stuck", false, "busy, " + quiet + ", no process sample"
 			}
 			evidence = fmt.Sprintf("busy, %s, CPU %.1f%%", quiet, in.Proc.CPUPercent)
 			if in.Proc.CPUPercent >= 1 {
 				return "unknown", false, evidence
 			}
-			return "stalled", false, evidence
+			return "stuck", false, evidence
 		}
 		if in.Obs.PID != 0 && (in.Obs.RegistryStatus == "idle" || in.Obs.RegistryStatus == "shell") && in.LastStop != nil && !in.Obs.RegistryUpdatedAt.Before(*in.LastStop) {
 			return "idle", false, "registry " + in.Obs.RegistryStatus + " newer than Stop"
@@ -251,8 +248,8 @@ func label(in StateInput, now time.Time, th Thresholds) (label string, heuristic
 		if age < time.Minute {
 			return "working", false, "process alive, activity " + stateDuration(age) + " ago"
 		}
-		if in.Obs.TurnOpen && age >= th.StalledAfter {
-			return "stalled", false, "turn open, " + quiet
+		if in.Obs.TurnOpen && age >= th.StuckAfter {
+			return "stuck", false, "turn open, " + quiet
 		}
 		if !in.Obs.TurnOpen {
 			if in.Unseen {

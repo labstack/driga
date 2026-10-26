@@ -232,10 +232,10 @@ func TestInboxCollapsesFinishedTurns(t *testing.T) {
 // zero, and rows without readings are no reading; a stat shows its total.
 func TestStatesTotalsAndEmptySums(t *testing.T) {
 	snap := snapshot()
-	snap.Agents.Rows = append(snap.Agents.Rows, view.AgentRow{ID: 4, Label: "~stalled?", Adapter: "codex", Project: "core", Evidence: "no output for 2h"})
+	snap.Agents.Rows = append(snap.Agents.Rows, view.AgentRow{ID: 4, Label: "~stuck", Adapter: "codex", Project: "core", Evidence: "no output for 2h"})
 	snap.Activity.Machines[0].Buckets[0].Sample.MemTotal = 32
 	f, err := Run(snap, RunRequest{Dashboard: Dashboard{Name: "x", Panels: []Panel{
-		{ID: "stuck", Title: "S", Viz: "table", Source: "sessions", Columns: []string{"state", "inferred", "evidence"}, Where: []Filter{{Column: "state", Value: "stalled?"}}},
+		{ID: "stuck", Title: "S", Viz: "table", Source: "sessions", Columns: []string{"state", "inferred", "evidence"}, Where: []Filter{{Column: "state", Value: "stuck"}}},
 		{ID: "none", Title: "N", Viz: "stat", Source: "orphans", Measure: "sum:rss_bytes"},
 		{ID: "mem", Title: "M", Viz: "stat", Source: "activity", Measure: "max:mem_used_bytes", Total: "max:mem_total_bytes"},
 		{ID: "quiet", Title: "Q", Viz: "table", Source: "orphans", Empty: "No leftover processes."},
@@ -247,7 +247,7 @@ func TestStatesTotalsAndEmptySums(t *testing.T) {
 	for _, x := range f.Results {
 		r[x.ID] = x
 	}
-	if rows := r["stuck"].Frame.Rows; len(rows) != 1 || rows[0][0] != "stalled?" || rows[0][1] != true || rows[0][2] != "no output for 2h" {
+	if rows := r["stuck"].Frame.Rows; len(rows) != 1 || rows[0][0] != "stuck" || rows[0][1] != true || rows[0][2] != "no output for 2h" {
 		t.Fatalf("stuck = %v", rows)
 	}
 	if v := r["none"].Frame.Rows[0][0]; v != 0.0 {
@@ -306,7 +306,7 @@ func TestSessionsOrderedByUrgency(t *testing.T) {
 	snap.Agents.Rows = []view.AgentRow{
 		{ID: 1, Label: "idle", Age: time.Minute},
 		{ID: 2, Label: "working", Age: time.Hour},
-		{ID: 3, Label: "~stalled?", Age: time.Hour},
+		{ID: 3, Label: "~stuck", Age: time.Hour},
 		{ID: 4, Label: "working", Age: time.Minute},
 		{ID: 5, Label: "waiting", Age: 2 * time.Hour},
 	}

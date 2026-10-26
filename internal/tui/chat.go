@@ -315,7 +315,7 @@ func (m *app) chatView() string {
 		lines = append(lines, dim.Render(fmt.Sprintf("▸ tools used · %d · ctrl+t expand/collapse", tools)))
 	}
 	if len(lines) == 0 {
-		lines = append(lines, dim.Render("Ask what needs you, why a session is stalled, or what this screen means."))
+		lines = append(lines, dim.Render("Ask what needs you, why a session is stuck, or what this screen means."))
 	}
 	context := m.chatContextLine()
 	m.chatInput.SetWidth(max(1, m.width-4))

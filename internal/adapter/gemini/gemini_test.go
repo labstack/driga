@@ -184,8 +184,8 @@ func TestGeminiNeverWaiting(t *testing.T) {
 	for _, tc := range []struct {
 		age  time.Duration
 		want string
-	}{{time.Second, "working"}, {2 * time.Minute, "unknown"}, {11 * time.Minute, "stalled"}} {
-		got, _, _ := derive.Label(derive.StateInput{Obs: s, Proc: &model.Proc{PID: 123}}, s.LastActivityAt.Add(tc.age), derive.Thresholds{StalledAfter: 10 * time.Minute})
+	}{{time.Second, "working"}, {2 * time.Minute, "unknown"}, {11 * time.Minute, "stuck"}} {
+		got, _, _ := derive.Label(derive.StateInput{Obs: s, Proc: &model.Proc{PID: 123}}, s.LastActivityAt.Add(tc.age), derive.Thresholds{StuckAfter: 10 * time.Minute})
 		if got != tc.want {
 			t.Fatalf("age=%v label=%s want=%s", tc.age, got, tc.want)
 		}

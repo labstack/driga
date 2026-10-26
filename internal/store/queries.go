@@ -840,7 +840,7 @@ func (tx *Tx) Prune(now time.Time) error {
 		{"DELETE FROM sessions WHERE " + expiredSession, sessionArgs},
 		{"DELETE FROM panel_events WHERE machine_id=? AND ts<?", []any{tx.machineID, week}},
 		{"DELETE FROM panel_events WHERE machine_id=? AND ts<? AND (kind LIKE 'log:tool_call:%' OR kind IN ('PostToolUse','PostToolUseFailure','postToolUse','postToolUseFailure','otlp:tool_result'))", []any{tx.machineID, unix(now.UTC().Truncate(time.Hour).Add(-23 * time.Hour))}},
-		{"DELETE FROM prompt_intervals WHERE machine_id=? AND ended_at<?", []any{tx.machineID, unix(now.Add(-time.Hour))}},
+		{"DELETE FROM prompt_intervals WHERE machine_id=? AND (ended_at<? OR ended_at IS NULL AND started_at<?)", []any{tx.machineID, unix(now.Add(-time.Hour)), unix(now.Add(-time.Hour))}},
 		{"DELETE FROM machine_samples WHERE machine_id=? AND ts<?", []any{tx.machineID, week}},
 		{`DELETE FROM machine_samples WHERE machine_id=? AND ts<? AND ts NOT IN
 		(SELECT MAX(ts) FROM machine_samples WHERE machine_id=? AND ts>=? AND ts<? GROUP BY ts/?)`, []any{tx.machineID, day, tx.machineID, week, day, int64(5 * time.Minute)}},

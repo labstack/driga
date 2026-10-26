@@ -233,7 +233,11 @@ func (s *Server) streamSnapshotTx(ctx context.Context, tx *sql.Tx, out io.Writer
 		}
 		// Metadata older than the raw tail still belongs to a fresh peer's
 		// last day/30-turn view. Raw rows already emitted above are omitted.
-		return snapshotRows[model.Event](ctx, tx, "panel_events", local, ` AND ts>=? AND NOT EXISTS(SELECT 1 FROM events e WHERE e.machine_id=panel_events.machine_id AND e.adapter=panel_events.adapter AND e.external_id=panel_events.external_id AND e.ts=panel_events.ts AND e.kind=panel_events.kind)`, encode, now.Add(-7*24*time.Hour).UnixNano())
+		return snapshotRows[model.Event](ctx, tx, "panel_events", local, ` AND ts>=? AND (NOT (kind LIKE 'log:tool_call:%' OR kind IN ('PostToolUse','PostToolUseFailure','postToolUse','postToolUseFailure','otlp:tool_result')) OR (machine_id,adapter,external_id,ts,kind) IN (
+ SELECT machine_id,adapter,external_id,ts,kind FROM (
+ SELECT machine_id,adapter,external_id,ts,kind, ROW_NUMBER() OVER (PARTITION BY machine_id,adapter,external_id ORDER BY ts DESC,kind DESC) AS row
+ FROM panel_events WHERE machine_id=? AND ts>=? AND (kind LIKE 'log:tool_call:%' OR kind IN ('PostToolUse','PostToolUseFailure','postToolUse','postToolUseFailure','otlp:tool_result'))) WHERE row<=1000))
+ AND NOT EXISTS(SELECT 1 FROM events e WHERE e.machine_id=panel_events.machine_id AND e.adapter=panel_events.adapter AND e.external_id=panel_events.external_id AND e.ts=panel_events.ts AND e.kind=panel_events.kind)`, encode, now.Add(-7*24*time.Hour).UnixNano(), local, now.Add(-7*24*time.Hour).UnixNano())
 	}); err != nil {
 		return err
 	}

@@ -144,3 +144,8 @@ func TestAlertThrottleCoversBothKinds(t *testing.T) {
 		t.Fatal(first, next)
 	}
 }
+
+// The fake records command arguments independently of stdin payloads.
+func (f runnerFunc) RunInput(ctx context.Context, input []byte, name string, args ...string) ([]byte, error) {
+	return f(ctx, name, args...)
+}

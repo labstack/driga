@@ -50,7 +50,7 @@ func TestPanelPollRetention(t *testing.T) {
 		if err := tx.UpsertMachine(model.Machine{Hostname: "studio"}); err != nil {
 			return err
 		}
-		id, err := tx.UpsertSession(model.Session{SessionObs: model.SessionObs{Adapter: "claude", ExternalID: "one"}, Label: "stalled?"})
+		id, err := tx.UpsertSession(model.Session{SessionObs: model.SessionObs{Adapter: "claude", ExternalID: "one"}, Label: "stuck"})
 		if err != nil {
 			return err
 		}

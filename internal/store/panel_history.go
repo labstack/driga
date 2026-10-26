@@ -1,6 +1,7 @@
 package store
 
 import (
+	"github.com/labstack/driga/internal/model"
 	"strings"
 	"time"
 )
@@ -20,12 +21,17 @@ func (tx *Tx) RecordPanelPolls(now time.Time) error {
 	if err != nil {
 		return err
 	}
+	sessions, err := tx.SessionsScoped(SessionFilter{}, Scope{})
+	if err != nil {
+		return err
+	}
+	byMachine := make(map[string][]model.Session)
+	for _, session := range sessions {
+		byMachine[session.MachineID] = append(byMachine[session.MachineID], session)
+	}
 	for _, m := range machines {
 		q := tx.ForMachine(m.MachineID)
-		ss, err := q.Sessions(SessionFilter{})
-		if err != nil {
-			return err
-		}
+		ss := byMachine[m.MachineID]
 		p := PanelPoll{TS: now, Worst: "quiet"}
 		rank := map[string]int{"quiet": 0, "idle": 1, "working": 2, "stuck": 4, "waiting": 3}
 		for _, s := range ss {
@@ -33,7 +39,7 @@ func (tx *Tx) RecordPanelPolls(now time.Time) error {
 				continue
 			}
 			state := strings.TrimPrefix(s.Label, "~")
-			if state == "stalled?" {
+			if state == "stuck" {
 				p.Stuck++
 				state = "stuck"
 			}

@@ -61,7 +61,7 @@ func TestThemeFollowsCatppuccinAndStaysReadable(t *testing.T) {
 	official := map[string][2]catppuccin.Color{
 		"working": {catppuccin.Latte.Green(), catppuccin.Mocha.Green()},
 		"waiting": {catppuccin.Latte.Yellow(), catppuccin.Mocha.Yellow()},
-		"stalled": {catppuccin.Latte.Red(), catppuccin.Mocha.Red()},
+		"stuck":   {catppuccin.Latte.Red(), catppuccin.Mocha.Red()},
 		"idle":    {catppuccin.Latte.Blue(), catppuccin.Mocha.Blue()},
 		"warn":    {catppuccin.Latte.Peach(), catppuccin.Mocha.Peach()},
 		"accent":  {catppuccin.Latte.Mauve(), catppuccin.Mocha.Mauve()},
@@ -99,7 +99,7 @@ func TestUnknownTokenRendersPlain(t *testing.T) {
 
 // Every token the TUI asks for must exist in the shared palette.
 func TestTUITokensExist(t *testing.T) {
-	for _, name := range []string{"accent", "crit", "faint", "idle", "ink", "line", "muted", "working", "on-strong", "strong", "sunk", "waiting", "stalled", "finished", "warn", "ok", "observation", "tool"} {
+	for _, name := range []string{"accent", "crit", "faint", "idle", "ink", "line", "muted", "working", "on-strong", "strong", "sunk", "waiting", "stuck", "finished", "warn", "ok", "observation", "tool"} {
 		found := false
 		for _, tok := range themeTokens {
 			found = found || tok.Name == name

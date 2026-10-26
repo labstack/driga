@@ -1,7 +1,8 @@
 Flow  [m Map] [t Timeline] [s Sessions] · Map · last 60m                                                                                          │ ╭ Selected family ─────────────────────────────────╮
-◆ 0 needs you   ▶ 0   ‖ 0   ○ 0   ✓ 0                                                                                                               │ Select a session to see its family               │
-             events/min · updated 0s ago                                                                                                            │ J Terminal · Enter Open · c Ask Chat · K Stop    │
-NEEDS YOU · 0 · oldest first                                                                                                                        ╰──────────────────────────────────────────────────╯
+Need you 0 · To review 1 · Stuck 0                                                                                                                  │ Select a session to see its family               │
+Leftover 1 · Reclaimable 0.0M · Memory 0.0M/0.0M                                                                                                    │ J Terminal · Enter Open · c Ask Chat · K Stop    │
+             events/min · updated 0s ago                                                                                                            ╰──────────────────────────────────────────────────╯
+NEEDS YOU · 0 · oldest first
   Nothing needs you
 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
   No sessions in this window

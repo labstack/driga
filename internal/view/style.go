@@ -14,10 +14,10 @@ func StateStyle(label string, noColor bool) lipgloss.Style {
 	}
 	token := strings.TrimSuffix(strings.TrimPrefix(label, "~"), "?")
 	if token == "dead" {
-		token = "stalled"
+		token = "stuck"
 	}
 	switch token {
-	case "working", "waiting", "stalled", "idle", "finished", "ended":
+	case "working", "waiting", "stuck", "idle", "finished", "ended":
 		return TokenStyle(token, noColor)
 	}
 
@@ -71,7 +71,7 @@ func LoadLevel(load float64, cores int) string {
 
 // FriendlyEnum preserves the established human forms while wire enums use snake_case.
 func FriendlyEnum(value string) string {
-	if value == "stalled" || value == "~stalled" {
+	if value == "stuck" || value == "~stuck" {
 		return value + "?"
 	}
 	return strings.ReplaceAll(value, "_", "-")

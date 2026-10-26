@@ -12,7 +12,7 @@ func TestMachinePanelSources(t *testing.T) {
 	sample := model.MachineSample{CPUPercent: &cpu, DiskTotal: 500, DiskFree: 100}
 	s.Summary.Sample = sample
 	s.Activity.Machines[0].Buckets[0].Sample = &sample
-	s.Machines.Rows = append(s.Machines.Rows, view.MachineRow{Sample: sample})
+	s.Machines.Rows = append(s.Machines.Rows, view.MachineRow{Sample: &sample})
 	for _, source := range []string{"activity", "summary", "machines"} {
 		f, err := Run(s, RunRequest{Dashboard: Dashboard{Name: "Resources", Panels: []Panel{{ID: "r", Title: "Resources", Source: source, Viz: "table", Columns: []string{"disk_total_bytes", "cpu_percent"}, Limit: 200}}}})
 		if err != nil {

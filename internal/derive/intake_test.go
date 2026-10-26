@@ -38,7 +38,7 @@ func TestAPIErrorEvidence(t *testing.T) {
 	in.LastNotification = nil
 	in.LastAPIError = "API error 529, attempt 3"
 	l, _, e := Label(in, now, Thresholds{})
-	if l != "stalled" || !strings.Contains(e, "API error 529, attempt 3") {
+	if l != "stuck" || !strings.Contains(e, "API error 529, attempt 3") {
 		t.Fatal(l, e)
 	}
 	a := now.Add(-3 * time.Second)

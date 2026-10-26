@@ -15,7 +15,8 @@ const maxOperations = 40
 type Operation struct {
 	Op        string           `json:"op" jsonschema:"add, update, remove, move, layout, variables or rename"`
 	ID        string           `json:"id,omitempty" jsonschema:"update, remove and move: the panel's id"`
-	Panel     *panel.Panel     `json:"panel,omitempty" jsonschema:"add: the new panel; update: fields to change, merged over the panel"`
+	Panel     *panel.Panel     `json:"panel,omitempty" jsonschema:"add: the new panel; update: nonzero fields merged over the panel; use clear to reset optional fields"`
+	Clear     []string         `json:"clear,omitempty" jsonschema:"update: optional panel fields to reset after merging; restores empty, zero or default values; id, title, viz and source cannot be cleared"`
 	Before    string           `json:"before,omitempty" jsonschema:"add and move: place before this panel id; default the end"`
 	Grids     map[string]Grid  `json:"grids,omitempty" jsonschema:"layout: grid positions by panel id, as the app sends after a drag"`
 	Variables []panel.Variable `json:"variables,omitempty" jsonschema:"variables: the dashboard's full variable list"`
@@ -34,11 +35,17 @@ func Apply(current panel.Dashboard, ops []Operation) (panel.Dashboard, error) {
 	if len(ops) > maxOperations {
 		return current, fmt.Errorf("at most %d operations per edit", maxOperations)
 	}
-	d := clone(current)
+	d, err := clone(current)
+	if err != nil {
+		return current, err
+	}
 	index := func(id string) int { return slices.IndexFunc(d.Panels, func(p panel.Panel) bool { return p.ID == id }) }
 	for i, op := range ops {
 		fail := func(format string, args ...any) (panel.Dashboard, error) {
 			return current, fmt.Errorf("operations[%d] %s: %s", i, op.Op, fmt.Sprintf(format, args...))
+		}
+		if len(op.Clear) > 0 && op.Op != "update" {
+			return fail("clear is only supported by update")
 		}
 		switch op.Op {
 		case "add":
@@ -59,10 +66,14 @@ func Apply(current panel.Dashboard, ops []Operation) (panel.Dashboard, error) {
 			d.Panels = slices.Insert(d.Panels, at, p)
 		case "update":
 			at := index(op.ID)
-			if at < 0 || op.Panel == nil {
-				return fail("needs an existing panel id and the fields to change")
+			if at < 0 || op.Panel == nil && len(op.Clear) == 0 {
+				return fail("needs an existing panel id and the fields to change or clear")
 			}
-			merged, err := merge(d.Panels[at], *op.Panel)
+			var patch panel.Panel
+			if op.Panel != nil {
+				patch = *op.Panel
+			}
+			merged, err := merge(d.Panels[at], patch, op.Clear)
 			if err != nil {
 				return fail("%s", err)
 			}
@@ -75,6 +86,9 @@ func Apply(current panel.Dashboard, ops []Operation) (panel.Dashboard, error) {
 			}
 			d.Panels = slices.Delete(d.Panels, at, at+1)
 		case "move":
+			if op.Before == op.ID && op.ID != "" {
+				return fail("cannot move a panel before itself")
+			}
 			at := index(op.ID)
 			if at < 0 {
 				return fail("no panel %q", op.ID)
@@ -111,8 +125,9 @@ func Apply(current panel.Dashboard, ops []Operation) (panel.Dashboard, error) {
 	return d, nil
 }
 
-// merge overlays the fields set in patch onto p.
-func merge(p, patch panel.Panel) (panel.Panel, error) {
+// merge overlays nonzero patch fields, then resets explicitly cleared optional
+// fields. A typed patch alone cannot distinguish omitted values from zero values.
+func merge(p, patch panel.Panel, clear []string) (panel.Panel, error) {
 	base, err := json.Marshal(p)
 	if err != nil {
 		return p, err
@@ -132,10 +147,21 @@ func merge(p, patch panel.Panel) (panel.Panel, error) {
 	// A typed patch carries every field; only the ones it sets change.
 	for k, v := range changes {
 		switch string(v) {
-		case `""`, "0", "null", "false", "[]":
+		case `""`, "null", "false", "[]":
 			continue
+		case "0":
+			// max is a pointer, so a numeric zero was explicitly provided.
+			if k != "max" {
+				continue
+			}
 		}
 		fields[k] = v
+	}
+	for _, name := range clear {
+		if !slices.Contains([]string{"description", "where", "by", "measure", "columns", "sort", "limit", "unit", "max", "total", "empty", "width", "height", "content", "grid"}, name) {
+			return p, fmt.Errorf("cannot clear panel field %q", name)
+		}
+		delete(fields, name)
 	}
 	b, err := json.Marshal(fields)
 	if err != nil {

@@ -644,8 +644,8 @@ func summaryLocal(r Reader, f Filter, now time.Time) (SummaryView, error) {
 				v.Working++
 			case "waiting":
 				v.Waiting++
-			case "stalled":
-				v.Stalled++
+			case "stuck":
+				v.Stuck++
 			}
 			count(row.Children)
 		}

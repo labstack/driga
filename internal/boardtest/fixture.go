@@ -21,7 +21,7 @@ func BoardFixture(kind string, now time.Time) view.BoardSnapshot {
 	names := []string{"driga", "echo-pro", "monk", "inloop", "canon", "atlas", "studio", "orbit", "relay", "小さな道具", "northstar", "platform"}
 	titles := []string{"Add board view", "Fix retry after reconnect", "Permission boundary audit", "Polish onboarding copy", "流れを整える 🌊", "Investigate cache invalidation", "Ship the release pipeline safely", "An intentionally long title with CJK 東京 and emoji 🛰️ — verify alignment at every width"}
 	for i := 0; i < count; i++ {
-		state := []string{"working", "working", "waiting", "stalled", "working", "idle", "working", "finished", "working", "idle"}[i%10]
+		state := []string{"working", "working", "waiting", "stuck", "working", "idle", "working", "finished", "working", "idle"}[i%10]
 		if kind == "quiet" {
 			state = "idle"
 		}
@@ -47,7 +47,7 @@ func BoardFixture(kind string, now time.Time) view.BoardSnapshot {
 			n.Waits = []view.FlowWait{{ID: fmt.Sprint("wait-", id), StartedAt: now.Add(-time.Duration(3+i%21) * time.Minute), Reason: "Permission · Bash", Detail: "go test ./..."}}
 			n.Mixer.Evidence = "open permission prompt"
 		}
-		if state == "stalled" {
+		if state == "stuck" {
 			n.Mixer.Evidence = "no transcript growth for 18m"
 		}
 		if state == "finished" {

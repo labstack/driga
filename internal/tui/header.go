@@ -91,7 +91,15 @@ func (m *app) header() string {
 	case "warning":
 		loadToken = "warn"
 	}
-	health := []string{headerGauge("mem", sample.MemUsed, sample.MemTotal, m.opts.NoColor), headerGauge("swap", sample.SwapUsed, sample.SwapTotal, m.opts.NoColor), "load " + view.TokenStyle(loadToken, m.opts.NoColor).Render(view.FormatLoad(sample.Load1, "%.1f")) + fmt.Sprintf("/%d", sample.Cores), "disk " + view.HumanBytes(sample.DiskFree)}
+	cpu := "load " + view.TokenStyle(loadToken, m.opts.NoColor).Render(view.FormatLoad(sample.Load1, "%.1f")) + fmt.Sprintf("/%d", sample.Cores)
+	if sample.CPUPercent != nil {
+		cpu = fmt.Sprintf("CPU %.0f%%", *sample.CPUPercent)
+	}
+	disk := "disk free " + view.HumanBytes(sample.DiskFree)
+	if sample.DiskTotal > 0 {
+		disk = "disk " + view.HumanBytes(sample.DiskTotal-min(sample.DiskTotal, sample.DiskFree)) + "/" + view.HumanBytes(sample.DiskTotal)
+	}
+	health := []string{headerGauge("mem", sample.MemUsed, sample.MemTotal, m.opts.NoColor), headerGauge("swap", sample.SwapUsed, sample.SwapTotal, m.opts.NoColor), cpu, disk}
 	identity = strings.Join(identityParts, " · ")
 	// One line at every width: drop health readings from the least important
 	// (disk, then load, then swap) before the header would wrap. Machines

@@ -34,7 +34,7 @@ var settings = []Setting{
 	{"roots", "Roots", "list", []string{}, "Additional repository discovery roots; ~ expands to HOME.", "file-only; empty = session working directories only"},
 	{"root_depth", "RootDepth", "int", int64(3), "Repository discovery depth.", "0..max int; zero = roots only"},
 	{"exclude", "Exclude", "list", []string{"**/node_modules", "**/.tmp/**"}, "Repository discovery exclusions.", "file-only; empty = no exclusions"},
-	{"stalled_after", "StalledAfter", "duration", "10m", "Quiet busy-session threshold.", "0..2562047h47m16.854775807s; zero = default 10m"},
+	{"stuck_after", "StuckAfter", "duration", "10m", "Quiet busy-session threshold.", "0..2562047h47m16.854775807s; zero = default 10m"},
 	{"orphan_min_age", "OrphanMinAge", "duration", "10m", "Minimum orphan candidate age.", "0..2562047h47m16.854775807s; zero = no age minimum"},
 	{"capture_text", "CaptureText", "string", "titles", "Local text capture policy.", "titles or snippets"},
 	{"open_cmd", "OpenCmd", "string", "", "Editor command; {cwd} is substituted.", "empty = auto-detect"},
@@ -142,7 +142,7 @@ func (s Setting) assign(c *Config, raw any) error {
 		if err != nil || d < 0 || (s.Key == "fleet.enroll_window" && (d == 0 || d > 10*time.Minute)) {
 			return fmt.Errorf("expected Go duration; allowed range %s", s.Range)
 		}
-		if s.Key == "stalled_after" && d == 0 {
+		if s.Key == "stuck_after" && d == 0 {
 			d = 10 * time.Minute
 		}
 		v = d

@@ -12,6 +12,18 @@ import (
 // machineCPU uses the same OS library as memory/load. No blocking interval or
 // package-global baseline: the collector owns the previous successful sample.
 func machineCPU(ctx context.Context, s *model.MachineSample) error {
+	return sampleCPU(ctx, s, readMachineCPU)
+}
+
+func sampleCPU(ctx context.Context, s *model.MachineSample, read func(context.Context, *model.MachineSample) error) error {
+	if err := read(ctx, s); err != nil {
+		s.CPUError = err.Error()
+		s.CPUTotalSeconds, s.CPUBusySeconds, s.CPUPercent = 0, 0, nil
+	}
+	return ctx.Err()
+}
+
+func readMachineCPU(ctx context.Context, s *model.MachineSample) error {
 	times, err := cpu.TimesWithContext(ctx, false)
 	if err != nil {
 		return fmt.Errorf("CPU times: %w", err)

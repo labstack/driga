@@ -67,20 +67,22 @@ type MachineSample struct {
 	CommitLimit uint64 `json:"commit_limit_bytes,omitzero"`
 	CommitUsed  uint64 `json:"commit_used_bytes,omitzero"`
 	// CPU counters are local sampling evidence; only the interval share travels.
-	CPUTotalSeconds float64   `json:"-"`
-	CPUBusySeconds  float64   `json:"-"`
-	CPUPercent      *float64  `json:"cpu_percent"`
-	DiskTotal       uint64    `json:"disk_total_bytes"`
-	MachineID       string    `json:"machine_id"`
-	TS              time.Time `json:"sampled_at"`
-	MemUsed         uint64    `json:"mem_used_bytes"`
-	MemCompressed   uint64    `json:"mem_compressed_bytes"`
-	MemTotal        uint64    `json:"mem_total_bytes"`
-	SwapUsed        uint64    `json:"swap_used_bytes"`
-	SwapTotal       uint64    `json:"swap_total_bytes"`
-	DiskFree        uint64    `json:"disk_free_bytes"`
-	PressureLevel   string    `json:"pressure_level"`
-	PressureFree    float64   `json:"pressure_free"`
+	CPUTotalSeconds float64  `json:"-"`
+	CPUBusySeconds  float64  `json:"-"`
+	CPUError        string   `json:"-"`
+	CPUPercent      *float64 `json:"cpu_percent"`
+	// DiskTotal is unknown for samples collected before schema 0004.
+	DiskTotal     uint64    `json:"disk_total_bytes"`
+	MachineID     string    `json:"machine_id"`
+	TS            time.Time `json:"sampled_at"`
+	MemUsed       uint64    `json:"mem_used_bytes"`
+	MemCompressed uint64    `json:"mem_compressed_bytes"`
+	MemTotal      uint64    `json:"mem_total_bytes"`
+	SwapUsed      uint64    `json:"swap_used_bytes"`
+	SwapTotal     uint64    `json:"swap_total_bytes"`
+	DiskFree      uint64    `json:"disk_free_bytes"`
+	PressureLevel string    `json:"pressure_level"`
+	PressureFree  float64   `json:"pressure_free"`
 	// Negative load values mean unavailable (Windows); zero is a real reading.
 	Load1  float64 `json:"load1"`
 	Load5  float64 `json:"load5"`

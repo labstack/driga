@@ -59,7 +59,7 @@ func copilotCapturePolicy(ss []model.Session, policy string) {
 	}
 }
 
-func labelCopilot(s *model.Session, procs []model.Proc, unseen bool, now time.Time, stalledAfter time.Duration) {
+func labelCopilot(s *model.Session, procs []model.Proc, unseen bool, now time.Time, stuckAfter time.Duration) {
 	in := derive.StateInput{Obs: s.SessionObs, Unseen: unseen, LastUserPrompt: s.LastPromptAt}
 	for _, p := range procs {
 		if p.PID == s.PID && !s.ProcStart.IsZero() && platform.SameStart(p.StartTime, s.ProcStart) {
@@ -67,7 +67,7 @@ func labelCopilot(s *model.Session, procs []model.Proc, unseen bool, now time.Ti
 			break
 		}
 	}
-	mixed := derive.LabelWithEvidence(in, now, derive.Thresholds{StalledAfter: stalledAfter})
+	mixed := derive.LabelWithEvidence(in, now, derive.Thresholds{StuckAfter: stuckAfter})
 	s.Mixer = &mixed
 	s.Label, s.Heuristic, s.Evidence = mixed.Verdict, mixed.Heuristic, mixed.Evidence
 }

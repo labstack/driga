@@ -104,7 +104,7 @@ func (m *app) visibleSummary() view.SummaryView {
 	if m.machineScope == "" || m.machineScope == "all" {
 		return s
 	}
-	s.Agents, s.Working, s.Waiting, s.Stalled, s.Inbox, s.Orphans, s.Reclaim = 0, 0, 0, 0, 0, 0, 0
+	s.Agents, s.Working, s.Waiting, s.Stuck, s.Inbox, s.Orphans, s.Reclaim = 0, 0, 0, 0, 0, 0, 0
 	var count func([]view.AgentRow)
 	count = func(rows []view.AgentRow) {
 		for _, r := range rows {
@@ -115,8 +115,8 @@ func (m *app) visibleSummary() view.SummaryView {
 					s.Working++
 				case "waiting":
 					s.Waiting++
-				case "stalled":
-					s.Stalled++
+				case "stuck":
+					s.Stuck++
 				}
 			}
 			count(r.Children)

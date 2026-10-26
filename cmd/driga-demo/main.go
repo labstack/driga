@@ -116,7 +116,7 @@ var script = []session{
 	{key: "billing", adapter: "claude", title: "Migrate billing to Stripe v3", project: "atlas", label: "working", start: 12 * time.Minute, files: []string{"src/billing.ts", "src/webhooks.ts"}, pid: 4101, mem: 1800 << 20},
 	{key: "webhooks", adapter: "claude", title: "Update webhook handlers", project: "atlas", parent: "billing", label: "working", appear: 3 * time.Second, files: []string{"src/webhooks.ts"}},
 	{key: "tests", adapter: "claude", title: "Write migration tests", project: "atlas", parent: "billing", label: "working", appear: 5 * time.Second},
-	{key: "react", adapter: "codex", title: "Upgrade to React 20", project: "atlas", label: "stalled", start: 41 * time.Minute, pid: 4104, mem: 1200 << 20},
+	{key: "react", adapter: "codex", title: "Upgrade to React 20", project: "atlas", label: "stuck", start: 41 * time.Minute, pid: 4104, mem: 1200 << 20},
 	{key: "upload", adapter: "codex", title: "Fix flaky upload test", project: "canon", label: "working", start: 19 * time.Minute, files: []string{"src/upload.ts"}, pid: 4201, mem: 1100 << 20},
 	{key: "darkmode", adapter: "gemini", title: "Add dark mode to settings", project: "canon", label: "working", start: 27 * time.Minute, files: []string{"src/upload.ts", "src/settings.tsx"}, pid: 4202, mem: 800 << 20},
 	{key: "notes", adapter: "copilot", title: "Release notes for 2.4", project: "relay", label: "finished", start: 62 * time.Minute, pid: 4301, mem: 300 << 20},
@@ -225,7 +225,7 @@ func (d *demo) seed(tx *store.Tx) error {
 		}
 		for m := s.start; m > 0; m -= time.Minute {
 			at := d.t0.Add(-m)
-			active := s.label == "working" || s.label == "waiting" || (s.label == "stalled" && m > 20*time.Minute) || (s.label == "finished" && m > 45*time.Minute)
+			active := s.label == "working" || s.label == "waiting" || (s.label == "stuck" && m > 20*time.Minute) || (s.label == "finished" && m > 45*time.Minute)
 			if active && int(m/time.Minute)%7 != 3 {
 				if err := tx.Observe(id, at, int64(2000+int(m/time.Minute)%5*900), 400); err != nil {
 					return err
@@ -244,7 +244,7 @@ func (d *demo) upsert(tx *store.Tx, s session, now time.Time) (int64, error) {
 	repo := d.repos[s.project]
 	obs := model.SessionObs{Adapter: s.adapter, ExternalID: "demo-" + s.key, Origin: "interactive", PID: s.pid, ProcStart: d.t0.Add(-s.start), Cwd: cwd(s.project), Branch: "main", Title: s.title,
 		StartedAt: d.t0.Add(-s.start + s.appear), LastActivityAt: now, TurnOpen: label == "working" || label == "waiting"}
-	if label == "stalled" {
+	if label == "stuck" {
 		obs.LastActivityAt = d.t0.Add(-20 * time.Minute)
 	}
 	if label == "finished" || label == "idle" {

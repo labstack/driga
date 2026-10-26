@@ -249,9 +249,7 @@ func (b *Broker) load(id string) (*conversation, error) {
 				return nil, err
 			}
 		}
-		if !whole(messages[i].Role) {
-			messages[i].Text = b.capture(messages[i].Text)
-		}
+		messages[i].Text = b.captureMessage(messages[i].Role, messages[i].Text)
 	}
 	c := &conversation{used: b.uses, changed: make(chan struct{}), mode: Confirm, row: row, messages: messages, seq: uint64(time.Now().UnixMicro())}
 	for _, m := range messages {
@@ -273,19 +271,51 @@ func (b *Broker) capture(text string) string {
 	return ""
 }
 
-// save stores a message within the capture policy. Tool names and panel
-// cards, which hold a panel spec and no agent text, are kept whole: a card
-// runs its spec again for live data each time it is shown.
-func (b *Broker) save(ctx context.Context, m store.ChatMessage) error {
-	if !whole(m.Role) {
-		m.Text = b.capture(m.Text)
+// captureMessage applies the capture policy without cutting a panel's JSON
+// into an invalid snippet. Panel specs, variables and errors can contain text
+// from the conversation, so only tool names are kept under every policy.
+func (b *Broker) captureMessage(role, text string) string {
+	if role == "tool" {
+		return text
 	}
+	if role != "panel" || !b.opts.Snippets {
+		return b.capture(text)
+	}
+	var value any
+	if json.Unmarshal([]byte(text), &value) != nil {
+		return ""
+	}
+	var capture func(any) any
+	capture = func(value any) any {
+		switch v := value.(type) {
+		case string:
+			return b.capture(v)
+		case []any:
+			for i := range v {
+				v[i] = capture(v[i])
+			}
+		case map[string]any:
+			out := make(map[string]any, len(v))
+			for key, item := range v {
+				out[b.capture(key)] = capture(item)
+			}
+			return out
+		}
+		return value
+	}
+	raw, err := json.Marshal(capture(value))
+	if err != nil {
+		return ""
+	}
+	return string(raw)
+}
+
+// save stores a message within the capture policy.
+func (b *Broker) save(ctx context.Context, m store.ChatMessage) error {
+	m.Text = b.captureMessage(m.Role, m.Text)
 	return b.st.SaveChatMessage(ctx, m)
 }
 
-// whole says whether a message role is kept whatever the capture policy:
-// tool names, and panel cards, a spec a snippet would cut into broken JSON.
-func whole(role string) bool { return role == "tool" || role == "panel" }
 func (b *Broker) event(c *conversation, kind string, m *store.ChatMessage) {
 	e := Event{Kind: kind}
 	if m != nil {
@@ -482,7 +512,7 @@ func (b *Broker) run(ctx context.Context, c *conversation) {
 			err = b.agent.Run(ctx, req, func(d Delta) error {
 				b.mu.Lock()
 				defer b.mu.Unlock()
-				if ctx.Err() != nil {
+				if ctx.Err() != nil && len(d.Panel) == 0 {
 					return ctx.Err()
 				}
 				if d.Notice != "" && !c.noticed {
@@ -527,7 +557,7 @@ func (b *Broker) run(ctx context.Context, c *conversation) {
 				}
 				if len(d.Panel) > 0 {
 					card := store.ChatMessage{ID: uuid.NewString(), MachineID: c.row.MachineID, ConversationID: c.row.ID, Role: "panel", Text: string(d.Panel), Status: "used", CreatedAt: time.Now().UTC()}
-					if err := b.save(ctx, card); err != nil {
+					if err := b.save(context.WithoutCancel(ctx), card); err != nil {
 						return err
 					}
 					b.message(c, card)
@@ -551,9 +581,8 @@ func (b *Broker) run(ctx context.Context, c *conversation) {
 				m.Status = "stopped"
 			} else {
 				m.Text += "\n" + scrub.Scrub(err.Error())
-				// The message keeps the error only while the service runs and
-				// within the capture policy; the log keeps it for diagnosis.
-				slog.Warn("chat turn failed", "event", "chat_turn_failed", "conversation", c.row.ID, "err", scrub.Scrub(err.Error()))
+				// Errors can contain private agent text even after secret scrubbing.
+				slog.Warn("chat turn failed", "event", "chat_turn_failed", "conversation", c.row.ID, "error_class", fmt.Sprintf("%T", err), "error_bytes", len(err.Error()))
 			}
 		}
 		if e := b.save(context.Background(), m); e != nil {

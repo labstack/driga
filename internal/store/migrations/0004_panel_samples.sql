@@ -35,8 +35,8 @@ CREATE INDEX panel_events_ts ON panel_events(machine_id,ts);
 -- Recover the metadata the existing raw tail still contains at upgrade.
 INSERT INTO panel_events(machine_id,adapter,external_id,ts,kind,metadata)
 SELECT machine_id,adapter,external_id,ts,kind,
- CASE WHEN json_extract(metadata,'$.tool') IS NOT NULL
- THEN json_object('tool',json_extract(metadata,'$.tool')) ELSE 'null' END
+ CASE WHEN json_extract(MAX(metadata),'$.tool') IS NOT NULL
+ THEN json_object('tool',json_extract(MAX(metadata),'$.tool')) ELSE 'null' END
 FROM events WHERE kind IN ('UserPromptSubmit','userPromptSubmitted','otlp:user_prompt',
  'Stop','agentStop','errorOccurred','SessionEnd','sessionEnd',
  'PostToolUse','PostToolUseFailure','postToolUse','postToolUseFailure','otlp:tool_result')

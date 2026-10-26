@@ -2,6 +2,7 @@ package view
 
 import (
 	"slices"
+	"sort"
 	"strings"
 	"time"
 
@@ -28,106 +29,136 @@ type ToolHour struct {
 func FleetPanels(r Reader, f Filter, now time.Time) ([]SessionPanel, []ToolHour, error) {
 	var details []SessionPanel
 	var hours []ToolHour
-	start := now.UTC().Truncate(time.Hour).Add(-23 * time.Hour)
 	err := machineReaders(r, f.Scope, func(mr Reader, m model.Machine) error {
-		ss, err := mr.Sessions(store.SessionFilter{EndedSince: start, RepoPath: f.Project})
-		if err != nil {
-			return err
-		}
-		repos, err := mr.Repos()
-		if err != nil {
-			return err
-		}
-		wts, err := mr.Worktrees(0)
-		if err != nil {
-			return err
-		}
-		files, err := mr.SessionFiles(time.Time{})
-		if err != nil {
-			return err
-		}
-		inbox, err := mr.Inbox(time.Time{}, true)
-		if err != nil {
-			return err
-		}
-		totals := map[string][]int{}
-		for _, s := range ss {
-			events, err := mr.PanelEvents(s.Adapter, s.ExternalID, now.Add(-7*24*time.Hour))
-			if err != nil {
-				return err
-			}
-			d := SessionPanel{ID: s.ID, MachineID: m.MachineID, Turns: turnOutcomes(events, inbox, s.ID, now)}
-			root := ""
-			for _, repo := range repos {
-				if s.RepoID != nil && repo.ID == *s.RepoID {
-					root = repo.Path
-				}
-			}
-			// A worktree's root gives the same project-relative paths as the main checkout.
-			for _, w := range wts {
-				if s.WorktreeID != nil && w.ID == *s.WorktreeID {
-					root = w.Path
-				}
-			}
-			seen := map[string]bool{}
-			if root != "" {
-				for _, file := range files[s.ID] {
-					if file.TS.After(now) {
-						continue
-					}
-					rel, err := pathx.RecordedRel(root, file.Path)
-					if err == nil && rel != "." && !seen[rel] {
-						d.Files = append(d.Files, rel)
-						seen[rel] = true
-					}
-				}
-			}
-			slices.Sort(d.Files)
-			details = append(details, d)
-			project := projectName(s, repos)
-			if project == "" {
-				continue
-			}
-			if totals[project] == nil {
-				totals[project] = make([]int, 24)
-			}
-			// Transcript calls, hook results and OTLP can describe the same calls.
-			// Use the largest observed channel count per session/hour, never their sum.
-			log, hook, otlp := make([]int, 24), make([]int, 24), make([]int, 24)
-			for _, e := range events {
-				if e.TS.Before(start) || e.TS.After(now) {
-					continue
-				}
-				i := int(e.TS.Sub(start) / time.Hour)
-				if strings.HasPrefix(e.Kind, "log:tool_call:") {
-					log[i]++
-					continue
-				}
-				switch e.Kind {
-				case "PostToolUse", "PostToolUseFailure", "postToolUse", "postToolUseFailure":
-					hook[i]++
-				case "otlp:tool_result":
-					otlp[i]++
-				}
-			}
-			for i := range hook {
-				n := max(log[i], hook[i], otlp[i])
-				totals[project][i] += n
-			}
-		}
-		projects := make([]string, 0, len(totals))
-		for p := range totals {
-			projects = append(projects, p)
-		}
-		slices.Sort(projects)
-		for _, p := range projects {
-			for i, n := range totals[p] {
-				hours = append(hours, ToolHour{start.Add(time.Duration(i) * time.Hour), p, m.MachineID, MachineName(m), n})
-			}
-		}
-		return nil
+		d, h, err := fleetMachinePanels(mr, m, f, now)
+		details = append(details, d...)
+		hours = append(hours, h...)
+		return err
 	})
 	return details, hours, err
+}
+
+// fleetMachinePanels batches evidence once for one machine, then joins its
+// sessions in memory. Local session IDs are never joined across machines.
+func fleetMachinePanels(mr Reader, m model.Machine, f Filter, now time.Time) ([]SessionPanel, []ToolHour, error) {
+	var details []SessionPanel
+	var hours []ToolHour
+	start := now.UTC().Truncate(time.Hour).Add(-23 * time.Hour)
+	ss, err := mr.Sessions(store.SessionFilter{EndedSince: start, RepoPath: f.Project})
+	if err != nil {
+		return nil, nil, err
+	}
+	repos, err := mr.Repos()
+	if err != nil {
+		return nil, nil, err
+	}
+	wts, err := mr.Worktrees(0)
+	if err != nil {
+		return nil, nil, err
+	}
+	files, err := mr.SessionFiles(time.Time{})
+	if err != nil {
+		return nil, nil, err
+	}
+	inbox, err := mr.Inbox(time.Time{}, true)
+	if err != nil {
+		return nil, nil, err
+	}
+	allEvents, err := mr.AllPanelEvents(now.Add(-7 * 24 * time.Hour))
+	if err != nil {
+		return nil, nil, err
+	}
+	type sessionKey struct{ adapter, external string }
+	bySession := make(map[sessionKey][]model.Event)
+	for _, event := range allEvents {
+		key := sessionKey{event.Adapter, event.ExternalID}
+		bySession[key] = append(bySession[key], event)
+	}
+	byInbox := make(map[int64][]model.InboxItem)
+	for _, item := range inbox {
+		byInbox[item.SessionID] = append(byInbox[item.SessionID], item)
+	}
+	byRepo := make(map[int64]model.Repo, len(repos))
+	for _, repo := range repos {
+		byRepo[repo.ID] = repo
+	}
+	byWorktree := make(map[int64]model.Worktree, len(wts))
+	for _, worktree := range wts {
+		byWorktree[worktree.ID] = worktree
+	}
+	totals := map[string][]int{}
+	for _, s := range ss {
+		events := bySession[sessionKey{s.Adapter, s.ExternalID}]
+		d := SessionPanel{ID: s.ID, MachineID: m.MachineID, Turns: turnOutcomes(events, byInbox[s.ID], s.ID, now)}
+		root := ""
+		project := projectName(s, nil)
+		if s.RepoID != nil {
+			if repo, ok := byRepo[*s.RepoID]; ok {
+				root, project = repo.Path, repo.Name
+			}
+		}
+		// A worktree's root gives the same project-relative paths as the main checkout.
+		if s.WorktreeID != nil {
+			if w, ok := byWorktree[*s.WorktreeID]; ok {
+				root = w.Path
+			}
+		}
+		seen := map[string]bool{}
+		if root != "" {
+			for _, file := range files[s.ID] {
+				if file.TS.After(now) {
+					continue
+				}
+				rel, err := pathx.RecordedRel(root, file.Path)
+				if err == nil && rel != "." && !seen[rel] {
+					d.Files = append(d.Files, rel)
+					seen[rel] = true
+				}
+			}
+		}
+		slices.Sort(d.Files)
+		details = append(details, d)
+		if project == "" {
+			continue
+		}
+		if totals[project] == nil {
+			totals[project] = make([]int, 24)
+		}
+		// Transcript calls, hook results and OTLP can describe the same calls.
+		// Use the largest observed channel count per session/hour, never their sum.
+		log, hook, otlp := make([]int, 24), make([]int, 24), make([]int, 24)
+		for _, e := range events {
+			if e.TS.Before(start) || e.TS.After(now) {
+				continue
+			}
+			i := int(e.TS.Sub(start) / time.Hour)
+			if strings.HasPrefix(e.Kind, "log:tool_call:") {
+				log[i]++
+				continue
+			}
+			switch e.Kind {
+			case "PostToolUse", "PostToolUseFailure", "postToolUse", "postToolUseFailure":
+				hook[i]++
+			case "otlp:tool_result":
+				otlp[i]++
+			}
+		}
+		for i := range hook {
+			n := max(log[i], hook[i], otlp[i])
+			totals[project][i] += n
+		}
+	}
+	projects := make([]string, 0, len(totals))
+	for p := range totals {
+		projects = append(projects, p)
+	}
+	slices.Sort(projects)
+	for _, p := range projects {
+		for i, n := range totals[p] {
+			hours = append(hours, ToolHour{start.Add(time.Duration(i) * time.Hour), p, m.MachineID, MachineName(m), n})
+		}
+	}
+	return details, hours, nil
 }
 
 // turnOutcomes merges terminal hooks and adapter completions. Waits belong to
@@ -140,6 +171,7 @@ func turnOutcomes(events []model.Event, inbox []model.InboxItem, id int64, now t
 		channel string
 	}
 	var ends []endpoint
+	var prompts []time.Time
 	var prompt time.Time
 	open := false
 	for _, e := range events {
@@ -148,6 +180,7 @@ func turnOutcomes(events []model.Event, inbox []model.InboxItem, id int64, now t
 		}
 		switch e.Kind {
 		case "UserPromptSubmit", "userPromptSubmitted", "otlp:user_prompt", "log:turn_start":
+			prompts = append(prompts, e.TS)
 			prompt = e.TS
 			open = true
 		case "Stop", "agentStop", "log:turn_end":
@@ -167,6 +200,18 @@ func turnOutcomes(events []model.Event, inbox []model.InboxItem, id int64, now t
 			}
 		}
 	}
+	slices.SortFunc(prompts, time.Time.Compare)
+	var waits []time.Time
+	for _, item := range inbox {
+		if item.SessionID == id && item.Kind == "waiting" {
+			waits = append(waits, item.TS)
+		}
+	}
+	slices.SortFunc(waits, time.Time.Compare)
+	between := func(times []time.Time, from, to time.Time) bool {
+		i := sort.Search(len(times), func(i int) bool { return times[i].After(from) })
+		return i < len(times) && !times[i].After(to)
+	}
 	slices.SortFunc(ends, func(a, b endpoint) int { return a.at.Compare(b.at) })
 	// The transcript and Stop hook can report the same completion a few
 	// milliseconds apart. Separate channels without an intervening prompt
@@ -180,13 +225,7 @@ func turnOutcomes(events []model.Event, inbox []model.InboxItem, id int64, now t
 				compact[len(compact)-1].failed = end.failed || prev.failed
 				continue
 			}
-			duplicate = (end.at.Equal(prev.at) || end.channel != prev.channel) && end.failed == prev.failed
-			for _, e := range events {
-				if (e.Kind == "UserPromptSubmit" || e.Kind == "userPromptSubmitted" || e.Kind == "log:turn_start" || e.Kind == "otlp:user_prompt") && e.TS.After(prev.at) && !e.TS.After(end.at) {
-					duplicate = false
-					break
-				}
-			}
+			duplicate = end.channel != prev.channel && end.failed == prev.failed && !between(prompts, prev.at, end.at)
 		}
 		if !duplicate {
 			compact = append(compact, end)
@@ -197,10 +236,8 @@ func turnOutcomes(events []model.Event, inbox []model.InboxItem, id int64, now t
 	var previous time.Time
 	for _, end := range ends {
 		outcome := "ok"
-		for _, i := range inbox {
-			if i.SessionID == id && i.Kind == "waiting" && i.TS.After(previous) && !i.TS.After(end.at) {
-				outcome = "waited"
-			}
+		if between(waits, previous, end.at) {
+			outcome = "waited"
 		}
 		if end.failed {
 			outcome = "failed"

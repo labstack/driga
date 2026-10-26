@@ -27,9 +27,12 @@ var ReadTools = []string{"get_flow", "get_activity", "get_summary", "list_agents
 // files; what Chat changes goes through Driga's own tools and their cards.
 var NativeTools = []string{"Read", "Glob", "Grep", "TodoWrite"}
 
-// DashboardWrites change only the user's dashboards, each save a version that
-// can be restored, so Chat runs them without an approval card.
-var DashboardWrites = []string{"create_dashboard", "edit_dashboard", "replace_dashboard", "restore_dashboard_version"}
+// DashboardWrites are the bounded dashboard changes Chat may pre-approve.
+// Replacing or restoring a whole dashboard goes through the permission bridge.
+var DashboardWrites = []string{"create_dashboard", "edit_dashboard"}
+
+// MaxDashboardCreates bounds automatic dashboard creation within one turn.
+const MaxDashboardCreates = 4
 
 func readTool(name string) bool {
 	for _, t := range ReadTools {
@@ -64,7 +67,7 @@ func (a *Claude) probe(ctx context.Context) (llm.Claude, error) {
 	}
 	return c, err
 }
-func (a *Claude) Run(ctx context.Context, r Request, emit func(Delta) error) error {
+func (a *Claude) Run(ctx context.Context, r Request, emit func(Delta) error) (err error) {
 	c, err := a.probe(ctx)
 	if err != nil {
 		return err
@@ -136,6 +139,7 @@ func (a *Claude) Run(ctx context.Context, r Request, emit func(Delta) error) err
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	s := stream{emit: emit, cancel: cancel, actions: actions}
+	defer func() { err = errors.Join(err, s.flushCards()) }()
 	run := c.RunIn
 	if actions {
 		run = c.RunChatIn
@@ -185,7 +189,11 @@ type stream struct {
 	// its text begins a new paragraph rather than running on.
 	gap bool
 	// cards are panel tool calls waiting for their result, by tool use id.
-	cards map[string]card
+	cards   map[string]card
+	creates int
+	// unavailable calls can occur on resume. A refused result is harmless;
+	// a successful or missing result must fail the turn rather than disappear.
+	unavailable map[string]string
 	// offered is the tools claude's init event listed, all of them ones
 	// Chat accepts; nil until it arrives.
 	offered map[string]bool
@@ -312,6 +320,12 @@ func (s *stream) line(line []byte) error {
 	case "user":
 		for _, content := range e.Message.Content {
 			if content.Type == "tool_result" {
+				if name, ok := s.unavailable[content.ToolUseID]; ok {
+					delete(s.unavailable, content.ToolUseID)
+					if !content.IsError {
+						return fmt.Errorf("agent used unavailable tool %q without a refusal", name)
+					}
+				}
 				if err := s.emit(Delta{ToolUseID: content.ToolUseID, ToolResult: string(content.Content), Failed: content.IsError}); err != nil {
 					return err
 				}
@@ -352,6 +366,9 @@ func (s *stream) line(line []byte) error {
 		s.partial = false
 		s.partialText = ""
 	case "result":
+		if len(s.unavailable) != 0 {
+			return errors.New("agent attempted an unavailable tool without a result")
+		}
 		if e.IsError {
 			return errors.New("bad claude output: final result reports an error")
 		}
@@ -359,11 +376,8 @@ func (s *stream) line(line []byte) error {
 			return errors.New("bad claude output: missing result text")
 		}
 		s.done = true
-		// A card whose result never came still shows what was asked.
-		for id := range s.cards {
-			if err := s.settle(id, nil, false); err != nil {
-				return err
-			}
+		if err := s.flushCards(); err != nil {
+			return err
 		}
 		if !s.printed {
 			if err := s.emit(Delta{Text: *e.Result}); err != nil {
@@ -389,9 +403,16 @@ func (s *stream) finish() error {
 func (s *stream) tool(id, name string) error {
 	if !s.validTool(name) {
 		// A model resuming a conversation may still ask for a tool it once
-		// had. claude refuses a tool its init did not offer, and the model
-		// goes on; only a refused tool that was offered ends the turn.
+		// had. Continue only once claude explicitly refuses that unavailable
+		// tool; a successful result must never be silently dropped.
 		if s.offered != nil && !s.offered[name] {
+			if id == "" || len(s.unavailable) >= 256 {
+				return errors.New("invalid unavailable tool call in Chat turn")
+			}
+			if s.unavailable == nil {
+				s.unavailable = map[string]string{}
+			}
+			s.unavailable[id] = name
 			return nil
 		}
 		return errors.New("agent attempted a tool outside driga read tools")
@@ -404,6 +425,12 @@ func (s *stream) tool(id, name string) error {
 	}
 	if len(s.tools) >= 256 {
 		return errors.New("too many tool calls in Chat turn")
+	}
+	if name == "mcp__driga__create_dashboard" {
+		if s.creates >= MaxDashboardCreates {
+			return errors.New("too many dashboard creates in Chat turn")
+		}
+		s.creates++
 	}
 	if id != "" {
 		s.tools[id] = true
@@ -428,7 +455,31 @@ type card struct {
 		ID      string `json:"id"`
 		Version int    `json:"version"`
 	} `json:"saved,omitempty"`
-	Error string `json:"error,omitempty"`
+	Error  string `json:"error,omitempty"`
+	Status string `json:"status,omitempty"`
+}
+
+// flushCards retains unresolved calls in deterministic order on every exit.
+// No result means the write's outcome is unknown, including after cancellation.
+func (s *stream) flushCards() error {
+	ids := make([]string, 0, len(s.cards))
+	for id := range s.cards {
+		ids = append(ids, id)
+	}
+	slices.Sort(ids)
+	var result error
+	for _, id := range ids {
+		c := s.cards[id]
+		delete(s.cards, id)
+		c.Status = "unknown"
+		c.Error = "Outcome unknown: no tool result was received"
+		raw, err := json.Marshal(c)
+		if err == nil {
+			err = s.emit(Delta{Panel: raw})
+		}
+		result = errors.Join(result, err)
+	}
+	return result
 }
 
 // panel holds a panel tool call until its result says what came of it.
@@ -455,8 +506,8 @@ func (s *stream) settle(id string, result json.RawMessage, failed bool) error {
 	if failed {
 		c.Error = scrub.Snippet(text)
 	} else if c.Tool != "show_panels" && c.Tool != "open_dashboard" {
-		// claude passes the tool's structured result, the saved dashboard's
-		// fragment, as the result text.
+		// Driga's saved dashboard tools send the saved fragment as both JSON
+		// text and structured content, including its identity and version.
 		var f struct {
 			ID      string `json:"id"`
 			Version int    `json:"version"`

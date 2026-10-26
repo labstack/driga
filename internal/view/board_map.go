@@ -49,7 +49,7 @@ func BoardAge(r BoardRow, now time.Time) string {
 			at = r.Wait.StartedAt
 		}
 	}
-	if r.State == "stalled" {
+	if r.State == "stuck" {
 		at = r.Node.LastActivityAt
 	}
 	if at.IsZero() {
@@ -249,11 +249,11 @@ func boardMapNode(r BoardRow, x, y int) BoardMapNode {
 	switch r.State {
 	case "finished":
 		opacity, dash = 0.45, "1 4"
-	case "stalled":
+	case "stuck":
 		dash = "4 3"
 	}
 	age := ""
-	if r.State == "waiting" || r.State == "stalled" {
+	if r.State == "waiting" || r.State == "stuck" {
 		age = r.Age
 	}
 	label := r.Title

@@ -117,7 +117,7 @@ func boardRank(s string) int {
 	switch s {
 	case "waiting":
 		return 0
-	case "stalled":
+	case "stuck":
 		return 1
 	case "working":
 		return 2
@@ -140,7 +140,7 @@ func Board(snapshot BoardSnapshot, window time.Duration, now time.Time) BoardVie
 	}
 	step := time.Duration(minutes) * time.Minute / 60
 	edge := now.Truncate(step).Add(step)
-	b := BoardView{ObservedAt: now, FromAt: edge.Add(-time.Duration(minutes) * time.Minute), WindowMinutes: minutes, SliceSeconds: int(step / time.Second), Machines: map[string]*BoardGroup{}, Pulse: map[string]int{"waiting": 0, "stalled": 0, "working": 0, "idle": 0, "finished": 0}, Needs: []BoardRow{}, Groups: []BoardGroup{}, Finished: []BoardRow{}, Load: snapshot.Load, Memory: snapshot.Memory}
+	b := BoardView{ObservedAt: now, FromAt: edge.Add(-time.Duration(minutes) * time.Minute), WindowMinutes: minutes, SliceSeconds: int(step / time.Second), Machines: map[string]*BoardGroup{}, Pulse: map[string]int{"waiting": 0, "stuck": 0, "working": 0, "idle": 0, "finished": 0}, Needs: []BoardRow{}, Groups: []BoardGroup{}, Finished: []BoardRow{}, Load: snapshot.Load, Memory: snapshot.Memory}
 
 	totals := map[string]*BoardGroup{}
 	branches := map[string]map[string]bool{}
@@ -477,7 +477,7 @@ func BoardStrip(row BoardRow, columns int) string {
 				v, p = '─', 1
 			case "working":
 				v, p = '━', 2
-			case "stalled":
+			case "stuck":
 				v, p = '░', 3
 			case "waiting":
 				v, p = '◆', 4

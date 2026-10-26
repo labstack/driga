@@ -141,7 +141,13 @@ func fold(obs *model.SessionObs, e entry, offset int64, snippets bool) error {
 		if json.Unmarshal(e.Payload, &tool) == nil && (tool.Type == "function_call" || tool.Type == "custom_tool_call") {
 			identity := tool.CallID
 			if identity == "" {
-				identity = fmt.Sprint(offset)
+				// Rotation and backlog seeks can move a call to a different byte
+				// offset. ToolEvent hashes this stable content identity before it
+				// is retained; no argument text enters the event metadata.
+				var payload any
+				_ = json.Unmarshal(e.Payload, &payload)
+				canonical, _ := json.Marshal(payload)
+				identity = ts.UTC().Format(time.RFC3339Nano) + "\x00" + string(canonical)
 			}
 			obs.Events = append(obs.Events, adapter.ToolEvent(ts, tool.Name, identity))
 		}

@@ -41,7 +41,7 @@ func storySnapshot() viewer.Snapshot {
 			Children: []view.AgentRow{{ID: 13, MachineID: "studio-id", MachineFresh: studio, Title: "Run the payment suite", Label: "working", Adapter: "claude", Project: "harbor", Branch: "fix/checkout-flake", Age: 6 * time.Minute, Mem: mb(380), LastActivityAt: at(20 * time.Second)}}},
 		{ID: 14, MachineID: "studio-id", MachineFresh: studio, Title: "", Label: "~working", Heuristic: true, Evidence: "files changed 1m ago; no hook events", Adapter: "codex", Project: "beacon", Branch: "chore/deps", Age: 2 * time.Hour, LastActivityAt: at(time.Minute)},
 		{ID: 15, MachineID: "studio-id", MachineFresh: studio, Title: "Write the release notes", Label: "idle", Adapter: "claude", Project: "atlas", Branch: "main", Age: 3 * time.Hour, Mem: mb(240), LastActivityAt: at(48 * time.Minute)},
-		{ID: 16, MachineID: "build-id", MachineFresh: build, Title: "Migrate billing to the v2 events", Label: "~stalled?", Heuristic: true, Evidence: "busy, no output for 34m, CPU idle", Adapter: "claude", Project: "harbor", Branch: "feat/billing-v2", Age: 5 * time.Hour, Mem: gb(2.1), LastActivityAt: at(34 * time.Minute)},
+		{ID: 16, MachineID: "build-id", MachineFresh: build, Title: "Migrate billing to the v2 events", Label: "~stuck", Heuristic: true, Evidence: "busy, no output for 34m, CPU idle", Adapter: "claude", Project: "harbor", Branch: "feat/billing-v2", Age: 5 * time.Hour, Mem: gb(2.1), LastActivityAt: at(34 * time.Minute)},
 		{ID: 17, MachineID: "build-id", MachineFresh: build, Title: "Profile the search index", Label: "dead", Evidence: "process gone with a turn open", Adapter: "claude", Project: "beacon", Branch: "perf/index", Age: 7 * time.Hour, LastActivityAt: at(2 * time.Hour)},
 		{ID: 18, MachineID: "studio-id", MachineFresh: studio, Title: "Tidy the docs site", Label: "finished", Adapter: "gemini", Project: "beacon", Branch: "docs/tidy", Age: 26 * time.Hour, Mem: mb(90), LastActivityAt: at(20 * time.Hour)},
 		{ID: 19, MachineID: "studio-id", MachineFresh: studio, Title: "", Label: "unknown", Adapter: "agy", Project: "sandbox", Age: 4 * time.Hour, Mem: mb(130)},
@@ -68,7 +68,7 @@ func storySnapshot() viewer.Snapshot {
 		{ID: "wt-2", Kind: "worktree", Path: "/home/dev/src/atlas-wt/spike", Repo: "atlas", Branch: "spike/cache", Status: "dirty", Size: int64(mb(640))},
 		{ID: "tmp-1", Kind: "scratch", Path: "/tmp/agent-scratch-7", Status: "ready", Size: int64(gb(3.2))},
 	}
-	s.Summary = view.SummaryView{Agents: 9, Working: 3, Waiting: 2, Stalled: 1, Inbox: 8, Orphans: 2, Reclaim: gb(5.0)}
+	s.Summary = view.SummaryView{MachineID: "studio-id", Agents: 9, Working: 3, Waiting: 2, Stuck: 1, Inbox: 8, Orphans: 2, Reclaim: gb(5.0)}
 	s.Machine.SessionCosts = []view.SessionCost{
 		{SessionID: 12, Adapter: "claude", Project: "harbor", Memory: gb(1.4), CPUPercent: 88},
 		{SessionID: 13, Adapter: "claude", Project: "harbor", Memory: mb(380), CPUPercent: 42},
@@ -93,13 +93,14 @@ func storySnapshot() viewer.Snapshot {
 		}
 		s.Activity.Machines = append(s.Activity.Machines, am)
 	}
+	s.Summary.Sample = *s.Activity.Machines[0].Buckets[59].Sample
 	mem := func(n uint64) *uint64 { return &n }
 	waitEnd := at(30 * time.Minute)
 	s.BoardData.Nodes = []view.FlowNode{
 		{ID: 11, MachineID: "studio-id", Title: "Add rate limiting to the upload API", Label: "waiting", Adapter: "claude", Project: "atlas", Branch: "feat/upload-limits", StartedAt: at(42 * time.Minute), LastActivityAt: at(3 * time.Minute), Mem: mem(mb(612)), LastTool: "Bash",
 			Waits: []view.FlowWait{{ID: "w1", StartedAt: at(4 * time.Minute), Reason: "permission"}, {ID: "w0", StartedAt: at(35 * time.Minute), EndedAt: &waitEnd, Reason: "question"}}},
 		{ID: 12, MachineID: "studio-id", Title: "Fix the flaky checkout test", Label: "working", Adapter: "claude", Project: "harbor", Branch: "fix/checkout-flake", StartedAt: at(18 * time.Minute), LastActivityAt: at(10 * time.Second), Mem: mem(gb(1.4)), LastTool: "Edit"},
-		{ID: 16, MachineID: "build-id", Title: "Migrate billing to the v2 events", Label: "~stalled?", Adapter: "claude", Project: "harbor", Branch: "feat/billing-v2", StartedAt: at(55 * time.Minute), LastActivityAt: at(34 * time.Minute), Mem: mem(gb(2.1)),
+		{ID: 16, MachineID: "build-id", Title: "Migrate billing to the v2 events", Label: "~stuck", Adapter: "claude", Project: "harbor", Branch: "feat/billing-v2", StartedAt: at(55 * time.Minute), LastActivityAt: at(34 * time.Minute), Mem: mem(gb(2.1)),
 			Waits: []view.FlowWait{{ID: "w2", StartedAt: at(22 * time.Minute), Reason: "question"}}},
 	}
 	s.BoardData.History = []view.HistoryRow{

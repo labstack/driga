@@ -64,7 +64,7 @@ func TestConfigShowDefaults(t *testing.T) {
 	if err := toml.Unmarshal(out.Bytes(), &values); err != nil {
 		t.Fatal(err)
 	}
-	if values["capture_text"] != "titles" || values["stalled_after"] != "10m" || values["orphan_min_age"] != "10m" {
+	if values["capture_text"] != "titles" || values["stuck_after"] != "10m" || values["orphan_min_age"] != "10m" {
 		t.Fatal(values)
 	}
 }

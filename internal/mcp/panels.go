@@ -3,10 +3,14 @@ package mcp
 import (
 	"context"
 	"embed"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
+	"sync/atomic"
+	"time"
 
+	"github.com/labstack/driga/internal/chat"
 	"github.com/labstack/driga/internal/dashboard"
 	"github.com/labstack/driga/internal/panel"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -56,20 +60,21 @@ type createInput struct {
 type editInput struct {
 	ID          string                `json:"id" jsonschema:"Dashboard id"`
 	Operations  []dashboard.Operation `json:"operations" jsonschema:"Edits applied in order, all or none"`
-	BaseVersion int                   `json:"base_version,omitempty" jsonschema:"Version you read; the edit fails if someone saved since"`
+	BaseVersion int                   `json:"base_version" jsonschema:"Required version you read, including 0 for an unsaved built-in; fails if someone saved since"`
 	Message     string                `json:"message,omitempty" jsonschema:"One line describing the change, shown in history"`
 }
 
 type replaceInput struct {
 	ID          string          `json:"id" jsonschema:"Dashboard id"`
 	Dashboard   panel.Dashboard `json:"dashboard" jsonschema:"Complete replacement spec; panels it leaves out are removed"`
-	BaseVersion int             `json:"base_version,omitempty" jsonschema:"Version you read; the call fails if someone saved since"`
+	BaseVersion int             `json:"base_version" jsonschema:"Required version you read, including 0 for an unsaved built-in; fails if someone saved since"`
 	Message     string          `json:"message,omitempty" jsonschema:"One line describing the change, shown in history"`
 }
 
 type restoreInput struct {
-	ID      string `json:"id" jsonschema:"Dashboard id"`
-	Version int    `json:"version" jsonschema:"Earlier version to restore; restoring saves it as the newest version"`
+	ID          string `json:"id" jsonschema:"Dashboard id"`
+	Version     int    `json:"version" jsonschema:"Earlier version to restore; restoring saves it as the newest version"`
+	BaseVersion int    `json:"base_version" jsonschema:"Required current version you read; fails if someone saved since"`
 }
 
 type describeOutput struct {
@@ -98,6 +103,8 @@ type versionSummary struct {
 func registerPanels(s *sdk.Server, o Options) {
 	readOnly := &sdk.ToolAnnotations{ReadOnlyHint: true}
 	write := &sdk.ToolAnnotations{DestructiveHint: boolPtr(false), IdempotentHint: false, OpenWorldHint: boolPtr(false)}
+	replace := &sdk.ToolAnnotations{DestructiveHint: boolPtr(true), IdempotentHint: false, OpenWorldHint: boolPtr(false)}
+	var creates atomic.Int32
 	run := func(ctx context.Context, req panel.RunRequest) (*sdk.CallToolResult, panel.Fragment, error) {
 		f, err := o.Panels(ctx, req)
 		if err != nil {
@@ -109,13 +116,22 @@ func registerPanels(s *sdk.Server, o Options) {
 		if err != nil {
 			return nil, panel.Fragment{}, dashboardError(err)
 		}
-		result, f, err := run(ctx, panel.RunRequest{Dashboard: r.Spec, Vars: vars})
+		_, f, err := run(ctx, panel.RunRequest{Dashboard: r.Spec, Vars: vars})
 		if err != nil {
-			return nil, f, err
+			f = savedWarning(r, verb, err)
 		}
 		f.ID, f.Version = r.ID, r.Version
-		result.Content = []sdk.Content{&sdk.TextContent{Text: fmt.Sprintf("%s %q (id %s, version %d). %s", verb, r.Name, r.ID, r.Version, describeFragment(f))}}
-		return result, f, nil
+		raw, err := json.Marshal(f)
+		if err != nil {
+			f = savedWarning(r, verb, err)
+			f.ID, f.Version = r.ID, r.Version
+			// The fallback holds only the already-persisted spec and string
+			// warnings, so it cannot contain an unsupported live reading.
+			raw, _ = json.Marshal(f)
+		}
+		// Text and structured content deliberately carry the same fragment.
+		// Chat can read the saved identity without a host-specific transform.
+		return &sdk.CallToolResult{Content: []sdk.Content{&sdk.TextContent{Text: string(raw)}}}, f, nil
 	}
 
 	sdk.AddTool(s, &sdk.Tool{Name: "describe_panels", Title: "Panel sources", Annotations: readOnly,
@@ -174,6 +190,9 @@ func registerPanels(s *sdk.Server, o Options) {
 		sdk.AddTool(s, &sdk.Tool{Name: "create_dashboard", Title: "Create dashboard", Annotations: write, Meta: appMeta(),
 			Description: "Save a new dashboard the user can open in the Driga app and edit. Returns it with live data." + specGuide,
 		}, func(ctx context.Context, _ *sdk.CallToolRequest, in createInput) (*sdk.CallToolResult, panel.Fragment, error) {
+			if o.ChatServer && creates.Add(1) > chat.MaxDashboardCreates {
+				return nil, panel.Fragment{}, errors.New("too many dashboard creates in Chat turn")
+			}
 			r, err := o.Dashboards.Create(in.Dashboard, agent, in.Message)
 			return saved(ctx, "Created", r, err, nil)
 		})
@@ -183,16 +202,16 @@ func registerPanels(s *sdk.Server, o Options) {
 			r, err := o.Dashboards.Edit(in.ID, in.Operations, in.BaseVersion, agent, in.Message)
 			return saved(ctx, "Updated", r, err, nil)
 		})
-		sdk.AddTool(s, &sdk.Tool{Name: "replace_dashboard", Title: "Replace dashboard", Annotations: write, Meta: appMeta(),
+		sdk.AddTool(s, &sdk.Tool{Name: "replace_dashboard", Title: "Replace dashboard", Annotations: replace, Meta: appMeta(),
 			Description: "Save a whole new spec for a dashboard as a new version; dragged positions of panels it keeps are preserved." + specGuide,
 		}, func(ctx context.Context, _ *sdk.CallToolRequest, in replaceInput) (*sdk.CallToolResult, panel.Fragment, error) {
 			r, err := o.Dashboards.Replace(in.ID, in.Dashboard, in.BaseVersion, agent, in.Message)
 			return saved(ctx, "Replaced", r, err, nil)
 		})
-		sdk.AddTool(s, &sdk.Tool{Name: "restore_dashboard_version", Title: "Restore dashboard version", Annotations: write, Meta: appMeta(),
+		sdk.AddTool(s, &sdk.Tool{Name: "restore_dashboard_version", Title: "Restore dashboard version", Annotations: replace, Meta: appMeta(),
 			Description: "Save an earlier version of a dashboard as its newest version. Nothing is lost: the replaced version stays in history.",
 		}, func(ctx context.Context, _ *sdk.CallToolRequest, in restoreInput) (*sdk.CallToolResult, panel.Fragment, error) {
-			r, err := o.Dashboards.Restore(in.ID, in.Version, agent)
+			r, err := o.Dashboards.Restore(in.ID, in.Version, in.BaseVersion, agent)
 			return saved(ctx, "Restored", r, err, nil)
 		})
 	}
@@ -207,6 +226,16 @@ func registerPanels(s *sdk.Server, o Options) {
 		})
 	}
 	addAppResource(s)
+}
+
+// savedWarning reports a committed save even when its live data could not be
+// rendered. Retrying the save would otherwise create an unintended new version.
+func savedWarning(r dashboard.Record, verb string, err error) panel.Fragment {
+	f := panel.Fragment{Dashboard: r.Spec, ObservedAt: time.Now().UTC().Format(time.RFC3339), Results: []panel.Result{}}
+	for _, p := range r.Spec.Panels {
+		f.Results = append(f.Results, panel.Result{ID: p.ID, Status: panel.StatusError, Message: verb + " dashboard; live data unavailable: " + err.Error()})
+	}
+	return f
 }
 
 func addAppResource(s *sdk.Server) {

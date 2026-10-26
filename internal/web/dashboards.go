@@ -133,7 +133,7 @@ func (s *Server) dashboardAPI(w http.ResponseWriter, r *http.Request) {
 		out = map[string]any{"versions": out}
 	case "restore":
 		var rec dashboard.Record
-		if rec, err = store.Restore(in.ID, in.Version, you); err == nil {
+		if rec, err = store.Restore(in.ID, in.Version, in.BaseVersion, you); err == nil {
 			out, err = s.fragment(r.Context(), rec, in.Vars)
 		}
 	default:

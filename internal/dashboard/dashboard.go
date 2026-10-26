@@ -30,6 +30,7 @@ var (
 	ErrVersion       = errors.New("version not found")
 	ErrAlreadyLatest = errors.New("that version is already current")
 	idPattern        = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,63}$`)
+	slugPattern      = regexp.MustCompile(`[^a-z0-9]+`)
 )
 
 // Author is who saved a version: the person in the app, or an agent.
@@ -203,7 +204,7 @@ func (s *Store) Create(spec panel.Dashboard, author Author, message string) (Rec
 }
 
 func (s *Store) newID(name string) (string, error) {
-	slug := strings.Trim(regexp.MustCompile(`[^a-z0-9]+`).ReplaceAllString(strings.ToLower(name), "-"), "-")
+	slug := strings.Trim(slugPattern.ReplaceAllString(strings.ToLower(name), "-"), "-")
 	if len(slug) > 40 {
 		slug = strings.Trim(slug[:40], "-")
 	}
@@ -223,8 +224,8 @@ func (s *Store) newID(name string) (string, error) {
 	return "", errors.New("could not choose a dashboard id")
 }
 
-// update applies change to the current spec. base 0 means the latest; any
-// other base must still be the current version.
+// update applies change to the current spec only when base is still its
+// current version, including version zero for an unsaved built-in dashboard.
 func (s *Store) update(id string, base int, author Author, message string, change func(panel.Dashboard) (panel.Dashboard, error)) (Record, error) {
 	var out Record
 	err := s.locked(func() error {
@@ -232,10 +233,14 @@ func (s *Store) update(id string, base int, author Author, message string, chang
 		if err != nil {
 			return err
 		}
-		if base != 0 && base != r.Version {
+		if base != r.Version {
 			return ErrStale
 		}
-		spec, err := change(clone(r.Spec))
+		current, err := clone(r.Spec)
+		if err != nil {
+			return err
+		}
+		spec, err := change(current)
 		if err != nil {
 			return err
 		}
@@ -272,8 +277,8 @@ func (s *Store) Versions(id string) ([]Version, error) {
 }
 
 // Restore saves an earlier version as the newest one.
-func (s *Store) Restore(id string, version int, author Author) (Record, error) {
-	return s.update(id, 0, author, fmt.Sprintf("Restored version %d", version), func(current panel.Dashboard) (panel.Dashboard, error) {
+func (s *Store) Restore(id string, version, base int, author Author) (Record, error) {
+	return s.update(id, base, author, fmt.Sprintf("Restored version %d", version), func(current panel.Dashboard) (panel.Dashboard, error) {
 		r, err := s.read(id)
 		if err != nil {
 			return panel.Dashboard{}, err
@@ -283,7 +288,7 @@ func (s *Store) Restore(id string, version int, author Author) (Record, error) {
 		}
 		for _, v := range r.history {
 			if v.Version == version {
-				return clone(v.Spec), nil
+				return clone(v.Spec)
 			}
 		}
 		return panel.Dashboard{}, ErrVersion
@@ -305,11 +310,16 @@ func (s *Store) Delete(id string) error {
 	})
 }
 
-func clone(d panel.Dashboard) panel.Dashboard {
-	b, _ := json.Marshal(d)
+func clone(d panel.Dashboard) (panel.Dashboard, error) {
+	b, err := json.Marshal(d)
+	if err != nil {
+		return panel.Dashboard{}, fmt.Errorf("clone dashboard: %w", err)
+	}
 	var out panel.Dashboard
-	_ = json.Unmarshal(b, &out)
-	return out
+	if err := json.Unmarshal(b, &out); err != nil {
+		return panel.Dashboard{}, fmt.Errorf("clone dashboard: %w", err)
+	}
+	return out, nil
 }
 
 // keepGrids carries dragged positions over to a replacement that omits them.
