@@ -64,7 +64,7 @@ jobs:
       # The catalog check runs stories in Chromium; the pinned Playwright
       # installs the browser it was built against.
       - name: Install Chromium for the catalog check
-        run: cd ui && bun install --frozen-lockfile && bunx playwright install --with-deps chromium
+        run: cd ui && bun install --frozen-lockfile && bun x playwright install --with-deps chromium
       - uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
           distribution: goreleaser
