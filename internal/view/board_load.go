@@ -63,13 +63,25 @@ func loadBoardMachine(mr Reader, f Filter, now time.Time, b *BoardSnapshot) erro
 	}
 	byWait := map[int64][]FlowWait{}
 	jumps := map[int64]*model.InboxJump{}
+	byID := make(map[int64]model.Session, len(sessions))
+	for _, s := range sessions {
+		byID[s.ID] = s
+	}
 	for _, item := range inbox {
 		if item.Kind != "waiting" {
 			continue
 		}
 		item = attention.Policy(item, f.CaptureText)
-		byWait[item.SessionID] = append(byWait[item.SessionID], flowWait(item))
-		if attention.Active(item) {
+		wait := flowWait(item)
+		s, known := byID[item.SessionID]
+		live := liveSessionWait(item, s, known, now)
+		// Closed spans remain timeline history; only live open waits can
+		// change a row's current state or supply its wait reason and jump.
+		if wait.EndedAt == nil && !live {
+			continue
+		}
+		byWait[item.SessionID] = append(byWait[item.SessionID], wait)
+		if live {
 			jumps[item.SessionID] = item.Jump
 		}
 	}

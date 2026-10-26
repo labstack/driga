@@ -1,13 +1,98 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"github.com/labstack/driga/internal/chat"
 	"github.com/labstack/driga/internal/model"
+	panels "github.com/labstack/driga/internal/panel"
+	"github.com/labstack/driga/internal/store"
 	"github.com/labstack/driga/internal/view"
 	"strings"
 	"testing"
+	"time"
 )
+
+func TestFlowIdleNotificationsAgreeWithAppPanels(t *testing.T) {
+	for _, label := range []string{"idle", "waiting"} {
+		t.Run(label, func(t *testing.T) {
+			st, err := store.Open("", store.Memory)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { st.Close() })
+			m := boardApp(t, "empty")
+			now := m.opts.Now()
+			err = st.Tx(context.Background(), func(tx *store.Tx) error {
+				if err := tx.UpsertMachine(model.Machine{OS: "linux"}); err != nil {
+					return err
+				}
+				for i := range 2 {
+					id, err := tx.UpsertSession(model.Session{SessionObs: model.SessionObs{Adapter: "claude", ExternalID: fmt.Sprint(i), Title: "Finished turn", StartedAt: now.Add(-time.Hour), LastActivityAt: now.Add(-2 * time.Minute)}, Label: label})
+					if err != nil {
+						return err
+					}
+					for j := range 2 {
+						if err := tx.UpsertInboxItem(model.InboxItem{ID: fmt.Sprintf("idle-prompt-%d-%d", i, j), SessionID: id, Kind: "waiting", Reason: "idle_prompt", TS: now.Add(-time.Minute)}); err != nil {
+							return err
+						}
+					}
+				}
+				return nil
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			src := NewStoreSource(st, t.TempDir(), view.Filter{})
+			src.Now = func() time.Time { return now }
+			m.snap, err = src.Load(context.Background())
+			if err != nil {
+				t.Fatal(err)
+			}
+			m.width = 200
+			m.rebuild()
+			want := 0
+			if label == "waiting" {
+				want = 2
+			}
+			if len(m.board.Needs) != want || m.board.Pulse["waiting"] != want {
+				t.Errorf("board needs=%d pulse=%d, want %d", len(m.board.Needs), m.board.Pulse["waiting"], want)
+			}
+			for _, g := range m.board.Groups {
+				for _, row := range g.Rows {
+					if row.State != label || label == "idle" && (row.Wait != nil || row.WaitReason != "") {
+						t.Errorf("row state=%s wait=%+v reason=%q", row.State, row.Wait, row.WaitReason)
+					}
+				}
+			}
+			got := m.View().Content
+			for _, text := range []string{fmt.Sprintf("Need you %d", want), fmt.Sprintf("%d waiting", want), fmt.Sprintf("NEEDS YOU · %d", want)} {
+				if !strings.Contains(got, text) {
+					t.Errorf("missing %q: %s", text, got)
+				}
+			}
+			fragment, err := panels.Run(m.snap, panels.RunRequest{Dashboard: panels.Header()})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := fragment.Results[0].Frame.Rows[0][0]; got != float64(want) {
+				t.Errorf("app Need you=%v, want %d", got, want)
+			}
+			if len(fragment.WaitingSessions) != want {
+				t.Errorf("app waiting sessions=%v, want %d", fragment.WaitingSessions, want)
+			}
+			fleet, err := panels.Run(m.snap, panels.RunRequest{Dashboard: panels.Dashboard{Name: "Sessions", Panels: []panels.Panel{{ID: "sessions", Title: "Sessions", Viz: "table", Source: "sessions", Columns: []string{"state"}}}}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, row := range fleet.Results[0].Frame.Rows {
+				if row[0] != label {
+					t.Errorf("app session state=%v, want %s", row[0], label)
+				}
+			}
+		})
+	}
+}
 
 func TestHeaderShowsCPUAndDiskTotals(t *testing.T) {
 	m := boardApp(t, "quiet")
