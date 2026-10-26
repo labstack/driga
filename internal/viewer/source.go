@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/labstack/driga/internal/adapter"
+	"github.com/labstack/driga/internal/chat"
 	"github.com/labstack/driga/internal/cleanup"
 	"github.com/labstack/driga/internal/collector"
 	"github.com/labstack/driga/internal/config"
@@ -34,9 +35,10 @@ type ScopedSource interface {
 
 // Snapshot holds the shared views and the evidence needed by detail panes.
 type Snapshot struct {
-	BoardData view.BoardSnapshot
-	Tail      []view.TailEvent
-	Cleanup   []cleanup.Candidate
+	LivePrompts []chat.Prompt `json:"-"` // request-local only; never persisted or cached
+	BoardData   view.BoardSnapshot
+	Tail        []view.TailEvent
+	Cleanup     []cleanup.Candidate
 	view.Envelope
 	LocalMachineID string
 	Machines       view.MachinesView

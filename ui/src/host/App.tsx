@@ -6,29 +6,22 @@ import { AppShell, Box, Button, Group, Select, Text, Title } from "@mantine/core
 import { notifications } from "@mantine/notifications";
 import { spotlight } from "@mantine/spotlight";
 import { PencilSimple } from "@phosphor-icons/react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Panel as Pane, Group as Split, Separator, useDefaultLayout, usePanelRef } from "react-resizable-panels";
 import { FleetPage } from "../fleet/FleetPage";
-import { fleetOf, fleetSpec } from "../fleet/FleetSpec";
+import { fleetOf } from "../fleet/FleetSpec";
 import { HostContext, type Act, type Host, type InboxFilter } from "../panels/host";
-import type { Dashboard as Spec, Fragment, Prompt } from "../panels/types";
+import type { Prompt } from "../panels/types";
 import "../panels/panels.css";
 import "./host.css";
-import { action, confirmedAction, chat, confirm, dashboards, type Operation, type Summary } from "./api";
+import { action, confirmedAction, chat, confirm, dashboards } from "./api";
 import { Chat } from "./Chat";
 import { ClustersHeader } from "./ClustersHeader";
 import { Dashboard } from "./Dashboard";
 import { attentionKinds, headerOf, kinds, type AttentionKind, type HeaderTarget } from "./Header";
 import { historyOf } from "./History";
 import { Search } from "./Search";
-
-const refreshMs = 5000;
-const headerID = "header";
-
-// The brief reads the whole inbox, whatever dashboard is open.
-const inboxSpec: Spec = { name: "Inbox", panels: [{ id: "inbox", title: "Inbox", viz: "inbox", source: "inbox" }] };
-
-const homeID = "home";
+import { useDashboardRefresh, refreshMs, headerID, homeID } from "./useDashboardRefresh";
 
 type Page = "board" | "fleet";
 
@@ -70,57 +63,12 @@ function typing(target: EventTarget | null): boolean {
 export function App() {
   const [id, setId] = useState<string>(initial);
   const [page, setPage] = useState<Page>(initialPage);
-  const [list, setList] = useState<Summary[]>([]);
-  const [header, setHeader] = useState<Fragment | null>(null);
-  const [inbox, setInbox] = useState<Fragment | null>(null);
-  const [fleet, setFleet] = useState<Fragment | null>(null);
-  const [fragment, setFragment] = useState<Fragment | null>(null);
   const [vars, setVars] = useState<Record<string, string>>({});
-  const [editing, setEditing] = useState(false);
   const [filter, setFilter] = useState<InboxFilter | null>(null);
   const [chatOpen, setChatOpen] = useState(() => remembered("driga-chat-open") !== "false");
-  // When the board last refreshed, and whether the latest try failed.
-  const [fresh, setFresh] = useState<{ at: number; failed: boolean }>({ at: 0, failed: false });
-  const [prompts, setPrompts] = useState<Prompt[]>([]);
   const [ask, setAsk] = useState<{ text: string; at: number } | null>(null);
-  const timer = useRef<number | undefined>(undefined);
-  const loadSequence = useRef(0);
-  const loadScope = useRef({ id, vars });
-  loadScope.current = { id, vars };
-
   const say = (message: string) => notifications.show({ message, autoClose: 4000, closeButtonProps: { "aria-label": "Dismiss" } });
-  const load = useCallback(async () => {
-    if (loadScope.current.id !== id || loadScope.current.vars !== vars) return;
-    const sequence = ++loadSequence.current;
-    const current = () => loadSequence.current === sequence && loadScope.current.id === id && loadScope.current.vars === vars;
-    const [h, i, f] = await Promise.allSettled([dashboards.open(headerID), dashboards.run(inboxSpec), dashboards.run(fleetSpec)]);
-    if (!current()) return;
-    if (h.status === "fulfilled") setHeader(h.value);
-    if (i.status === "fulfilled") setInbox(i.value);
-    if (f.status === "fulfilled") setFleet(f.value);
-    // A failed fetch keeps the prompts last seen; the stale note says so.
-    chat.prompts().then(ps => { if (current()) setPrompts(ps); }, () => undefined);
-    try {
-      const next = await dashboards.open(id, vars);
-      if (!current()) return;
-      setFragment(next);
-      setFresh({ at: Date.now(), failed: false });
-    }
-    catch (e) {
-      if (!current()) return;
-      setFresh(f => ({ ...f, failed: true }));
-      if (id !== homeID) { say((e as Error).message); setId(homeID); }
-    }
-  }, [id, vars]);
-  useEffect(() => { void load(); return () => { loadSequence.current++; }; }, [load]);
-  // Refresh while visible; editing holds the board still.
-  useEffect(() => {
-    if (editing) return;
-    const tick = () => { if (document.visibilityState === "visible") void load(); };
-    timer.current = window.setInterval(tick, refreshMs);
-    return () => window.clearInterval(timer.current);
-  }, [load, editing]);
-  useEffect(() => { dashboards.list().then(l => setList(l.filter(d => d.id !== headerID)), () => undefined); }, [fragment?.version, fragment?.id]);
+  const { fragment, header, inbox, fleet, prompts, list, fresh, editing, setEditing, refresh: load, edit, forgetPrompt } = useDashboardRefresh({ id, vars, onError: say, onMissing: () => setId(homeID) });
   useEffect(() => { remember("driga-chat-open", String(chatOpen)); }, [chatOpen]);
   // Chat and the board share the window; dragging the line between them
   // sets Chat's width, which is remembered. Hiding Chat collapses its pane.
@@ -134,13 +82,12 @@ export function App() {
   }, [chatOpen, chatPane]);
   useEffect(() => { history.replaceState(null, "", page === "fleet" ? "/app/?page=fleet" : id === homeID ? "/app/" : `/app/?dashboard=${encodeURIComponent(id)}`); }, [id, page]);
 
-  // The header reads the fragment's counts, the fleet, Chat's prompts and
-  // the service’s persisted history.
+  // The header reads the server's reconciled counts, the fleet and history.
   const fleetData = useMemo(() => fleet ? fleetOf(fleet, inbox) : null, [fleet, inbox]);
   const kept = useMemo(() => historyOf(header), [header]);
-  const headerData = useMemo(() => header ? headerOf(header, fleetData, prompts, kept) : null, [header, fleetData, prompts, kept]);
+  const headerData = useMemo(() => header ? headerOf(header, fleetData, kept) : null, [header, fleetData, kept]);
 
-  const open = (next: string) => { setEditing(false); setFragment(null); setVars({}); setId(next); setPage("board"); };
+  const open = (next: string) => { setEditing(false); setVars({}); setId(next); setPage("board"); };
   const openFleet = useCallback(() => { setEditing(false); setPage("fleet"); }, []);
   const showOnHome = (target: HeaderTarget) => {
     const away = id !== homeID || page !== "board";
@@ -150,12 +97,6 @@ export function App() {
   // A tile narrows the inbox to its kind, or points Home at the stuck sessions, which the inbox does not list.
   const onFilter = (kind: AttentionKind) => { if (kind === "stuck") showOnHome("stuck"); else setFilter(f => f === kind ? null : kind); };
   const askChat = (text: string) => { setChatOpen(true); setAsk({ text, at: Date.now() }); };
-  const edit = async (target: string, base: number, operations: Operation[], message?: string) => {
-    try {
-      const next = await dashboards.edit(target, operations, base, target === headerID ? undefined : vars, message);
-      if (target === headerID) setHeader(next); else setFragment(next);
-    } catch (e) { say((e as Error).message); void load(); }
-  };
   const act: Act = async ({ kind, row }) => {
     const machine = row.machine_id;
     const session = Number(row.session_id ?? row.id);
@@ -189,7 +130,7 @@ export function App() {
     } catch (e) { say((e as Error).message); }
   };
   const answer = async (prompt: Prompt, allow: boolean) => {
-    try { await chat.answer(prompt.id, allow); setPrompts(ps => ps.filter(p => p.id !== prompt.id)); say(allow ? `Allowed ${prompt.tool}` : `Denied ${prompt.tool}`); }
+    try { await chat.answer(prompt.id, allow); forgetPrompt(prompt.id); say(allow ? `Allowed ${prompt.tool}` : `Denied ${prompt.tool}`); }
     catch (e) { say((e as Error).message); }
   };
   const remove = async () => {

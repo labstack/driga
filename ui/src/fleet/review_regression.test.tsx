@@ -8,7 +8,7 @@ import type { Chart } from "../panels/Chart";
 import { chartTheme } from "../panels/charts";
 import type { Cell, Fragment, Frame } from "../panels/types";
 import { FleetInspector } from "./FleetInspector";
-import { overlapIndex, overlaps } from "./FleetModel";
+import { FleetRelationships } from "./FleetModel";
 import { FleetPage } from "./FleetPage";
 import { FleetSankey } from "./FleetSankey";
 import { fleetSankey, selectionOf } from "./FleetSankeyOption";
@@ -108,12 +108,11 @@ describe("Fleet review regressions", () => {
     const otherMachine = session("3", { machine: "remote", files: ["a.go"] });
     const otherProject = session("4", { project: "beta", files: ["a.go"] });
     const sessions = [a, b, otherMachine, otherProject];
-    const index = overlapIndex(sessions);
-    expect(index.get(a)).toEqual([{ with: b, files: ["a.go", "b.go"] }]);
-    expect(index.get(b)).toEqual([{ with: a, files: ["a.go", "b.go"] }]);
-    expect(index.get(otherMachine)).toEqual([]);
-    expect(index.get(otherProject)).toEqual([]);
-    expect(overlaps(sessions)).toEqual([{ a: "1", b: "2", files: ["a.go", "b.go"] }]);
+    const index = new FleetRelationships(data(sessions));
+    expect(index.overlaps(a)).toEqual([{ with: b, files: ["a.go", "b.go"] }]);
+    expect(index.overlaps(b)).toEqual([{ with: a, files: ["a.go", "b.go"] }]);
+    expect(index.overlaps(otherMachine)).toEqual([]);
+    expect(index.overlaps(otherProject)).toEqual([]);
   });
 
   it("builds Sankey overlap evidence once for the fleet", () => {

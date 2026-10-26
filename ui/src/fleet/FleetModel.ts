@@ -14,8 +14,6 @@ export type FleetProjectGroup = { project: FleetProject; sessions: FleetSession[
 
 export type FleetMachineGroup = { machine: FleetMachine; projects: FleetProjectGroup[]; memory: number; counts: Record<FleetState, number> };
 
-export type FleetOverlap = { a: string; b: string; files: string[] };
-
 /** sortedMachines puts the local machine first, then the rest by name, so
  * nothing reshuffles between refreshes. */
 export function sortedMachines(machines: FleetMachine[]): FleetMachine[] {
@@ -46,7 +44,7 @@ export function needsYou(sessions: FleetSession[]): number {
  * stable order: machines local first then by name, projects by name,
  * sessions by state rank then title. A machine with no sessions still
  * appears, with no projects. */
-export function groupFleet({ machines, projects, sessions }: FleetData): FleetMachineGroup[] {
+function groupFleet({ machines, projects, sessions }: FleetData): FleetMachineGroup[] {
   const byId = new Map(projects.map(p => [p.id, p]));
   return sortedMachines(machines).map(machine => {
     const own = sessions.filter(s => s.machine === machine.id);
@@ -59,21 +57,9 @@ export function groupFleet({ machines, projects, sessions }: FleetData): FleetMa
   });
 }
 
-/** childrenOf lists the subagents a session spawned, in state order. */
-export function childrenOf(sessions: FleetSession[], id: string): FleetSession[] {
-  return sessions.filter(s => s.parent === id).sort(byState);
-}
-
-/** roots keeps the sessions that no other session spawned, so a tree shows
- * each subagent once, under its parent. */
-export function roots(sessions: FleetSession[]): FleetSession[] {
-  const ids = new Set(sessions.map(s => s.id));
-  return sessions.filter(s => !s.parent || !ids.has(s.parent));
-}
-
 /** overlaps finds pairs of sessions of one project editing the same file,
  * each pair once, with the files they share. */
-export function overlapIndex(sessions: FleetSession[]): Map<FleetSession, { with: FleetSession; files: string[] }[]> {
+function overlapIndex(sessions: FleetSession[]): Map<FleetSession, { with: FleetSession; files: string[] }[]> {
   const pairs = new Map<FleetSession, Map<FleetSession,string[]>>(sessions.map(s => [s, new Map()]));
   const owners = new Map<string, FleetSession[]>();
   for (const s of sessions) for (const file of new Set(s.files ?? [])) {
@@ -90,18 +76,76 @@ export function overlapIndex(sessions: FleetSession[]): Map<FleetSession, { with
   return new Map([...pairs].map(([s,others]) => [s,[...others].map(([withSession,files]) => ({with:withSession,files}))]));
 }
 
-export function overlaps(sessions: FleetSession[]): FleetOverlap[] {
-  const index = overlapIndex(sessions);
-  const seen = new Set<FleetSession>();
-  return sessions.flatMap(s => {
-    seen.add(s);
-    return index.get(s)!.filter(o => !seen.has(o.with)).map(o => ({a:s.id,b:o.with.id,files:o.files}));
-  });
+/** A session's identity always includes its machine. */
+export function sessionKey(s: Pick<FleetSession, "machine" | "id">): string {
+  return JSON.stringify([s.machine, s.id]);
 }
 
-export function overlapsOf(sessions: FleetSession[], id: string, machine?: string): { with: FleetSession; files: string[] }[] {
-  const own = sessions.find(s => s.id === id && (machine === undefined || s.machine === machine));
-  return own ? overlapIndex(sessions).get(own)! : [];
+export function sessionSelection(key: string): { kind: "session"; machine: string; id: string } | null {
+  try {
+    const value: unknown = JSON.parse(key);
+    if (Array.isArray(value) && value.length === 2 && value.every(x => typeof x === "string")) return { kind: "session", machine: value[0], id: value[1] };
+  } catch { /* Invalid identities select nothing. */ }
+  return null;
+}
+
+/** Index the complete fleet once. Relationship queries never require callers
+ * to prepare a machine or project scope, including cross-project ancestry. */
+export class FleetRelationships {
+  readonly groups: FleetMachineGroup[];
+  readonly machines: FleetMachine[];
+  readonly projects: FleetProject[];
+  private readonly sessions = new Map<string, FleetSession>();
+  private readonly childrenByParent = new Map<string, FleetSession[]>();
+  private readonly projectMembers = new Map<string, FleetSession[]>();
+  private readonly shared: ReturnType<typeof overlapIndex>;
+
+  constructor(private readonly data: FleetData) {
+    for (const s of data.sessions) {
+      this.sessions.set(sessionKey(s), s);
+      const members = this.projectMembers.get(s.project) ?? [];
+      members.push(s); this.projectMembers.set(s.project, members);
+      if (s.parent) {
+        const key = sessionKey({ machine: s.machine, id: s.parent });
+        const children = this.childrenByParent.get(key) ?? [];
+        children.push(s); this.childrenByParent.set(key, children);
+      }
+    }
+    for (const children of this.childrenByParent.values()) children.sort(byState);
+    this.groups = groupFleet(data);
+    this.machines = sortedMachines(data.machines);
+    this.projects = [...this.projectMembers.keys()].map(id => this.project(id) ?? { id, name: id, repo: "" }).sort((a, b) => a.name.localeCompare(b.name));
+    this.shared = overlapIndex(data.sessions);
+  }
+
+  session(id: string, machine?: string): FleetSession | undefined {
+    if (machine !== undefined) return this.sessions.get(sessionKey({ machine, id }));
+    const matches = this.data.sessions.filter(s => s.id === id);
+    return matches.length === 1 ? matches[0] : undefined;
+  }
+  machine(id: string): FleetMachine | undefined { return this.data.machines.find(m => m.id === id); }
+  project(id: string): FleetProject | undefined { return this.data.projects.find(p => p.id === id); }
+  projectSessions(id: string): FleetSession[] { return this.projectMembers.get(id) ?? []; }
+  projectMachines(id: string): FleetMachine[] {
+    const ids = new Set(this.projectSessions(id).map(s => s.machine));
+    return this.machines.filter(m => ids.has(m.id));
+  }
+  parent(s: FleetSession): FleetSession | undefined { return s.parent ? this.session(s.parent, s.machine) : undefined; }
+  children(s: FleetSession): FleetSession[] { return this.childrenByParent.get(sessionKey(s)) ?? []; }
+  roots(machine: string, project: string): FleetSession[] { return this.projectSessions(project).filter(s => s.machine === machine && !this.parent(s)).sort(byState); }
+  overlaps(s: FleetSession): { with: FleetSession; files: string[] }[] { return this.shared.get(this.session(s.id, s.machine)!) ?? []; }
+  branch(root: FleetSession): { session: FleetSession; depth: number }[] {
+    const result: { session: FleetSession; depth: number }[] = [];
+    const walk = (s: FleetSession, depth: number, path: Set<string>) => {
+      const key = sessionKey(s);
+      if (path.has(key)) return;
+      result.push({ session: s, depth });
+      const next = new Set(path).add(key);
+      for (const child of this.children(s)) walk(child, depth + 1, next);
+    };
+    walk(root, 0, new Set());
+    return result;
+  }
 }
 
 /** turnSummary says what the last turns held, for the tracker strip; a
@@ -133,21 +177,6 @@ export function turnWords(session: FleetSession): string {
  * agent, branch and memory. */
 export function sessionCaption(s: FleetSession): string {
   return [agentLabel(s.agent), s.branch, bytes(s.memory)].filter(Boolean).join(" · ");
-}
-
-export function machineOf(machines: FleetMachine[], id: string): FleetMachine | undefined {
-  return machines.find(m => m.id === id);
-}
-
-export function projectOf(projects: FleetProject[], id: string): FleetProject | undefined {
-  return projects.find(p => p.id === id);
-}
-
-/** machinesOfProject names the machines a project runs on, which answers
- * "the same repo on two machines" in words. */
-export function machinesOfProject(data: FleetData, project: string): FleetMachine[] {
-  const ids = new Set(data.sessions.filter(s => s.project === project).map(s => s.machine));
-  return sortedMachines(data.machines.filter(m => ids.has(m.id)));
 }
 
 /** machineCard is a machine group as the machine card takes it: counts of

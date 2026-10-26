@@ -1,11 +1,11 @@
 import "./Fleet.css";
 import { ActionIcon, Badge, Button, ColorSwatch, Group, Table, Text, UnstyledButton, VisuallyHidden } from "@mantine/core";
 import { CaretDown, CaretRight, Desktop, FolderSimple, GitBranch, HardDrives, Laptop, type Icon } from "@phosphor-icons/react";
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { bytes, exact, plural, relative } from "../panels/format";
 import { AgentChip } from "../widgets/AgentChip";
 import { StatusBadge } from "../widgets/StatusBadge";
-import { childrenOf, groupFleet, roots, type FleetMachineGroup, type FleetProjectGroup } from "./FleetModel";
+import { FleetRelationships, sessionKey, type FleetMachineGroup, type FleetProjectGroup } from "./FleetModel";
 import type { FleetActions, FleetData, FleetMachine, FleetSelection, FleetSession } from "./FleetTypes";
 
 const icons: Record<NonNullable<FleetMachine["kind"]>, Icon> = { desktop: Desktop, laptop: Laptop, server: HardDrives };
@@ -17,25 +17,13 @@ const indent = 20;
  * fully accessible mode: every row and action is a real control, and it
  * needs no pointer. Selecting a row fills the inspector. */
 export function FleetTree({ data, selected, onSelect, onOpen, onReply }: FleetActions & { data: FleetData; selected: FleetSelection | null }) {
-  const groups = groupFleet(data);
-  const sessionsByMachine = new Map<string, FleetSession[]>();
-  for (const s of data.sessions) {
-    const own = sessionsByMachine.get(s.machine) ?? [];
-    own.push(s);
-    sessionsByMachine.set(s.machine, own);
-  }
-  const treeRoots = new Set([...sessionsByMachine.values()].flatMap(roots));
+  const relationships = new FleetRelationships(data);
+  const groups = relationships.groups;
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const toggle = (id: string) => setCollapsed(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   const is = (kind: FleetSelection["kind"], id: string) => selected?.kind === kind && selected.id === id;
-  const sessionRows = (s: FleetSession, level: number, ancestors = new Set<FleetSession>()): ReactNode[] => {
-    if (ancestors.has(s)) return [];
-    const path = new Set(ancestors).add(s);
-    return [
-      <SessionRow key={`${s.machine}/${s.id}`} session={s} level={level} selected={is("session", s.id) && (!selected?.machine || selected.machine === s.machine)} onSelect={onSelect} onOpen={onOpen} onReply={onReply} />,
-      ...childrenOf(sessionsByMachine.get(s.machine) ?? [], s.id).flatMap(c => sessionRows(c, level + 1, path)),
-    ];
-  };
+  const sessionRows = (root: FleetSession) => relationships.branch(root).map(({ session: s, depth }) =>
+    <SessionRow key={sessionKey(s)} session={s} level={depth + 2} selected={is("session", s.id) && (!selected?.machine || selected.machine === s.machine)} onSelect={onSelect} onOpen={onOpen} onReply={onReply} />);
   return <Table.ScrollContainer minWidth={760} type="native">
     <Table aria-label="Fleet tree" layout="fixed">
       <Table.Thead>
@@ -56,7 +44,7 @@ export function FleetTree({ data, selected, onSelect, onOpen, onReply }: FleetAc
             <MachineRow key={g.machine.id} group={g} open={open} selected={is("machine", g.machine.id)} onToggle={() => toggle(g.machine.id)} onSelect={onSelect} />,
             ...(open ? g.projects.flatMap(p => [
               <ProjectRow key={`${g.machine.id}/${p.project.id}`} group={p} selected={is("project", p.project.id)} onSelect={onSelect} />,
-              ...p.sessions.filter(s => treeRoots.has(s)).flatMap(s => sessionRows(s, 2)),
+              ...relationships.roots(g.machine.id, p.project.id).flatMap(sessionRows),
             ]) : []),
           ];
         })}

@@ -3,7 +3,6 @@ package desktop
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -19,6 +18,7 @@ import (
 	"github.com/labstack/driga/internal/config"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/secfile"
+	"github.com/labstack/driga/internal/service"
 	"github.com/labstack/driga/internal/store"
 	"github.com/labstack/driga/internal/view"
 	"github.com/labstack/driga/internal/web"
@@ -74,12 +74,12 @@ type shell struct {
 	// the quit was cancelled.
 	relaunchApp func() bool
 
-	mu         sync.Mutex
-	cfg        config.Config
-	tray       *mygo.Tray
-	status     Status
-	envErr     error
-	serviceErr error
+	mu        sync.Mutex
+	cfg       config.Config
+	tray      *mygo.Tray
+	status    service.Status
+	envErr    error
+	lifecycle *service.Lifecycle
 	// shadowed are the DRIGA_* variables the login shell sets otherwise.
 	shadowed []string
 	// restartPending is set once an upgrade's relaunch was cancelled.
@@ -101,7 +101,7 @@ func Run(opts Options) error {
 	defer closeSource()
 	dataDir := config.DataDir()
 	if opts.Chat == nil {
-		remote := &collectorChat{dataDir: dataDir}
+		remote := chat.NewConnection(dataDir)
 		defer remote.Close()
 		opts.Chat = remote
 	}
@@ -237,22 +237,10 @@ func relaunchApp() bool {
 
 // trayStatus is the service's status with what the app knows added: a
 // pending restart, a failed install and the login environment.
-func (s *shell) trayStatus() Status {
+func (s *shell) trayStatus() service.Status {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	st := s.status
-	switch {
-	case s.restartPending:
-		st = Status{RestartPending: true}
-	case st.Err != nil:
-	case s.serviceErr != nil:
-		st.Err = s.serviceErr
-	case s.envErr != nil && st.Running:
-		st.Err = fmt.Errorf("without login shell PATH: %w", s.envErr)
-	case len(s.shadowed) > 0 && st.Running:
-		st.Err = fmt.Errorf("ignoring %s from the login shell; quit Driga and run driga app from it", strings.Join(s.shadowed, ", "))
-	}
-	return st
+	return s.status.WithDiagnostics(service.Diagnostics{EnvironmentError: s.envErr, Shadowed: s.shadowed, RestartPending: s.restartPending})
 }
 
 // watchNeeds keeps the tray and the badge on the current needs.

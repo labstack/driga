@@ -3,6 +3,7 @@ package desktop
 import (
 	"context"
 	"errors"
+	"github.com/labstack/driga/internal/service"
 	"os"
 	"path/filepath"
 	"testing"
@@ -14,11 +15,11 @@ import (
 // A service the app could not install or start shows in the tray, whether
 // or not an earlier one still runs.
 func TestServiceErrorInTray(t *testing.T) {
-	s := &shell{serviceErr: errors.New("driga service install: denied")}
+	s := &shell{status: service.Status{Err: errors.New("driga service install: denied")}}
 	if line := StatusLine(s.trayStatus()); line != "Driga service: driga service install: denied" {
 		t.Errorf("tray says %q", line)
 	}
-	s.status = Status{Running: true}
+	s.status.Running = true
 	if line := StatusLine(s.trayStatus()); line != "Driga service running · driga service install: denied" {
 		t.Errorf("tray says %q", line)
 	}
@@ -74,7 +75,7 @@ func TestRelaunchCancelledWaitsForRestart(t *testing.T) {
 	if value, set := os.LookupEnv("DRIGA_APP"); set {
 		t.Fatalf("DRIGA_APP=%q left set after the cancelled quit", value)
 	}
-	s.status = Status{Running: true}
+	s.status = service.Status{Running: true}
 	if line := StatusLine(s.trayStatus()); line != "Restart Driga to finish updating" {
 		t.Fatalf("tray says %q", line)
 	}
@@ -117,7 +118,7 @@ func TestRelaunchKeepsALoginLaunchMarked(t *testing.T) {
 // An app in an isolated home leaves the login service alone.
 func TestIsolatedHomeLeavesTheService(t *testing.T) {
 	s := &shell{homes: func() (string, string) { return "/tmp/fake", "/Users/someone" }, serviceExe: "/nonexistent/driga"}
-	if err := s.ensureService(context.Background()); !errors.Is(err, errIsolatedHome) {
+	if err := s.ensureService(context.Background()); !errors.Is(err, service.ErrIsolatedHome) {
 		t.Fatalf("ensureService: %v", err)
 	}
 }

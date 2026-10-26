@@ -9,7 +9,7 @@ import { FleetEmpty } from "./FleetEmpty";
 import { FleetHeader } from "./FleetHeader";
 import { FleetInspector } from "./FleetInspector";
 import { FleetMachineStrip } from "./FleetMachineStrip";
-import { groupFleet } from "./FleetModel";
+import { FleetRelationships } from "./FleetModel";
 import { fleetSankey, sankeyHeight, selectionOf } from "./FleetSankeyOption";
 import { FleetTree } from "./FleetTree";
 import type { FleetProps, FleetSelection } from "./FleetTypes";
@@ -35,7 +35,7 @@ export function FleetSankey({ machines, projects, sessions, strips, selected, de
   const data = useMemo(() => ({ machines, projects, sessions }), [machines, projects, sessions]);
   const [selection, select] = useUncontrolled<FleetSelection | null>({ value: selected, defaultValue: defaultSelected, finalValue: null, onChange: onSelect });
   const [view, setView] = useUncontrolled<FleetMode>({ value: mode, defaultValue: defaultMode, finalValue: "flow", onChange: onModeChange });
-  const groups = useMemo(() => groupFleet(data), [data]);
+  const groups = useMemo(() => new FleetRelationships(data).groups, [data]);
   const machineId = selection?.kind === "machine" && machines.some(m => m.id === selection.id) ? selection.id : null;
   useEffect(() => { if (selection?.kind === "machine" && !machines.some(m => m.id === selection.id)) select(null); }, [machines, selection, select]);
   const shown = useMemo(() => machineId ? { machines: data.machines.filter(m => m.id === machineId), projects: data.projects, sessions: data.sessions.filter(s => s.machine === machineId) } : data, [data, machineId]);

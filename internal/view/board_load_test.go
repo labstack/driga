@@ -139,7 +139,7 @@ func TestBoardOpenWaitUsesInboxLiveness(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if got := HeaderCounts(inbox, agents, OrphansView{}, SummaryView{}).NeedYou; got != len(board.Needs) {
+				if got := ProjectAttention(inbox, agents, "", nil).Header(OrphansView{}, SummaryView{}).NeedYou; got != len(board.Needs) {
 					t.Fatalf("Need you=%d, board needs=%d", got, len(board.Needs))
 				}
 			}

@@ -351,11 +351,6 @@ func visibleSessions(ss []model.Session, all bool, now time.Time) []model.Sessio
 	return result
 }
 
-// liveSessionWait is the shared inbox and board rule for a wait needing the user.
-func liveSessionWait(item model.InboxItem, s model.Session, known bool, now time.Time) bool {
-	return attention.Active(item) && known && s.EndedAt == nil && s.Label == "waiting" && len(visibleSessions([]model.Session{s}, false, now)) > 0
-}
-
 // Inbox reads events; no acknowledgment or spool mutation occurs here.
 func inboxLocal(r Reader, f Filter, now time.Time) (InboxView, error) {
 	v := InboxView{Rows: []InboxRow{}}

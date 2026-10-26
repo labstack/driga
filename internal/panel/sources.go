@@ -329,7 +329,7 @@ var sources = map[string]schema{
 		description: "One row of totals for the selected machines",
 		columns:     []Column{col("agents", Number, "count"), col("working", Number, "count"), col("waiting", Number, "count"), col("stuck", Number, "count"), col("inbox", Number, "count"), col("orphans", Number, "count"), col("reclaim_bytes", Number, "bytes"), col("mem_used_bytes", Number, "bytes"), col("mem_total_bytes", Number, "bytes"), col("disk_free_bytes", Number, "bytes"), col("load1", Number), col("disk_total_bytes", Number, "bytes"), col("cpu_percent", Number, "percent"), col("need_you", Number, "count"), col("to_review", Number, "count"), col("attention_stuck", Number, "count"), col("leftover", Number, "count"), col("leftover_bytes", Number, "bytes")},
 		build: func(s viewer.Snapshot) [][]any {
-			h := view.HeaderCounts(s.Inbox, s.Agents, s.Orphans, s.Summary)
+			h := view.ProjectAttention(s.Inbox, s.Agents, s.LocalMachineID, s.LivePrompts).Header(s.Orphans, s.Summary)
 			v := s.Summary
 			return [][]any{{float64(v.Agents), float64(v.Working), float64(v.Waiting), float64(v.Stuck), float64(v.Inbox), float64(v.Orphans), float64(v.Reclaim), float64(v.Sample.MemUsed), float64(v.Sample.MemTotal), float64(v.Sample.DiskFree), v.Sample.Load1, float64(v.Sample.DiskTotal), cpuValue(v.Sample.CPUPercent), float64(h.NeedYou), float64(h.ToReview), float64(h.Stuck), float64(h.Leftover), float64(h.LeftoverBytes)}}
 		},

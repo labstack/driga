@@ -1,4 +1,4 @@
-package desktop
+package chat
 
 import (
 	"context"
@@ -8,30 +8,33 @@ import (
 	"os"
 	"sync"
 
-	"github.com/labstack/driga/internal/chat"
 	"github.com/labstack/driga/internal/store"
 )
 
-type collectorRemote interface {
-	chat.Client
-	chat.PromptClient
+type connectionRemote interface {
+	Client
+	PromptClient
 	Close()
 }
 
-// collectorChat reaches the chat broker of whichever collector runs, dialing
-// it on first use and again while it does not answer. It never falls back to
-// a private broker: chat waits for the collector instead.
-type collectorChat struct {
+// Connection reaches the collector broker lazily and replaces unavailable
+// transports for the next operation. Failed mutations are never replayed.
+type Connection struct {
 	dataDir    string
 	mu         sync.Mutex
-	remote     collectorRemote
-	dial       func(context.Context, string) (collectorRemote, error)
+	remote     connectionRemote
+	dial       func(context.Context, string) (connectionRemote, error)
 	dialing    chan struct{}
 	cancelDial context.CancelFunc
 	closed     bool
 }
 
-func (c *collectorChat) client(ctx context.Context) (collectorRemote, error) {
+// NewConnection provides collector-only Chat. It never creates a private broker.
+func NewConnection(dataDir string) *Connection {
+	return &Connection{dataDir: dataDir}
+}
+
+func (c *Connection) client(ctx context.Context) (connectionRemote, error) {
 	for {
 		c.mu.Lock()
 		if c.closed {
@@ -56,13 +59,13 @@ func (c *collectorChat) client(ctx context.Context) (collectorRemote, error) {
 		c.dialing, c.cancelDial = make(chan struct{}), cancel
 		dial := c.dial
 		c.mu.Unlock()
-		var r collectorRemote
+		var r connectionRemote
 		var err error
 		if dial != nil {
 			r, err = dial(dialCtx, c.dataDir)
 		} else {
-			var remote *chat.Remote
-			remote, err = chat.Dial(dialCtx, c.dataDir)
+			var remote *Remote
+			remote, err = Dial(dialCtx, c.dataDir)
 			if remote != nil {
 				r = remote
 			}
@@ -89,8 +92,8 @@ func (c *collectorChat) client(ctx context.Context) (collectorRemote, error) {
 }
 
 // Close ends what this client turned on, such as full auto. A pending dial
-// cannot install a new connection after the app has closed.
-func (c *collectorChat) Close() {
+// cannot install a new connection after the client has closed.
+func (c *Connection) Close() {
 	c.mu.Lock()
 	c.closed = true
 	r := c.remote
@@ -107,7 +110,7 @@ func (c *collectorChat) Close() {
 
 // failed forgets an unavailable transport for the next request. The failed
 // request is never retried: it may already have changed state at the service.
-func (c *collectorChat) failed(r collectorRemote, err error) {
+func (c *Connection) failed(r connectionRemote, err error) {
 	if err == nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return
 	}
@@ -127,7 +130,7 @@ func (c *collectorChat) failed(r collectorRemote, err error) {
 	}
 }
 
-func (c *collectorChat) Create(ctx context.Context) (store.Conversation, error) {
+func (c *Connection) Create(ctx context.Context) (store.Conversation, error) {
 	r, err := c.client(ctx)
 	if err != nil {
 		return store.Conversation{}, err
@@ -137,7 +140,7 @@ func (c *collectorChat) Create(ctx context.Context) (store.Conversation, error) 
 	return out, err
 }
 
-func (c *collectorChat) List(ctx context.Context) ([]store.Conversation, error) {
+func (c *Connection) List(ctx context.Context) ([]store.Conversation, error) {
 	r, err := c.client(ctx)
 	if err != nil {
 		return nil, err
@@ -147,7 +150,7 @@ func (c *collectorChat) List(ctx context.Context) ([]store.Conversation, error) 
 	return out, err
 }
 
-func (c *collectorChat) Send(ctx context.Context, id, text string, scope chat.Context) error {
+func (c *Connection) Send(ctx context.Context, id, text string, scope Context) error {
 	r, err := c.client(ctx)
 	if err != nil {
 		return err
@@ -157,7 +160,7 @@ func (c *collectorChat) Send(ctx context.Context, id, text string, scope chat.Co
 	return err
 }
 
-func (c *collectorChat) Stop(ctx context.Context, id string) error {
+func (c *Connection) Stop(ctx context.Context, id string) error {
 	r, err := c.client(ctx)
 	if err != nil {
 		return err
@@ -167,7 +170,7 @@ func (c *collectorChat) Stop(ctx context.Context, id string) error {
 	return err
 }
 
-func (c *collectorChat) SetMode(ctx context.Context, id string, mode chat.Mode) error {
+func (c *Connection) SetMode(ctx context.Context, id string, mode Mode) error {
 	r, err := c.client(ctx)
 	if err != nil {
 		return err
@@ -177,7 +180,7 @@ func (c *collectorChat) SetMode(ctx context.Context, id string, mode chat.Mode) 
 	return err
 }
 
-func (c *collectorChat) Decide(ctx context.Context, id, action string, allow bool) error {
+func (c *Connection) Decide(ctx context.Context, id, action string, allow bool) error {
 	r, err := c.client(ctx)
 	if err != nil {
 		return err
@@ -187,27 +190,27 @@ func (c *collectorChat) Decide(ctx context.Context, id, action string, allow boo
 	return err
 }
 
-func (c *collectorChat) Read(ctx context.Context, id string, after uint64) (chat.State, error) {
+func (c *Connection) Read(ctx context.Context, id string, after uint64) (State, error) {
 	r, err := c.client(ctx)
 	if err != nil {
-		return chat.State{}, err
+		return State{}, err
 	}
 	out, err := r.Read(ctx, id, after)
 	c.failed(r, err)
 	return out, err
 }
 
-func (c *collectorChat) Wait(ctx context.Context, id string, after uint64) (chat.State, error) {
+func (c *Connection) Wait(ctx context.Context, id string, after uint64) (State, error) {
 	r, err := c.client(ctx)
 	if err != nil {
-		return chat.State{}, err
+		return State{}, err
 	}
 	out, err := r.Wait(ctx, id, after)
 	c.failed(r, err)
 	return out, err
 }
 
-func (c *collectorChat) Prompts(ctx context.Context) ([]chat.Prompt, error) {
+func (c *Connection) Prompts(ctx context.Context) ([]Prompt, error) {
 	r, err := c.client(ctx)
 	if err != nil {
 		return nil, err
@@ -217,7 +220,7 @@ func (c *collectorChat) Prompts(ctx context.Context) ([]chat.Prompt, error) {
 	return out, err
 }
 
-func (c *collectorChat) AnswerPrompt(ctx context.Context, id string, allow bool) error {
+func (c *Connection) AnswerPrompt(ctx context.Context, id string, allow bool) error {
 	r, err := c.client(ctx)
 	if err != nil {
 		return err
@@ -228,6 +231,6 @@ func (c *collectorChat) AnswerPrompt(ctx context.Context, id string, allow bool)
 }
 
 var (
-	_ chat.Client       = (*collectorChat)(nil)
-	_ chat.PromptClient = (*collectorChat)(nil)
+	_ Client       = (*Connection)(nil)
+	_ PromptClient = (*Connection)(nil)
 )

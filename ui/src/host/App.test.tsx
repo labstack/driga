@@ -11,9 +11,9 @@ vi.mock("./api", () => ({
   dashboards: { open: api.open, run: api.run, list: api.list, edit: api.edit },
   chat: { prompts: api.prompts }, action: vi.fn(), confirmedAction: vi.fn(), confirm: vi.fn(),
 }));
-vi.mock("./ClustersHeader", () => ({ ClustersHeader: ({ onToggleChat, search }: { onToggleChat: () => void; search: ReactNode }) => <><button onClick={onToggleChat}>Toggle Chat</button>{search}</> }));
+vi.mock("./ClustersHeader", () => ({ ClustersHeader: ({ onToggleChat, search, data }: { onToggleChat: () => void; search: ReactNode; data: { checkedAt: string } | null }) => <><button onClick={onToggleChat}>Toggle Chat</button><output data-testid="header">{data?.checkedAt}</output>{search}</> }));
 vi.mock("./Search", () => ({ Search: ({ open }: { open: (id: string) => void }) => <><button onClick={() => open("other")}>Other dashboard</button><button onClick={() => open("home")}>Home dashboard</button></> }));
-vi.mock("./Dashboard", () => ({ Dashboard: ({ fragment }: { fragment: Fragment }) => <div data-testid="dashboard">{fragment.id}</div> }));
+vi.mock("./Dashboard", () => ({ Dashboard: ({ fragment, onRemove }: { fragment: Fragment; onRemove: (id: string) => void }) => <><div data-testid="dashboard">{fragment.id}</div><output data-testid="warning">{fragment.results[0]?.message}</output><button onClick={() => onRemove("panel")}>Remove panel</button></> }));
 vi.mock("./Chat", () => ({ Chat: () => <button>Chat control</button> }));
 vi.mock("../fleet/FleetPage", () => ({ FleetPage: () => <div data-testid="fleet">Fleet</div> }));
 vi.mock("react-resizable-panels", async () => {
@@ -88,6 +88,31 @@ describe("App", () => {
     await act(async () => { next.resolve(fragment("latest")); });
     await act(async () => { old.resolve(fragment("outdated")); });
     expect(container.querySelector('[data-testid="dashboard"]')?.textContent).toBe("latest");
+  });
+  it("keeps a failed header supplement while the dashboard refresh succeeds", async () => {
+    await mount();
+    const checkedAt = container.querySelector('[data-testid="header"]')?.textContent;
+    api.open.mockImplementation((id: string) => id === "header" ? Promise.reject(new Error("header failed")) : Promise.resolve(fragment("new dashboard")));
+    api.run.mockRejectedValueOnce(new Error("inbox failed")).mockResolvedValueOnce(fragment("fleet"));
+    api.prompts.mockRejectedValueOnce(new Error("prompts failed"));
+    await act(async () => { (window as unknown as { drigaCommand: (name: string) => void }).drigaCommand("reload"); });
+    expect(container.querySelector('[data-testid="dashboard"]')?.textContent).toBe("new dashboard");
+    expect(container.querySelector('[data-testid="header"]')?.textContent).toBe(checkedAt);
+    expect(container.textContent).not.toContain("Not updated since");
+  });
+  it("shows a saved dashboard and its warning when an older refresh overlaps the edit", async () => {
+    await mount();
+    const old = deferred<Fragment>(), saved = deferred<Fragment>();
+    api.open.mockImplementation((id: string) => id === "home" ? old.promise : Promise.resolve(fragment(id)));
+    api.edit.mockReturnValue(saved.promise);
+    await act(async () => { (window as unknown as { drigaCommand: (name: string) => void }).drigaCommand("reload"); });
+    await click("Remove panel");
+    await act(async () => { saved.resolve({ ...fragment("home"), version: 2, dashboard: { name: "Committed dashboard", panels: [] }, results: [{ id: "w", status: "error", message: "Saved dashboard; live data unavailable" }] }); });
+    await act(async () => { old.resolve(fragment("outdated")); });
+    expect(container.querySelector('[data-testid="dashboard"]')?.textContent).toBe("home");
+    expect(container.querySelector('[data-testid="warning"]')?.textContent).toContain("live data unavailable");
+    expect(container.textContent).toContain("Committed dashboard");
+    expect(api.edit).toHaveBeenCalledTimes(1);
   });
   it("makes collapsed Chat inert and restores its controls when opened", async () => {
     localStorage.setItem("driga-chat-open", "false");

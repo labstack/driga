@@ -6,7 +6,7 @@ import { escape, sankey, type Option, type SankeyLink, type SankeyNode, type The
 import { bytes, plural, relative } from "../panels/format";
 import { fonts, typeScale } from "../theme/tokens";
 import { agentLabel } from "../widgets/types";
-import { childrenOf, groupFleet, machinesOfProject, overlapIndex, needsYou, sortedMachines } from "./FleetModel";
+import { FleetRelationships, needsYou, sessionKey, sessionSelection } from "./FleetModel";
 import { states, type FleetData, type FleetSelection } from "./FleetTypes";
 
 /** sankeyHeight gives every session row room, and never less than a panel. */
@@ -22,9 +22,7 @@ export function selectionOf(params: { dataType?: string; name?: string; data?: u
   const [prefix, id] = [name.slice(0, 2), name.slice(2)];
   if (prefix === "m:" || prefix === "l:") return { kind: "machine", id };
   if (prefix === "p:") return { kind: "project", id };
-  if (prefix === "s:") {
-    try { const key: unknown = JSON.parse(id); if (Array.isArray(key) && key.length === 2 && key.every(x => typeof x === "string")) return { kind:"session", machine:key[0],id:key[1] }; } catch { /* Invalid chart identity selects nothing. */ }
-  }
+  if (prefix === "s:") return sessionSelection(id);
   return null;
 }
 
@@ -41,10 +39,8 @@ function rich(text: string): string {
  * project's fan stays together and nothing crosses twice. */
 export function fleetSankey(data: FleetData, t: Theme): Option {
   const c = { ...t.states, brand: t.brand, machine: t.line, leftover: t.muted };
-  const groups = groupFleet(data);
-  const overlaps = overlapIndex(data.sessions);
-  const machines = sortedMachines(data.machines);
-  const projects = [...new Set(data.sessions.map(s => s.project))].map(id => data.projects.find(p => p.id === id) ?? { id, name: id, repo: "" }).sort((a, b) => a.name.localeCompare(b.name));
+  const relationships = new FleetRelationships(data);
+  const { groups, machines, projects } = relationships;
   const total = data.sessions.reduce((n, s) => n + s.memory, 0) + machines.reduce((n, m) => n + (m.leftover?.memory ?? 0), 0);
   const floor = Math.max(1, total / 200);
   const nodes: SankeyNode[] = [];
@@ -63,8 +59,8 @@ export function fleetSankey(data: FleetData, t: Theme): Option {
     });
   }
   for (const p of projects) {
-    const on = machinesOfProject(data, p.id);
-    const sessions = data.sessions.filter(s => s.project === p.id);
+    const on = relationships.projectMachines(p.id);
+    const sessions = relationships.projectSessions(p.id);
     nodes.push({
       name: `p:${p.id}`, depth: 1, text: rich(p.name),
       tip: `<b>${escape(p.name)}</b><br>${escape(p.repo)}<br>on ${escape(on.map(m => m.name).join(", "))} · ${plural(sessions.length, "session")} · ${escape(bytes(sessions.reduce((n, s) => n + s.memory, 0)))}`,
@@ -89,11 +85,11 @@ export function fleetSankey(data: FleetData, t: Theme): Option {
       if (!pg) continue;
       links.push({ source: `m:${g.machine.id}`, target: `p:${p.id}`, value: Math.max(pg.memory, floor), tip: `${escape(g.machine.name)} → ${escape(p.name)}: ${escape(bytes(pg.memory))} in ${plural(pg.sessions.length, "session")}`, lineStyle: pg.waiting ? needs : quiet });
       for (const s of pg.sessions) {
-        const kids = childrenOf(data.sessions.filter(x => x.machine === s.machine), s.id).length;
-        const shared = overlaps.get(s) ?? [];
+        const kids = relationships.children(s).length;
+        const shared = relationships.overlaps(s);
         const marks = `${kids ? ` {dim|↳${kids}}` : ""}${shared.length ? " {bang|!}" : ""}`;
         nodes.push({
-          name: `s:${JSON.stringify([s.machine,s.id])}`, depth: 2,
+          name: `s:${sessionKey(s)}`, depth: 2,
           text: `${rich(s.title)}${marks}{dim| · ${rich(s.agent)} · ${bytes(s.memory)}}`,
           tip: [
             `<b>${escape(s.title)}</b>`,
@@ -106,7 +102,7 @@ export function fleetSankey(data: FleetData, t: Theme): Option {
           ].filter(Boolean).join("<br>"),
           itemStyle: { color: c[s.state] },
         });
-        links.push({ source: `p:${p.id}`, target: `s:${JSON.stringify([s.machine,s.id])}`, value: Math.max(s.memory, floor), tip: `${escape(p.name)} → ${escape(s.title)}: ${escape(bytes(s.memory))}`, lineStyle: s.state === "waiting" ? needs : quiet });
+        links.push({ source: `p:${p.id}`, target: `s:${sessionKey(s)}`, value: Math.max(s.memory, floor), tip: `${escape(p.name)} → ${escape(s.title)}: ${escape(bytes(s.memory))}`, lineStyle: s.state === "waiting" ? needs : quiet });
       }
     }
   }

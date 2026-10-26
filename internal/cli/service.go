@@ -2,9 +2,7 @@ package cli
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"github.com/labstack/driga/internal/secfile"
 	"io"
 	"os"
 	"os/exec"
@@ -13,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	ks "github.com/kardianos/service"
 	"github.com/labstack/driga/internal/collector"
 	"github.com/labstack/driga/internal/config"
 	"github.com/labstack/driga/internal/service"
@@ -96,104 +93,25 @@ func (c serviceControl) Run(g *Globals) error {
 	if runtime.GOOS == "darwin" {
 		serviceBin = service.ExecutablePath(serviceBin)
 	}
-	s, err := service.New(serviceBin)
-	if err != nil {
-		return fmt.Errorf("initialize service controller: %w", err)
-	}
-	switch c.Action {
-	case "install":
-		if runtime.GOOS == "darwin" {
-			// launchd opens these streams before the collector starts.
-			dir := filepath.Dir(service.LogPath())
-			if err := secfile.MkdirPrivate(dir); err != nil {
-				return err
-			}
-			if err := secfile.Protect(dir); err != nil {
-				return err
-			}
-			f, err := secfile.OpenFile(service.LogPath(), os.O_CREATE|os.O_APPEND|os.O_WRONLY)
-			if err != nil {
-				return err
-			}
-			if err := errors.Join(secfile.ProtectFile(f), f.Close()); err != nil {
-				return err
-			}
+	lifecycle := service.NewLifecycle(service.LifecycleOptions{Executable: serviceBin, DataDir: config.DataDir(), Output: commandOutput(g)})
+	if c.Action == "status" {
+		st := lifecycle.Observe()
+		if st.Err != nil {
+			return st.Err
 		}
-		if err := installService(s, service.RemoveLegacy, func() error {
-			if hint := service.InstallHint(runtime.GOOS); hint != "" {
-				_, err := fmt.Fprintln(commandOutput(g), hint)
-				return err
-			}
-			return nil
-		}); err != nil {
-			return err
+		if st.TaskState != "" {
+			_, err = fmt.Fprintf(commandOutput(g), "task: %s; service: lock held=%t, pid=%d, alive=%t\n", st.TaskState, st.LockHeld, st.Owner.PID, st.Alive)
+		} else {
+			_, err = fmt.Fprintln(commandOutput(g), st.Registration)
 		}
-	case "uninstall":
-		err = s.Uninstall()
-	case "start":
-		err = s.Start()
-	case "stop":
-		err = s.Stop()
-	case "restart":
-		err = s.Restart()
-	case "status":
-		if task, ok := s.(interface{ TaskState() (string, error) }); ok {
-			state, stateErr := task.TaskState()
-			if stateErr != nil && !errors.Is(stateErr, ks.ErrNotInstalled) {
-				return fmt.Errorf("query the service task: %w", stateErr)
-			}
-			owner, held, err := collector.ReadOwner(config.DataDir())
-			if err != nil {
-				return fmt.Errorf("probe the service lock: %w", err)
-			}
-			_, err = fmt.Fprintf(commandOutput(g), "task: %s; service: lock held=%t, pid=%d, alive=%t\n", state, held, owner.PID, collector.Running(config.DataDir()))
-			return err
-		}
-		status, statusErr := s.Status()
-		if statusErr != nil && !errors.Is(statusErr, ks.ErrNotInstalled) {
-			return statusErr
-		}
-		label := "unknown"
-		switch status {
-		case ks.StatusRunning:
-			label = "running"
-		case ks.StatusStopped:
-			label = "stopped"
-		}
-		if errors.Is(statusErr, ks.ErrNotInstalled) {
-			label = "not installed"
-		}
-		_, err = fmt.Fprintln(commandOutput(g), label)
 		return err
-	default:
-		return fmt.Errorf("unknown service action %q", c.Action)
 	}
+	err = lifecycle.Control(context.Background(), c.Action)
 	if err != nil {
 		return err
 	}
 	_, err = fmt.Fprintln(commandOutput(g), "Driga service:", c.Action)
 	return err
-}
-
-// installService keeps the previous collector available until the new login
-// service has installed successfully. All later steps stop on the first error.
-func installService(s interface {
-	Install() error
-	Start() error
-}, removeLegacy, showHint func() error) error {
-	if err := s.Install(); err != nil {
-		return err
-	}
-	if err := removeLegacy(); err != nil {
-		return fmt.Errorf("remove the collector an earlier release installed: %w", err)
-	}
-	if err := showHint(); err != nil {
-		return err
-	}
-	if err := s.Start(); err != nil {
-		return fmt.Errorf("installed the Driga service; start it with driga service start: %w", err)
-	}
-	return nil
 }
 
 // collectorHint is the command that starts the Driga service. The app

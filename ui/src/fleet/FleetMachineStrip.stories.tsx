@@ -3,14 +3,14 @@ import { expect, fn, userEvent } from "storybook/test";
 import { minutes } from "../widgets/TrackerBar-fixtures";
 import { busy } from "./Fleet-fixtures";
 import { FleetMachineStrip } from "./FleetMachineStrip";
-import { groupFleet } from "./FleetModel";
+import { FleetRelationships } from "./FleetModel";
 
 /** The row of machine cards above the Fleet view. */
 const meta = {
   id: "fleet-machine-strip",
   title: "Components/Fleet/Machine strip",
   component: FleetMachineStrip,
-  args: { groups: groupFleet(busy), selected: null, onSelect: fn() },
+  args: { groups: new FleetRelationships(busy).groups, selected: null, onSelect: fn() },
   parameters: { docs: { description: { component: "The machine card as a toggle: selecting one narrows the view below to that machine, selecting it again clears the selection. The strip scrolls sideways when the window is narrower than the fleet. With polls the app has kept, each card carries its strip." } } },
 } satisfies Meta<typeof FleetMachineStrip>;
 export default meta;

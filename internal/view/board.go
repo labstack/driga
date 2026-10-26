@@ -1,7 +1,6 @@
 package view
 
 import (
-	"fmt"
 	"github.com/labstack/driga/internal/model"
 	"sort"
 	"strings"
@@ -99,7 +98,7 @@ type BoardView struct {
 	Memory        string                 `json:"memory"`
 }
 
-func BoardKey(n FlowNode) string { return fmt.Sprintf("%s/%d", n.MachineID, n.ID) }
+func BoardKey(n FlowNode) string { return (headerSession{n.MachineID, n.ID}).String() }
 func boardState(n FlowNode) string {
 	if n.EndedAt != nil {
 		return "finished"
@@ -494,19 +493,6 @@ func BoardStrip(row BoardRow, columns int) string {
 		out[i] = ch
 	}
 	return string(out)
-}
-
-// WithPrompts associates only proven pending permission requests with a wait.
-func (b *BoardView) WithPrompts(prompts map[string]string) {
-	for gi := range b.Groups {
-		for ri := range b.Groups[gi].Rows {
-			r := &b.Groups[gi].Rows[ri]
-			r.PromptID = prompts[r.Key]
-		}
-	}
-	for i := range b.Needs {
-		b.Needs[i].PromptID = prompts[b.Needs[i].Key]
-	}
 }
 
 // BoardSpark keeps project and machine rhythms to a fixed twelve-cell measure.
