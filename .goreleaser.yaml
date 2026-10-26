@@ -89,6 +89,9 @@ archives:
     ids:
       - driga
       - drigad
+    # macOS ships drigad inside Driga.app, so its archive has one binary
+    # where Linux has two.
+    allow_different_binary_count: true
     name_template: "driga_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     formats:
       - tar.gz
@@ -116,7 +119,6 @@ archives:
   - id: driga-windows
     ids:
       - driga
-      - drigad
     name_template: "driga_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     formats:
       - zip
@@ -125,9 +127,13 @@ archives:
         formats: [none]
       - goos: darwin
         formats: [none]
+    # drigad.exe is a plain file too, so Scoop shims no service binary.
     files:
       - src: '{{ dir (dir (dir .ArtifactPath)) }}/driga-app_windows_{{ .Arch }}_*/Driga.exe'
         dst: .
+        strip_parent: true
+      - src: '{{ dir (dir (dir .ArtifactPath)) }}/drigad_windows_{{ .Arch }}_*/bin/drigad.exe'
+        dst: bin
         strip_parent: true
       - README.md
       - LICENSE
