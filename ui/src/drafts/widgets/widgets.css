@@ -1,0 +1,58 @@
+/* The few states of the widget drafts that Mantine props cannot express:
+   hover and selection on tiles and rows, the attention tint, the one allowed
+   pulse, hover-revealed actions and the state cells of a strip. Colors are
+   theme variables only; tints are mixed from them at the research's 12%, so
+   secondary text on a tint keeps AA. Motion is 150 ms, off under reduced
+   motion. */
+
+.w-tile { display: block; width: 100%; text-align: left; border: 1px solid var(--driga-border); border-radius: var(--mantine-radius-md); background: var(--driga-raised); transition: background-color 150ms ease-out, box-shadow 150ms ease-out; }
+.w-tile[data-clickable]:hover { background: color-mix(in srgb, var(--driga-hover) 60%, var(--driga-raised)); }
+.w-tile[data-clickable]:active { transform: scale(0.99); }
+.w-tile:focus-visible { outline: 2px solid var(--mantine-color-brand-filled); outline-offset: 2px; }
+.w-tile[data-selected="true"] { box-shadow: inset 0 0 0 1px var(--mantine-color-brand-filled); }
+.w-tile[data-attention="warning"] { background: color-mix(in srgb, var(--mantine-color-warning-filled) 12%, var(--driga-raised)); box-shadow: inset 2px 0 0 var(--mantine-color-warning-filled); }
+.w-tile[data-attention="info"] { background: color-mix(in srgb, var(--mantine-color-info-filled) 12%, var(--driga-raised)); box-shadow: inset 2px 0 0 var(--mantine-color-info-filled); }
+.w-tile[data-attention="danger"] { background: color-mix(in srgb, var(--mantine-color-danger-filled) 12%, var(--driga-raised)); box-shadow: inset 2px 0 0 var(--mantine-color-danger-filled); }
+.w-tile[data-attention="warning"][data-clickable]:hover { background: color-mix(in srgb, var(--mantine-color-warning-filled) 14%, var(--driga-raised)); }
+.w-tile[data-attention="info"][data-clickable]:hover { background: color-mix(in srgb, var(--mantine-color-info-filled) 14%, var(--driga-raised)); }
+.w-tile[data-attention="danger"][data-clickable]:hover { background: color-mix(in srgb, var(--mantine-color-danger-filled) 14%, var(--driga-raised)); }
+.w-tile[data-attention="warning"][data-selected="true"] { box-shadow: inset 2px 0 0 var(--mantine-color-warning-filled), inset 0 0 0 1px var(--mantine-color-brand-filled); }
+.w-tile[data-attention="info"][data-selected="true"] { box-shadow: inset 2px 0 0 var(--mantine-color-info-filled), inset 0 0 0 1px var(--mantine-color-brand-filled); }
+.w-tile[data-attention="danger"][data-selected="true"] { box-shadow: inset 2px 0 0 var(--mantine-color-danger-filled), inset 0 0 0 1px var(--mantine-color-brand-filled); }
+
+/* The one allowed motion: the waiting dot breathes, 2 s, never under reduced motion. */
+.w-pulse { animation: w-pulse 2s ease-in-out infinite; }
+@keyframes w-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+@media (prefers-reduced-motion: reduce) { .w-pulse { animation: none; } }
+
+/* A clickable row or card: hover lifts it a step, selection draws the inset ring. */
+.w-row { position: relative; transition: background-color 150ms ease-out, border-color 150ms ease-out, box-shadow 150ms ease-out; }
+.w-row[data-clickable] { cursor: pointer; }
+.w-row[data-clickable]:hover { background: color-mix(in srgb, var(--driga-hover) 60%, var(--driga-raised)); }
+.w-row:focus-visible { outline: 2px solid var(--mantine-color-brand-filled); outline-offset: -2px; }
+.w-row[data-selected="true"] { box-shadow: inset 0 0 0 1px var(--mantine-color-brand-filled); }
+.w-card[data-clickable]:hover { border-color: var(--driga-control-border); }
+
+/* Actions wait until the row is hovered, focused or selected; always on touch. */
+.w-actions { opacity: 0; transition: opacity 150ms ease-out; }
+.w-row:hover .w-actions, .w-row:focus-within .w-actions, .w-row[data-selected="true"] .w-actions { opacity: 1; }
+@media (pointer: coarse) { .w-actions { opacity: 1; } }
+
+/* A strip's cells: one per minute or poll, the worst state in it. */
+.w-cell { flex: 1 1 0; min-width: 2px; height: 100%; border-radius: 1px; background: var(--driga-border); }
+.w-cell[data-state="working"] { background: var(--mantine-color-success-filled); }
+.w-cell[data-state="waiting"] { background: var(--mantine-color-warning-filled); }
+.w-cell[data-state="stuck"] { background: var(--mantine-color-danger-filled); }
+.w-cell[data-state="idle"], .w-cell[data-state="finished"] { background: var(--mantine-color-info-filled); }
+
+/* The inset box a reason or last tool line sits in. */
+.w-inset { background: var(--driga-inset); border-radius: var(--mantine-radius-sm); padding: 2px 6px; }
+
+/* A small chip: a delta, a counter. Composed rather than a Badge so its text
+   is never clipped by an overflow box. */
+.w-chip { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 6px; border-radius: var(--mantine-radius-sm); white-space: nowrap; font-family: var(--mantine-font-family-monospace); font-size: var(--mantine-font-size-xs); font-weight: 500; font-variant-numeric: tabular-nums; line-height: 1; }
+.w-chip[data-tone="gray"] { background: var(--driga-inset); color: var(--driga-muted); }
+.w-chip[data-tone="success"] { background: color-mix(in srgb, var(--mantine-color-success-filled) 14%, var(--driga-raised)); color: var(--mantine-color-success-light-color); }
+.w-chip[data-tone="danger"] { background: color-mix(in srgb, var(--mantine-color-danger-filled) 14%, var(--driga-raised)); color: var(--mantine-color-danger-light-color); }
+.w-chip[data-tone="warning"] { background: color-mix(in srgb, var(--mantine-color-warning-filled) 14%, var(--driga-raised)); color: var(--mantine-color-warning-light-color); }
+.w-chip[data-tone="default"] { border: 1px solid var(--driga-border); color: var(--driga-text); }
