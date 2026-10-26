@@ -114,9 +114,11 @@ func fold(obs *model.SessionObs, e entry, offset int64, snippets bool) error {
 		}
 		switch event.Type {
 		case "task_started":
+			obs.Events = append(obs.Events, model.Event{TS: ts, Kind: "log:turn_start"})
 			obs.TurnOpen = true
 		case "task_complete", "turn_complete", "turn_completed":
 			obs.TurnOpen = false
+			obs.Events = append(obs.Events, model.Event{TS: ts, Kind: "log:turn_end"})
 			completion := model.CompletionEvent{ID: fmt.Sprintf("codex:%s:%d", obs.ExternalID, offset), TS: ts}
 			if snippets {
 				completion.Text = capturedText(event.LastAgentMessage)
@@ -131,6 +133,18 @@ func fold(obs *model.SessionObs, e entry, offset int64, snippets bool) error {
 			}
 		}
 	case "response_item":
+		var tool struct {
+			Type   string `json:"type"`
+			Name   string `json:"name"`
+			CallID string `json:"call_id"`
+		}
+		if json.Unmarshal(e.Payload, &tool) == nil && (tool.Type == "function_call" || tool.Type == "custom_tool_call") {
+			identity := tool.CallID
+			if identity == "" {
+				identity = fmt.Sprint(offset)
+			}
+			obs.Events = append(obs.Events, adapter.ToolEvent(ts, tool.Name, identity))
+		}
 		return patchFiles(obs, e.Payload, ts)
 	}
 	return nil

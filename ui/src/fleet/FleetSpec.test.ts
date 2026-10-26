@@ -10,6 +10,7 @@ describe("fleetOf", () => {
   it("reads machines with their reach, latest memory sample, leftovers and memory by role", () => {
     expect(data.machines.map(m => [m.id, m.name, m.local ?? false, m.reachable, m.kind])).toEqual([["studio-id", "studio", true, true, "desktop"], ["build-id", "build-01", false, true, "server"], ["laptop-id", "laptop-02", false, false, "desktop"]]);
     expect(data.machines[0].memoryUsed).toBe(25769803776);
+    expect(data.machines[0]).toMatchObject({ cpuPercent: 42, diskFree: 120 * GB, diskTotal: 500 * GB });
     expect(data.machines[0].leftover).toEqual({ trees: 2, processes: 9, memory: 1288490188 + 859832320 });
     expect(data.machines[0].memoryByRole?.[0]).toEqual({ label: "claude · interactive", value: 2.6 * GB });
     expect(Date.parse(data.machines[2].lastSeen)).toBe(Date.parse("2026-03-14T14:46:00Z"));
@@ -26,8 +27,10 @@ describe("fleetOf", () => {
     expect(s["16"]).toMatchObject({ state: "stuck", inferred: true, evidence: "busy, no output for 34m, CPU idle" });
     expect(s["17"]).toMatchObject({ state: "stuck", label: "dead", inferred: true });
     expect(s["19"]).toMatchObject({ state: "idle", label: "unknown", inferred: true, memory: 136314880 });
-    expect(s["14"].turns).toBeUndefined();
-    expect(s["14"].files).toBeUndefined();
+    expect(s["14"].turns).toEqual([]);
+    expect(s["14"].files).toEqual([]);
+    expect(s["11"].turns).toEqual(["ok", "waited", "failed"]);
+    expect(s["11"].files).toEqual(["src/upload.ts"]);
   });
   it("is empty when the service knows no machines", () => {
     expect(fleetOf(fleetEmpty)).toEqual({ machines: [], projects: [], sessions: [] });

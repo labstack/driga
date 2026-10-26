@@ -239,6 +239,7 @@ func (f conversation) observation(path, cwd string, snippets bool) model.Session
 			pending = false
 			o.LastPromptAt = m.ts
 			o.TurnOpen = true
+			o.Events = append(o.Events, model.Event{TS: m.ts, Kind: "log:turn_start"})
 			if snippets {
 				o.LastPrompt = m.snippet
 			}
@@ -250,10 +251,12 @@ func (f conversation) observation(path, cwd string, snippets bool) model.Session
 			}
 			o.TurnOpen = pending
 			if wasOpen && !pending {
+				o.Events = append(o.Events, model.Event{TS: m.ts, Kind: "log:turn_end"})
 				o.Completions = append(o.Completions, model.CompletionEvent{ID: "gemini:" + f.sessionID + ":" + m.id, TS: m.ts})
 			}
 		}
-		for _, t := range m.tools {
+		for i, t := range m.tools {
+			o.Events = append(o.Events, adapter.ToolEvent(m.ts, t.name, fmt.Sprintf("%s:%s:%d", m.id, t.id, i)))
 			if (t.name != "write_file" && t.name != "replace") || t.path == "" {
 				continue
 			}

@@ -113,9 +113,10 @@ show `ack pending` and retry on reconnect.
 
 Desktop alerts show the session title or project and why it needs you, within
 your capture policy. The Driga service posts them under Driga's name and icon,
-whether or not the app is open. Clicking one jumps to the session's terminal
-pane, without acknowledging it. Re-sending an item replaces its existing
-notification.
+whether or not the app is open. A macOS notification click opens the app and
+jumps to the event's session pane, opens Fleet for a machine warning (including a health summary), or opens
+the inbox for a session summary or a session event no longer present. It never acknowledges
+the item. Re-sending an item replaces its existing notification.
 
 On macOS, notifications require the installed **Driga.app**
 (`brew install --cask labstack/tap/driga`). macOS asks only once: if the
@@ -129,12 +130,10 @@ replayed; they stay in the inbox.
 
 On a headless machine the Driga service (`driga service install`) posts its
 own notifications instead: through the bundle on macOS, notify-send on Linux
-and native WinRT toasts on Windows. There, clicking a local item's macOS
-notification runs `driga inbox jump <item-id>` without acknowledging it. Jumps
-select a proven tmux pane, focus a proven Terminal/iTerm window with
-`inbox.jump_terminal = true`, or print a resume command. Machine warnings open
-Terminal on `driga top --tab machines`. Batch summaries and remote alerts have
-no click action, and service alerts on Linux and Windows have none either.
+and native WinRT toasts on Windows. macOS clicks launch the app with the
+machine and item identity, including for paired peers; identical item IDs on
+two machines stay distinct. Service alerts on Linux and Windows have no click
+action. `driga inbox jump <item-id>` remains available for a terminal jump.
 
 Health warnings notify once per condition, until it clears. Concurrent health
 warnings from one machine form one summary. Details and cleanup commands remain
@@ -147,6 +146,24 @@ The default `capture_text = "titles"` stores generated titles and file paths,
 with session/process/Git/machine metadata. Prompt and handoff text is opt-in:
 `capture_text = "snippets"` stores at most 200 characters per snippet after secret
 scrubbing. Scrubbing cannot guarantee privacy. Full transcripts are not stored.
+The app's header history survives reloads: attention is reconstructed from
+inbox and Chat-approval intervals, while an hour of inferred stuck counts and
+the last 30 polls of each machine's worst state are stored without text. Chat
+approval history keeps random IDs and timestamps only; permission inputs stay
+in memory. The header does not invent stuck history before its first poll.
+
+Fleet machine cards show interval CPU utilization and memory/disk pressure.
+Selecting a machine gives CPU and disk bar gauges. CPU is unknown on the first
+sample and after counter resets. Each session shows its last 30 retained turn
+outcomes and captured files relative to its project; shared paths mark overlaps.
+Tool-call and lifecycle metadata are retained independently of the 200-event raw
+tail, without arguments, file contents or transcript text. The `activity_heatmap`
+panel source supplies 24 UTC hourly buckets per project, including the current
+hour. Fleet renders them with the Heatmap widget. To avoid double counting
+transcript, hook and OTLP reporting, each session/hour uses the largest of those
+channel counts. This is a conservative count when channels cover disjoint calls.
+CPU and disk gauges stay in Fleet to keep the header and default Home calm.
+
 Agent configuration is only changed by explicit setup/hook commands.
 
 ```sh

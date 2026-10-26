@@ -1,7 +1,4 @@
-// The Fleet page's data: one spec the app runs against the service, and
-// the mapping from its frames onto the view's contract. Every column read
-// here is one a source already sends; what the service does not send yet
-// stays absent, and the view draws it absent.
+// The Fleet spec and the mapping from service frames to the shipping view.
 import { rows, type Dashboard, type Fragment, type Row } from "../panels/types";
 import { stateOf } from "../widgets/StatusBadge";
 import type { State } from "../widgets/types";
@@ -9,7 +6,7 @@ import type { FleetData, FleetMachine, FleetProject, FleetSession } from "./Flee
 
 /** fleetSpec reads the fleet: machines, every live session with the flow's
  * extras (parent, start, last tool), leftovers, projects, each machine's
- * latest memory sample and its agent memory by role. */
+ * CPU, memory and disk pressure, agent memory by role and project tool activity. */
 export const fleetSpec: Dashboard = {
   name: "Fleet",
   panels: [
@@ -18,8 +15,8 @@ export const fleetSpec: Dashboard = {
     { id: "flow", title: "Flow", viz: "table", source: "flow", columns: ["id", "parent_id", "started_at", "ended_at", "last_tool", "reason", "machine_id"], limit: 200 },
     { id: "orphans", title: "Leftover", viz: "table", source: "orphans", limit: 200 },
     { id: "projects", title: "Projects", viz: "table", source: "projects", limit: 200 },
-    { id: "activity", title: "Memory", viz: "table", source: "activity", columns: ["ts", "machine", "mem_used_bytes", "mem_total_bytes"], sort: "-ts", limit: 200 },
     { id: "memory", title: "Memory by role", viz: "table", source: "memory", limit: 200 },
+    { id: "heatmap", title: "Tool calls by project", viz: "timeseries", source: "activity_heatmap", by: "project", measure: "sum:tool_calls" },
   ],
 };
 
@@ -41,9 +38,6 @@ export function stateFor(label: string): { state: State; label?: string; inferre
 export function fleetOf(fragment: Fragment, inbox?: Fragment | null): FleetData {
   const frame = (id: string): Row[] => rows(fragment.results.find(r => r.id === id)?.frame);
   const observed = Date.parse(fragment.observed_at) || Date.now();
-  // Each machine's latest sample, newest first in the frame.
-  const samples = new Map<string, Row>();
-  for (const r of frame("activity")) if (!samples.has(text(r.machine))) samples.set(text(r.machine), r);
   const leftovers = new Map<string, { trees: number; processes: number; memory: number }>();
   for (const r of frame("orphans")) {
     const l = leftovers.get(text(r.machine_id)) ?? { trees: 0, processes: 0, memory: 0 };
@@ -56,14 +50,15 @@ export function fleetOf(fragment: Fragment, inbox?: Fragment | null): FleetData 
   }
   const machines: FleetMachine[] = frame("machines").map(r => {
     const id = text(r.machine_id), name = text(r.machine), state = text(r.state);
-    const sample = samples.get(name);
     return {
       id, name,
       kind: text(r.os) === "linux" ? "server" : "desktop",
       local: state === "local",
       reachable: state === "local" || state === "live",
       lastSeen: new Date(observed - num(r.last_seen)).toISOString(),
-      memoryUsed: num(sample?.mem_used_bytes), memoryTotal: num(sample?.mem_total_bytes),
+      memoryUsed: num(r.mem_used_bytes), memoryTotal: num(r.mem_total_bytes),
+      cpuPercent: typeof r.cpu_percent === "number" ? r.cpu_percent : undefined,
+      diskFree: num(r.disk_free_bytes), diskTotal: num(r.disk_total_bytes),
       leftover: leftovers.get(id),
       memoryByRole: byRole.get(name),
     };
@@ -87,6 +82,8 @@ export function fleetOf(fragment: Fragment, inbox?: Fragment | null): FleetData 
       state: read.state, label: read.label, inferred: read.inferred || r.inferred === true, evidence: text(r.evidence) || undefined,
       agent: text(r.agent), project: text(r.project), machine: text(r.machine_id), branch: text(r.branch) || undefined,
       memory: num(r.mem_bytes),
+      turns: text(r.turns).split(",").filter((t): t is "ok" | "waited" | "failed" => ["ok", "waited", "failed"].includes(t)),
+      files: r.edited ? JSON.parse(text(r.edited)) ?? [] : [],
       parent: f && num(f.parent_id) > 0 ? text(f.parent_id) : undefined,
       lastTool: text(f?.last_tool) || undefined,
       lastActivity: text(r.last_activity_at) || fragment.observed_at,

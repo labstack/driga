@@ -47,6 +47,9 @@ type Snapshot struct {
 	Inbox          view.InboxView
 	Orphans        view.OrphansView
 	Machine        view.MachineView
+	PanelHistory   view.PanelHistoryView
+	SessionPanels  []view.SessionPanel
+	ToolActivity   []view.ToolHour
 	Activity       view.ActivityView
 	Conflicts      view.ConflictsView
 	AgentDetails   map[int64]view.AgentView
@@ -151,6 +154,12 @@ func (s *StoreSource) load(ctx context.Context, mode string, scope store.Scope, 
 			return err
 		}
 		if snap.Activity, err = view.Activity(tx, f, now); err != nil {
+			return err
+		}
+		if snap.PanelHistory, err = view.PanelHistory(tx, f, now); err != nil {
+			return err
+		}
+		if snap.SessionPanels, snap.ToolActivity, err = view.FleetPanels(tx, f, now); err != nil {
 			return err
 		}
 		if snap.Tail, err = view.EventTail(tx, f.Scope, now); err != nil {

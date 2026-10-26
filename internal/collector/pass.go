@@ -214,6 +214,8 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 				if sample.TS.IsZero() {
 					sample.TS = now
 				}
+				sample.CPUPercent = platform.MachineCPUPercent(work.prevMachine, sample)
+				work.prevMachine = sample
 				if err := tx.InsertSample(sample); err != nil {
 					return err
 				}
@@ -288,6 +290,18 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 				s.ID, err = tx.UpsertSession(*s)
 				if err != nil {
 					return err
+				}
+			}
+			for _, event := range s.Events {
+				event.Adapter, event.ExternalID, event.MachineID = s.Adapter, s.ExternalID, tx.MachineID()
+				inserted, err := tx.RecordPanelEvent(event)
+				if err != nil {
+					return err
+				}
+				if inserted {
+					if err := appendFeed(tx, feed.Event, event, share, now); err != nil {
+						return err
+					}
 				}
 			}
 			if err := tx.ReplaceSessionFiles(s.ID, s.FilesTouched); err != nil {
@@ -449,7 +463,7 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 		for _, s := range ss {
 			before := original[s.ID]
 			current := s
-			current.Completions, current.FilesTouched = nil, nil
+			current.Completions, current.FilesTouched, current.Events = nil, nil, nil
 			if reflect.DeepEqual(before, current) {
 				continue
 			}
@@ -475,11 +489,17 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 				return err
 			}
 		}
+		if p.Procs {
+			if err := tx.RecordPanelPolls(now); err != nil {
+				return err
+			}
+		}
 		r.Sessions, r.Procs = len(ss), len(procs)
 		return tx.SetMeta("last_pass_at", now.Format(time.RFC3339Nano))
 	})
 	if err == nil {
 		state.prev, state.prevAt = work.prev, work.prevAt
+		state.prevMachine = work.prevMachine
 		state.cwds, state.cwdsAt = work.cwds, work.cwdsAt
 		state.cwdNext = work.cwdNext
 		state.spawn, state.gitFullAt = work.spawn, work.gitFullAt
@@ -981,13 +1001,14 @@ func mergeObs(dst *model.SessionObs, src model.SessionObs) {
 	}
 	dst.Completions = append(dst.Completions, src.Completions...)
 	dst.FilesTouched = append(dst.FilesTouched, src.FilesTouched...)
+	dst.Events = append(dst.Events, src.Events...)
 	if src.Adapter == "gemini" {
 		// Gemini observations are complete folds, including rewinds and
 		// recovery snapshots. Timestamps and titles can move backwards.
 		dst.Title, dst.LastPrompt = src.Title, src.LastPrompt
 		dst.LastActivityAt, dst.LastPromptAt = src.LastActivityAt, src.LastPromptAt
 		dst.TurnOpen = src.TurnOpen
-		dst.Completions, dst.FilesTouched = src.Completions, src.FilesTouched
+		dst.Completions, dst.FilesTouched, dst.Events = src.Completions, src.FilesTouched, src.Events
 	}
 }
 

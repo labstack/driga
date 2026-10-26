@@ -134,12 +134,22 @@ func (b *Broker) WaitPrompt(ctx context.Context, in Prompt) (PromptDecision, err
 	b.prompts[in.ID] = p
 	b.wakePromptWatcher()
 	b.mu.Unlock()
+	// Only timestamps are durable; permission inputs stay in memory. Store I/O
+	// runs outside the broker lock so answering an unrelated prompt stays fast.
+	historyErr := b.st.StartPromptHistory(ctx, in.ID, in.CreatedAt)
+	defer func() { _ = b.st.EndPromptHistory(context.WithoutCancel(ctx), in.ID, time.Now().UTC()) }()
 	var out PromptDecision
 	var err error
+	if historyErr != nil {
+		cancel()
+	}
 	select {
 	case out = <-p.answer:
 	case <-wait.Done():
-		err = ctx.Err() // Expiry, unlike hook cancellation, is a normal retirement.
+		err = historyErr
+		if err == nil {
+			err = ctx.Err()
+		} // Expiry, unlike hook cancellation, is a normal retirement.
 	case <-b.ctx.Done():
 		err = b.ctx.Err()
 	}

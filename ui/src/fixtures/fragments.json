@@ -1,5 +1,521 @@
 {
  "all": {
+  "history": {
+   "attention": [
+    {
+     "ts": "2026-03-14T14:01:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:02:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:03:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:04:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:05:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:06:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:07:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:08:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:09:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:10:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:11:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:12:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:13:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:14:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:15:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:16:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:17:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:18:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:19:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:20:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:21:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:22:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:23:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:24:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:25:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:26:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:27:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:28:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:29:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:30:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:31:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:32:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:33:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:34:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:35:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:36:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:37:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:38:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:39:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:40:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:41:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:42:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:43:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:44:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:45:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:46:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:47:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:48:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:49:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:50:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:51:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:52:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:53:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:54:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:55:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:56:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:57:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:58:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:59:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T15:00:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    }
+   ],
+   "polls": [
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:57:35Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:57:40Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:57:45Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:57:50Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:57:55Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:00Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:05Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:10Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:15Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:20Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:25Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:30Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:35Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:40Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:45Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:50Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:55Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:00Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:05Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:10Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:15Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:20Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:25Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:30Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:35Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:40Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:45Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:50Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:55Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T15:00:00Z",
+     "state": "waiting"
+    }
+   ]
+  },
   "dashboard": {
    "name": "Every panel",
    "description": "One panel of each kind, over the fictional fleet.",
@@ -2166,6 +2682,19 @@
       {
        "name": "evidence",
        "type": "string"
+      },
+      {
+       "name": "turns",
+       "type": "string"
+      },
+      {
+       "name": "files",
+       "type": "number",
+       "unit": "count"
+      },
+      {
+       "name": "edited",
+       "type": "string"
       }
      ],
      "rows": []
@@ -2181,6 +2710,522 @@
   "local_machine": "studio-id"
  },
  "header": {
+  "history": {
+   "attention": [
+    {
+     "ts": "2026-03-14T14:01:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:02:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:03:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:04:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:05:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:06:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:07:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:08:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:09:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:10:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:11:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:12:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:13:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:14:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:15:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:16:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:17:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:18:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:19:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:20:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:21:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:22:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:23:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:24:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:25:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:26:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:27:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:28:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:29:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:30:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:31:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:32:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:33:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:34:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:35:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:36:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:37:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:38:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:39:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:40:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:41:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:42:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:43:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:44:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:45:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:46:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:47:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:48:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:49:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:50:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:51:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:52:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:53:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:54:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:55:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:56:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:57:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:58:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:59:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T15:00:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    }
+   ],
+   "polls": [
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:57:35Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:57:40Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:57:45Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:57:50Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:57:55Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:00Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:05Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:10Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:15Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:20Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:25Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:30Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:35Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:40Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:45Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:50Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:55Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:00Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:05Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:10Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:15Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:20Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:25Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:30Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:35Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:40Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:45Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:50Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:55Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T15:00:00Z",
+     "state": "waiting"
+    }
+   ]
+  },
   "dashboard": {
    "name": "Header",
    "description": "The numbers shown above Chat in the app. Only stat panels.",
@@ -2423,6 +3468,522 @@
   "local_machine": "studio-id"
  },
  "header_quiet": {
+  "history": {
+   "attention": [
+    {
+     "ts": "2026-03-14T14:01:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:02:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:03:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:04:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:05:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:06:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:07:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:08:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:09:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:10:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:11:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:12:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:13:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:14:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:15:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:16:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:17:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:18:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:19:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:20:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:21:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:22:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:23:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:24:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:25:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:26:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:27:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:28:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:29:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:30:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:31:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:32:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:33:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:34:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:35:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:36:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:37:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:38:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:39:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:40:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:41:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:42:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:43:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:44:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:45:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:46:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:47:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:48:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:49:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:50:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:51:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:52:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:53:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:54:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:55:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:56:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:57:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:58:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:59:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T15:00:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    }
+   ],
+   "polls": [
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:57:35Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:57:40Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:57:45Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:57:50Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:57:55Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:00Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:05Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:10Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:15Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:20Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:25Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:30Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:35Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:40Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:45Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:50Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:55Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:00Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:05Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:10Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:15Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:20Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:25Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:30Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:35Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:40Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:45Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:50Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:55Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T15:00:00Z",
+     "state": "waiting"
+    }
+   ]
+  },
   "dashboard": {
    "name": "Header",
    "description": "The numbers shown above Chat in the app. Only stat panels.",
@@ -2665,6 +4226,522 @@
   "local_machine": "studio-id"
  },
  "home": {
+  "history": {
+   "attention": [
+    {
+     "ts": "2026-03-14T14:01:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:02:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:03:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:04:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:05:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:06:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:07:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:08:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:09:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:10:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:11:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:12:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:13:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:14:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:15:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:16:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:17:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:18:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:19:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:20:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:21:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:22:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:23:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:24:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:25:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:26:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:27:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:28:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:29:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:30:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:31:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:32:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:33:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:34:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:35:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:36:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:37:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:38:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:39:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:40:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:41:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:42:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:43:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:44:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:45:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:46:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:47:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:48:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:49:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:50:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:51:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:52:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:53:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:54:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:55:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:56:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:57:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:58:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:59:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T15:00:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    }
+   ],
+   "polls": [
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:57:35Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:57:40Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:57:45Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:57:50Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:57:55Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:00Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:05Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:10Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:15Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:20Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:25Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:30Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:35Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:40Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:45Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:50Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:55Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:00Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:05Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:10Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:15Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:20Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:25Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:30Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:35Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:40Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:45Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:50Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:55Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T15:00:00Z",
+     "state": "waiting"
+    }
+   ]
+  },
   "dashboard": {
    "name": "Home",
    "description": "What needs you, what finished, what is running away, and what is in flight.",
@@ -4146,6 +6223,522 @@
   "local_machine": "studio-id"
  },
  "home_quiet": {
+  "history": {
+   "attention": [
+    {
+     "ts": "2026-03-14T14:01:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:02:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:03:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:04:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:05:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:06:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:07:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:08:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:09:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:10:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:11:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:12:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:13:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:14:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:15:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:16:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:17:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:18:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:19:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:20:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:21:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:22:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:23:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:24:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:25:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:26:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:27:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:28:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:29:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:30:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:31:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:32:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:33:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:34:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:35:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:36:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:37:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:38:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:39:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:40:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:41:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:42:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:43:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:44:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:45:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:46:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:47:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:48:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:49:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:50:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:51:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:52:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:53:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:54:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:55:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:56:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:57:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:58:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:59:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T15:00:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    }
+   ],
+   "polls": [
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:57:35Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:57:40Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:57:45Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:57:50Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:57:55Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:00Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:05Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:10Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:15Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:20Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:25Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:30Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:35Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:40Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:45Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:50Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:55Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:00Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:05Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:10Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:15Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:20Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:25Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:30Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:35Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:40Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:45Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:50Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:55Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T15:00:00Z",
+     "state": "waiting"
+    }
+   ]
+  },
   "dashboard": {
    "name": "Home",
    "description": "What needs you, what finished, what is running away, and what is in flight.",
@@ -5240,6 +7833,7 @@
    ],
    "project": [
     "atlas",
+    "beacon",
     "harbor",
     "sandbox"
    ]
@@ -5248,6 +7842,522 @@
   "local_machine": "studio-id"
  },
  "inbox": {
+  "history": {
+   "attention": [
+    {
+     "ts": "2026-03-14T14:01:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:02:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:03:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:04:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:05:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:06:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:07:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:08:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:09:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:10:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:11:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:12:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:13:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:14:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:15:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:16:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:17:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:18:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:19:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:20:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:21:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:22:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:23:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:24:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:25:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:26:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:27:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:28:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:29:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:30:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:31:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:32:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:33:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:34:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:35:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:36:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:37:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:38:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:39:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:40:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:41:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:42:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:43:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:44:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:45:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:46:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:47:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:48:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:49:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:50:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:51:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:52:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:53:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:54:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:55:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:56:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:57:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:58:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:59:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T15:00:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    }
+   ],
+   "polls": [
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:57:35Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:57:40Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:57:45Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:57:50Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:57:55Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:00Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:05Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:10Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:15Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:20Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:25Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:30Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:35Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:40Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:45Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:50Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:55Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:00Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:05Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:10Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:15Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:20Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:25Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:30Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:35Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:40Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:45Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:50Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:55Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T15:00:00Z",
+     "state": "waiting"
+    }
+   ]
+  },
   "dashboard": {
    "name": "Inbox",
    "panels": [
@@ -5581,6 +8691,522 @@
   "local_machine": "studio-id"
  },
  "inbox_quiet": {
+  "history": {
+   "attention": [
+    {
+     "ts": "2026-03-14T14:01:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:02:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:03:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:04:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:05:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:06:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:07:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:08:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:09:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:10:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:11:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:12:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:13:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:14:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:15:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:16:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:17:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:18:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:19:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:20:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:21:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:22:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:23:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:24:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:25:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:26:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:27:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:28:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:29:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:30:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:31:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:32:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:33:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:34:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:35:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:36:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:37:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:38:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:39:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:40:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:41:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:42:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:43:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:44:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:45:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:46:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:47:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:48:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:49:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:50:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:51:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:52:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:53:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:54:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:55:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:56:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:57:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:58:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:59:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T15:00:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    }
+   ],
+   "polls": [
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:57:35Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:57:40Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:57:45Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:57:50Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:57:55Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:00Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:05Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:10Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:15Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:20Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:25Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:30Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:35Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:40Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:45Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:50Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:55Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:00Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:05Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:10Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:15Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:20Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:25Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:30Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:35Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:40Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:45Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:50Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:55Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T15:00:00Z",
+     "state": "waiting"
+    }
+   ]
+  },
   "dashboard": {
    "name": "Inbox",
    "panels": [
@@ -5718,6 +9344,522 @@
   "local_machine": "studio-id"
  },
  "search": {
+  "history": {
+   "attention": [
+    {
+     "ts": "2026-03-14T14:01:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:02:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:03:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:04:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:05:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:06:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:07:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:08:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:09:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:10:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:11:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:12:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:13:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:14:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:15:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:16:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:17:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:18:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:19:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:20:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:21:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:22:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:23:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:24:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:25:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:26:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:27:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:28:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:29:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:30:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:31:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:32:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:33:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:34:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:35:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:36:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:37:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:38:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:39:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:40:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:41:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:42:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:43:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:44:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:45:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:46:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:47:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:48:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:49:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:50:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:51:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:52:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:53:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:54:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:55:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:56:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:57:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:58:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:59:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T15:00:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    }
+   ],
+   "polls": [
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:57:35Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:57:40Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:57:45Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:57:50Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:57:55Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:00Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:05Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:10Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:15Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:20Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:25Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:30Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:35Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:40Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:45Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:50Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:55Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:00Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:05Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:10Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:15Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:20Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:25Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:30Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:35Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:40Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:45Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:50Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:55Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T15:00:00Z",
+     "state": "waiting"
+    }
+   ]
+  },
   "dashboard": {
    "name": "Search",
    "panels": [
@@ -5798,6 +9940,19 @@
       {
        "name": "evidence",
        "type": "string"
+      },
+      {
+       "name": "turns",
+       "type": "string"
+      },
+      {
+       "name": "files",
+       "type": "number",
+       "unit": "count"
+      },
+      {
+       "name": "edited",
+       "type": "string"
       }
      ],
      "rows": [
@@ -5815,7 +9970,10 @@
        "studio-id",
        "waiting",
        false,
-       ""
+       "",
+       "ok,waited,failed",
+       1,
+       "[\"src/upload.ts\"]"
       ],
       [
        16,
@@ -5831,7 +9989,10 @@
        "build-id",
        "stalled?",
        true,
-       "busy, no output for 34m, CPU idle"
+       "busy, no output for 34m, CPU idle",
+       "",
+       0,
+       "[]"
       ],
       [
        17,
@@ -5847,7 +10008,10 @@
        "build-id",
        "dead",
        false,
-       "process gone with a turn open"
+       "process gone with a turn open",
+       "",
+       0,
+       "[]"
       ],
       [
        13,
@@ -5863,7 +10027,10 @@
        "studio-id",
        "working",
        false,
-       ""
+       "",
+       "",
+       0,
+       "[]"
       ],
       [
        12,
@@ -5879,7 +10046,10 @@
        "studio-id",
        "working",
        false,
-       ""
+       "",
+       "",
+       0,
+       "[]"
       ],
       [
        14,
@@ -5895,7 +10065,10 @@
        "studio-id",
        "working",
        true,
-       "files changed 1m ago; no hook events"
+       "files changed 1m ago; no hook events",
+       "",
+       0,
+       "[]"
       ],
       [
        15,
@@ -5911,7 +10084,10 @@
        "studio-id",
        "idle",
        false,
-       ""
+       "",
+       "ok",
+       1,
+       "[\"src/upload.ts\"]"
       ],
       [
        18,
@@ -5927,7 +10103,10 @@
        "studio-id",
        "finished",
        false,
-       ""
+       "",
+       "",
+       0,
+       "[]"
       ],
       [
        19,
@@ -5943,7 +10122,10 @@
        "studio-id",
        "unknown",
        false,
-       ""
+       "",
+       "",
+       0,
+       "[]"
       ]
      ]
     }

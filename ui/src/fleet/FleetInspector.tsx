@@ -2,6 +2,7 @@ import "./Fleet.css";
 import { Badge, Button, Card, ColorSwatch, Group, Progress, ScrollArea, Stack, Text, Title, UnstyledButton } from "@mantine/core";
 import { Desktop, GitBranch, HandPalm, HardDrives, Laptop, type Icon } from "@phosphor-icons/react";
 import { bytes, duration, exact, plural, relative } from "../panels/format";
+import { BarGauge } from "../widgets/BarGauge";
 import { AgentChip } from "../widgets/AgentChip";
 import { CategoryBar } from "../widgets/CategoryBar";
 import { Measure } from "../widgets/Measure";
@@ -129,6 +130,8 @@ function MachinePanel({ group, onSelect }: { group: FleetMachineGroup; onSelect:
       <Progress value={used} size={4} color="var(--driga-control-border)" aria-label={`Memory used ${used}%`} />
       {m.memoryByRole && m.memoryByRole.length > 0 && <CategoryBar label={`Agent memory on ${m.name} by owner`} segments={m.memoryByRole} total={m.memoryTotal} format={bytes} size={6} />}
     </Stack>
+    {m.cpuPercent !== undefined && <Stack gap={4}><Label>CPU</Label><BarGauge value={m.cpuPercent} max={100} format={n => `${Math.round(n)}%`} label={`CPU on ${m.name}`} /></Stack>}
+    {!!m.diskTotal && <Stack gap={4}><Label>Disk</Label><BarGauge value={Math.max(0, m.diskTotal - (m.diskFree ?? 0))} max={m.diskTotal} format={bytes} label={`Disk on ${m.name}`} /></Stack>}
     <Stack gap={2}>
       <Label>Sessions</Label>
       {total === 0 && <Text fz="xs" c="dimmed">None</Text>}

@@ -8,6 +8,7 @@ import { Badge, Box, Button, Group, Paper, Stack, Text } from "@mantine/core";
 import { Broom, Desktop, HardDrives, Laptop } from "@phosphor-icons/react";
 import type { KeyboardEvent, MouseEvent } from "react";
 import { bytes, duration, exact } from "../panels/format";
+import { RingGauge } from "./RingGauge";
 import { BarGauge } from "./BarGauge";
 import { stateVar } from "./StatusBadge";
 import { TrackerBar, type TrackerCell } from "./TrackerBar";
@@ -24,6 +25,9 @@ export type Machine = {
   tls?: boolean;
   reachable: boolean;
   lastSeen: string;
+  cpuPercent?: number;
+  diskFree?: number;
+  diskTotal?: number;
   memUsed: number;
   memTotal: number;
   sessions: Record<LiveState, number>;
@@ -65,7 +69,11 @@ export function MachineCard({ machine: m, selected, onSelect, onOpen, onReclaim 
         <Text size="xs" lh={1.2} c={late ? "danger" : "dimmed"} fw={late ? 500 : undefined} style={{ whiteSpace: "nowrap" }}>{m.reachable ? "reachable" : `last seen ${duration(sinceSeen)} ago`}</Text>
       </Group>
     </Group>
-    <BarGauge value={m.memUsed} max={m.memTotal} format={bytes} label={`Memory on ${m.name}`} />
+    {m.cpuPercent !== undefined && <Stack gap={4}><Text size="xs" c="dimmed">CPU</Text><BarGauge value={m.cpuPercent} max={100} format={n => `${Math.round(n)}%`} label={`CPU on ${m.name}`} /></Stack>}
+    {m.diskTotal ? <Group gap="sm" wrap="wrap" aria-label="Pressure">
+      <RingGauge value={m.memUsed} max={m.memTotal} format={bytes} label="Memory" caption={bytes(m.memUsed)} size={36} />
+      <RingGauge value={Math.max(0, m.diskTotal - (m.diskFree ?? 0))} max={m.diskTotal} format={bytes} label="Disk" caption={bytes(m.diskTotal - (m.diskFree ?? 0))} size={36} />
+    </Group> : <BarGauge value={m.memUsed} max={m.memTotal} format={bytes} label={`Memory on ${m.name}`} />}
     <Group gap={10} wrap="nowrap" aria-label={liveStates.map(k => `${m.sessions[k]} ${stateWord[k]}`).join(", ")}>
       {liveStates.map(k => <Group key={k} gap={3} wrap="nowrap" title={stateWord[k]}>
         <Box aria-hidden style={{ width: 6, height: 6, borderRadius: "50%", background: m.sessions[k] > 0 ? stateVar(k) : "transparent", boxShadow: m.sessions[k] > 0 ? undefined : `inset 0 0 0 1.5px ${stateVar(k)}`, opacity: m.sessions[k] > 0 ? 1 : 0.5 }} />

@@ -16,7 +16,7 @@ const meta = {
   decorators: [Story => <Box h={900} p="md" style={{ display: "flex", flexDirection: "column" }}><Story /></Box>],
   parameters: {
     layout: "fullscreen",
-    docs: { story: { inline: false, iframeHeight: 900 }, description: { component: "Where the memory goes and what needs you, across every machine Driga knows. Built from what the service sends today: states, memory, the flow's parents and last tools, the inbox's reasons for waiting. Turns, files edited and per-machine polls are not sent yet, so they are absent." } },
+    docs: { story: { inline: false, iframeHeight: 900 }, description: { component: "Where the memory goes and what needs you, across every machine Driga knows. Built from what the service sends today: states, memory, the flow's parents and last tools, the inbox's reasons for waiting. The service supplies persisted attention and poll history, turn outcomes, captured relative file paths and a 24-hour project tool-call heatmap." } },
   },
 } satisfies Meta<typeof FleetPage>;
 export default meta;
@@ -29,6 +29,7 @@ export const Busy: Story = {
     await expect(canvas.getByText("· 3 need you")).toBeVisible();
     await expect(canvas.getByRole("button", { name: /^laptop-02 last seen 14m ago/ })).toBeVisible();
     await expect(canvas.getByRole("img", { name: /Fleet flow/ })).toBeVisible();
+    await expect(canvas.getByRole("img", { name: /Tool calls by project/ })).toBeVisible();
   },
 };
 
@@ -39,6 +40,9 @@ export const OpenASession: Story = {
     await userEvent.click(canvas.getByRole("button", { name: "Add rate limiting to the upload API" }));
     const inspector = within(canvas.getByRole("group", { name: "Inspector" }));
     await expect(inspector.getByText("permission · Bash · npm run migrate -- --env staging")).toBeVisible();
+    await expect(inspector.getByRole("img", { name: /Last 30 turns/ })).toBeVisible();
+    await expect(inspector.getByText("src/upload.ts")).toBeVisible();
+    await expect(inspector.getByText("also #15")).toBeVisible();
     await userEvent.click(inspector.getByRole("button", { name: "Open" }));
     await expect(args.act).toHaveBeenCalledWith({ kind: "jump", row: { session_id: 11, machine_id: "studio-id" } });
     await userEvent.unhover(inspector.getByRole("button", { name: "Open" }));

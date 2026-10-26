@@ -49,13 +49,13 @@ func TestWindowHostReopensAfterClose(t *testing.T) {
 	windows.loaded[0]()
 	host.Closed(windows.pages[0])
 	// A stale load of the closed window runs nothing.
-	host.Command("view", "flow")
+	host.Command("view", "fleet")
 	windows.loaded[0]()
 	if len(windows.pages) != 2 || len(windows.pages[1].evals) != 0 {
 		t.Fatalf("stale load ran: %+v", windows.pages[1])
 	}
 	windows.loaded[1]()
-	if !slices.Equal(windows.pages[1].evals, []string{`window.drigaCommand("view","flow")`}) {
+	if !slices.Equal(windows.pages[1].evals, []string{`window.drigaCommand("view","fleet")`}) {
 		t.Fatalf("evals %q", windows.pages[1].evals)
 	}
 	if !host.IsOpen() {
@@ -143,7 +143,7 @@ func TestWindowHostCreateReentry(t *testing.T) {
 		pages, loads = append(pages, p), append(loads, loaded)
 		if len(pages) == 1 {
 			host.Open()
-			host.Command("view", "flow")
+			host.Command("view", "fleet")
 			if host.IsOpen() || host.Current() != nil {
 				t.Error("a window being created counts as open")
 			}
@@ -155,7 +155,7 @@ func TestWindowHostCreateReentry(t *testing.T) {
 		t.Fatalf("windows %d, current %v", len(pages), host.Current())
 	}
 	loads[0]()
-	if !slices.Equal(pages[0].evals, []string{`window.drigaCommand("view","flow")`}) {
+	if !slices.Equal(pages[0].evals, []string{`window.drigaCommand("view","fleet")`}) {
 		t.Fatalf("evals %q", pages[0].evals)
 	}
 }
@@ -173,7 +173,7 @@ func TestWindowHostClosedDuringCreate(t *testing.T) {
 		}
 		return p
 	}}
-	within(t, func() { host.Command("view", "flow") })
+	within(t, func() { host.Command("view", "fleet") })
 	if host.IsOpen() {
 		t.Fatal("kept a closed window")
 	}

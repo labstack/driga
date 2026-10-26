@@ -38,6 +38,7 @@ func TestAppLaunch(t *testing.T) {
 		{"command at login", "", true, []string{"top"}, false},
 		{"app", "", false, []string{"app"}, true},
 		{"app help", "", false, []string{"app", "--help"}, false},
+		{"notification", "", false, []string{"app", "--notification", `{}`}, true},
 		{"other value", "0", false, nil, false},
 	} {
 		if got := appLaunch(env(tt.env), tt.login, tt.args); got != tt.want {
@@ -148,5 +149,13 @@ func TestAppCommandStartsWithBadConfig(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got.Config, config.Default()) {
 		t.Fatal("the app did not start with the default settings")
+	}
+}
+
+func TestNotificationLaunchIsNotHandedOffTwice(t *testing.T) {
+	t.Setenv("DRIGA_APP", "1")
+	defer func() { systemLaunch = false }()
+	if !AppLaunch([]string{"app", "--notification", `{"item_id":"w","machine_id":"peer"}`}) || !systemLaunch {
+		t.Fatal("a Launch Services notification was treated as another CLI launch")
 	}
 }

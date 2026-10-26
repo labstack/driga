@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/labstack/driga/internal/view"
 	"github.com/labstack/driga/internal/viewer"
 )
 
@@ -51,13 +52,14 @@ type Result struct {
 // Fragment is a dashboard with its results: what a tool returns and an MCP
 // App or the app's dashboard renders.
 type Fragment struct {
-	Dashboard  Dashboard           `json:"dashboard"`
-	Results    []Result            `json:"results"`
-	Vars       map[string]string   `json:"vars,omitempty"`
-	Options    map[string][]string `json:"options,omitempty"`
-	ObservedAt string              `json:"observed_at"`
-	ID         string              `json:"id,omitempty"`
-	Version    int                 `json:"version,omitempty"`
+	History    view.PanelHistoryView `json:"history"`
+	Dashboard  Dashboard             `json:"dashboard"`
+	Results    []Result              `json:"results"`
+	Vars       map[string]string     `json:"vars,omitempty"`
+	Options    map[string][]string   `json:"options,omitempty"`
+	ObservedAt string                `json:"observed_at"`
+	ID         string                `json:"id,omitempty"`
+	Version    int                   `json:"version,omitempty"`
 	// LocalMachine is the machine the app runs on; actions act only there.
 	LocalMachine string `json:"local_machine"`
 }
@@ -83,7 +85,7 @@ func Run(snap viewer.Snapshot, req RunRequest) (Fragment, error) {
 		base[source] = r
 		return r
 	}
-	f := Fragment{Dashboard: req.Dashboard, Results: []Result{}, Vars: vars, Options: options(req.Dashboard, rows), ObservedAt: snap.ObservedAt.UTC().Format(time.RFC3339), LocalMachine: snap.LocalMachineID}
+	f := Fragment{History: snap.PanelHistory, Dashboard: req.Dashboard, Results: []Result{}, Vars: vars, Options: options(req.Dashboard, rows), ObservedAt: snap.ObservedAt.UTC().Format(time.RFC3339), LocalMachine: snap.LocalMachineID}
 	for _, p := range req.Dashboard.Panels {
 		if len(req.Panels) > 0 && !slices.Contains(req.Panels, p.ID) {
 			continue

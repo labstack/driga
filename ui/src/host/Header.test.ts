@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { fleet } from "../fixtures/fleet";
-import { fragments, storyNow } from "../fixtures/fragments";
+import { fragments } from "../fixtures/fragments";
 import { fleetOf } from "../fleet/FleetSpec";
 import { changeWords, counts, headerOf, nothingKept, pollOf, stripsOf } from "./Header";
-import { trendOf } from "./History";
+import { historyOf } from "./History";
 
 const GB = 1024 ** 3;
 
@@ -12,7 +12,7 @@ describe("headerOf", () => {
   it("reads the counts, adding Chat's prompts to what needs the person", () => {
     expect(counts(fragments.header, 2)).toEqual({ waiting: 5, review: 3, stuck: 1 });
     const h = headerOf(fragments.header, data, 0, nothingKept);
-    expect(h.attention.waiting).toEqual({ count: 3, trend: [3], delta: 0 });
+    expect(h.attention.waiting).toEqual({ count: 3, trend: [], delta: 0 });
     expect(h.checkedAt).toBe("2026-03-14T15:00:00Z");
   });
   it("names the local machine from the fleet and dots every machine", () => {
@@ -33,7 +33,7 @@ describe("headerOf", () => {
     expect(h.attention.waiting.delta).toBe(2);
     expect(changeWords(h.attention.waiting)).toBe("up 2 in the last hour");
     expect(changeWords(h.attention.stuck)).toBe("down 1 in the last hour");
-    expect(changeWords(h.attention.review)).toBe("steady over the last hour");
+    expect(changeWords(h.attention.review)).toBe("not enough history for an hour’s change");
   });
   it("turns kept polls into strips, once there is more than one", () => {
     const h = headerOf(fragments.header, data, 0, nothingKept);
@@ -43,11 +43,18 @@ describe("headerOf", () => {
   });
 });
 
-describe("trendOf", () => {
-  it("gives one reading a minute, carrying the last reading forward", () => {
-    const counts = (waiting: number) => ({ waiting, review: 0, stuck: 0 });
-    const samples = [{ at: storyNow - 3 * 60_000, counts: counts(1) }, { at: storyNow - 2 * 60_000 + 5000, counts: counts(2) }, { at: storyNow, counts: counts(3) }];
-    expect(trendOf(samples, "waiting", storyNow)).toEqual([1, 1, 2, 3]);
-    expect(trendOf([], "waiting", storyNow)).toEqual([]);
-  });
+describe("historyOf", () => {
+ it("reads the same service history after a reload, with no browser accumulation", () => {
+  const first = historyOf(fragments.header);
+  expect(first.attention.waiting).toHaveLength(60);
+  expect(first.attention.waiting[0]).toBe(1);
+  expect(first.attention.waiting[59]).toBe(3);
+  expect(first.polls["studio-id"]).toHaveLength(30);
+  expect(historyOf(structuredClone(fragments.header))).toEqual(first);
+ });
+ it("keeps unknown stuck readings absent and never substitutes current counts", () => {
+  const f = structuredClone(fragments.header);
+  f.history = { attention: [{ts: f.observed_at, waiting: 1, review: 2, stuck: null}], polls: [] };
+  expect(historyOf(f).attention).toEqual({ waiting: [1], review: [2], stuck: [] });
+ });
 });

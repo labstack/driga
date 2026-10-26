@@ -2,6 +2,7 @@ package panel
 
 import (
 	"cmp"
+	"encoding/json"
 	"slices"
 	"strings"
 	"time"
@@ -89,15 +90,26 @@ func ms(d time.Duration) float64 { return float64(d.Milliseconds()) }
 // sources are the data a panel can show, each read from the same snapshot
 // the app's views use.
 var sources = map[string]schema{
+	"activity_heatmap": {
+		description: "Tool calls per project per UTC hour for the last 24 hours (including the current hour). Zero-filled. The largest transcript/hook/OTLP count per session/hour avoids summing duplicate reporting channels. No text or file contents.",
+		columns:     []Column{col("ts", Time), col("project", String), col("machine_id", String), col("machine", String), col("tool_calls", Number, "count")},
+		build: func(s viewer.Snapshot) [][]any {
+			var rows [][]any
+			for _, h := range s.ToolActivity {
+				rows = append(rows, []any{stamp(h.TS), h.Project, h.MachineID, h.Machine, float64(h.Calls)})
+			}
+			return rows
+		},
+	},
 	"sessions": {
-		description: "Every live agent session, workers included, ordered by state (waiting, then stalled? or dead, working, idle, finished, other) and newest first within each. label is Driga's raw label (a leading ~ marks an inferred one); state is the label without the mark, inferred says whether it was inferred, and evidence is why",
-		columns:     []Column{col("id", Number), col("title", String), col("label", String), col("agent", String), col("project", String), col("branch", String), col("machine", String), col("age", Number, "duration"), col("mem_bytes", Number, "bytes"), col("last_activity_at", Time), col("machine_id", String), col("state", String), col("inferred", Bool), col("evidence", String)},
+		description: "Every live agent session, workers included, with last 30 completed turn outcomes (comma-separated ok, waited, failed), files count and edited (JSON array of project-relative captured paths), ordered by state (waiting, then stalled? or dead, working, idle, finished, other) and newest first within each. label is Driga's raw label (a leading ~ marks an inferred one); state is the label without the mark, inferred says whether it was inferred, and evidence is why",
+		columns:     []Column{col("id", Number), col("title", String), col("label", String), col("agent", String), col("project", String), col("branch", String), col("machine", String), col("age", Number, "duration"), col("mem_bytes", Number, "bytes"), col("last_activity_at", Time), col("machine_id", String), col("state", String), col("inferred", Bool), col("evidence", String), col("turns", String), col("files", Number, "count"), col("edited", String)},
 		build: func(s viewer.Snapshot) [][]any {
 			var rows [][]any
 			var walk func([]view.AgentRow)
 			walk = func(agents []view.AgentRow) {
 				for _, a := range agents {
-					rows = append(rows, []any{float64(a.ID), sessionTitle(a.Title, a.Adapter, a.Project, a.Branch), a.Label, a.Adapter, a.Project, a.Branch, a.MachineName, ms(a.Age), bytesKnown(a.Mem), stamp(a.LastActivityAt), a.MachineID, strings.TrimPrefix(a.Label, "~"), a.Heuristic || strings.HasPrefix(a.Label, "~"), a.Evidence})
+					rows = append(rows, []any{float64(a.ID), sessionTitle(a.Title, a.Adapter, a.Project, a.Branch), a.Label, a.Adapter, a.Project, a.Branch, a.MachineName, ms(a.Age), bytesKnown(a.Mem), stamp(a.LastActivityAt), a.MachineID, strings.TrimPrefix(a.Label, "~"), a.Heuristic || strings.HasPrefix(a.Label, "~"), a.Evidence, turnsFor(s, a.ID), filesCount(s, a.ID), filesFor(s, a.ID)})
 					walk(a.Children)
 				}
 			}
@@ -189,14 +201,15 @@ var sources = map[string]schema{
 	},
 	"activity": {
 		description: "One row per machine per minute for the last hour: events, memory, load and disk",
-		columns:     []Column{col("ts", Time), col("machine", String), col("events", Number, "count"), col("mem_used_bytes", Number, "bytes"), col("mem_total_bytes", Number, "bytes"), col("swap_used_bytes", Number, "bytes"), col("load1", Number), col("disk_free_bytes", Number, "bytes")},
+		columns:     []Column{col("ts", Time), col("machine", String), col("events", Number, "count"), col("mem_used_bytes", Number, "bytes"), col("mem_total_bytes", Number, "bytes"), col("swap_used_bytes", Number, "bytes"), col("load1", Number), col("disk_free_bytes", Number, "bytes"), col("disk_total_bytes", Number, "bytes"), col("cpu_percent", Number, "percent")},
 		build: func(s viewer.Snapshot) [][]any {
 			var rows [][]any
 			for _, m := range s.Activity.Machines {
 				for _, b := range m.Buckets {
-					row := []any{stamp(b.TS), m.MachineName, float64(b.Events), nil, nil, nil, nil, nil}
+					row := []any{stamp(b.TS), m.MachineName, float64(b.Events), nil, nil, nil, nil, nil, nil, nil}
 					if b.Sample != nil {
 						row[3], row[4], row[5], row[6], row[7] = float64(b.Sample.MemUsed), float64(b.Sample.MemTotal), float64(b.Sample.SwapUsed), b.Sample.Load1, float64(b.Sample.DiskFree)
+						row[8], row[9] = float64(b.Sample.DiskTotal), cpuValue(b.Sample.CPUPercent)
 					}
 					rows = append(rows, row)
 				}
@@ -298,21 +311,21 @@ var sources = map[string]schema{
 	},
 	"machines": {
 		description: "Known machines with their agents, inbox and connection state",
-		columns:     []Column{col("machine_id", String), col("machine", String), col("state", String), col("os", String), col("agents", Number, "count"), col("inbox", Number, "count"), col("last_seen", Number, "duration")},
+		columns:     []Column{col("machine_id", String), col("machine", String), col("state", String), col("os", String), col("agents", Number, "count"), col("inbox", Number, "count"), col("last_seen", Number, "duration"), col("mem_used_bytes", Number, "bytes"), col("mem_total_bytes", Number, "bytes"), col("disk_free_bytes", Number, "bytes"), col("disk_total_bytes", Number, "bytes"), col("cpu_percent", Number, "percent")},
 		build: func(s viewer.Snapshot) [][]any {
 			rows := make([][]any, 0, len(s.Machines.Rows))
 			for _, m := range s.Machines.Rows {
-				rows = append(rows, []any{m.MachineID, view.MachineName(m.Machine), view.MachineState(m.Machine, s.LocalMachineID, s.ObservedAt), m.OS, float64(m.Agents), float64(m.Inbox), ms(m.LastSeenAge)})
+				rows = append(rows, []any{m.MachineID, view.MachineName(m.Machine), view.MachineState(m.Machine, s.LocalMachineID, s.ObservedAt), m.OS, float64(m.Agents), float64(m.Inbox), ms(m.LastSeenAge), float64(m.Sample.MemUsed), float64(m.Sample.MemTotal), float64(m.Sample.DiskFree), float64(m.Sample.DiskTotal), cpuValue(m.Sample.CPUPercent)})
 			}
 			return rows
 		},
 	},
 	"summary": {
 		description: "One row of totals for the selected machines",
-		columns:     []Column{col("agents", Number, "count"), col("working", Number, "count"), col("waiting", Number, "count"), col("stalled", Number, "count"), col("inbox", Number, "count"), col("orphans", Number, "count"), col("reclaim_bytes", Number, "bytes"), col("mem_used_bytes", Number, "bytes"), col("mem_total_bytes", Number, "bytes"), col("disk_free_bytes", Number, "bytes"), col("load1", Number)},
+		columns:     []Column{col("agents", Number, "count"), col("working", Number, "count"), col("waiting", Number, "count"), col("stalled", Number, "count"), col("inbox", Number, "count"), col("orphans", Number, "count"), col("reclaim_bytes", Number, "bytes"), col("mem_used_bytes", Number, "bytes"), col("mem_total_bytes", Number, "bytes"), col("disk_free_bytes", Number, "bytes"), col("load1", Number), col("disk_total_bytes", Number, "bytes"), col("cpu_percent", Number, "percent")},
 		build: func(s viewer.Snapshot) [][]any {
 			v := s.Summary
-			return [][]any{{float64(v.Agents), float64(v.Working), float64(v.Waiting), float64(v.Stalled), float64(v.Inbox), float64(v.Orphans), float64(v.Reclaim), float64(v.Sample.MemUsed), float64(v.Sample.MemTotal), float64(v.Sample.DiskFree), v.Sample.Load1}}
+			return [][]any{{float64(v.Agents), float64(v.Working), float64(v.Waiting), float64(v.Stalled), float64(v.Inbox), float64(v.Orphans), float64(v.Reclaim), float64(v.Sample.MemUsed), float64(v.Sample.MemTotal), float64(v.Sample.DiskFree), v.Sample.Load1, float64(v.Sample.DiskTotal), cpuValue(v.Sample.CPUPercent)}}
 		},
 	},
 }
@@ -406,4 +419,40 @@ func bytesKnown(n uint64) any {
 		return nil
 	}
 	return float64(n)
+}
+
+func cpuValue(v *float64) any {
+	if v == nil {
+		return nil
+	}
+	return *v
+}
+
+func turnsFor(s viewer.Snapshot, id int64) string {
+	for _, d := range s.SessionPanels {
+		if d.ID == id {
+			return strings.Join(d.Turns, ",")
+		}
+	}
+	return ""
+}
+func filesCount(s viewer.Snapshot, id int64) float64 {
+	for _, d := range s.SessionPanels {
+		if d.ID == id {
+			return float64(len(d.Files))
+		}
+	}
+	return 0
+}
+func filesFor(s viewer.Snapshot, id int64) string {
+	for _, d := range s.SessionPanels {
+		if d.ID == id {
+			if len(d.Files) == 0 {
+				return "[]"
+			}
+			b, _ := json.Marshal(d.Files)
+			return string(b)
+		}
+	}
+	return "[]"
 }

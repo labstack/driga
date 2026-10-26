@@ -24,12 +24,15 @@ type Reader interface {
 	SessionHandoffs(int64, time.Time, time.Time) ([]model.CompletionEvent, error)
 	Summaries(int64) ([]model.Summary, error)
 	SessionFiles(time.Time) (map[int64][]model.FileTouch, error)
+	PanelEvents(string, string, time.Time) ([]model.Event, error)
 	Events(string, string, time.Time) ([]model.Event, error)
 	RecentEvents(time.Time, int) ([]model.Event, error)
 	Inbox(time.Time, bool) ([]model.InboxItem, error)
 	Orphans() ([]model.Orphan, error)
 	LatestSample() (model.MachineSample, error)
 	Samples(time.Time) ([]model.MachineSample, error)
+	PromptIntervals(time.Time) ([]store.PromptInterval, error)
+	PanelPolls(time.Time) ([]store.PanelPoll, error)
 	EventCounts(time.Time, time.Time) ([]store.EventCount, error)
 	BoardEvidence(time.Time, time.Time) ([]model.Event, map[int64][]store.ObservationMinute, error)
 	ObservationMinutes(int64, time.Time) ([]store.ObservationMinute, error)
@@ -351,6 +354,7 @@ type MachineFresh struct {
 
 // MachineRow lists a known machine, cached counts, and clock health.
 type MachineRow struct {
+	Sample model.MachineSample `json:"sample"`
 	model.Machine
 	Agents      int           `json:"agents"`
 	Inbox       int           `json:"inbox"`

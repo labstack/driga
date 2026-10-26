@@ -17,6 +17,7 @@ import (
 	"github.com/egoist/mygo"
 	"github.com/labstack/driga/internal/chat"
 	"github.com/labstack/driga/internal/config"
+	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/secfile"
 	"github.com/labstack/driga/internal/store"
 	"github.com/labstack/driga/internal/view"
@@ -32,6 +33,7 @@ const loginMarker = "open-at-login"
 
 // Options configure the desktop app.
 type Options struct {
+	Notification *model.NotificationTarget
 	// OpenSource opens the data the app shows, and its closer. Run calls it
 	// once it holds the single-instance lock, so a second launch never opens
 	// the store.
@@ -133,7 +135,13 @@ func Run(opts Options) error {
 	mygo.Protocol.Handle("mygo", server)
 	mygo.Theme.SetSource(themeSource(opts.Config.UI.Theme))
 	mygo.App.SetMenu(s.menu(MenuModel(s.goos)))
-	mygo.App.OnSecondInstance(func([]string, string) { s.host.Open() })
+	mygo.App.OnSecondInstance(func(args []string, _ string) {
+		if target := notificationFromArgs(args); target != nil {
+			s.openNotification(*target)
+		} else {
+			s.host.Open()
+		}
+	})
 	mygo.App.OnActivate(func(visible bool) {
 		if !visible {
 			s.host.Open()
@@ -150,7 +158,9 @@ func Run(opts Options) error {
 		}
 		_ = s.applyOpenAtLogin(opts.Config.App.LaunchAtLogin)
 		s.applyTray(opts.Config.App.Tray)
-		if !startHidden(s.goos, mygo.App.WasOpenedAtLogin(), s.trayCreated()) {
+		if opts.Notification != nil {
+			s.openNotification(*opts.Notification)
+		} else if !startHidden(s.goos, mygo.App.WasOpenedAtLogin(), s.trayCreated()) {
 			s.host.Open()
 		}
 		s.applyDock()
@@ -436,7 +446,7 @@ func (s *shell) do(command string) {
 	default:
 		if raw, ok := strings.CutPrefix(command, "session:"); ok {
 			if id, err := strconv.ParseInt(raw, 10, 64); err == nil {
-				s.host.Command("openSession", id)
+				s.host.Command("openSession", map[string]any{"session_id": id})
 			}
 		}
 	}

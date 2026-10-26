@@ -12,11 +12,11 @@ const GB = 1024 ** 3;
 const MB = 1024 ** 2;
 
 const machines: Frame = {
-  columns: [col("machine_id", "string"), col("machine", "string"), col("state", "string"), col("os", "string"), col("agents", "number", "count"), col("inbox", "number", "count"), col("last_seen", "number", "duration")],
+  columns: [col("machine_id", "string"), col("machine", "string"), col("state", "string"), col("os", "string"), col("agents", "number", "count"), col("inbox", "number", "count"), col("last_seen", "number", "duration"), col("mem_used_bytes", "number", "bytes"), col("mem_total_bytes", "number", "bytes"), col("disk_free_bytes", "number", "bytes"), col("disk_total_bytes", "number", "bytes"), col("cpu_percent", "number", "percent")],
   rows: [
-    ["studio-id", "studio", "local", "darwin", 7, 4, 0],
-    ["build-id", "build-01", "live", "linux", 3, 2, 4000],
-    ["laptop-id", "laptop-02", "stale", "darwin", 0, 0, 840000],
+    ["studio-id", "studio", "local", "darwin", 7, 4, 0, 25769803776, 34359738368, 120 * GB, 500 * GB, 42],
+    ["build-id", "build-01", "live", "linux", 3, 2, 4000, 14227079168, 68719476736, 20 * GB, 500 * GB, 88],
+    ["laptop-id", "laptop-02", "stale", "darwin", 0, 0, 840000, 11 * GB, 16 * GB, 100 * GB, 500 * GB, null],
   ],
 };
 
@@ -59,15 +59,9 @@ const projects: Frame = {
   ],
 };
 
-const activity: Frame = {
-  columns: [col("ts", "time"), col("machine", "string"), col("mem_used_bytes", "number", "bytes"), col("mem_total_bytes", "number", "bytes")],
-  rows: [
-    ["2026-03-14T15:00:00Z", "studio", 25769803776, 34359738368],
-    ["2026-03-14T15:00:00Z", "build-01", 14227079168, 68719476736],
-    ["2026-03-14T14:59:00Z", "studio", 26843545600, 34359738368],
-    ["2026-03-14T14:59:00Z", "build-01", 14100000000, 68719476736],
-    ["2026-03-14T14:46:00Z", "laptop-02", 11 * GB, 16 * GB],
-  ],
+const heatmap: Frame = {
+ columns: [col("ts", "time"), col("series", "string"), col("value", "number", "count")],
+ rows: ["atlas", "harbor", "beacon"].flatMap((p, n) => Array.from({length: 24}, (_, i) => [new Date(Date.parse("2026-03-14T15:00:00Z") - (23-i)*3600000).toISOString(), p, (i*7+n)%13])),
 };
 
 const memory: Frame = {
@@ -89,8 +83,9 @@ const result = (id: string, frame: Frame) => ({ id, status: "ok" as const, frame
 /** fleet is the busy fleet: three machines, one unreachable, every session
  * state, leftovers on two machines. */
 export const fleet: Fragment = {
+  history: fragments.header.history,
   dashboard: { name: "Fleet", panels: [] },
-  results: [result("machines", machines), result("sessions", sessions), result("flow", flow), result("orphans", orphans), result("projects", projects), result("activity", activity), result("memory", memory)],
+  results: [result("machines", machines), result("sessions", sessions), result("flow", flow), result("orphans", orphans), result("projects", projects), result("heatmap", heatmap), result("memory", memory)],
   observed_at,
   local_machine: "studio-id",
 };
@@ -100,9 +95,9 @@ export const fleet: Fragment = {
 export const fleetQuiet: Fragment = {
   ...fleet,
   results: [
-    result("machines", { ...machines, rows: machines.rows.map(r => r[2] === "stale" ? [...r.slice(0, 2), "live", ...r.slice(3, 6), 2000] : r) }),
+    result("machines", { ...machines, rows: machines.rows.map(r => r[2] === "stale" ? [...r.slice(0, 2), "live", ...r.slice(3, 6), 2000, ...r.slice(7)] : r) }),
     result("sessions", { ...sessions, rows: sessions.rows.filter(r => ["working", "idle", "finished"].includes(String(r[11]))) }),
-    result("flow", flow), result("orphans", { ...orphans, rows: [] }), result("projects", projects), result("activity", activity), result("memory", memory),
+    result("flow", flow), result("orphans", { ...orphans, rows: [] }), result("projects", projects), result("heatmap", heatmap), result("memory", memory),
   ],
 };
 

@@ -202,20 +202,20 @@ func (q *querier) ProcsScoped(scope Scope) ([]model.Proc, error) {
 	})
 }
 
-const sampleColumns = "ts,mem_used,mem_compressed,mem_total,swap_used,swap_total,pressure_free,load1,load5,load15,disk_free,cores,psi_mem_some10,pressure_level,commit_used,commit_limit"
+const sampleColumns = "ts,mem_used,mem_compressed,mem_total,swap_used,swap_total,pressure_free,load1,load5,load15,disk_free,cores,psi_mem_some10,pressure_level,commit_used,commit_limit,disk_total,cpu_percent"
 
 // InsertSample records a machine-health reading, replacing the same timestamp.
 func (tx *Tx) InsertSample(s model.MachineSample) error {
-	return tx.exec(`INSERT INTO machine_samples (machine_id,`+sampleColumns+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+	return tx.exec(`INSERT INTO machine_samples (machine_id,`+sampleColumns+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 	ON CONFLICT(machine_id,ts) DO UPDATE SET mem_used=excluded.mem_used,mem_compressed=excluded.mem_compressed,
 	mem_total=excluded.mem_total,swap_used=excluded.swap_used,swap_total=excluded.swap_total,pressure_free=excluded.pressure_free,
-	load1=excluded.load1,load5=excluded.load5,load15=excluded.load15,disk_free=excluded.disk_free,cores=excluded.cores,psi_mem_some10=excluded.psi_mem_some10,pressure_level=excluded.pressure_level,commit_used=excluded.commit_used,commit_limit=excluded.commit_limit`, tx.machineID, unix(s.TS), s.MemUsed, s.MemCompressed, s.MemTotal, s.SwapUsed, s.SwapTotal, s.PressureFree, s.Load1, s.Load5, s.Load15, s.DiskFree, s.Cores, s.PsiMemSome10, s.PressureLevel, s.CommitUsed, s.CommitLimit)
+	load1=excluded.load1,load5=excluded.load5,load15=excluded.load15,disk_free=excluded.disk_free,cores=excluded.cores,psi_mem_some10=excluded.psi_mem_some10,pressure_level=excluded.pressure_level,commit_used=excluded.commit_used,commit_limit=excluded.commit_limit,disk_total=excluded.disk_total,cpu_percent=excluded.cpu_percent`, tx.machineID, unix(s.TS), s.MemUsed, s.MemCompressed, s.MemTotal, s.SwapUsed, s.SwapTotal, s.PressureFree, s.Load1, s.Load5, s.Load15, s.DiskFree, s.Cores, s.PsiMemSome10, s.PressureLevel, s.CommitUsed, s.CommitLimit, s.DiskTotal, s.CPUPercent)
 }
 
 func scanSample(s scanner) (model.MachineSample, error) {
 	var m model.MachineSample
 	var ts int64
-	err := s.Scan(&m.MachineID, &ts, &m.MemUsed, &m.MemCompressed, &m.MemTotal, &m.SwapUsed, &m.SwapTotal, &m.PressureFree, &m.Load1, &m.Load5, &m.Load15, &m.DiskFree, &m.Cores, &m.PsiMemSome10, &m.PressureLevel, &m.CommitUsed, &m.CommitLimit)
+	err := s.Scan(&m.MachineID, &ts, &m.MemUsed, &m.MemCompressed, &m.MemTotal, &m.SwapUsed, &m.SwapTotal, &m.PressureFree, &m.Load1, &m.Load5, &m.Load15, &m.DiskFree, &m.Cores, &m.PsiMemSome10, &m.PressureLevel, &m.CommitUsed, &m.CommitLimit, &m.DiskTotal, &m.CPUPercent)
 	m.TS = fromUnix(ts)
 	return m, err
 }
@@ -700,6 +700,12 @@ func (q *querier) SetMeta(key, value string) error {
 
 // InsertEvent records an event and keeps the newest 200 for that adapter/session.
 func (tx *Tx) InsertEvent(e model.Event) error {
+	if _, err := tx.RecordPanelEvent(e); err != nil {
+		return err
+	}
+	if strings.HasPrefix(e.Kind, "log:") {
+		return nil
+	}
 	metadata, err := json.Marshal(e.Metadata)
 	if err != nil {
 		return err
@@ -832,6 +838,9 @@ func (tx *Tx) Prune(now time.Time) error {
 		{"DELETE FROM inbox_items WHERE machine_id=? AND ts<?", []any{tx.machineID, month}},
 		{"DELETE FROM handoffs WHERE machine_id=? AND ts<?", []any{tx.machineID, month}},
 		{"DELETE FROM sessions WHERE " + expiredSession, sessionArgs},
+		{"DELETE FROM panel_events WHERE machine_id=? AND ts<?", []any{tx.machineID, week}},
+		{"DELETE FROM panel_events WHERE machine_id=? AND ts<? AND (kind LIKE 'log:tool_call:%' OR kind IN ('PostToolUse','PostToolUseFailure','postToolUse','postToolUseFailure','otlp:tool_result'))", []any{tx.machineID, unix(now.UTC().Truncate(time.Hour).Add(-23 * time.Hour))}},
+		{"DELETE FROM prompt_intervals WHERE machine_id=? AND ended_at<?", []any{tx.machineID, unix(now.Add(-time.Hour))}},
 		{"DELETE FROM machine_samples WHERE machine_id=? AND ts<?", []any{tx.machineID, week}},
 		{`DELETE FROM machine_samples WHERE machine_id=? AND ts<? AND ts NOT IN
 		(SELECT MAX(ts) FROM machine_samples WHERE machine_id=? AND ts>=? AND ts<? GROUP BY ts/?)`, []any{tx.machineID, day, tx.machineID, week, day, int64(5 * time.Minute)}},

@@ -77,7 +77,7 @@ func TestMacNativeMappingAndConcurrentAuthorization(t *testing.T) {
 		t.Fatal(f)
 	}
 	first := f.requests[0]
-	if first.Title != n.Title || first.Body != n.Body || first.Sound != n.Sound || first.ItemID != n.ItemID || first.MachineID != n.MachineID || first.Identifier == "" || first.ThreadIdentifier != first.Identifier {
+	if first.Title != n.Title || first.Body != n.Body || first.Sound != n.Sound || first.ItemID != n.ItemID || first.MachineID != n.MachineID || first.Kind != n.Kind || first.Identifier == "" || first.ThreadIdentifier != first.Identifier {
 		t.Fatal(first)
 	}
 	for _, next := range f.requests {
@@ -160,12 +160,12 @@ func TestNativeNotificationClickUsesArgv(t *testing.T) {
 	const path, item = "/opt/Driga's app/driga", "item '$(bad) with spaces"
 	for _, action := range []string{notificationDefaultAction, "com.apple.UNNotificationDismissActionIdentifier"} {
 		for _, id := range []string{item, ""} {
-			if err := notificationResponse(t.Context(), r, path, action, id); err != nil {
+			if err := notificationResponse(t.Context(), r, path, action, id, "local", ""); err != nil {
 				t.Fatal(err)
 			}
 		}
 	}
-	if !reflect.DeepEqual(calls, [][]string{{path, "inbox", "jump", item}}) {
+	if !reflect.DeepEqual(calls, [][]string{{path, "app", "--notification", `{"item_id":"item '$(bad) with spaces","machine_id":"local"}`}, {path, "app", "--notification", `{"item_id":"","machine_id":"local"}`}}) {
 		t.Fatal(calls)
 	}
 }
@@ -258,10 +258,22 @@ func TestServiceNotificationClickRunsTheCLI(t *testing.T) {
 		calls = append(calls, append([]string{name}, args...))
 		return nil, nil
 	})
-	if err := notificationResponse(t.Context(), r, "/Applications/Driga.app/Contents/MacOS/drigad", notificationDefaultAction, "w1"); err != nil {
+	if err := notificationResponse(t.Context(), r, "/Applications/Driga.app/Contents/MacOS/drigad", notificationDefaultAction, "w1", "local", ""); err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(calls, [][]string{{"/Applications/Driga.app/Contents/MacOS/driga", "inbox", "jump", "w1"}}) {
+	if !reflect.DeepEqual(calls, [][]string{{"/Applications/Driga.app/Contents/MacOS/driga", "app", "--notification", `{"item_id":"w1","machine_id":"local"}`}}) {
 		t.Fatal(calls)
+	}
+}
+
+func TestMachineSummaryClickKeepsItsKind(t *testing.T) {
+	var args []string
+	r := runnerFunc(func(_ context.Context, _ string, a ...string) ([]byte, error) { args = a; return nil, nil })
+	if err := notificationResponse(t.Context(), r, "/app/driga", notificationDefaultAction, "", "local", "machine_health"); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"app", "--notification", `{"kind":"machine_health","item_id":"","machine_id":"local"}`}
+	if !reflect.DeepEqual(args, want) {
+		t.Fatal(args)
 	}
 }

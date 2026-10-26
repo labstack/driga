@@ -1,6 +1,6 @@
 import { spotlight } from "@mantine/spotlight";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect, screen, userEvent, waitFor, within } from "storybook/test";
+import { expect, fn, screen, userEvent, waitFor, within } from "storybook/test";
 import { answered, awaitingApproval, prompt } from "../fixtures/chat";
 import { fleetQuiet } from "../fixtures/fleet";
 import { fragments } from "../fixtures/fragments";
@@ -143,4 +143,27 @@ export const LoadingHome: Story = {
 export const ServiceUnreachable: Story = {
   parameters: { service: fakeService({ down: true }) },
   play: async ({ canvas }) => { await expect(await canvas.findByText(/can't reach its service/)).toBeVisible(); },
+};
+
+const desktopCommand = (name: string, arg: unknown) => (window as unknown as { drigaCommand: (name: string, arg: unknown) => void }).drigaCommand(name, arg);
+
+export const NotificationViews: Story = {
+ play: async ({ canvas }) => {
+  await expect(await canvas.findByRole("heading", { name: "Home", level: 1 })).toBeVisible();
+  desktopCommand("view", "fleet");
+  await expect(await canvas.findByRole("heading", { name: "Fleet", level: 1 })).toBeVisible();
+  desktopCommand("view", "inbox");
+  await expect(await canvas.findByRole("heading", { name: "Home", level: 1 })).toBeVisible();
+  await expect(await canvas.findByText(/To review · 3/)).toBeVisible();
+ },
+};
+
+const notificationRequest = fn();
+export const NotificationSession: Story = {
+ parameters: { service: fakeService({ onRequest: notificationRequest }) },
+ play: async ({ canvas }) => {
+  await expect(await canvas.findByRole("heading", { name: "Home", level: 1 })).toBeVisible();
+  desktopCommand("openSession", { session_id: 11, machine_id: "studio-id" });
+  await waitFor(() => expect(notificationRequest).toHaveBeenCalledWith("/app/action", { action: "jump", session_id: 11, machine: "studio-id" }));
+ },
 };

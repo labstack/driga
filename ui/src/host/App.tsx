@@ -18,8 +18,8 @@ import { action, chat, confirm, dashboards, type Operation, type Summary } from 
 import { Chat } from "./Chat";
 import { ClustersHeader } from "./ClustersHeader";
 import { Dashboard } from "./Dashboard";
-import { attentionKinds, counts, headerOf, kinds, stripsOf, type AttentionKind, type HeaderTarget } from "./Header";
-import { useHistory } from "./History";
+import { attentionKinds, headerOf, kinds, type AttentionKind, type HeaderTarget } from "./Header";
+import { historyOf } from "./History";
 import { Search } from "./Search";
 
 const refreshMs = 5000;
@@ -122,12 +122,10 @@ export function App() {
   useEffect(() => { history.replaceState(null, "", page === "fleet" ? "/app/?page=fleet" : id === homeID ? "/app/" : `/app/?dashboard=${encodeURIComponent(id)}`); }, [id, page]);
 
   // The header reads the fragment's counts, the fleet, Chat's prompts and
-  // what the app has kept of them since the page opened.
+  // the service’s persisted history.
   const fleetData = useMemo(() => fleet ? fleetOf(fleet, inbox) : null, [fleet, inbox]);
-  const attention = useMemo(() => header ? counts(header, prompts.length) : null, [header, prompts.length]);
-  const kept = useHistory(attention, fleetData);
+  const kept = useMemo(() => historyOf(header), [header]);
   const headerData = useMemo(() => header ? headerOf(header, fleetData, prompts.length, kept) : null, [header, fleetData, prompts.length, kept]);
-  const strips = useMemo(() => headerData ? stripsOf(kept, headerData.machines) : {}, [kept, headerData]);
 
   const open = (next: string) => { setEditing(false); setVars({}); setId(next); setPage("board"); };
   const openFleet = useCallback(() => { setEditing(false); setPage("fleet"); }, []);
@@ -200,8 +198,9 @@ export function App() {
       else if (name === "forward") history.forward();
       else if (name === "find") spotlight.open();
       else if (name === "view" && arg === "fleet") openFleet();
+      else if (name === "view" && arg === "inbox") { setFilter(null); showOnHome("inbox"); }
       // A session picked from the tray opens its pane, as clicking its row does.
-      else if (name === "openSession" && typeof arg === "number") void act({ kind: "jump", row: { session_id: arg } });
+      else if (name === "openSession" && arg && typeof arg === "object" && "session_id" in arg && typeof arg.session_id === "number") void act({ kind: "jump", row: arg as { session_id: number; machine_id?: string } });
     };
   });
 
@@ -240,7 +239,7 @@ export function App() {
        <Pane id="board" minSize={360} style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
         {page === "fleet"
           ? <Box px="md" pt="sm" pb="md" style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
-            <FleetPage fragment={fleet} inbox={inbox} strips={strips} act={act} />
+            <FleetPage fragment={fleet} inbox={inbox} act={act} />
           </Box>
           : <>
         <Group justify="space-between" wrap="nowrap" gap="sm" px="md" pt="sm" pb={8}>

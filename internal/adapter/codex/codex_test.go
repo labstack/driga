@@ -338,3 +338,26 @@ func TestFilenameFallback(t *testing.T) {
 		t.Fatalf("obs=%+v", obs)
 	}
 }
+
+func TestRolloutPanelMetadataWithoutSnippets(t *testing.T) {
+	env, _ := setup(t, fixture(t))
+	o, _ := collect(t, codex.New(), env)
+	tools, starts, ends := 0, 0, 0
+	for _, e := range o.Events {
+		if strings.HasPrefix(e.Kind, "log:tool_call:") {
+			tools++
+		}
+		if e.Kind == "log:turn_start" {
+			starts++
+		}
+		if e.Kind == "log:turn_end" {
+			ends++
+		}
+		if e.Summary != "" {
+			t.Fatal("captured rollout text")
+		}
+	}
+	if tools != 1 || starts != 1 || ends != 1 {
+		t.Fatalf("metadata %d tools %d starts %d ends: %+v", tools, starts, ends, o.Events)
+	}
+}

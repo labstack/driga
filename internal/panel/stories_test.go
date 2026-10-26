@@ -89,7 +89,7 @@ func storySnapshot() viewer.Snapshot {
 			// does not change between runs.
 			used := m.base + float64((n*7+i*3)%11)/4
 			am.Buckets = append(am.Buckets, view.ActivityBucket{TS: now.Add(-time.Duration(n) * time.Minute), Events: (n*5 + i) % 9,
-				Sample: &model.MachineSample{MemUsed: gb(used), MemTotal: gb(m.total), SwapUsed: gb(float64(n%5) + 2), DiskFree: gb(120 - float64(i)*100), Load1: 2 + float64(n%4)}})
+				Sample: &model.MachineSample{MemUsed: gb(used), MemTotal: gb(m.total), SwapUsed: gb(float64(n%5) + 2), DiskFree: gb(120 - float64(i)*100), DiskTotal: gb(500), CPUPercent: new(float64(24 + i*10)), Load1: 2 + float64(n%4)}})
 		}
 		s.Activity.Machines = append(s.Activity.Machines, am)
 	}
@@ -106,6 +106,23 @@ func storySnapshot() viewer.Snapshot {
 		{MachineID: "studio-id", ID: 21, Title: "Upgrade the image pipeline", Project: "atlas", Branch: "feat/images", Adapter: "claude", StartedAt: at(30 * time.Hour), EndedAt: at(26 * time.Hour), Resume: "cd '/home/dev/src/atlas' && claude --resume 'a1b2c3'"},
 		{MachineID: "build-id", ID: 22, Title: "Split the payments service", Project: "harbor", Branch: "refactor/payments", Adapter: "codex", StartedAt: at(4 * 24 * time.Hour), EndedAt: at(3 * 24 * time.Hour), Resume: "cd '/home/dev/src/harbor' && codex resume 'd4e5f6'"},
 		{MachineID: "studio-id", ID: 23, Title: "Explore the plugin API", Project: "sandbox", Adapter: "agy", StartedAt: at(9 * 24 * time.Hour), EndedAt: at(9*24*time.Hour - time.Hour)},
+	}
+	for i := 0; i < 60; i++ {
+		n := 1
+		if i > 30 {
+			n = 3
+		}
+		stuck := 1
+		s.PanelHistory.Attention = append(s.PanelHistory.Attention, view.AttentionPoint{TS: now.Add(time.Duration(i-59) * time.Minute), Waiting: n, Review: 3, Stuck: &stuck})
+	}
+	for i := 0; i < 30; i++ {
+		s.PanelHistory.Polls = append(s.PanelHistory.Polls, view.MachinePoll{MachineID: "studio-id", TS: now.Add(time.Duration(i-29) * 5 * time.Second), State: "waiting"})
+	}
+	s.SessionPanels = []view.SessionPanel{{ID: 11, MachineID: "studio-id", Turns: []string{"ok", "waited", "failed"}, Files: []string{"src/upload.ts"}}, {ID: 15, MachineID: "studio-id", Turns: []string{"ok"}, Files: []string{"src/upload.ts"}}}
+	for _, project := range []string{"atlas", "harbor", "beacon"} {
+		for i := 0; i < 24; i++ {
+			s.ToolActivity = append(s.ToolActivity, view.ToolHour{TS: now.Add(time.Duration(i-23) * time.Hour), Project: project, MachineID: "studio-id", Machine: "studio", Calls: (i * 7) % 13})
+		}
 	}
 	return s
 }

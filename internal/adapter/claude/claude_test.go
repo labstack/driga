@@ -491,3 +491,29 @@ func TestRegistryRejectsMalformedStartedAt(t *testing.T) {
 		t.Fatalf("malformed registry: %+v %+v", obs, warnings)
 	}
 }
+
+func TestTranscriptPanelMetadataWithoutSnippets(t *testing.T) {
+	env := testEnv(t)
+	registry(t, env)
+	transcript(t, env, fixture(t, "transcript.jsonl"))
+	obs, _ := collect(t, claude.New(), env)
+	o := only(t, obs)
+	tools, starts, ends := 0, 0, 0
+	for _, e := range o.Events {
+		if strings.HasPrefix(e.Kind, "log:tool_call:") {
+			tools++
+		}
+		if e.Kind == "log:turn_start" {
+			starts++
+		}
+		if e.Kind == "log:turn_end" {
+			ends++
+		}
+		if e.Summary != "" {
+			t.Fatal("captured transcript text")
+		}
+	}
+	if tools != 2 || starts != 1 || ends != 1 {
+		t.Fatalf("metadata %d tools %d starts %d ends: %+v", tools, starts, ends, o.Events)
+	}
+}

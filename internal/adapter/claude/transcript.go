@@ -17,6 +17,7 @@ import (
 var maxTailBytes int64 = 8 << 20
 
 type transcriptEntry struct {
+	UUID       string          `json:"uuid"`
 	Type       string          `json:"type"`
 	Cwd        string          `json:"cwd"`
 	GitBranch  string          `json:"gitBranch"`
@@ -37,6 +38,7 @@ type message struct {
 }
 
 type contentBlock struct {
+	ID    string          `json:"id"`
 	Type  string          `json:"type"`
 	Name  string          `json:"name"`
 	Input json.RawMessage `json:"input"`
@@ -148,6 +150,7 @@ func foldEntry(o *model.SessionObs, e transcriptEntry, snippets bool) {
 		if e.Type == "user" {
 			if !e.IsMeta && realPrompt(m.Content) {
 				o.TurnOpen = true
+				o.Events = append(o.Events, model.Event{TS: ts, Kind: "log:turn_start"})
 				if ts.After(o.LastPromptAt) {
 					o.LastPromptAt = ts
 				}
@@ -156,11 +159,15 @@ func foldEntry(o *model.SessionObs, e transcriptEntry, snippets bool) {
 		}
 		var blocks []contentBlock
 		if json.Unmarshal(m.Content, &blocks) == nil {
-			for _, block := range blocks {
+			for i, block := range blocks {
+				if block.Type == "tool_use" {
+					o.Events = append(o.Events, adapter.ToolEvent(ts, block.Name, fmt.Sprintf("%s:%s:%d", e.UUID, block.ID, i)))
+				}
 				foldTool(o, block, ts)
 			}
 		}
 		if m.StopReason == "end_turn" {
+			o.Events = append(o.Events, model.Event{TS: ts, Kind: "log:turn_end"})
 			o.TurnOpen = false
 		}
 	case "system":

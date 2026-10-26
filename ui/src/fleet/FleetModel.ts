@@ -148,7 +148,7 @@ export function machineCard(group: FleetMachineGroup, strip?: Machine["strip"]):
   const { machine: m, counts: c } = group;
   return {
     id: m.id, name: m.name, kind: m.kind, local: m.local, reachable: m.reachable, lastSeen: m.lastSeen,
-    memUsed: m.memoryUsed, memTotal: m.memoryTotal,
+    memUsed: m.memoryUsed, memTotal: m.memoryTotal, cpuPercent: m.cpuPercent, diskFree: m.diskFree, diskTotal: m.diskTotal,
     sessions: { working: c.working, waiting: c.waiting, stuck: c.stuck, idle: c.idle },
     strip,
     leftover: { trees: m.leftover?.trees ?? m.leftover?.processes ?? 0, bytes: m.leftover?.memory ?? 0 },

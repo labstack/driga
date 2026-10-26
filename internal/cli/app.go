@@ -13,13 +13,16 @@ import (
 	"github.com/labstack/driga/internal/dashboard"
 	"github.com/labstack/driga/internal/desktop"
 	"github.com/labstack/driga/internal/logfile"
+	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/service"
 	"github.com/labstack/driga/internal/view"
 	"github.com/labstack/driga/internal/web"
 )
 
 // AppCmd opens the desktop app, or focuses the running one.
-type AppCmd struct{}
+type AppCmd struct {
+	Notification string `hidden:"" help:"Desktop notification event target."`
+}
 
 var (
 	// openedAtLogin and runDesktop are the desktop package's, replaced in tests.
@@ -43,14 +46,14 @@ var (
 func AppLaunch(args []string) bool {
 	login := len(args) == 0 && os.Getenv("DRIGA_APP") != "1" && openedAtLogin()
 	app := appLaunch(os.Getenv, login, args)
-	systemLaunch = app && len(args) == 0
+	systemLaunch = app && (len(args) == 0 || len(args) > 1 && args[1] == "--notification" && os.Getenv("DRIGA_APP") == "1")
 	_ = os.Unsetenv("DRIGA_APP")
 	return app
 }
 
 // appLaunch decides app mode: `driga app`, or a bare launch by the system.
 func appLaunch(env func(string) string, openedAtLogin bool, args []string) bool {
-	if len(args) == 1 && args[0] == "app" {
+	if len(args) >= 1 && args[0] == "app" && (len(args) == 1 || args[1] == "--notification") {
 		return true
 	}
 	return len(args) == 0 && (env("DRIGA_APP") == "1" || openedAtLogin)
@@ -61,12 +64,25 @@ func appLaunch(env func(string) string, openedAtLogin bool, args []string) bool 
 func AppMain(cli, version string, metadata ...string) int {
 	_ = os.Unsetenv("DRIGA_APP")
 	systemLaunch, serviceExecutable = true, cli
-	return Main([]string{"app"}, version, metadata...)
+	args := os.Args[1:]
+	if len(args) > 0 && args[0] == "app" {
+		args = args[1:]
+	}
+	return Main(append([]string{"app"}, args...), version, metadata...)
 }
 
 // Run must run on the main goroutine: the app's toolkit owns the main thread.
-func (AppCmd) Run(g *Globals) error {
-	if handed, err := handOffApp(systemLaunch); handed || err != nil {
+func (c AppCmd) Run(g *Globals) error {
+	var target *model.NotificationTarget
+	var args []string
+	if c.Notification != "" {
+		target = new(model.NotificationTarget)
+		if err := json.Unmarshal([]byte(c.Notification), target); err != nil {
+			return fmt.Errorf("notification target: %w", err)
+		}
+		args = []string{"app", "--notification", c.Notification}
+	}
+	if handed, err := handOffApp(systemLaunch, args...); handed || err != nil {
 		return err
 	}
 	restore := appLogging()
@@ -84,6 +100,7 @@ func (AppCmd) Run(g *Globals) error {
 	local := *g
 	local.Machine = "local"
 	return runDesktop(desktop.Options{
+		Notification: target,
 		// The app opens the viewer once it is the only instance.
 		OpenSource: func() (web.Source, func(), error) {
 			source, _, closeSource, err := openAppViewer(ctx, g, cfg, view.Filter{})

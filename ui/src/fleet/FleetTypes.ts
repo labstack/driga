@@ -18,6 +18,9 @@ export type FleetMachine = {
   reachable: boolean;
   /** When Driga last heard from it, ISO. */
   lastSeen: string;
+  cpuPercent?: number;
+  diskFree?: number;
+  diskTotal?: number;
   memoryUsed: number;
   memoryTotal: number;
   /** Agent processes no session owns, which Reclaim can end: how many

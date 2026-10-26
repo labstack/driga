@@ -136,6 +136,9 @@ type Broker struct {
 }
 
 func New(ctx context.Context, st *store.Store, a Agent, o Options) (*Broker, error) {
+	if err := st.InterruptPromptHistory(ctx, time.Now().UTC()); err != nil {
+		return nil, err
+	}
 	if err := st.InterruptChat(ctx); err != nil {
 		return nil, err
 	}

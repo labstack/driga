@@ -3,4 +3,4 @@
 package cli
 
 // handOffApp never hands off: the one binary is the app.
-func handOffApp(bool) (bool, error) { return false, nil }
+func handOffApp(bool, ...string) (bool, error) { return false, nil }

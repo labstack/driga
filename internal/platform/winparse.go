@@ -125,6 +125,9 @@ func (p winPlatform) Machine(ctx context.Context) (model.MachineSample, error) {
 	if err != nil {
 		return s, err
 	}
+	if err := machineCPU(ctx, &s); err != nil {
+		return s, err
+	}
 	return s, ctx.Err()
 }
 

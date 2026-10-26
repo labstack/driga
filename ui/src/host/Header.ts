@@ -1,6 +1,6 @@
 // The header's contract: what it is told and what it reports back, and the
 // mapping from what the app already loads (the header fragment, the fleet,
-// Chat's prompts and the readings the app keeps between refreshes) onto it.
+// Chat's prompts and the history the service persists) onto it.
 import { Eye, HandWaving, Hourglass, type Icon } from "@phosphor-icons/react";
 import type { ReactNode } from "react";
 import type { FleetData } from "../fleet/FleetTypes";
@@ -132,6 +132,7 @@ export function polarity(kind: AttentionKind | "memory", delta: number, total?: 
 
 /** changeWords says an attention count's hour in words: "up 2 in the last hour". */
 export function changeWords(a: Attention): string {
+  if (a.trend.length < 2) return "not enough history for an hour’s change";
   return a.delta === 0 ? "steady over the last hour" : `${a.delta > 0 ? "up" : "down"} ${Math.abs(a.delta)} in the last hour`;
 }
 
@@ -149,8 +150,7 @@ export function stat(fragment: Fragment, id: string): number | null {
   return typeof v === "number" ? v : null;
 }
 
-/** What the app keeps between refreshes, since the service sends only the
- * moment: each attention count's last hour and each machine's last polls. */
+/** History served by the service: each attention count's last hour and each machine's last polls. */
 export type Kept = { attention: Record<AttentionKind, number[]>; polls: Record<string, Poll[]> };
 
 export const nothingKept: Kept = { attention: { waiting: [], review: [], stuck: [] }, polls: {} };
@@ -169,20 +169,20 @@ export function machinesOf(fleet: FleetData, polls: Kept["polls"]): Machine[] {
   });
 }
 
-/** pollOf is a machine's worst state now, for the polls the app keeps. */
+/** pollOf is a machine's worst state now, for the service's polls. */
 export function pollOf(m: Machine): Poll {
   return m.reachable ? worst(m) ?? "quiet" : "offline";
 }
 
 /** headerOf maps what the app has onto the header: the fragment's counts
- * and memory, the fleet's machines, Chat's prompts, and the kept readings.
+ * and memory, the fleet's machines, Chat's prompts, and the service history.
  * Without the fleet the header still shows its counts, with the local
  * machine named by its id and no dots. */
 export function headerOf(header: Fragment, fleet: FleetData | null, prompts: number, kept: Kept): HeaderData {
   const now = counts(header, prompts);
   const attention = Object.fromEntries(attentionKinds.map(k => {
-    const trend = kept.attention[k].length ? kept.attention[k] : [now[k]];
-    return [k, { count: now[k], trend, delta: trend[trend.length - 1] - trend[0] }];
+    const trend = kept.attention[k];
+    return [k, { count: now[k], trend, delta: trend.length > 1 ? trend[trend.length - 1] - trend[0] : 0 }];
   })) as Record<AttentionKind, Attention>;
   const machines = fleet ? machinesOf(fleet, kept.polls) : [];
   const local = machines.find(m => m.local) ?? fleet?.machines.find(m => m.id === header.local_machine);
@@ -199,7 +199,7 @@ export function headerOf(header: Fragment, fleet: FleetData | null, prompts: num
   };
 }
 
-/** stripsOf turns the kept polls into the machine cards' strips, one cell a poll. */
+/** stripsOf turns the served polls into the machine cards' strips, one cell a poll. */
 export function stripsOf(kept: Kept, machines: Machine[]): Record<string, MachineCard["strip"]> {
   return Object.fromEntries(machines.filter(m => (kept.polls[m.id]?.length ?? 0) > 1).map(m => {
     const polls = kept.polls[m.id];

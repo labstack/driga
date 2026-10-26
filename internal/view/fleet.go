@@ -117,6 +117,11 @@ func Machines(r Reader, now time.Time, scopes ...store.Scope) (MachinesView, err
 		}
 		m.State = MachineState(m, r.MachineID(), now)
 		row := MachineRow{Machine: m, Agents: len(visibleSessions(ss, false, now)), Inbox: count, LastSeenAge: seenAge(now, lastSeen(m))}
+		sample, err := mr.LatestSample()
+		if err != nil && !errors.Is(err, store.ErrNotFound) {
+			return err
+		}
+		row.Sample = sample
 		if m.ClockSkewMS > 60000 || m.ClockSkewMS < -60000 {
 			row.SkewWarning = fmt.Sprintf("clock skew %s (> 60s)", time.Duration(m.ClockSkewMS)*time.Millisecond)
 		}

@@ -3,8 +3,10 @@ package attention
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/labstack/driga/internal/model"
 	"log/slog"
 	"path/filepath"
 	"sync"
@@ -24,7 +26,7 @@ const MacNotificationSettings = `open "x-apple.systempreferences:com.apple.Notif
 type NativeNotificationRequest struct {
 	Identifier, ThreadIdentifier string
 	Title, Body, Sound           string
-	ItemID, MachineID            string
+	ItemID, MachineID, Kind      string
 }
 
 type NativeNotificationCenter interface {
@@ -150,23 +152,22 @@ func nativeNotificationRequest(n Notification) NativeNotificationRequest {
 	// ambiguous delimiters and puts no private item text in the identifier.
 	id := fmt.Sprintf("driga-%x", sha256.Sum256([]byte(n.MachineID+"\x00"+key)))
 	return NativeNotificationRequest{Identifier: id, ThreadIdentifier: id,
-		Title: n.Title, Body: n.Body, Sound: n.Sound, ItemID: n.ItemID, MachineID: n.MachineID}
+		Title: n.Title, Body: n.Body, Sound: n.Sound, ItemID: n.ItemID, MachineID: n.MachineID, Kind: n.Kind}
 }
 
 const notificationDefaultAction = "com.apple.UNNotificationDefaultActionIdentifier"
 
-// Notification clicks use argv, never a shell. Remote items and summaries have
-// no ItemID, as enforced by the collector before handing them to the backend.
-// notificationResponse jumps to the item a clicked notification is about. It
-// runs the CLI, driga, beside path: drigad would start another service.
-func notificationResponse(ctx context.Context, r Runner, path, action, itemID string) error {
-	if action != notificationDefaultAction || itemID == "" || path == "" || r == nil {
+// notificationResponse opens the app with a value-only target. argv is never
+// interpreted by a shell; the app resolves the event in its own current store.
+func notificationResponse(ctx context.Context, r Runner, path, action, itemID, machineID, kind string) error {
+	if action != notificationDefaultAction || path == "" || r == nil {
 		return nil
 	}
 	if filepath.Base(path) == "drigad" {
 		path = filepath.Join(filepath.Dir(path), "driga")
 	}
-	_, err := r.Run(ctx, path, "inbox", "jump", itemID)
+	target, _ := json.Marshal(model.NotificationTarget{ItemID: itemID, MachineID: machineID, Kind: kind})
+	_, err := r.Run(ctx, path, "app", "--notification", string(target))
 	return err
 }
 

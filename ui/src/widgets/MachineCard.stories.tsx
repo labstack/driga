@@ -80,3 +80,12 @@ export const Fleet: Story = {
   parameters: { maw: 960, docs: { description: { story: "The three machines in a row, as Home would show them." } } },
   play: async ({ canvas }) => { await expect(canvas.getAllByRole("img", { name: /last 90 minutes/ })).toHaveLength(3); },
 };
+
+export const Pressure: Story = {
+ args: { machine: { ...f.studio, cpuPercent: 42, diskFree: 100 * 1024 ** 3, diskTotal: 500 * 1024 ** 3 } },
+ play: async ({ canvas }) => {
+  await expect(canvas.getByRole("progressbar", { name: /CPU on studio: 42%/ })).toBeVisible();
+  await expect(canvas.getByRole("img", { name: /^Memory:.*69%/ })).toBeVisible();
+  await expect(canvas.getByRole("img", { name: /^Disk:.*80%/ })).toBeVisible();
+ },
+};
