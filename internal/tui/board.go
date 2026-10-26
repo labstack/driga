@@ -308,7 +308,7 @@ func (m *app) boardLayout() (string, []flowHit) {
 		if m.flowAttention {
 			pre = "› "
 		}
-		add(pre + "◆ " + r.Title + " · " + r.Node.Project + " · " + r.Age)
+		add(pre + "◆ " + clean(r.Title+" · "+r.Node.Project) + " · " + r.Age)
 		command := r.Command
 		if command == "" {
 			command = r.WaitReason
@@ -333,7 +333,7 @@ func (m *app) boardLayout() (string, []flowHit) {
 			if i == idx || shown >= 3 {
 				continue
 			}
-			add("  ◆ " + r.Title + " · " + r.Node.Project + " · " + r.Age)
+			add("  ◆ " + clean(r.Title+" · "+r.Node.Project) + " · " + r.Age)
 			shown++
 		}
 		if len(b.Needs) > shown {
@@ -373,7 +373,7 @@ func (m *app) boardLayout() (string, []flowHit) {
 	} else {
 		// Lip Gloss owns the tree connectors; the same preorder supplies hit targets.
 		for _, g := range b.Groups {
-			t := tree.New().Root(g.Name)
+			t := tree.New().Root(clean(g.Name))
 			branch := map[string]*tree.Tree{}
 			indices := []int{}
 			for i, r := range rows {
@@ -434,7 +434,9 @@ func (m *app) boardLayout() (string, []flowHit) {
 	}
 	detail := []string{}
 	if r := selectedRow; r != nil {
-		detail = append(detail, r.Title+" · "+view.FlowJoin(r.Node.Project, r.Node.Adapter)+" · "+r.State)
+		// Normalize session text before wrapping or building trees: controls
+		// must occupy spaces, never introduce lines or affect frame padding.
+		detail = append(detail, clean(r.Title+" · "+view.FlowJoin(r.Node.Project, r.Node.Adapter)+" · "+r.State))
 		detail = append(detail, panelDetails...)
 		familyLimit := 5
 		if len(panelDetails) > 0 {
@@ -454,7 +456,7 @@ func (m *app) boardLayout() (string, []flowHit) {
 					continue
 				}
 				shown++
-				text := member.Glyph + " " + member.Title + "\n" + view.BoardStrip(member, max(8, panelW-10))
+				text := member.Glyph + " " + clean(member.Title) + "\n" + view.BoardStrip(member, max(8, panelW-10))
 				node := tree.New().Root(text)
 				familyNodes[member.Key] = node
 				if parent := familyNodes[member.Parent]; parent != nil {
@@ -469,10 +471,10 @@ func (m *app) boardLayout() (string, []flowHit) {
 			detail = append(detail, fmt.Sprintf("+%d more · open session", total-shown))
 		}
 		if r.Node.LastTool != "" {
-			detail = append(detail, "now   "+r.Node.LastTool)
+			detail = append(detail, "now   "+clean(r.Node.LastTool))
 		}
 		if tools := view.BoardTools(*r); tools != "" {
-			detail = append(detail, "tools "+tools+" · last hour")
+			detail = append(detail, "tools "+clean(tools)+" · last hour")
 		}
 		if r.Cost != nil {
 			detail = append(detail, "cost "+boardMoney(r.Cost)+" · retained window")
@@ -492,15 +494,15 @@ func (m *app) boardLayout() (string, []flowHit) {
 	}
 	add(strings.Repeat("─", w))
 	if r := selectedRow; r != nil {
-		add(r.Title + " · " + r.Node.Adapter + " · " + r.State)
+		add(clean(r.Title + " · " + r.Node.Adapter + " · " + r.State))
 		for _, line := range panelDetails {
 			add(line)
 		}
 		if r.Node.LastTool != "" {
-			add("now " + r.Node.LastTool)
+			add("now " + clean(r.Node.LastTool))
 		}
 		if tools := view.BoardTools(*r); tools != "" {
-			add(tools + " · last hour")
+			add(clean(tools) + " · last hour")
 		}
 		if r.Cost != nil {
 			add("cost " + boardMoney(r.Cost) + " · retained window")
