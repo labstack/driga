@@ -11,6 +11,7 @@ import { storyNow } from "../src/fixtures/fragments";
 import { unexpected, type Service } from "../src/fixtures/service";
 import { Provider } from "../src/theme/Provider";
 import { assertTextLayout } from "./checks";
+import { assertScrollbarsClear } from "./scrollbars";
 import { viewportOptions } from "./viewports";
 
 // findBy* waits 1 s by default; shared runners need longer under load.
@@ -71,6 +72,7 @@ const preview: Preview = {
   afterEach: async () => {
     await document.fonts.ready;
     assertTextLayout(document.body);
+    assertScrollbarsClear(document.body);
   },
   decorators: [
     (Story, { globals }) => <Provider scheme={globals.colorScheme === "dark" ? "dark" : "light"}>

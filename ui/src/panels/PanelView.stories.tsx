@@ -18,7 +18,7 @@ const meta = {
   component: PanelView,
   args: { ...one("stat"), act },
   decorators: [(Story, { parameters }) => <HostContext.Provider value={{ act, local: "studio-id", ...parameters.host }}>
-    <Box w={parameters.width ?? 720}><Story /></Box>
+    <Box w={parameters.width ?? 720} h={parameters.height}><Story /></Box>
   </HostContext.Provider>],
   parameters: { docs: { description: { component: "A panel is a card: its title, an optional description behind the info icon, a summary line and a table view for charts, and its body in the state its result is in." } } },
 } satisfies Meta<typeof PanelView>;
@@ -45,6 +45,22 @@ export const TimeseriesAsTable: Story = {
 };
 export const Bar: Story = { args: one("bar"), play: async ({ canvas }) => { await expect(canvas.getByText(/Fix the flaky checkout test #12 most/)).toBeVisible(); } };
 export const BarByProject: Story = { args: one("bar_project") };
+/** More rows than the card holds: the list scrolls and its scrollbar sits
+ * beside the values, not over them. */
+export const BarOverflowing: Story = {
+  args: (() => {
+    const panel = one("bar_project");
+    const rows = panel.result.frame?.rows ?? [];
+    const many = Array.from({ length: 12 }, (_, i) => [`${rows[i % rows.length]?.[0] ?? "project"}-${i}`, 1_000_000_000 * (12 - i)]);
+    return { ...panel, result: { ...panel.result, frame: { ...panel.result.frame!, rows: many } }, fill: true };
+  })(),
+  parameters: { height: 260 },
+  play: async ({ canvas, canvasElement }) => {
+    await expect(canvas.getAllByRole("listitem")).toHaveLength(12);
+    // The list overflows, so the card draws its scrollbar.
+    await waitFor(() => expect(canvasElement.querySelector(".mantine-ScrollArea-scrollbar[data-orientation=vertical]")).toBeVisible());
+  },
+};
 export const Table: Story = {
   args: one("table"),
   play: async ({ canvas }) => {

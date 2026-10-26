@@ -114,5 +114,8 @@ export const theme = createTheme({
     Tooltip: { defaultProps: { withArrow: true, openDelay: 300 } },
     Modal: { defaultProps: { closeButtonProps: { "aria-label": "Close" } } },
     Drawer: { defaultProps: { closeButtonProps: { "aria-label": "Close" } } },
+    // A scrollbar sits beside the content, never over it: Mantine paints
+    // its bar inside the viewport, over right-aligned values.
+    ScrollArea: { defaultProps: { offsetScrollbars: "present" } },
   },
 });
