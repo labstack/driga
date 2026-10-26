@@ -49,6 +49,11 @@ describe("catalog", () => {
     const ids = Object.values(import.meta.glob<{ default: { id: string } }>("./**/*.stories.tsx", { eager: true })).map(m => m.default.id);
     expect(Object.keys(specimens).filter(id => !ids.includes(id))).toEqual([]);
   });
+  it("keeps drafts out of the app: only drafts and stories import them", () => {
+    const sources = import.meta.glob<string>(["./**/*.{ts,tsx}", "!./drafts/**", "!./**/*.stories.tsx", "!./**/*.test.{ts,tsx}"], { query: "?raw", import: "default", eager: true });
+    const importing = Object.entries(sources).filter(([, text]) => /(?:from|import)\s*\(?\s*["'][^"']*\/drafts\//.test(text)).map(([file]) => file);
+    expect(importing).toEqual([]);
+  });
   it("has a story for every kind of panel", () => {
     const missing = Object.entries(vizStories).filter(([, name]) => !(name in panelStories)).map(([viz]) => viz);
     expect(missing).toEqual([]);

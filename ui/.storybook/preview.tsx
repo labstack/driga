@@ -35,7 +35,7 @@ const preview: Preview = {
     layout: "padded",
     a11y: { test: "error" },
     viewport: { options: viewportOptions },
-    options: { storySort: { order: ["Pages", "Flows", "Components", "Embedded", "Theme"] } },
+    options: { storySort: { order: ["Drafts", "Pages", "Flows", "Components", "Embedded", "Theme"] } },
   },
   globalTypes: {
     colorScheme: { description: "Color scheme", toolbar: { title: "Color scheme", items: ["light", "dark"], dynamicTitle: true } },
