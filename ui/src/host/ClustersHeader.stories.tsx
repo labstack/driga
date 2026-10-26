@@ -30,16 +30,19 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 /** rest leaves the row as a reviewer should see it: nothing hovered or focused. */
-async function rest(canvas: { getByRole: (role: string, options?: { name?: RegExp | string }) => HTMLElement }) {
-  const brand = canvas.getByRole("img", { name: "Driga" });
-  await userEvent.unhover(brand);
+async function rest(canvasRoot: HTMLElement) {
+  // The pointer leaves every control it may have crossed, and focus with it.
+  for (const control of canvasRoot.querySelectorAll<HTMLElement>("button, [role=img]")) await userEvent.unhover(control);
   (document.activeElement as HTMLElement | null)?.blur();
+  // A tooltip opens after the theme's 300 ms delay, so one the last click
+  // started can appear after an immediate check; wait the delay out first.
+  await new Promise(resolve => setTimeout(resolve, 400));
   await waitFor(() => expect(screen.queryByRole("tooltip")).toBeNull());
 }
 
 export const Busy: Story = {
   parameters: { docs: { description: { story: "Three agents wait on you, three turns await review, nothing is stuck; two leftover process trees; memory at 75% and falling; one of four machines unreachable (the hollow dot). Click a tile to filter the inbox to its kind." } } },
-  play: async ({ canvas, args }) => {
+  play: async ({ canvas, args , canvasElement }) => {
     const needYou = canvas.getByRole("button", { name: /^Need you\s*3$/ });
     await expect(needYou).toBeVisible();
     await expect(needYou).toHaveAttribute("aria-pressed", "false");
@@ -58,14 +61,14 @@ export const Busy: Story = {
     await expect(args.onToggleChat).toHaveBeenCalled();
     await userEvent.click(canvas.getByRole("button", { name: "Search" }));
     await expect(args.onSearch).toHaveBeenCalled();
-    await rest(canvas);
+    await rest(canvasElement);
   },
 };
 
 export const TileMenu: Story = {
   name: "Tile menu",
   parameters: { docs: { description: { story: "Every tile keeps its menu: Show on Home and Ask Chat about it, behind the ⋯ in its corner or on right-click." } } },
-  play: async ({ canvas, args }) => {
+  play: async ({ canvas, args , canvasElement }) => {
     await userEvent.click(canvas.getByRole("button", { name: "More for To review" }));
     await userEvent.click(await screen.findByRole("menuitem", { name: "Show on Home" }));
     await expect(args.onShow).toHaveBeenCalledWith("inbox");
@@ -74,7 +77,7 @@ export const TileMenu: Story = {
     await userEvent.click(await screen.findByRole("menuitem", { name: "Ask Chat about it" }));
     await expect(args.onAsk).toHaveBeenCalledWith("Memory");
     await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
-    await rest(canvas);
+    await rest(canvasElement);
   },
 };
 
@@ -168,13 +171,13 @@ export const Filtering: Story = {
 export const KeyboardFocus: Story = {
   name: "Keyboard focus",
   parameters: { docs: { description: { story: "Tab reaches the first tile, with the accent focus ring and a tooltip naming its filter, the hour's change and its key. Enter filters. The keys themselves are the app's, beside ⌘K." } } },
-  play: async ({ canvas, args }) => {
+  play: async ({ canvas, args , canvasElement }) => {
     await userEvent.tab();
     const needYou = canvas.getByRole("button", { name: /^Need you\s*3$/ });
     await expect(needYou).toHaveFocus();
     await expect(await screen.findByRole("tooltip")).toHaveTextContent(/up 2 in the last hour/);
     await userEvent.keyboard("{Enter}");
     await expect(args.onFilter).toHaveBeenCalledWith("waiting");
-    await rest(canvas);
+    await rest(canvasElement);
   },
 };
