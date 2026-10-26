@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/labstack/driga/internal/store"
 	"github.com/labstack/driga/internal/viewer"
@@ -20,9 +21,8 @@ type actionRequest struct {
 	Force     bool   `json:"force,omitempty"`
 	Project   string `json:"project,omitempty"`
 	Machine   string `json:"machine,omitempty"`
-	// Confirmed is set once the app's dialog was answered, for the actions
-	// that change something.
-	Confirmed bool `json:"confirmed,omitempty"`
+	// Token is issued by the host dialog for this exact action, once.
+	Token string `json:"token,omitempty"`
 }
 
 // appAction runs one of the local actions the TUI has keys for, through
@@ -43,6 +43,9 @@ func (s *Server) appAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	args, err := actionArgs(in, snap)
+	if err == nil && changesMachine(in) && !s.consumeConfirmation(in) {
+		err = errors.New("Confirm the action first")
+	}
 	if err == nil {
 		err = s.opts.Action(r.Context(), in.Action, args)
 	}
@@ -56,11 +59,6 @@ func (s *Server) appAction(w http.ResponseWriter, r *http.Request) {
 // actionArgs validates a request and returns the action's arguments.
 func actionArgs(in actionRequest, snap viewer.Snapshot) (json.RawMessage, error) {
 	local := in.Machine == snap.LocalMachineID
-	// As in the TUI, acknowledging one item needs no confirmation.
-	changes := in.Action == "kill" || in.Action == "cleanup" || in.Action == "ack_inbox" && in.All
-	if changes && !in.Confirmed {
-		return nil, errors.New("Confirm the action first")
-	}
 	var args any
 	switch in.Action {
 	case "jump", "kill":
@@ -128,4 +126,23 @@ func localProject(snap viewer.Snapshot, path string) bool {
 		}
 	}
 	return false
+}
+
+// Acknowledging one item needs no confirmation, as in the TUI.
+func changesMachine(in actionRequest) bool {
+	return in.Action == "kill" || in.Action == "cleanup" || in.Action == "ack_inbox" && in.All
+}
+
+func confirmationKey(in actionRequest) string {
+	in.Token = ""
+	raw, _ := json.Marshal(in)
+	return string(raw)
+}
+
+func (s *Server) consumeConfirmation(in actionRequest) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	c, ok := s.confirmations[in.Token]
+	delete(s.confirmations, in.Token)
+	return ok && time.Now().Before(c.until) && c.key == confirmationKey(in)
 }

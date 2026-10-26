@@ -151,7 +151,7 @@ func TestMacUnconfiguredBackendUnavailable(t *testing.T) {
 	}
 }
 
-func TestNativeNotificationClickUsesArgv(t *testing.T) {
+func TestNativeNotificationClickKeepsIdentifiersOutOfArgv(t *testing.T) {
 	var calls [][]string
 	r := runnerFunc(func(_ context.Context, name string, args ...string) ([]byte, error) {
 		calls = append(calls, append([]string{name}, args...))
@@ -165,7 +165,7 @@ func TestNativeNotificationClickUsesArgv(t *testing.T) {
 			}
 		}
 	}
-	if !reflect.DeepEqual(calls, [][]string{{path, "app", "--notification", `{"item_id":"item '$(bad) with spaces","machine_id":"local"}`}, {path, "app", "--notification", `{"item_id":"","machine_id":"local"}`}}) {
+	if !reflect.DeepEqual(calls, [][]string{{path, "app", "--notification-stdin"}, {path, "app", "--notification-stdin"}}) {
 		t.Fatal(calls)
 	}
 }
@@ -261,7 +261,7 @@ func TestServiceNotificationClickRunsTheCLI(t *testing.T) {
 	if err := notificationResponse(t.Context(), r, "/Applications/Driga.app/Contents/MacOS/drigad", notificationDefaultAction, "w1", "local", ""); err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(calls, [][]string{{"/Applications/Driga.app/Contents/MacOS/driga", "app", "--notification", `{"item_id":"w1","machine_id":"local"}`}}) {
+	if !reflect.DeepEqual(calls, [][]string{{"/Applications/Driga.app/Contents/MacOS/driga", "app", "--notification-stdin"}}) {
 		t.Fatal(calls)
 	}
 }
@@ -272,7 +272,7 @@ func TestMachineSummaryClickKeepsItsKind(t *testing.T) {
 	if err := notificationResponse(t.Context(), r, "/app/driga", notificationDefaultAction, "", "local", "machine_health"); err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"app", "--notification", `{"kind":"machine_health","item_id":"","machine_id":"local"}`}
+	want := []string{"app", "--notification-stdin"}
 	if !reflect.DeepEqual(args, want) {
 		t.Fatal(args)
 	}

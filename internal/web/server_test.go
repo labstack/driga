@@ -81,6 +81,8 @@ func fixture(t *testing.T) (*Server, *store.Store, int64, int64) {
 
 func request(s *Server, method, target string) *httptest.ResponseRecorder {
 	r := httptest.NewRequest(method, target, nil)
+	r.Host = "127.0.0.1:47801"
+	r.Header.Set("Origin", "http://127.0.0.1:47801")
 	w := httptest.NewRecorder()
 	s.ServeHTTP(w, r)
 	return w

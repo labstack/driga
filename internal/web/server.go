@@ -4,9 +4,12 @@ package web
 
 import (
 	"context"
+	"crypto/rand"
 	"embed"
+	"encoding/hex"
 	"encoding/json"
 	"io/fs"
+	"net"
 	"net/http"
 	"net/url"
 	"path"
@@ -53,7 +56,13 @@ type Options struct {
 
 // Server is a transport-free handler: the app's page, its JSON endpoints and
 // Chat's long polls.
+type confirmation struct {
+	key   string
+	until time.Time
+}
+
 type Server struct {
+	confirmations map[string]confirmation
 	routes        *http.ServeMux
 	source        Source
 	opts          Options
@@ -63,10 +72,10 @@ type Server struct {
 	polled        time.Time // The app's last request.
 	cacheMu       sync.Mutex
 	cache         map[snapshotKey]cachedSnapshot
-	cacheVersion  int64
+	snapshotLoads map[snapshotKey]*snapshotLoad
 	cleanupAt     time.Time
 	cleanupRows   []cleanup.Candidate
-	cleanupErr    error
+	cleanupLoad   *cleanupLoad
 	watchInterval time.Duration
 	pollTimeout   time.Duration
 }
@@ -82,7 +91,7 @@ func New(source Source, opts Options) (*Server, error) {
 	}
 	s := &Server{
 		source: source, opts: opts, static: http.StripPrefix("/static/", http.FileServer(http.FS(static))),
-		cache: map[snapshotKey]cachedSnapshot{}, watchInterval: time.Second, pollTimeout: 25 * time.Second,
+		confirmations: map[string]confirmation{}, cache: map[snapshotKey]cachedSnapshot{}, watchInterval: time.Second, pollTimeout: 25 * time.Second,
 	}
 	s.routes = s.newRoutes()
 	return s, nil
@@ -124,6 +133,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	w.Header().Set("Cache-Control", "no-store")
+	if !appRequestOrigin(r) {
+		http.Error(w, "Untrusted app origin", http.StatusForbidden)
+		return
+	}
 	if r.Method != http.MethodGet && r.Method != http.MethodHead && !(r.Method == http.MethodPost && (isChatPOST(r.URL.Path) || isAppPOST(r.URL.Path) || isDashboardPOST(r.URL.Path))) {
 		w.Header().Set("Allow", "GET, HEAD")
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -201,12 +214,53 @@ func (s *Server) appConfirm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var in struct {
-		Message string `json:"message"`
+		Message string         `json:"message"`
+		Request *actionRequest `json:"request,omitempty"`
 	}
 	if !decodeAppJSON(w, r, &in) {
 		return
 	}
-	writeJSON(w, map[string]bool{"confirmed": s.opts.Confirm(r.Context(), in.Message)})
+	if in.Request != nil {
+		snap, err := s.cachedLoad(r.Context(), store.Scope{}, false)
+		if err != nil {
+			http.Error(w, "Snapshot unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		if _, err := actionArgs(*in.Request, snap); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		// The native prompt includes the exact request the issued token authorizes.
+		in.Message += "\nAction: " + confirmationKey(*in.Request)
+	}
+	confirmed := s.opts.Confirm(r.Context(), in.Message)
+	token := ""
+	if confirmed && in.Request != nil {
+		var raw [32]byte
+		if _, err := rand.Read(raw[:]); err != nil {
+			http.Error(w, "Confirmation unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		token = hex.EncodeToString(raw[:])
+		s.mu.Lock()
+		now := time.Now()
+		for key, c := range s.confirmations {
+			if !now.Before(c.until) {
+				delete(s.confirmations, key)
+			}
+		}
+		if len(s.confirmations) >= 128 {
+			s.mu.Unlock()
+			http.Error(w, "Too many pending confirmations", http.StatusTooManyRequests)
+			return
+		}
+		s.confirmations[token] = confirmation{confirmationKey(*in.Request), now.Add(time.Minute)}
+		s.mu.Unlock()
+	}
+	writeJSON(w, struct {
+		Confirmed bool   `json:"confirmed"`
+		Token     string `json:"token,omitempty"`
+	}{confirmed, token})
 }
 
 // appOpenExternal hands a web link to the default browser.
@@ -255,4 +309,43 @@ func (w *headerWriter) Write(b []byte) (int, error) {
 		w.WriteHeader(http.StatusOK)
 	}
 	return w.ResponseWriter.Write(b)
+}
+
+// HTTP is loopback-only; POSTs must originate at the same authority. The
+// toolkit's private protocol has its own exact app origin.
+func appRequestOrigin(r *http.Request) bool {
+	scheme := r.URL.Scheme
+	if scheme == "" {
+		scheme = "http"
+		if r.TLS != nil {
+			scheme = "https"
+		}
+	}
+	origin := r.Header.Get("Origin")
+	if scheme == "mygo" {
+		// MyGo stamps this transport address itself, after translating
+		// WebView2's http://mygo.localhost URL back to mygo://localhost.
+		// Its original Origin header remains unchanged on Windows.
+		if !strings.HasPrefix(r.RemoteAddr, "mygo:") || r.Host != "localhost" {
+			return false
+		}
+		if r.Method != http.MethodPost && origin == "" {
+			return true
+		}
+		return origin == "mygo://localhost" || origin == "http://mygo.localhost"
+	}
+	if scheme != "http" && scheme != "https" {
+		return false
+	}
+	host := r.Host
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	if host != "127.0.0.1" && host != "localhost" && host != "::1" && host != "[::1]" {
+		return false
+	}
+	if r.Method != http.MethodPost && origin == "" {
+		return true
+	}
+	return origin == scheme+"://"+r.Host
 }

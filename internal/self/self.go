@@ -5,8 +5,10 @@
 package self
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 )
 
@@ -17,7 +19,22 @@ func Executable() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return CLI(exe), nil
+	return executable(exe)
+}
+
+func executable(exe string) (string, error) {
+	cli := CLI(exe)
+	if cli == exe {
+		return exe, nil
+	}
+	info, err := os.Stat(cli)
+	if err != nil {
+		return "", fmt.Errorf("Driga CLI beside service: %w", err)
+	}
+	if !info.Mode().IsRegular() || runtime.GOOS != "windows" && info.Mode().Perm()&0111 == 0 {
+		return "", fmt.Errorf("Driga CLI beside service is not an executable file: %s", cli)
+	}
+	return cli, nil
 }
 
 // CLI maps a drigad path to the driga beside it; other paths are unchanged.

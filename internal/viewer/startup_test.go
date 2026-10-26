@@ -265,10 +265,10 @@ func TestLiveSnapshotSocketProbeDoesNotBlockReads(t *testing.T) {
 	select {
 	case err := <-done:
 		if err != nil {
-			t.Fatalf("blocked socket probe stalled viewer: %v", err)
+			t.Fatalf("blocked socket probe stuck viewer: %v", err)
 		}
 	case <-time.After(2 * time.Second):
-		t.Fatal("blocked socket probe stalled viewer")
+		t.Fatal("blocked socket probe stuck viewer")
 	}
 }
 

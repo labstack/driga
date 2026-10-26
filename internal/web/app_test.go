@@ -22,6 +22,8 @@ func (appSource) LoadScope(context.Context, store.Scope, ...bool) (viewer.Snapsh
 
 func postJSON(s *Server, path, body string) *httptest.ResponseRecorder {
 	r := httptest.NewRequest("POST", path, strings.NewReader(body))
+	r.Host = "127.0.0.1:47801"
+	r.Header.Set("Origin", "http://127.0.0.1:47801")
 	r.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	s.ServeHTTP(w, r)
@@ -69,6 +71,8 @@ func TestAppHooks(t *testing.T) {
 		}
 	}
 	r := httptest.NewRequest("POST", "/app/confirm", strings.NewReader(`{"message":"x"}`))
+	r.Host = "127.0.0.1:47801"
+	r.Header.Set("Origin", "http://127.0.0.1:47801")
 	w := httptest.NewRecorder()
 	s.ServeHTTP(w, r)
 	if w.Code != http.StatusUnsupportedMediaType {

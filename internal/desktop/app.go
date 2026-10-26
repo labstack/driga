@@ -318,9 +318,11 @@ func (s *shell) newWindow(loaded func()) page {
 	p := mainPage{w}
 	w.Page().OnDidFinishLoad(loaded)
 	w.Page().OnWillNavigate(func(e *mygo.NavigateEvent) {
-		if external(e.URL) {
+		if !internalNavigation(e.URL) {
 			e.PreventDefault()
-			go func() { _ = mygo.Shell.OpenExternal(e.URL) }()
+			if external(e.URL) {
+				go func() { _ = mygo.Shell.OpenExternal(e.URL) }()
+			}
 		}
 	})
 	w.OnClosed(func() {

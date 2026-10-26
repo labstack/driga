@@ -30,22 +30,19 @@ func TestActionArgs(t *testing.T) {
 	}{
 		{"jump", actionRequest{Action: "jump", SessionID: 7, Machine: "here"}, `{"session_id":7}`},
 		{"jump remote", actionRequest{Action: "jump", SessionID: 8, Machine: "peer"}, ""},
-		{"stop unconfirmed", actionRequest{Action: "kill", SessionID: 7, Machine: "here"}, ""},
-		{"stop", actionRequest{Action: "kill", SessionID: 7, Machine: "here", Confirmed: true}, `{"force":false,"session_id":7}`},
-		{"stop claims another machine", actionRequest{Action: "kill", SessionID: 7, Machine: "peer", Confirmed: true}, ""},
-		{"kill tree", actionRequest{Action: "kill", ID: "ok", Machine: "here", Force: true, Confirmed: true}, `{"force":true,"id":"ok"}`},
-		{"kill young tree", actionRequest{Action: "kill", ID: "young", Machine: "here", Confirmed: true}, ""},
-		{"kill unverified tree", actionRequest{Action: "kill", ID: "unverified", Machine: "here", Confirmed: true}, ""},
-		{"kill remote tree", actionRequest{Action: "kill", ID: "remote", Machine: "here", Confirmed: true}, ""},
-		{"cleanup", actionRequest{Action: "cleanup", ID: "wt", Machine: "here", Confirmed: true}, `{"id":"wt"}`},
-		{"cleanup unconfirmed", actionRequest{Action: "cleanup", ID: "wt", Machine: "here"}, ""},
+		{"stop", actionRequest{Action: "kill", SessionID: 7, Machine: "here"}, `{"force":false,"session_id":7}`},
+		{"stop claims another machine", actionRequest{Action: "kill", SessionID: 7, Machine: "peer"}, ""},
+		{"kill tree", actionRequest{Action: "kill", ID: "ok", Machine: "here", Force: true}, `{"force":true,"id":"ok"}`},
+		{"kill young tree", actionRequest{Action: "kill", ID: "young", Machine: "here"}, ""},
+		{"kill unverified tree", actionRequest{Action: "kill", ID: "unverified", Machine: "here"}, ""},
+		{"kill remote tree", actionRequest{Action: "kill", ID: "remote", Machine: "here"}, ""},
+		{"cleanup", actionRequest{Action: "cleanup", ID: "wt", Machine: "here"}, `{"id":"wt"}`},
 		{"ack one remote", actionRequest{Action: "ack_inbox", ID: "w1", Machine: "peer"}, `{"all":false,"id":"w1"}`},
-		{"ack all", actionRequest{Action: "ack_inbox", All: true, Confirmed: true}, `{"all":true,"id":""}`},
-		{"ack all unconfirmed", actionRequest{Action: "ack_inbox", All: true}, ""},
-		{"ack nothing", actionRequest{Action: "ack_inbox", Confirmed: true}, ""},
+		{"ack all", actionRequest{Action: "ack_inbox", All: true}, `{"all":true,"id":""}`},
+		{"ack nothing", actionRequest{Action: "ack_inbox"}, ""},
 		{"summarize", actionRequest{Action: "summarize", Project: "/repo", Machine: "here"}, `{"project":"/repo"}`},
 		{"summarize unknown", actionRequest{Action: "summarize", Project: "/elsewhere", Machine: "here"}, ""},
-		{"unknown", actionRequest{Action: "rm", Confirmed: true}, ""},
+		{"unknown", actionRequest{Action: "rm"}, ""},
 	} {
 		got, err := actionArgs(tc.in, snap)
 		if tc.want == "" {
@@ -68,13 +65,16 @@ func TestAppActionRuns(t *testing.T) {
 	var name string
 	var args json.RawMessage
 	s.opts.Action = func(_ context.Context, n string, a json.RawMessage) error { name, args = n, a; return nil }
-	body := fmt.Sprintf(`{"action":"kill","session_id":%d,"machine":%q,"confirmed":true}`, id, st.MachineID())
+	s.opts.Confirm = func(context.Context, string) bool { return true }
+	body := fmt.Sprintf(`{"action":"kill","session_id":%d,"machine":%q,"token":"forged"}`, id, st.MachineID())
+	body = authorizeAction(t, s, body)
 	if w := postChat(s, "/app/action", body); w.Code != 200 || name != "kill" || string(args) != fmt.Sprintf(`{"force":false,"session_id":%d}`, id) {
 		t.Fatal(w.Code, w.Body.String(), name, string(args))
 	}
 	s.opts.Action = func(context.Context, string, json.RawMessage) error {
 		return fmt.Errorf("session process changed or exited")
 	}
+	body = authorizeAction(t, s, body)
 	if w := postChat(s, "/app/action", body); w.Code != 400 || w.Body.String() != "session process changed or exited\n" {
 		t.Fatal(w.Code, w.Body.String())
 	}

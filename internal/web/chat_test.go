@@ -34,6 +34,8 @@ func chatFixture(t *testing.T) (*Server, *chat.Broker, string) {
 }
 func postChat(s *Server, path, body string) *httptest.ResponseRecorder {
 	r := httptest.NewRequest("POST", path, strings.NewReader(body))
+	r.Host = "127.0.0.1:47801"
+	r.Header.Set("Origin", "http://127.0.0.1:47801")
 	r.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	s.ServeHTTP(w, r)
@@ -46,6 +48,8 @@ func TestChatPOST(t *testing.T) {
 		t.Fatal(w.Code, w.Body)
 	}
 	r := httptest.NewRequest("POST", "/chat/api/send", strings.NewReader(body))
+	r.Host = "127.0.0.1:47801"
+	r.Header.Set("Origin", "http://127.0.0.1:47801")
 	r.Header.Set("Content-Type", "text/plain")
 	w := httptest.NewRecorder()
 	s.ServeHTTP(w, r)

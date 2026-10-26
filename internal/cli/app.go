@@ -21,7 +21,8 @@ import (
 
 // AppCmd opens the desktop app, or focuses the running one.
 type AppCmd struct {
-	Notification string `hidden:"" help:"Desktop notification event target."`
+	NotificationStdin bool   `hidden:"" help:"Read a notification target from standard input."`
+	Notification      string `hidden:"" help:"Desktop notification event target."`
 }
 
 var (
@@ -46,14 +47,14 @@ var (
 func AppLaunch(args []string) bool {
 	login := len(args) == 0 && os.Getenv("DRIGA_APP") != "1" && openedAtLogin()
 	app := appLaunch(os.Getenv, login, args)
-	systemLaunch = app && (len(args) == 0 || len(args) > 1 && args[1] == "--notification" && os.Getenv("DRIGA_APP") == "1")
+	systemLaunch = app && (len(args) == 0 || len(args) > 1 && (args[1] == "--notification" || args[1] == "--notification-stdin") && os.Getenv("DRIGA_APP") == "1")
 	_ = os.Unsetenv("DRIGA_APP")
 	return app
 }
 
 // appLaunch decides app mode: `driga app`, or a bare launch by the system.
 func appLaunch(env func(string) string, openedAtLogin bool, args []string) bool {
-	if len(args) >= 1 && args[0] == "app" && (len(args) == 1 || args[1] == "--notification") {
+	if len(args) >= 1 && args[0] == "app" && (len(args) == 1 || (args[1] == "--notification" || args[1] == "--notification-stdin")) {
 		return true
 	}
 	return len(args) == 0 && (env("DRIGA_APP") == "1" || openedAtLogin)
@@ -75,6 +76,27 @@ func AppMain(cli, version string, metadata ...string) int {
 func (c AppCmd) Run(g *Globals) error {
 	var target *model.NotificationTarget
 	var args []string
+	if c.NotificationStdin {
+		input := io.Reader(os.Stdin)
+		if g.Stdin != nil {
+			input = g.Stdin
+		}
+		raw, err := io.ReadAll(io.LimitReader(input, 4097))
+		if err != nil || len(raw) > 4096 {
+			return fmt.Errorf("notification input unavailable")
+		}
+		var parsed model.NotificationTarget
+		if err := json.Unmarshal(raw, &parsed); err != nil {
+			return fmt.Errorf("notification target: %w", err)
+		}
+		c.Notification = string(raw)
+		// mygo forwards these Go values over its single-instance IPC channel;
+		// changing os.Args does not change the kernel's process argument vector.
+		original := os.Args
+		os.Args = append([]string{original[0]}, "app", "--notification", c.Notification)
+		defer func() { os.Args = original }()
+	}
+
 	if c.Notification != "" {
 		target = new(model.NotificationTarget)
 		if err := json.Unmarshal([]byte(c.Notification), target); err != nil {
@@ -82,7 +104,7 @@ func (c AppCmd) Run(g *Globals) error {
 		}
 		args = []string{"app", "--notification", c.Notification}
 	}
-	if handed, err := handOffApp(systemLaunch, args...); handed || err != nil {
+	if handed, err := handOffApp(systemLaunch || c.NotificationStdin, args...); handed || err != nil {
 		return err
 	}
 	restore := appLogging()

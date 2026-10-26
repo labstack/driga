@@ -157,8 +157,8 @@ func nativeNotificationRequest(n Notification) NativeNotificationRequest {
 
 const notificationDefaultAction = "com.apple.UNNotificationDefaultActionIdentifier"
 
-// notificationResponse opens the app with a value-only target. argv is never
-// interpreted by a shell; the app resolves the event in its own current store.
+// notificationResponse sends a value-only target on stdin; identifiers never
+// enter argv. The app resolves it against its current store.
 func notificationResponse(ctx context.Context, r Runner, path, action, itemID, machineID, kind string) error {
 	if action != notificationDefaultAction || path == "" || r == nil {
 		return nil
@@ -167,7 +167,13 @@ func notificationResponse(ctx context.Context, r Runner, path, action, itemID, m
 		path = filepath.Join(filepath.Dir(path), "driga")
 	}
 	target, _ := json.Marshal(model.NotificationTarget{ItemID: itemID, MachineID: machineID, Kind: kind})
-	_, err := r.Run(ctx, path, "app", "--notification", string(target))
+	input, ok := r.(interface {
+		RunInput(context.Context, []byte, string, ...string) ([]byte, error)
+	})
+	if !ok {
+		return errors.New("notification runner has no private input transport")
+	}
+	_, err := input.RunInput(ctx, target, path, "app", "--notification-stdin")
 	return err
 }
 

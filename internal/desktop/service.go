@@ -16,6 +16,7 @@ import (
 
 	"github.com/labstack/driga/internal/collector"
 	"github.com/labstack/driga/internal/pathx"
+	"github.com/labstack/driga/internal/service"
 )
 
 // The app does not collect. The Driga service, drigad, does: it runs as a
@@ -46,15 +47,39 @@ func (s *shell) ensureService(ctx context.Context) error {
 		return errIsolatedHome
 	}
 	env := s.serviceEnv(ctx)
-	if err := s.runService(ctx, env, "install"); err != nil {
+	return startService(s.goos, s.opts.Version, func() (bool, error) {
+		controller, err := service.New(s.serviceExe)
+		if err != nil {
+			return false, err
+		}
+		return service.Installed(controller)
+	}, func(action string) error {
+		return s.runService(ctx, env, action)
+	}, func() (collector.Owner, bool, error) { return collector.ReadOwner(s.dataDir) })
+}
+
+// startService preserves macOS's plist refresh, while managers that reject an
+// existing registration start it directly. Version changes still restart it.
+func startService(goos, version string, installed func() (bool, error), run func(string) error, readOwner func() (collector.Owner, bool, error)) error {
+	action := "install"
+	if goos != "darwin" {
+		exists, err := installed()
+		if err != nil {
+			return fmt.Errorf("query installed Driga service: %w", err)
+		}
+		if exists {
+			action = "start"
+		}
+	}
+	if err := run(action); err != nil {
 		return err
 	}
-	owner, held, err := collector.ReadOwner(s.dataDir)
-	if err != nil || !held || owner.Version == "" || owner.Version == s.opts.Version {
+	owner, held, err := readOwner()
+	if err != nil || !held || owner.Version == "" || owner.Version == version {
 		return err
 	}
-	slog.Info("the Driga service runs another version; restarting it", "event", "service_restart", "running", owner.Version, "app", s.opts.Version)
-	return s.runService(ctx, env, "restart")
+	slog.Info("the Driga service runs another version; restarting it", "event", "service_restart", "running", owner.Version, "app", version)
+	return run("restart")
 }
 
 // serviceEnv is the login shell's environment, which the login service is

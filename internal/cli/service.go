@@ -119,19 +119,14 @@ func (c serviceControl) Run(g *Globals) error {
 				return err
 			}
 		}
-		if err := service.RemoveLegacy(); err != nil {
-			return fmt.Errorf("remove the collector an earlier release installed: %w", err)
-		}
-		if err := s.Install(); err != nil {
-			return err
-		}
-		if hint := service.InstallHint(runtime.GOOS); hint != "" {
-			if _, err := fmt.Fprintln(commandOutput(g), hint); err != nil {
+		if err := installService(s, service.RemoveLegacy, func() error {
+			if hint := service.InstallHint(runtime.GOOS); hint != "" {
+				_, err := fmt.Fprintln(commandOutput(g), hint)
 				return err
 			}
-		}
-		if err := s.Start(); err != nil {
-			return fmt.Errorf("installed the Driga service; start it with driga service start: %w", err)
+			return nil
+		}); err != nil {
+			return err
 		}
 	case "uninstall":
 		err = s.Uninstall()
@@ -178,6 +173,27 @@ func (c serviceControl) Run(g *Globals) error {
 	}
 	_, err = fmt.Fprintln(commandOutput(g), "Driga service:", c.Action)
 	return err
+}
+
+// installService keeps the previous collector available until the new login
+// service has installed successfully. All later steps stop on the first error.
+func installService(s interface {
+	Install() error
+	Start() error
+}, removeLegacy, showHint func() error) error {
+	if err := s.Install(); err != nil {
+		return err
+	}
+	if err := removeLegacy(); err != nil {
+		return fmt.Errorf("remove the collector an earlier release installed: %w", err)
+	}
+	if err := showHint(); err != nil {
+		return err
+	}
+	if err := s.Start(); err != nil {
+		return fmt.Errorf("installed the Driga service; start it with driga service start: %w", err)
+	}
+	return nil
 }
 
 // collectorHint is the command that starts the Driga service. The app

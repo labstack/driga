@@ -1,11 +1,14 @@
 package desktop
 
 import (
+	"context"
 	"encoding/json"
 	"github.com/egoist/mygo"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/store"
 	"github.com/labstack/driga/internal/view"
+	"github.com/labstack/driga/internal/viewer"
+	"time"
 )
 
 func notificationFromArgs(args []string) *model.NotificationTarget {
@@ -39,11 +42,19 @@ func notificationCommand(target model.NotificationTarget, rows []view.InboxRow) 
 
 func (s *shell) openNotification(target model.NotificationTarget) {
 	go func() {
-		snap, err := s.source.LoadScope(s.ctx, store.Scope{})
+		snap, err := notificationSnapshot(s.ctx, s.source)
 		name, arg := "view", any("inbox")
 		if err == nil {
 			name, arg = notificationCommand(target, snap.Inbox.Rows)
 		}
 		mygo.RunOnMain(func() { s.host.Command(name, arg) })
 	}()
+}
+
+func notificationSnapshot(parent context.Context, source interface {
+	LoadScope(context.Context, store.Scope, ...bool) (viewer.Snapshot, error)
+}) (viewer.Snapshot, error) {
+	ctx, cancel := context.WithTimeout(parent, 5*time.Second)
+	defer cancel()
+	return source.LoadScope(ctx, store.Scope{})
 }

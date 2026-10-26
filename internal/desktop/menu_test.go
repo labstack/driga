@@ -175,3 +175,30 @@ func TestExternalLinks(t *testing.T) {
 		}
 	}
 }
+
+// Forged origins and non-web schemes must not replace the privileged app page
+// or be handed to the operating system's external opener.
+func TestNavigationFailsClosed(t *testing.T) {
+	for _, raw := range []string{
+		"file:///etc/passwd", "custom://launch", "javascript:alert(1)",
+		"data:text/html,hello", "about:blank", "/flow", "//evil.example/app/",
+		"mygo://evil.example/app/", "mygo://localhost.evil/app/",
+		"mygo://localhost:123/app/", "mygo://user@localhost/app/",
+		"http://mygo.localhost:123/app/", "http://user@mygo.localhost/app/",
+		"https://mygo.localhost/app/", "http://mygo.localhost.evil/app/", "%zz",
+	} {
+		if internalNavigation(raw) {
+			t.Errorf("forged navigation allowed: %q", raw)
+		}
+	}
+	for _, raw := range []string{"file:///etc/passwd", "custom://launch", "javascript:alert(1)", "mygo://evil.example/app/", "http://user@mygo.localhost/app/"} {
+		if external(raw) {
+			t.Errorf("unsafe URL sent to external opener: %q", raw)
+		}
+	}
+	for _, raw := range []string{"mygo://localhost/app/", "http://mygo.localhost/app/?view=fleet#session"} {
+		if !internalNavigation(raw) || external(raw) {
+			t.Errorf("app origin blocked or opened externally: %q", raw)
+		}
+	}
+}
