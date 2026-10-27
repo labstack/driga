@@ -8,7 +8,126 @@ import (
 	"time"
 
 	"github.com/labstack/driga/internal/model"
+	"github.com/labstack/driga/internal/spool"
 )
+
+func TestProcessReplacementTransfersHelperOwnership(t *testing.T) {
+	for _, source := range []string{"registry", "rollout", "claude-hook", "codex-hook", "registry-without-scan"} {
+		t.Run(source, func(t *testing.T) {
+			agent := "claude"
+			if source == "rollout" || source == "codex-hook" {
+				agent = "codex"
+			}
+			d, st, p, a := setup(t)
+			obs := a.obs[0]
+			a.name, a.obs = agent, nil
+			p.procs[0].Cmdline, p.procs[0].Argv = agent, []string{agent}
+			helper := model.Proc{PID: 200, PPID: 101, StartTime: p.procs[0].StartTime.Add(time.Second), Cmdline: "claude mcp serve", Argv: []string{"claude", "mcp", "serve"}}
+			p.procs = append(p.procs, helper)
+			probe := &socketPlatform{fakePlatform: p, peers: map[int32]bool{200: false}}
+			d.Plat = probe
+			now := d.now()
+			d.Now = func() time.Time { return now }
+			pass(t, d, st, Plan{Procs: true, Sockets: true})
+			key := fmt.Sprintf("%d:%d", helper.PID, helper.StartTime.Unix())
+			provisional := sessions(t, st)[0].ID
+			if d.State.spawn[key] != provisional {
+				t.Fatal("provisional session did not own helper")
+			}
+			obs.Adapter = agent
+			if agent == "codex" {
+				obs.PID, obs.ProcStart, obs.RegistryStatus = 0, time.Time{}, ""
+			}
+			if source == "claude-hook" || source == "codex-hook" {
+				if err := spool.Append(d.SpoolDir, model.HookEvent{Adapter: agent, SessionID: obs.ExternalID, Event: "SessionStart", TS: now, PID: p.procs[0].PID, ProcStart: p.procs[0].StartTime, Cwd: obs.Cwd}); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				a.obs = []model.SessionObs{obs}
+			}
+			if source == "registry-without-scan" {
+				pass(t, d, st, Plan{})
+			}
+			for i := 0; i < 4; i++ {
+				now = now.Add(time.Second)
+				probe.requested = nil
+				pass(t, d, st, Plan{Procs: true, Sockets: true})
+				if len(probe.requested) != 0 {
+					t.Fatalf("pass %d: live helper became socket candidate: %v", i, probe.requested)
+				}
+				orphans, err := st.Orphans()
+				if err != nil || len(orphans) != 0 {
+					t.Fatalf("pass %d: live helper became orphan: %+v, %v", i, orphans, err)
+				}
+				var owner int64
+				for _, s := range sessions(t, st) {
+					if s.ExternalID == obs.ExternalID {
+						owner = s.ID
+					} else if s.ID == provisional && (s.PID != 0 || s.EndedAt == nil) {
+						t.Fatalf("provisional row still live: %+v", s)
+					}
+				}
+				procs, err := st.Procs()
+				if err != nil {
+					t.Fatal(err)
+				}
+				for _, proc := range procs {
+					if proc.PID == helper.PID && (owner == 0 || proc.SessionID != owner || d.State.spawn[key] != owner) {
+						t.Fatalf("pass %d: helper owner=%d, memory=%d, want %d", i, proc.SessionID, d.State.spawn[key], owner)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestHookOnlySessionReplacesProcessPlaceholder(t *testing.T) {
+	for _, agent := range []string{"claude", "codex"} {
+		for _, parent := range []string{"agent", "shell", "reused", "missing-start"} {
+			t.Run(agent+"/"+parent, func(t *testing.T) {
+				d, st, p, a := setup(t)
+				a.name, a.obs = agent, nil
+				p.procs[0].Cmdline, p.procs[0].Argv = agent, []string{agent}
+				now := d.now()
+				d.Now = func() time.Time { return now }
+				pass(t, d, st, Plan{Procs: true})
+				identity := p.procs[0]
+				if parent == "shell" {
+					identity = model.Proc{PID: 201, PPID: identity.PID, StartTime: now.Add(-time.Minute), Cmdline: "sh", Argv: []string{"sh"}}
+					p.procs = append(p.procs, identity)
+				}
+				if parent == "reused" {
+					identity.StartTime = identity.StartTime.Add(-time.Hour)
+				}
+				if parent == "missing-start" {
+					identity.StartTime = time.Time{}
+				}
+				for i := 0; i < 3; i++ {
+					now = now.Add(time.Second)
+					if i < 2 {
+						if err := spool.Append(d.SpoolDir, model.HookEvent{Adapter: agent, SessionID: "hook-only", Event: "SessionStart", TS: now, PID: identity.PID, ProcStart: identity.StartTime, Cwd: identity.Cwd}); err != nil {
+							t.Fatal(err)
+						}
+					}
+					pass(t, d, st, Plan{Procs: true})
+					var live []model.Session
+					for _, s := range sessions(t, st) {
+						if s.EndedAt == nil {
+							live = append(live, s)
+						}
+					}
+					if parent == "reused" || parent == "missing-start" {
+						if len(live) == 0 || live[0].PID != 101 || live[0].ExternalID == "hook-only" {
+							t.Fatalf("unreliable identity retired a live process: %+v", live)
+						}
+					} else if len(live) != 1 || live[0].ExternalID != "hook-only" || live[0].PID != 101 || live[0].Hosted || !live[0].ProcStart.Equal(p.procs[0].StartTime) {
+						t.Fatalf("pass %d: hook-only conversation duplicated: %+v", i, live)
+					}
+				}
+			})
+		}
+	}
+}
 
 func TestMissingAgentMetadataStillShowsLiveProcess(t *testing.T) {
 	for _, agent := range []string{"claude", "codex", "copilot"} {

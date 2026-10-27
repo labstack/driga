@@ -81,17 +81,21 @@ func processSessions(ss []model.Session, procs []model.Proc, d Deps) []model.Ses
 
 // Retire provisional identities once a registry, rollout or hook identifies the
 // conversation, and remove launcher rows left by an older collector version.
-func retireProcessAliases(ss []model.Session, procs []model.Proc, now time.Time) {
+func retireProcessAliases(ss []model.Session, procs []model.Proc, now time.Time) map[int64]int {
 	launchers := agentLaunchers(procs)
+	replacements := make(map[int64]int)
 	for i := range ss {
 		p := &ss[i]
 		if !strings.HasPrefix(p.ExternalID, "pid:") || p.PID == 0 {
 			continue
 		}
 		retire := launchers[p.PID]
-		for _, s := range ss {
+		for j, s := range ss {
 			if !strings.HasPrefix(s.ExternalID, "pid:") && s.Adapter == p.Adapter && s.PID == p.PID && !s.ProcStart.IsZero() && platform.SameStart(p.ProcStart, s.ProcStart) {
 				retire = true
+				if p.ID != 0 {
+					replacements[p.ID] = j
+				}
 				break
 			}
 		}
@@ -101,4 +105,5 @@ func retireProcessAliases(ss []model.Session, procs []model.Proc, now time.Time)
 			p.EndedAt = &at
 		}
 	}
+	return replacements
 }

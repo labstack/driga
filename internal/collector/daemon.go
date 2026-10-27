@@ -543,13 +543,13 @@ func drainOnly(ctx context.Context, d Deps, st *store.Store) error {
 	if err != nil {
 		return err
 	}
-	sessions = hookSessions(sessions, spoolHooks(d, batch.events))
-	copilotCapturePolicy(sessions, d.Cfg.CaptureText)
-	reconcileCopilot(sessions, d.Plat, now)
 	procs, err := st.Procs()
 	if err != nil {
 		return err
 	}
+	sessions = hookSessions(sessions, spoolHooks(d, batch.events), procs)
+	copilotCapturePolicy(sessions, d.Cfg.CaptureText)
+	reconcileCopilot(sessions, d.Plat, now)
 	jumps := collectInboxJumps(ctx, d, sessions, procs)
 	err = st.Tx(ctx, func(tx *store.Tx) error {
 		if _, err := configurePassFeed(d, tx, enabled); err != nil {
@@ -598,7 +598,7 @@ func drainOnly(ctx context.Context, d Deps, st *store.Store) error {
 		if err != nil {
 			return err
 		}
-		ss = hookSessions(ss, hooks)
+		ss = hookSessions(ss, hooks, procs)
 		copilotCapturePolicy(ss, d.Cfg.CaptureText)
 		reconcileCopilot(ss, d.Plat, now)
 		for i := range ss {

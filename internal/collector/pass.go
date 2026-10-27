@@ -442,6 +442,11 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 		if err := mapRepos(tx, ss, collected.paths); err != nil {
 			return err
 		}
+		for key, id := range work.spawn {
+			if replacement, ok := collected.processAliases[id]; ok {
+				work.spawn[key] = ss[replacement].ID
+			}
+		}
 		if procsOK {
 			spawn := derive.SpawnedBySession(idx, ss)
 			memory := make(map[string]int64)
