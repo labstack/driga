@@ -442,6 +442,11 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 		if err := mapRepos(tx, ss, collected.paths); err != nil {
 			return err
 		}
+		for key, id := range work.spawn {
+			if replacement, ok := collected.processAliases[id]; ok {
+				work.spawn[key] = ss[replacement].ID
+			}
+		}
 		if procsOK {
 			spawn := derive.SpawnedBySession(idx, ss)
 			memory := make(map[string]int64)
@@ -1035,6 +1040,10 @@ func mergeObs(dst *model.SessionObs, src model.SessionObs) {
 	if src.Hosted {
 		dst.Hosted = true
 	}
+	if src.Adapter == "codex" && !src.StartedAt.IsZero() {
+		// A full metadata header can correct an older hosted classification.
+		dst.Hosted = src.Hosted
+	}
 	dst.Completions = append(dst.Completions, src.Completions...)
 	dst.FilesTouched = append(dst.FilesTouched, src.FilesTouched...)
 	dst.Events = append(dst.Events, src.Events...)
@@ -1050,8 +1059,12 @@ func mergeObs(dst *model.SessionObs, src model.SessionObs) {
 
 func linkCodex(ss []model.Session, procs []model.Proc, plat platform.Platform) {
 	used := make(map[int32]bool)
+	launchers := agentLaunchers(procs)
 	var order []int
 	for i, s := range ss {
+		if strings.HasPrefix(s.ExternalID, "pid:") {
+			continue // Provisional rows must not block a real rollout's ownership.
+		}
 		if s.PID != 0 {
 			used[s.PID] = true
 		}
@@ -1093,7 +1106,7 @@ func linkCodex(ss []model.Session, procs []model.Proc, plat platform.Platform) {
 		sessionCwd := ""
 		for j := range procs {
 			p := &procs[j]
-			if used[p.PID] || p.Agent != s.Adapter || (p.Role != "interactive" && p.Role != "headless") || p.Cwd == "" || p.StartTime.IsZero() || p.StartTime.After(s.StartedAt.Add(5*time.Second)) || !live(j) {
+			if used[p.PID] || launchers[p.PID] || p.Agent != s.Adapter || (p.Role != "interactive" && p.Role != "headless") || p.Cwd == "" || p.StartTime.IsZero() || p.StartTime.After(s.StartedAt.Add(5*time.Second)) || !live(j) {
 				continue
 			}
 			if sessionCwd == "" {

@@ -15,6 +15,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/labstack/driga/internal/gitscan"
+	"github.com/labstack/driga/internal/platform"
 	"github.com/labstack/driga/internal/scrub"
 	"github.com/labstack/driga/internal/store"
 )
@@ -456,7 +457,7 @@ func autoProject(dir, dataDir string) bool {
 			cmd.Env = append(cmd.Env, env)
 		}
 	}
-	out, err := cmd.Output()
+	out, err := platform.ChildOutput(cmd, false)
 	return err == nil && strings.TrimSpace(string(out)) == "true"
 }
 

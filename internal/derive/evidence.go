@@ -173,7 +173,7 @@ func LabelWithEvidence(in StateInput, now time.Time, th Thresholds) model.StateM
 			case "stuck":
 				support[3] = alive && in.Obs.TurnOpen && age >= th.StuckAfter
 			case "unknown":
-				support[3] = alive && in.Obs.TurnOpen && age >= time.Minute && age < th.StuckAfter
+				support[3] = alive && (in.Obs.LastActivityAt.IsZero() || in.Obs.TurnOpen && age >= time.Minute && age < th.StuckAfter)
 			}
 		}
 	case "agy":

@@ -16,10 +16,11 @@ import (
 	"github.com/labstack/driga/internal/derive"
 	"github.com/labstack/driga/internal/fleet"
 	"github.com/labstack/driga/internal/model"
+	"github.com/labstack/driga/internal/platform"
 	"github.com/labstack/driga/internal/store"
 )
 
-func hookSessions(ss []model.Session, hooks []model.HookEvent) []model.Session {
+func hookSessions(ss []model.Session, hooks []model.HookEvent, procs []model.Proc) []model.Session {
 	seen := map[string]int{}
 	for i, s := range ss {
 		seen[sessionKey(s.Adapter, s.ExternalID)] = i
@@ -37,6 +38,30 @@ func hookSessions(ss []model.Session, hooks []model.HookEvent) []model.Session {
 		}
 		if h.Adapter == "copilot" {
 			copilot.Fold(&ss[i].SessionObs, h)
+		} else if ss[i].PID == 0 && h.PID > 0 && !h.ProcStart.IsZero() {
+			byPID := make(map[int32]model.Proc, len(procs))
+			for _, p := range procs {
+				byPID[p.PID] = p
+			}
+			p, ok := byPID[h.PID]
+			if !ok || !platform.SameStart(p.StartTime, h.ProcStart) || h.TS.Before(p.StartTime) {
+				continue
+			}
+			launchers := agentLaunchers(procs)
+			visited := map[int32]bool{}
+			for !visited[p.PID] {
+				visited[p.PID] = true
+				if p.Agent == h.Adapter && !launchers[p.PID] && (p.Role == "interactive" || p.Role == "headless") {
+					ss[i].PID, ss[i].ProcStart = p.PID, p.StartTime
+					ss[i].Hosted, ss[i].Origin = false, p.Role
+					break
+				}
+				parent, ok := byPID[p.PPID]
+				if !ok || parent.StartTime.IsZero() || parent.StartTime.After(p.StartTime) {
+					break
+				}
+				p = parent
+			}
 		}
 	}
 	return ss

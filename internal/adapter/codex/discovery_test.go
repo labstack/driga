@@ -35,3 +35,12 @@ func TestOldDiscoverySkipsOffsetLookup(t *testing.T) {
 		t.Fatalf("old discovery queried offsets %d times", o.reads)
 	}
 }
+
+func TestDiscoveryUsesUserHomeWithoutHomeHint(t *testing.T) {
+	env, _ := setup(t, fixture(t))
+	env.Home = ""
+	obs, _, err := codex.New().Collect(context.Background(), env)
+	if err != nil || len(obs) != 1 || obs[0].ExternalID != sid {
+		t.Fatalf("discovery with no HOME hint: observations=%+v err=%v", obs, err)
+	}
+}

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"runtime"
 	"slices"
@@ -14,8 +15,10 @@ import (
 	"github.com/alecthomas/kong"
 	"github.com/charmbracelet/x/term"
 	"github.com/labstack/driga/internal/config"
+	"github.com/labstack/driga/internal/logfile"
 	"github.com/labstack/driga/internal/platform"
 	"github.com/labstack/driga/internal/scrub"
+	"github.com/labstack/driga/internal/service"
 )
 
 // Globals carries resolved command options and runtime dependencies.
@@ -91,6 +94,7 @@ func Main(args []string, version string, metadata ...string) int {
 			return 0
 		}
 		fmt.Fprintln(os.Stderr, "driga: resolve paths:", err)
+		serviceRunError(args, err)
 		return 1
 	}
 	return run(args, version, os.Stdin, os.Stdout, os.Stderr, metadata...)
@@ -128,6 +132,7 @@ func run(args []string, version string, stdin io.Reader, stdout, stderr io.Write
 	}
 	report := func(err error, code int) {
 		fmt.Fprintln(stderr, "driga:", err)
+		serviceRunError(args, err)
 		if jsonMode {
 			var reported reportedError
 			if errors.As(err, &reported) {
@@ -197,6 +202,13 @@ func run(args []string, version string, stdin io.Reader, stdout, stderr io.Write
 		return 0
 	}()
 	return code
+}
+
+func serviceRunError(args []string, err error) {
+	if len(args) >= 2 && args[0] == "service" && args[1] == "run" {
+		w := &logfile.Writer{Path: service.LogPath()}
+		slog.New(logfile.TextHandler(w)).Error("service failed", "err", scrub.Scrub(err.Error()))
+	}
 }
 
 // NewParser builds the kong parser for the full command tree. The CLI and the

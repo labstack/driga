@@ -207,8 +207,15 @@ Defaults and their purpose:
 | `machine.disk_free_min` | `"0"` (automatic) | Inbox `low_disk` warning below the smaller of 10% of the volume or decimal 20 GB; override with a byte string or KiB/MiB/GiB. Env: `DRIGA_MACHINE_DISK_FREE_MIN`. |
 | `cleanup.regenerable` | `node_modules/`, `target/`, `.venv/`, … | Ignored directories that may leave with a worktree; extends the defaults. |
 
-The Claude, Codex, Copilot and Gemini adapters are enabled by default. Override them with
-`[adapters.<name>]` and `enabled = false`. Gemini CLI sessions are read from
+The Claude, Codex, Copilot and Gemini adapters are enabled by default. Disable individual
+adapters with `[adapters.<name>]` and `enabled = false`. Windows collection resolves the account's
+home through `USERPROFILE` when `HOME` is absent. Recognized Claude and Codex
+processes remain visible with `unknown` state when session metadata is not yet
+available; process presence alone does not establish a working or idle state.
+Known Scoop and VS Code launchers with a running agent child are not separate
+conversations. Hook and transcript identities replace provisional process rows.
+
+Gemini CLI sessions are read from
 `~/.gemini/tmp/*/chats/` as JSONL transcripts (or under `$GEMINI_CLI_HOME`). Copilot uses hooks and process
 observations; without hooks it shows process-level sessions with unknown state.
 Install with `driga hooks install copilot`; `driga doctor` reports missing or

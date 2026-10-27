@@ -8,6 +8,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -18,6 +20,23 @@ func TestWindowsJobHelper(t *testing.T) {
 	mode := os.Getenv("DRIGA_JOB_HELPER")
 	if mode == "" {
 		return
+	}
+	if mode == "console" {
+		console, _, _ := winKernel.NewProc("GetConsoleWindow").Call()
+		fmt.Printf("console=%t\n", console != 0)
+		os.Exit(0)
+	}
+	if mode == "console-parent" {
+		cmd := exec.Command(os.Args[0], "-test.run=^TestWindowsJobHelper$")
+		cmd.Env = append(os.Environ(), "DRIGA_JOB_HELPER=console")
+		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+		out, err := ChildOutput(cmd, false)
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(4)
+		}
+		fmt.Print(string(out))
+		os.Exit(0)
 	}
 	if mode == "leaf" {
 		time.Sleep(time.Minute)
@@ -31,6 +50,44 @@ func TestWindowsJobHelper(t *testing.T) {
 	fmt.Println(cmd.Process.Pid)
 	time.Sleep(time.Minute)
 	os.Exit(0)
+}
+
+func TestWindowsBackgroundChildDoesNotInheritConsole(t *testing.T) {
+	t.Run("windowless-parent", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestWindowsJobHelper$")
+		cmd.Env = append(os.Environ(), "DRIGA_JOB_HELPER=console-parent")
+		cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: windows.CREATE_NO_WINDOW}
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("console-less parent: %v: %s", err, out)
+		}
+		if got := strings.TrimSpace(string(out)); got != "console=false" {
+			t.Fatalf("background child has a console: %s", got)
+		}
+	})
+	for _, combined := range []bool{false, true} {
+		t.Run(fmt.Sprintf("combined=%t", combined), func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestWindowsJobHelper$")
+			cmd.Env = append(os.Environ(), "DRIGA_JOB_HELPER=console")
+			// HideWindow alone leaves console inheritance in place. Background
+			// children must have no console instead.
+			cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+			out, err := ChildOutput(cmd, combined)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := strings.TrimSpace(string(out)); got != "console=false" {
+				t.Fatalf("background child has a console: %s", got)
+			}
+			if !cmd.SysProcAttr.HideWindow {
+				t.Fatal("caller process attributes were lost")
+			}
+		})
+	}
 }
 
 func TestWindowsJobEndsOwnedDescendants(t *testing.T) {

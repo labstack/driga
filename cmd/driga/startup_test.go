@@ -9,7 +9,48 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/labstack/driga/internal/service"
 )
+
+func TestDaemonMalformedConfigWritesServiceLog(t *testing.T) {
+	name := "drigad"
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	bin := filepath.Join(t.TempDir(), name)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	build := exec.CommandContext(ctx, "go", "build", "-buildvcs=false", "-o", bin, ".")
+	build.Env = append(os.Environ(), "CGO_ENABLED=0")
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build: %v: %s", err, out)
+	}
+	root := t.TempDir()
+	for _, key := range []string{"HOME", "USERPROFILE", "APPDATA", "LOCALAPPDATA", "CODEX_HOME", "GEMINI_CLI_HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME", "XDG_RUNTIME_DIR", "DRIGA_DATA_DIR", "DRIGA_SPOOL_DIR"} {
+		t.Setenv(key, filepath.Join(root, key))
+	}
+	t.Setenv("DRIGA_CONFIG", filepath.Join(root, "config.toml"))
+	t.Setenv("DRIGA_APP", "")
+	if err := os.Unsetenv("DRIGA_APP"); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
+	t.Setenv("COPILOT_HOME", "")
+	if err := os.WriteFile(os.Getenv("DRIGA_CONFIG"), []byte("capture_text = [\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.CommandContext(ctx, bin)
+	configureStartupCommand(cmd)
+	out, err := cmd.CombinedOutput()
+	if exit, ok := err.(*exec.ExitError); !ok || exit.ExitCode() == 0 || !strings.Contains(string(out), "toml: array is incomplete") {
+		t.Fatalf("malformed config exit: %v: %s", err, out)
+	}
+	log, err := os.ReadFile(service.LogPath())
+	if err != nil || !strings.Contains(string(log), "toml: array is incomplete") {
+		t.Fatalf("startup failure missing from service log: %v: %s", err, log)
+	}
+}
 
 // Exercise Main, including path resolution, with a genuinely missing default
 // config. Other binary fixtures create an explicit config before startup.

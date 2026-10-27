@@ -59,6 +59,7 @@ builds:
     ldflags:
       - >-
         -s -w
+        {{ if eq .Os "windows" }}-H=windowsgui{{ end }}
         -X main.version={{ .Version }}
         -X main.commit={{ .FullCommit }}
         -X main.date={{ .CommitDate }}

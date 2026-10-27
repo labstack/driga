@@ -117,6 +117,9 @@ func (h HookCmd) append(g *Globals) error {
 	if ev.Event == "" {
 		ev.Event = payload.Event
 	}
+	if parent, err := hookParentProcess(); err == nil && parent.PID > 0 && !parent.StartTime.IsZero() {
+		ev.PID, ev.ProcStart = parent.PID, parent.StartTime
+	}
 	snippets, err := config.HookCaptureSnippets()
 	if err != nil {
 		hookLogError(err)
@@ -220,7 +223,7 @@ var hookParentProcess = func() (model.Proc, error) {
 	exe, exeErr := p.ExeWithContext(ctx)
 	cmd, argv, cmdErr := parentCommand(ctx, p)
 	if exeErr != nil && cmdErr != nil {
-		return model.Proc{}, errors.New("Copilot parent identity unavailable")
+		return model.Proc{}, errors.New("hook parent identity unavailable")
 	}
 	ms, err := p.CreateTimeWithContext(ctx)
 	if err != nil {
