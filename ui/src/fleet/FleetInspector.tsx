@@ -8,7 +8,7 @@ import { CategoryBar } from "../widgets/CategoryBar";
 import { Measure } from "../widgets/Measure";
 import { StatusBadge, toneVar } from "../widgets/StatusBadge";
 import { TrackerBar } from "../widgets/TrackerBar";
-import { childrenOf, groupFleet, machineOf, machinesOfProject, overlapsOf, projectOf, reach, turnCells, turnWords, type FleetMachineGroup } from "./FleetModel";
+import { FleetRelationships, reach, turnCells, turnWords, type FleetMachineGroup } from "./FleetModel";
 import { stateOrder, states, type FleetActions, type FleetData, type FleetMachine, type FleetProject, type FleetSelection, type FleetSession } from "./FleetTypes";
 
 const icons: Record<NonNullable<FleetMachine["kind"]>, Icon> = { desktop: Desktop, laptop: Laptop, server: HardDrives };
@@ -20,17 +20,17 @@ const icons: Record<NonNullable<FleetMachine["kind"]>, Icon> = { desktop: Deskto
  * selected. Actions report through callbacks, as the Inbox's do. What the
  * service does not send yet (turns, files, a start time) is simply absent. */
 export function FleetInspector({ data, selection, onSelect, onOpen, onReply, width = 320 }: FleetActions & { data: FleetData; selection: FleetSelection | null; width?: number }) {
-  const selectedSessions = selection?.kind === "session" ? data.sessions.filter(s => s.id === selection.id && (!selection.machine || s.machine === selection.machine)) : [];
-  const found = selection && (selection.kind === "session" ? (selectedSessions.length === 1 ? selectedSessions[0] : undefined) : selection.kind === "machine" ? data.machines.find(m => m.id === selection.id) : data.projects.find(p => p.id === selection.id));
+  const relationships = new FleetRelationships(data);
+  const found = selection && (selection.kind === "session" ? relationships.session(selection.id, selection.machine) : selection.kind === "machine" ? relationships.machine(selection.id) : relationships.project(selection.id));
   // A labelled group, not a landmark: the panel belongs to the view, and two
   // views on one page would otherwise collide.
   return <Card role="group" aria-label="Inspector" w={{ base: "100%", lg: width }} padding="sm" style={{ flex: "none", display: "flex", flexDirection: "column", minHeight: 0 }}>
     <ScrollArea type="auto" scrollbarSize={4} style={{ flex: 1, minHeight: 0 }}>
       {!selection || !found
         ? <Nothing />
-        : selection.kind === "session" ? <SessionPanel session={found as FleetSession} data={data} onSelect={onSelect} onOpen={onOpen} onReply={onReply} />
-        : selection.kind === "machine" ? <MachinePanel group={groupFleet(data).find(g => g.machine.id === selection.id)!} onSelect={onSelect} />
-        : <ProjectPanel project={found as FleetProject} data={data} onSelect={onSelect} />}
+        : selection.kind === "session" ? <SessionPanel session={found as FleetSession} relationships={relationships} onSelect={onSelect} onOpen={onOpen} onReply={onReply} />
+        : selection.kind === "machine" ? <MachinePanel group={relationships.groups.find(g => g.machine.id === selection.id)!} onSelect={onSelect} />
+        : <ProjectPanel project={found as FleetProject} relationships={relationships} onSelect={onSelect} />}
     </ScrollArea>
   </Card>;
 }
@@ -57,12 +57,12 @@ function SessionLink({ session: s, onSelect, extra }: { session: FleetSession; o
   </UnstyledButton>;
 }
 
-function SessionPanel({ session: s, data, onSelect, onOpen, onReply }: FleetActions & { session: FleetSession; data: FleetData }) {
-  const project = projectOf(data.projects, s.project);
-  const machine = machineOf(data.machines, s.machine);
-  const children = childrenOf(data.sessions.filter(x => x.machine === s.machine), s.id);
-  const parent = s.parent ? data.sessions.find(x => x.id === s.parent && x.machine === s.machine) : undefined;
-  const shared = overlapsOf(data.sessions, s.id, s.machine);
+function SessionPanel({ session: s, relationships, onSelect, onOpen, onReply }: FleetActions & { session: FleetSession; relationships: FleetRelationships }) {
+  const project = relationships.project(s.project);
+  const machine = relationships.machine(s.machine);
+  const children = relationships.children(s);
+  const parent = relationships.parent(s);
+  const shared = relationships.overlaps(s);
   const sharedBy = (file: string) => shared.filter(o => o.files.includes(file)).map(o => o.with);
   const quiet = Math.max(0, Date.now() - Date.parse(s.lastActivity));
   return <Stack gap="sm">
@@ -151,9 +151,9 @@ function MachinePanel({ group, onSelect }: { group: FleetMachineGroup; onSelect:
   </Stack>;
 }
 
-function ProjectPanel({ project: p, data, onSelect }: { project: FleetProject; data: FleetData; onSelect: FleetActions["onSelect"] }) {
-  const machines = machinesOfProject(data, p.id);
-  const sessions = data.sessions.filter(s => s.project === p.id);
+function ProjectPanel({ project: p, relationships, onSelect }: { project: FleetProject; relationships: FleetRelationships; onSelect: FleetActions["onSelect"] }) {
+  const machines = relationships.projectMachines(p.id);
+  const sessions = relationships.projectSessions(p.id);
   return <Stack gap="sm">
     <Title order={2} fz="md" ff="monospace" lh={1.6}>{p.name}</Title>
     {p.repo && <Text ff="monospace" fz="xs" c="dimmed" truncate title={p.repo}>{p.repo}</Text>}
@@ -163,7 +163,7 @@ function ProjectPanel({ project: p, data, onSelect }: { project: FleetProject; d
     </Stack>
     <Stack gap={2}>
       <Label>Sessions</Label>
-      {sessions.map(s => <SessionLink key={`${s.machine}/${s.id}`} session={s} onSelect={onSelect} extra={`${s.label ?? states[s.state].label} · ${machineOf(data.machines, s.machine)?.name ?? s.machine}`} />)}
+      {sessions.map(s => <SessionLink key={`${s.machine}/${s.id}`} session={s} onSelect={onSelect} extra={`${s.label ?? states[s.state].label} · ${relationships.machine(s.machine)?.name ?? s.machine}`} />)}
     </Stack>
   </Stack>;
 }

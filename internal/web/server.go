@@ -63,6 +63,7 @@ type confirmation struct {
 
 type Server struct {
 	confirmations map[string]confirmation
+	livePrompts   []chat.Prompt // last good live hooks; memory only
 	routes        *http.ServeMux
 	source        Source
 	opts          Options

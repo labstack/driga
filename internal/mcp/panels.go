@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"strings"
 	"sync/atomic"
-	"time"
 
 	"github.com/labstack/driga/internal/chat"
 	"github.com/labstack/driga/internal/dashboard"
@@ -112,25 +111,13 @@ func registerPanels(s *sdk.Server, o Options) {
 		}
 		return &sdk.CallToolResult{Content: []sdk.Content{&sdk.TextContent{Text: describeFragment(f)}}}, f, nil
 	}
-	saved := func(ctx context.Context, verb string, r dashboard.Record, err error, vars map[string]string) (*sdk.CallToolResult, panel.Fragment, error) {
+	live := dashboard.NewLive(o.Dashboards, o.Panels)
+	saved := func(f panel.Fragment, err error) (*sdk.CallToolResult, panel.Fragment, error) {
 		if err != nil {
 			return nil, panel.Fragment{}, dashboardError(err)
 		}
-		_, f, err := run(ctx, panel.RunRequest{Dashboard: r.Spec, Vars: vars})
-		if err != nil {
-			f = savedWarning(r, verb, err)
-		}
-		f.ID, f.Version = r.ID, r.Version
-		raw, err := json.Marshal(f)
-		if err != nil {
-			f = savedWarning(r, verb, err)
-			f.ID, f.Version = r.ID, r.Version
-			// The fallback holds only the already-persisted spec and string
-			// warnings, so it cannot contain an unsupported live reading.
-			raw, _ = json.Marshal(f)
-		}
-		// Text and structured content deliberately carry the same fragment.
-		// Chat can read the saved identity without a host-specific transform.
+		raw, _ := json.Marshal(f) // Live guarantees an encodable committed outcome.
+		// Chat reads the same identity as the rendered MCP App.
 		return &sdk.CallToolResult{Content: []sdk.Content{&sdk.TextContent{Text: string(raw)}}}, f, nil
 	}
 
@@ -153,8 +140,7 @@ func registerPanels(s *sdk.Server, o Options) {
 	sdk.AddTool(s, &sdk.Tool{Name: "open_dashboard", Title: "Open dashboard", Annotations: readOnly, Meta: appMeta(),
 		Description: "Show a saved dashboard with live data.",
 	}, func(ctx context.Context, _ *sdk.CallToolRequest, in openInput) (*sdk.CallToolResult, panel.Fragment, error) {
-		r, err := o.Dashboards.Get(in.ID)
-		return saved(ctx, "Opened", r, err, in.Vars)
+		return saved(live.Open(ctx, in.ID, in.Vars))
 	})
 	sdk.AddTool(s, &sdk.Tool{Name: "list_dashboards", Title: "Dashboards", Annotations: readOnly,
 		Description: "List saved dashboards with their ids, panel counts and versions. The first, id header, holds the metrics the Driga app shows above Chat: only stat panels, at most 8; edit it when the user wants a number there. Next, id home, is the dashboard the app opens on, with Chat beside it.",
@@ -193,26 +179,22 @@ func registerPanels(s *sdk.Server, o Options) {
 			if o.ChatServer && creates.Add(1) > chat.MaxDashboardCreates {
 				return nil, panel.Fragment{}, errors.New("too many dashboard creates in Chat turn")
 			}
-			r, err := o.Dashboards.Create(in.Dashboard, agent, in.Message)
-			return saved(ctx, "Created", r, err, nil)
+			return saved(live.Create(ctx, in.Dashboard, agent, in.Message, nil))
 		})
 		sdk.AddTool(s, &sdk.Tool{Name: "edit_dashboard", Title: "Edit dashboard", Annotations: write, Meta: appMeta(),
 			Description: "Change a saved dashboard with typed operations: add, update (merge fields), remove, move, layout, variables, rename. Edits apply in order, all or none, as a new version." + specGuide,
 		}, func(ctx context.Context, _ *sdk.CallToolRequest, in editInput) (*sdk.CallToolResult, panel.Fragment, error) {
-			r, err := o.Dashboards.Edit(in.ID, in.Operations, in.BaseVersion, agent, in.Message)
-			return saved(ctx, "Updated", r, err, nil)
+			return saved(live.Edit(ctx, in.ID, in.Operations, in.BaseVersion, agent, in.Message, nil))
 		})
 		sdk.AddTool(s, &sdk.Tool{Name: "replace_dashboard", Title: "Replace dashboard", Annotations: replace, Meta: appMeta(),
 			Description: "Save a whole new spec for a dashboard as a new version; dragged positions of panels it keeps are preserved." + specGuide,
 		}, func(ctx context.Context, _ *sdk.CallToolRequest, in replaceInput) (*sdk.CallToolResult, panel.Fragment, error) {
-			r, err := o.Dashboards.Replace(in.ID, in.Dashboard, in.BaseVersion, agent, in.Message)
-			return saved(ctx, "Replaced", r, err, nil)
+			return saved(live.Replace(ctx, in.ID, in.Dashboard, in.BaseVersion, agent, in.Message, nil))
 		})
 		sdk.AddTool(s, &sdk.Tool{Name: "restore_dashboard_version", Title: "Restore dashboard version", Annotations: replace, Meta: appMeta(),
 			Description: "Save an earlier version of a dashboard as its newest version. Nothing is lost: the replaced version stays in history.",
 		}, func(ctx context.Context, _ *sdk.CallToolRequest, in restoreInput) (*sdk.CallToolResult, panel.Fragment, error) {
-			r, err := o.Dashboards.Restore(in.ID, in.Version, in.BaseVersion, agent)
-			return saved(ctx, "Restored", r, err, nil)
+			return saved(live.Restore(ctx, in.ID, in.Version, in.BaseVersion, agent, nil))
 		})
 	}
 	if !o.ChatServer || o.Chat {
@@ -226,16 +208,6 @@ func registerPanels(s *sdk.Server, o Options) {
 		})
 	}
 	addAppResource(s)
-}
-
-// savedWarning reports a committed save even when its live data could not be
-// rendered. Retrying the save would otherwise create an unintended new version.
-func savedWarning(r dashboard.Record, verb string, err error) panel.Fragment {
-	f := panel.Fragment{Dashboard: r.Spec, ObservedAt: time.Now().UTC().Format(time.RFC3339), Results: []panel.Result{}}
-	for _, p := range r.Spec.Panels {
-		f.Results = append(f.Results, panel.Result{ID: p.ID, Status: panel.StatusError, Message: verb + " dashboard; live data unavailable: " + err.Error()})
-	}
-	return f
 }
 
 func addAppResource(s *sdk.Server) {

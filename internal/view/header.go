@@ -1,8 +1,14 @@
 package view
 
 import (
+	"fmt"
 	"slices"
 	"strings"
+	"time"
+
+	"github.com/labstack/driga/internal/attention"
+	"github.com/labstack/driga/internal/chat"
+	"github.com/labstack/driga/internal/model"
 )
 
 // HeaderStats is the shared attention and hygiene contract for the app and TUI.
@@ -12,15 +18,11 @@ type HeaderStats struct {
 	LeftoverBytes, Reclaimable, MemoryUsed, MemoryTotal uint64
 }
 
-func HeaderCounts(inbox InboxView, agents AgentsView, orphans OrphansView, summary SummaryView) HeaderStats {
+func (a AttentionProjection) Header(orphans OrphansView, summary SummaryView) HeaderStats {
+	inbox, agents := a.inbox, a.agents
 	h := HeaderStats{Leftover: len(orphans.Rows), Reclaimable: summary.Reclaim, MemoryUsed: summary.Sample.MemUsed, MemoryTotal: summary.Sample.MemTotal}
-	needs, unbound := needYouSessions(inbox, agents)
-	h.NeedYou = len(needs) + unbound
-	type key struct {
-		machine string
-		id      int64
-	}
-	reviewed := map[key]bool{}
+	h.NeedYou = len(a.needs) + a.unbound
+	reviewed := map[headerSession]bool{}
 	for _, row := range inbox.Rows {
 		if row.Historical {
 			continue
@@ -31,7 +33,7 @@ func HeaderCounts(inbox InboxView, agents AgentsView, orphans OrphansView, summa
 				h.ToReview++
 				continue
 			}
-			k := key{row.MachineID, row.SessionID}
+			k := headerSession{row.MachineID, row.SessionID}
 			if !reviewed[k] {
 				h.ToReview++
 				reviewed[k] = true
@@ -87,30 +89,76 @@ func needYouSessions(inbox InboxView, agents AgentsView) (map[headerSession]bool
 	return needs, unbound
 }
 
-// WaitingSessions identifies sessions already counted as needing the user on
-// one machine, so a live approval does not add another need for that session.
-func WaitingSessions(inbox InboxView, agents AgentsView, machine string) []int64 {
-	var ids []int64
-	needs, _ := needYouSessions(inbox, agents)
-	for session := range needs {
-		if session.machine == machine && session.id > 0 {
-			ids = append(ids, session.id)
-		}
-	}
-	slices.Sort(ids)
-	return ids
+// livePrompt contains only the in-memory facts needed for attention. It is
+// never written into the collected snapshot or durable history.
+type livePrompt struct {
+	ID, MachineID, Tool, Detail string
+	SessionID                   int64
+	CreatedAt                   time.Time
 }
-func ExtraPrompts(inbox InboxView, agents AgentsView, machine string, sessions []int64) int {
-	waiting := map[int64]bool{}
-	for _, id := range WaitingSessions(inbox, agents, machine) {
-		waiting[id] = true
+
+// AttentionProjection owns identity and reconciliation for header and Flow.
+// Destinations keep their inclusion policies: warnings count in the header,
+// while Flow shows waits for known, live sessions only.
+type AttentionProjection struct {
+	inbox   InboxView
+	agents  AgentsView
+	needs   map[headerSession]bool
+	unbound int
+	prompts []livePrompt
+}
+
+func ProjectAttention(inbox InboxView, agents AgentsView, machine string, pending []chat.Prompt) AttentionProjection {
+	prompts := make([]livePrompt, 0, len(pending))
+	for _, p := range pending {
+		prompts = append(prompts, livePrompt{ID: p.ID, MachineID: machine, SessionID: p.SessionID, Tool: p.Tool, Detail: p.Detail(), CreatedAt: p.CreatedAt})
 	}
-	extra := 0
-	for _, id := range sessions {
-		if id == 0 || !waiting[id] {
-			extra++
-			waiting[id] = true
+	needs, unbound := needYouSessions(inbox, agents)
+	for _, p := range prompts {
+		if p.SessionID == 0 {
+			unbound++
+		} else {
+			needs[headerSession{p.MachineID, p.SessionID}] = true
 		}
 	}
-	return extra
+	return AttentionProjection{inbox: inbox, agents: agents, needs: needs, unbound: unbound, prompts: prompts}
+}
+
+func (k headerSession) String() string { return fmt.Sprintf("%s/%d", k.machine, k.id) }
+
+// Board overlays prompts on a copy. Neither persisted evidence nor another
+// destination's snapshot can retain a prompt after its hook is answered.
+func (a AttentionProjection) Board(data BoardSnapshot, window time.Duration, now time.Time) BoardView {
+	data.Nodes = slices.Clone(data.Nodes)
+	prompts := map[string]livePrompt{}
+	for _, p := range a.prompts {
+		prompts[headerSession{p.MachineID, p.SessionID}.String()] = p
+		for i := range data.Nodes {
+			n := &data.Nodes[i]
+			if n.ID == p.SessionID && n.MachineID == p.MachineID && n.EndedAt == nil {
+				n.Waits = append(slices.Clone(n.Waits), FlowWait{ID: p.ID, StartedAt: p.CreatedAt, Tool: p.Tool, Detail: p.Detail, Reason: "permission"})
+			}
+		}
+	}
+	b := Board(data, window, now)
+	annotate := func(r *BoardRow) {
+		if p, ok := prompts[r.Key]; ok && r.Node.EndedAt == nil {
+			r.PromptID = p.ID
+			r.Command = p.Detail
+		}
+	}
+	for gi := range b.Groups {
+		for ri := range b.Groups[gi].Rows {
+			annotate(&b.Groups[gi].Rows[ri])
+		}
+	}
+	for i := range b.Needs {
+		annotate(&b.Needs[i])
+	}
+	return b
+}
+
+// liveSessionWait is the shared inbox and board rule for a wait needing the user.
+func liveSessionWait(item model.InboxItem, s model.Session, known bool, now time.Time) bool {
+	return attention.Active(item) && known && s.EndedAt == nil && s.Label == "waiting" && len(visibleSessions([]model.Session{s}, false, now)) > 0
 }

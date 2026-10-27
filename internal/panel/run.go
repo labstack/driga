@@ -52,16 +52,15 @@ type Result struct {
 // Fragment is a dashboard with its results: what a tool returns and an MCP
 // App or the app's dashboard renders.
 type Fragment struct {
-	LeftoverCount   int                   `json:"leftover_count"`
-	WaitingSessions []int64               `json:"waiting_sessions,omitempty"`
-	History         view.PanelHistoryView `json:"history"`
-	Dashboard       Dashboard             `json:"dashboard"`
-	Results         []Result              `json:"results"`
-	Vars            map[string]string     `json:"vars,omitempty"`
-	Options         map[string][]string   `json:"options,omitempty"`
-	ObservedAt      string                `json:"observed_at"`
-	ID              string                `json:"id,omitempty"`
-	Version         int                   `json:"version,omitempty"`
+	LeftoverCount int                   `json:"leftover_count"`
+	History       view.PanelHistoryView `json:"history"`
+	Dashboard     Dashboard             `json:"dashboard"`
+	Results       []Result              `json:"results"`
+	Vars          map[string]string     `json:"vars,omitempty"`
+	Options       map[string][]string   `json:"options,omitempty"`
+	ObservedAt    string                `json:"observed_at"`
+	ID            string                `json:"id,omitempty"`
+	Version       int                   `json:"version,omitempty"`
 	// LocalMachine is the machine the app runs on; actions act only there.
 	LocalMachine string `json:"local_machine"`
 }
@@ -87,7 +86,7 @@ func Run(snap viewer.Snapshot, req RunRequest) (Fragment, error) {
 		base[source] = r
 		return r
 	}
-	f := Fragment{LeftoverCount: view.HeaderCounts(snap.Inbox, snap.Agents, snap.Orphans, snap.Summary).Leftover, WaitingSessions: view.WaitingSessions(snap.Inbox, snap.Agents, snap.LocalMachineID), History: snap.PanelHistory, Dashboard: req.Dashboard, Results: []Result{}, Vars: vars, Options: options(req.Dashboard, rows), ObservedAt: snap.ObservedAt.UTC().Format(time.RFC3339), LocalMachine: snap.LocalMachineID}
+	f := Fragment{LeftoverCount: view.ProjectAttention(snap.Inbox, snap.Agents, snap.LocalMachineID, snap.LivePrompts).Header(snap.Orphans, snap.Summary).Leftover, History: snap.PanelHistory, Dashboard: req.Dashboard, Results: []Result{}, Vars: vars, Options: options(req.Dashboard, rows), ObservedAt: snap.ObservedAt.UTC().Format(time.RFC3339), LocalMachine: snap.LocalMachineID}
 	for _, p := range req.Dashboard.Panels {
 		if len(req.Panels) > 0 && !slices.Contains(req.Panels, p.ID) {
 			continue

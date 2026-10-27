@@ -1,11 +1,11 @@
-import { ActionIcon, Box, Button, Group, Paper, ScrollArea, Stack, Text, Textarea, Title } from "@mantine/core";
+import { ActionIcon, Box, Button, Group, Modal, Paper, ScrollArea, Stack, Text, Textarea, Title } from "@mantine/core";
 import { Check, Sparkle, X } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 import { useHost } from "../panels/host";
 import { PanelView, type Act } from "../panels/PanelView";
 import type { Panel, Result } from "../panels/types";
 import { EmptyState } from "../widgets/EmptyState";
-import { chat, type ChatAction, type ChatMessage, type ChatState } from "./api";
+import { chat, type ChatAction, type ChatMessage, type ChatMode, type ChatState } from "./api";
 import { ChatCard } from "./ChatCard";
 
 /** said is whether an action's result says anything; an empty JSON value,
@@ -33,8 +33,14 @@ function ActionCard({ conversation, action }: { conversation: string; action: Ch
     }
   };
   return <Paper withBorder p="xs" radius="md" style={{ background: "var(--driga-raised)", borderColor: pending ? "var(--mantine-color-warning-filled)" : undefined }}>
-    <Text size="sm" fw={600}>{action.title} <Text span size="xs" c="dimmed" fw={400}>· {action.status}</Text></Text>
-    {said(action.result) && <Text size="xs" c="dimmed" mt={2}>{action.result}</Text>}
+    <Text size="xs" ff="monospace" style={{ overflowWrap: "anywhere" }}>{action.tool} · {action.status}</Text>
+    <Text size="sm" fw={600} truncate="end" title={action.title}>{action.title}</Text>
+    {/* Input is the broker's live approval payload, never a title/snippet.
+        History after a restart contains only what capture_text retained. */}
+    <Text component="pre" size="xs" ff="monospace" my="xs" style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{JSON.stringify(action.input, null, 2)}</Text>
+    {action.directory && <Text size="xs" c="dimmed" style={{ overflowWrap: "anywhere" }}>in {action.directory}</Text>}
+    {action.decided_by && <Text size="xs" c="dimmed">Decided by {action.decided_by}</Text>}
+    {said(action.result) && <Text size="xs" c="dimmed" mt={2} style={{ overflowWrap: "anywhere" }}>{action.result}</Text>}
     {pending && <Group gap={6} mt="xs">
       <Button disabled={busy} aria-label={`Allow ${action.title}`} onClick={() => void decide(true)}>Allow</Button>
       <Button variant="default" disabled={busy} aria-label={`Deny ${action.title}`} onClick={() => void decide(false)}>Deny</Button>
@@ -86,9 +92,16 @@ export function Chat({ inbox, act, ask, onOpen, onClose }: {
   onOpen: (id: string) => void; onClose?: () => void;
 }) {
   const [id, setId] = useState<string | null>(null);
+  const [historyStatus, setHistoryStatus] = useState<"loading" | "empty" | "unavailable">("loading");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [actions, setActions] = useState<Map<string, ChatAction>>(new Map());
   const [active, setActive] = useState(false);
+  const [mode, setMode] = useState<ChatMode | null>(null);
+  const [until, setUntil] = useState<string>();
+  const [now, setNow] = useState(Date.now);
+  const [fullAsk, setFullAsk] = useState(false);
+  const [modeBusy, setModeBusy] = useState(false);
+  const changingMode = useRef(false);
   const [draft, setDraft] = useState("");
   const [problem, setProblem] = useState<string | null>(null);
   // The last question sent, so a failed reply can be retried even when the
@@ -101,7 +114,11 @@ export function Chat({ inbox, act, ask, onOpen, onClose }: {
 
   useEffect(() => {
     let mounted = true;
-    chat.history().then(list => { if (mounted && list.length && !sending.current) setId(current => current ?? list[0].id); }, () => undefined);
+    chat.history().then(list => {
+      if (!mounted) return;
+      setHistoryStatus(list.length ? "loading" : "empty");
+      if (list.length && !sending.current) setId(current => current ?? list[0].id);
+    }, () => { if (mounted) setHistoryStatus("unavailable"); });
     return () => { mounted = false; };
   }, []);
   useEffect(() => {
@@ -124,6 +141,9 @@ export function Chat({ inbox, act, ask, onOpen, onClose }: {
     };
     const flush = () => setMessages(order.map(id => byId.get(id)!));
     const receive = (s: ChatState) => {
+      setMode(s.mode);
+      setUntil(s.until);
+      setNow(Date.now());
       if (s.reset) { byId.clear(); order.length = 0; s.messages.forEach(put); setActions(new Map(s.actions.map(a => [a.id, a]))); cursor = s.cursor; }
       for (const e of s.events ?? []) {
         if (e.seq <= cursor) continue;
@@ -144,7 +164,30 @@ export function Chat({ inbox, act, ask, onOpen, onClose }: {
     })();
     return () => control.abort();
   }, [id]);
+  useEffect(() => {
+    if (mode !== "full auto") return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [mode]);
   useEffect(() => { log.current?.scrollTo({ top: log.current.scrollHeight }); }, [messages]);
+
+  const setTrustMode = async (next: ChatMode) => {
+    if (!id || changingMode.current) return false;
+    changingMode.current = true;
+    setModeBusy(true);
+    setProblem(null);
+    setFullAsk(false);
+    try { await chat.setMode(id, next); return true; }
+    catch (e) { setProblem((e as Error).message); return false; }
+    finally { changingMode.current = false; setModeBusy(false); }
+  };
+  const close = async () => {
+    if (mode === "full auto" && !await setTrustMode("confirm")) return;
+    onClose?.();
+  };
+  const modeLabels: Record<ChatMode, string> = { confirm: "Confirm", auto: "Auto", "full auto": "Full auto" };
+  let modeLabel = mode ? modeLabels[mode] : !id && historyStatus === "empty" ? "Confirm" : !id && historyStatus === "unavailable" ? "Mode unavailable" : "Loading mode…";
+  if (mode === "full auto" && until) modeLabel += ` · ${Math.max(0, Math.ceil((Date.parse(until) - now) / 60_000))}m left`;
 
   const send = async (text: string) => {
     const trimmed = text.trim();
@@ -175,8 +218,11 @@ export function Chat({ inbox, act, ask, onOpen, onClose }: {
   const lastCard = ordered.map(m => m.role).lastIndexOf("panel");
   return <Stack component="section" aria-label="Chat" h="100%" gap={0}>
     <Group justify="space-between" px="md" py="sm" style={{ borderBottom: "1px solid var(--driga-border)" }}>
-      <Group gap={8} align="baseline"><Title order={2} fz="sm" fw={600}>Chat</Title><Text size="xs" c="dimmed">through your Claude Code login</Text></Group>
-      {onClose && <ActionIcon aria-label="Close chat" onClick={onClose}><X /></ActionIcon>}
+      <Stack gap={2}>
+        <Group gap={8} align="baseline"><Title order={2} fz="sm" fw={600}>Chat</Title><Text size="xs" c="dimmed">through your Claude Code login</Text></Group>
+        <Text size="xs" c={mode === "full auto" ? "danger" : "dimmed"} fw={mode === "full auto" ? 600 : undefined} aria-label="Current trust mode">{modeLabel}</Text>
+      </Stack>
+      {onClose && <ActionIcon aria-label="Close chat" disabled={modeBusy} onClick={() => void close()}><X /></ActionIcon>}
     </Group>
     <ScrollArea viewportRef={log} style={{ flex: 1 }} type="auto">
       <Stack gap="sm" p="md">
@@ -206,9 +252,19 @@ export function Chat({ inbox, act, ask, onOpen, onClose }: {
       <Textarea ref={input} aria-label="Ask or act" autosize minRows={2} maxRows={8} value={draft} placeholder="Ask about your agents, or tell Driga what to show"
         onChange={e => setDraft(e.currentTarget.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(draft); } }} />
       <Group justify="space-between" mt={8}>
-        <Text size="xs" c="dimmed">Actions wait for your approval</Text>
+        <Group gap={4} aria-label="Trust mode">
+          {(["confirm", "auto", "full auto"] as const).map(next => <Button key={next} size="compact-xs" variant={mode === next ? "light" : "default"} color={next === "full auto" ? "danger" : undefined}
+            aria-pressed={mode === next} disabled={!id || !mode || modeBusy} onClick={() => next === "full auto" ? setFullAsk(true) : void setTrustMode(next)}>{modeLabels[next]}</Button>)}
+        </Group>
         {active ? <Button variant="default" onClick={() => id && void chat.stop(id)}>Stop</Button> : <Button type="submit" disabled={!draft.trim()}>Send</Button>}
       </Group>
     </Box>
+    {fullAsk && <Modal opened onClose={() => setFullAsk(false)} title="Enable Full auto?" centered>
+      <Text size="sm">Full auto runs every action without asking for 30 minutes</Text>
+      <Group justify="flex-end" mt="md">
+        <Button variant="default" onClick={() => setFullAsk(false)}>Cancel</Button>
+        <Button color="danger" onClick={() => void setTrustMode("full auto")}>Enable Full auto</Button>
+      </Group>
+    </Modal>}
   </Stack>;
 }

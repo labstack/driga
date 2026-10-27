@@ -1,8 +1,8 @@
 import { Box } from "@mantine/core";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect, fn, userEvent, waitFor } from "storybook/test";
-import { answered, awaitingApproval, decided, failed, forgotten, rejected, saved, working } from "../fixtures/chat";
-import { fragmentOf, panelOf } from "../fixtures/fragments";
+import { expect, fn, screen, userEvent, waitFor, within } from "storybook/test";
+import { answered, awaitingApproval, decided, failed, forgotten, longBash, longBashPending, rejected, saved, working } from "../fixtures/chat";
+import { fragmentOf, panelOf, storyNow } from "../fixtures/fragments";
 import { fakeService, type ServiceOptions } from "../fixtures/service";
 import { Chat } from "./Chat";
 
@@ -59,6 +59,52 @@ export const Decided: Story = {
   play: async ({ canvas }) => {
     await expect(await canvas.findByText(/delete_dashboard scratch-test/)).toBeVisible();
     await expect(canvas.queryByText('"{}"')).toBeNull();
+    await expect(canvas.getByText("Decided by you")).toBeVisible();
+  },
+};
+export const Confirm: Story = {
+  parameters: { service: service({ chat: { ...working, mode: "confirm" } }) },
+  play: async ({ canvas }) => {
+    await waitFor(() => expect(canvas.getByLabelText("Current trust mode")).toHaveTextContent(/^Confirm$/));
+    await waitFor(() => expect(canvas.getByRole("button", { name: "Confirm" })).toHaveAttribute("aria-pressed", "true"));
+  },
+};
+export const Auto: Story = {
+  parameters: { service: service({ chat: { ...working, mode: "auto" } }) },
+  play: async ({ canvas }) => {
+    await waitFor(() => expect(canvas.getByLabelText("Current trust mode")).toHaveTextContent(/^Auto$/));
+    await expect(canvas.getByRole("button", { name: "Auto" })).toHaveAttribute("aria-pressed", "true");
+  },
+};
+export const FullAuto: Story = {
+  parameters: { service: service({ chat: { ...working, mode: "full auto", until: new Date(storyNow + 12 * 60_000).toISOString() } }) },
+  play: async ({ canvas }) => {
+    const mode = await canvas.findByLabelText("Current trust mode");
+    await waitFor(() => expect(mode).toHaveTextContent("Full auto · 12m left"));
+    await expect(mode.style.color).toBe("var(--mantine-color-danger-text)");
+  },
+};
+export const FullAutoConfirmation: Story = {
+  parameters: { service: service({ chat: { ...working, mode: "auto" }, onRequest: (path, body) => requests.push({ path, body }) }) },
+  play: async ({ canvas }) => {
+    const fullAuto = await canvas.findByRole("button", { name: "Full auto" });
+    await waitFor(() => expect(fullAuto).toBeEnabled());
+    await userEvent.click(fullAuto);
+    const dialog = await screen.findByRole("dialog", { name: "Enable Full auto?" });
+    await expect(within(dialog).getByText("Full auto runs every action without asking for 30 minutes")).toBeVisible();
+    await expect(requests.some(r => r.path === "/chat/api/mode")).toBe(false);
+    await userEvent.click(within(dialog).getByRole("button", { name: "Enable Full auto" }));
+    await waitFor(() => expect(requests).toContainEqual({ path: "/chat/api/mode", body: { id: "conversation-1", mode: "full auto" } }));
+  },
+};
+export const LongBashPending: Story = {
+  parameters: { service: service({ chat: longBashPending }) },
+  play: async ({ canvas }) => {
+    const input = await canvas.findByText(/rm -rf \.\/scratch-test/);
+    await expect(JSON.parse(input.textContent ?? "")).toEqual({ command: longBash });
+    await expect(input).toHaveStyle({ whiteSpace: "pre-wrap", overflowWrap: "anywhere" });
+    await expect(canvas.getByText("in /home/dev/src/sandbox")).toBeVisible();
+    await expect(canvas.getByRole("button", { name: `Allow ${longBashPending.actions[0].title}` })).toBeVisible();
   },
 };
 export const Working: Story = { parameters: { service: service({ chat: working }) }, play: async ({ canvas }) => { await expect(await canvas.findByText("Working…")).toBeVisible(); } };

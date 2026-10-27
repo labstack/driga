@@ -2,6 +2,7 @@ package desktop
 
 import (
 	"fmt"
+	"github.com/labstack/driga/internal/service"
 	"strings"
 
 	"github.com/labstack/driga/internal/view"
@@ -110,7 +111,7 @@ func MenuModel(goos string) []MenuSpec {
 // TrayMenuModel is the tray icon's menu: Open Driga, the count and the first
 // needs, each opening its session, the collector's status, Settings, About
 // and Quit.
-func TrayMenuModel(needs []view.BoardRow, status Status) []MenuSpec {
+func TrayMenuModel(needs []view.BoardRow, status service.Status) []MenuSpec {
 	menu := []MenuSpec{{Label: "Open Driga", Command: CommandOpen}, separator}
 	if len(needs) > 0 {
 		menu = append(menu, MenuSpec{Label: needLabel(len(needs)), Disabled: true})
@@ -132,7 +133,7 @@ func needLabel(n int) string {
 }
 
 // StatusLine says whether the Driga service runs, or why it does not.
-func StatusLine(st Status) string {
+func StatusLine(st service.Status) string {
 	switch {
 	case st.RestartPending:
 		return "Restart Driga to finish updating"

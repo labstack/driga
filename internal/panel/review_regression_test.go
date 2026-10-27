@@ -1,9 +1,9 @@
 package panel
 
 import (
+	"github.com/labstack/driga/internal/chat"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/view"
-	"slices"
 	"testing"
 	"time"
 )
@@ -23,8 +23,10 @@ func TestHeaderCountsWaitingWithoutInboxAndDeduplicatesApprovals(t *testing.T) {
 	if got := f.Results[0].Frame.Rows[0][0]; got != 3.0 {
 		t.Fatalf("Need you = %v, want 3", got)
 	}
-	if !slices.Equal(f.WaitingSessions, []int64{1, 2}) {
-		t.Fatalf("local sessions already counted = %v", f.WaitingSessions)
+	s.LivePrompts = []chat.Prompt{{SessionID: 1}, {SessionID: 3}, {SessionID: 3}, {}}
+	f, err = Run(s, RunRequest{Dashboard: Header()})
+	if err != nil || f.Results[0].Frame.Rows[0][0] != 5.0 {
+		t.Fatalf("merged app Need you: %+v %v", f, err)
 	}
 }
 

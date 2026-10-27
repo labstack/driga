@@ -43,7 +43,7 @@ export type Frame = { columns: Column[]; rows: Cell[][]; spans?: Span[] };
 
 export type Result = { id: string; status: "ok" | "empty" | "error"; message?: string; frame?: Frame; trend?: (number | null)[]; total?: number | null; title?: string };
 
-export type Fragment = { leftover_count?: number; waiting_sessions?: number[];
+export type Fragment = { leftover_count?: number;
   history: { attention: { ts: string; waiting: number; review: number; stuck: number | null }[] | null; polls: { machine_id: string; ts: string; state: "working" | "waiting" | "stuck" | "idle" | "quiet" | "offline" }[] | null };
   dashboard: Dashboard;
   results: Result[];

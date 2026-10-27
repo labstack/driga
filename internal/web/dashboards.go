@@ -13,6 +13,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/labstack/driga/internal/chat"
 	"github.com/labstack/driga/internal/dashboard"
 	"github.com/labstack/driga/internal/panel"
 	"github.com/labstack/driga/internal/store"
@@ -93,6 +94,7 @@ func (s *Server) dashboardAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	store := s.opts.Dashboards
+	live := dashboard.NewLive(store, s.runPanels)
 	var out any
 	var err error
 	switch strings.TrimPrefix(r.URL.Path, "/app/api/") {
@@ -101,10 +103,7 @@ func (s *Server) dashboardAPI(w http.ResponseWriter, r *http.Request) {
 		list, err = store.List()
 		out = map[string]any{"dashboards": list}
 	case "open":
-		var rec dashboard.Record
-		if rec, err = store.Get(in.ID); err == nil {
-			out, err = s.fragment(r.Context(), rec, in.Vars)
-		}
+		out, err = live.Refresh(r.Context(), in.ID, in.Vars)
 	case "run":
 		if in.Dashboard == nil {
 			err = errors.New("dashboard is required")
@@ -116,15 +115,9 @@ func (s *Server) dashboardAPI(w http.ResponseWriter, r *http.Request) {
 			err = errors.New("dashboard is required")
 			break
 		}
-		var rec dashboard.Record
-		if rec, err = store.Create(*in.Dashboard, you, in.Message); err == nil {
-			out, err = s.fragment(r.Context(), rec, in.Vars)
-		}
+		out, err = live.Create(r.Context(), *in.Dashboard, you, in.Message, in.Vars)
 	case "edit":
-		var rec dashboard.Record
-		if rec, err = store.Edit(in.ID, in.Operations, in.BaseVersion, you, in.Message); err == nil {
-			out, err = s.fragment(r.Context(), rec, in.Vars)
-		}
+		out, err = live.Edit(r.Context(), in.ID, in.Operations, in.BaseVersion, you, in.Message, in.Vars)
 	case "delete":
 		err = store.Delete(in.ID)
 		out = map[string]bool{"ok": err == nil}
@@ -132,10 +125,7 @@ func (s *Server) dashboardAPI(w http.ResponseWriter, r *http.Request) {
 		out, err = store.Versions(in.ID)
 		out = map[string]any{"versions": out}
 	case "restore":
-		var rec dashboard.Record
-		if rec, err = store.Restore(in.ID, in.Version, in.BaseVersion, you); err == nil {
-			out, err = s.fragment(r.Context(), rec, in.Vars)
-		}
+		out, err = live.Restore(r.Context(), in.ID, in.Version, in.BaseVersion, you, in.Vars)
 	default:
 		http.NotFound(w, r)
 		return
@@ -153,12 +143,6 @@ func (s *Server) dashboardAPI(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, out)
 }
 
-func (s *Server) fragment(ctx context.Context, rec dashboard.Record, vars map[string]string) (panel.Fragment, error) {
-	f, err := s.runPanels(ctx, panel.RunRequest{Dashboard: rec.Spec, Vars: vars})
-	f.ID, f.Version = rec.ID, rec.Version
-	return f, err
-}
-
 // runPanels runs over the same cached snapshot the pages show. Disk
 // candidates are read only when a panel shows them.
 func (s *Server) runPanels(ctx context.Context, req panel.RunRequest) (panel.Fragment, error) {
@@ -173,6 +157,16 @@ func (s *Server) runPanels(ctx context.Context, req panel.RunRequest) (panel.Fra
 		if rows, err := s.cachedCleanup(ctx); err == nil {
 			snap.Cleanup = rows
 		}
+	}
+	if client, ok := s.opts.Chat.(chat.PromptClient); ok && slices.ContainsFunc(req.Dashboard.Panels, func(p panel.Panel) bool { return p.Source == "summary" }) {
+		if prompts, err := client.Prompts(ctx); err == nil {
+			s.mu.Lock()
+			s.livePrompts = prompts
+			s.mu.Unlock()
+		}
+		s.mu.Lock()
+		snap.LivePrompts = slices.Clone(s.livePrompts)
+		s.mu.Unlock()
 	}
 	return panel.Run(snap, req)
 }

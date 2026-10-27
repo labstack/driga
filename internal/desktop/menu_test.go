@@ -3,6 +3,7 @@ package desktop
 import (
 	"errors"
 	"fmt"
+	"github.com/labstack/driga/internal/service"
 	"strings"
 	"testing"
 
@@ -105,7 +106,7 @@ func TestTrayMenuModel(t *testing.T) {
 	for i := 1; i <= 7; i++ {
 		needs = append(needs, view.BoardRow{Title: fmt.Sprintf("session %d", i), Node: view.FlowNode{ID: int64(i)}})
 	}
-	menu := TrayMenuModel(needs, Status{Running: true})
+	menu := TrayMenuModel(needs, service.Status{Running: true})
 	var labels []string
 	for _, item := range menu {
 		if !item.Separator {
@@ -125,7 +126,7 @@ func TestTrayMenuModel(t *testing.T) {
 	if item, _ := find(menu, "Quit"); item.Role != "quit" {
 		t.Error("Quit has no quit role")
 	}
-	empty := TrayMenuModel(nil, Status{})
+	empty := TrayMenuModel(nil, service.Status{})
 	if _, ok := find(empty, "0 need you"); ok || len(empty) != 8 {
 		t.Errorf("empty tray menu %+v", empty)
 	}
@@ -133,15 +134,15 @@ func TestTrayMenuModel(t *testing.T) {
 
 func TestStatusLine(t *testing.T) {
 	for _, tc := range []struct {
-		status Status
+		status service.Status
 		want   string
 	}{
-		{Status{Running: true}, "Driga service running"},
-		{Status{}, "Starting the Driga service…"},
-		{Status{RestartPending: true, Running: true}, "Restart Driga to finish updating"},
-		{Status{Err: errors.New("driga service install: denied")}, "Driga service: driga service install: denied"},
-		{Status{Running: true, Err: errors.New("login shell: timeout")}, "Driga service running · login shell: timeout"},
-		{Status{Err: errors.New(strings.Repeat("x", 200))}, "Driga service: " + strings.Repeat("x", 64) + "…"},
+		{service.Status{Running: true}, "Driga service running"},
+		{service.Status{}, "Starting the Driga service…"},
+		{service.Status{RestartPending: true, Running: true}, "Restart Driga to finish updating"},
+		{service.Status{Err: errors.New("driga service install: denied")}, "Driga service: driga service install: denied"},
+		{service.Status{Running: true, Err: errors.New("login shell: timeout")}, "Driga service running · login shell: timeout"},
+		{service.Status{Err: errors.New(strings.Repeat("x", 200))}, "Driga service: " + strings.Repeat("x", 64) + "…"},
 	} {
 		if got := StatusLine(tc.status); got != tc.want {
 			t.Errorf("StatusLine(%+v) = %q; want %q", tc.status, got, tc.want)

@@ -25,7 +25,7 @@ func TestPromptHistoryContainsOnlyIntervals(t *testing.T) {
 		}
 		time.Sleep(time.Millisecond)
 	}
-	if err := b.answerPrompt("history", true); err != nil {
+	if err := b.AnswerPrompt(context.Background(), "history", true); err != nil {
 		t.Fatal(err)
 	}
 	if err := <-done; err != nil {

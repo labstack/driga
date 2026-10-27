@@ -1,11 +1,11 @@
 // The header's contract: what it is told and what it reports back, and the
 // mapping from what the app already loads (the header fragment, the fleet,
-// Chat's prompts and the history the service persists) onto it.
+// and the history the service persists) onto it.
 import { Eye, HandWaving, Hourglass, type Icon } from "@phosphor-icons/react";
 import type { ReactNode } from "react";
 import type { FleetData } from "../fleet/FleetTypes";
 import { bytes, relative } from "../panels/format";
-import type { Prompt, Fragment } from "../panels/types";
+import type { Fragment } from "../panels/types";
 import type { Polarity } from "../widgets/DeltaChip";
 import type { Machine as MachineCard } from "../widgets/MachineCard";
 import { liveStates, type LiveState } from "../widgets/types";
@@ -155,18 +155,9 @@ export type Kept = { attention: Record<AttentionKind, (number | null)[]>; polls:
 
 export const nothingKept: Kept = { attention: { waiting: [], review: [], stuck: [] }, polls: {} };
 
-/** counts reads the three attention counts the header fragment and Chat's
- * prompts give: waits plus prompts, finished turns, sessions that look stuck. */
-export function counts(header: Fragment, prompts: Prompt[]): Record<AttentionKind, number> {
-  const waiting = new Set(header.waiting_sessions);
-  let extra = 0;
-  for (const p of prompts) {
-    if (!p.session_id || !waiting.has(p.session_id)) {
-      extra++;
-      if (p.session_id) waiting.add(p.session_id);
-    }
-  }
-  return { waiting: (stat(header, "waiting") ?? 0) + extra, review: stat(header, "finished") ?? 0, stuck: stat(header, "stuck") ?? 0 };
+/** counts reads the reconciled attention values served by Go. */
+export function counts(header: Fragment): Record<AttentionKind, number> {
+  return { waiting: stat(header, "waiting") ?? 0, review: stat(header, "finished") ?? 0, stuck: stat(header, "stuck") ?? 0 };
 }
 
 /** machineOf reads one fleet machine with its sessions by state. */
@@ -183,11 +174,11 @@ export function pollOf(m: Machine): Poll {
 }
 
 /** headerOf maps what the app has onto the header: the fragment's counts
- * and memory, the fleet's machines, Chat's prompts, and the service history.
+ * and memory, the fleet's machines, and the service history.
  * Without the fleet the header still shows its counts, with the local
  * machine named by its id and no dots. */
-export function headerOf(header: Fragment, fleet: FleetData | null, prompts: Prompt[], kept: Kept): HeaderData {
-  const now = counts(header, prompts);
+export function headerOf(header: Fragment, fleet: FleetData | null, kept: Kept): HeaderData {
+  const now = counts(header);
   const attention = Object.fromEntries(attentionKinds.map(k => {
     const trend = kept.attention[k];
     return [k, { count: now[k], trend, delta: trend.length > 1 && trend[trend.length - 1] !== null && trend[0] !== null ? trend[trend.length - 1]! - trend[0]! : 0 }];

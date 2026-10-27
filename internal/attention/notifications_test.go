@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
@@ -45,102 +46,115 @@ func (f *fakeNotificationCenter) Add(_ context.Context, n NativeNotificationRequ
 	return f.addErr
 }
 
-func (f *fakeNotificationCenter) count() int {
+func (f *fakeNotificationCenter) snapshot() (int, []NativeNotificationRequest) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return len(f.requests)
+	return f.authorizations, append([]NativeNotificationRequest(nil), f.requests...)
 }
 
 func TestMacNativeMappingAndConcurrentAuthorization(t *testing.T) {
-	f := &fakeNotificationCenter{}
-	m := &MacNotifier{Center: f}
-	d := DesktopNotifier{OS: "darwin", Mac: m, Runner: runnerFunc(func(context.Context, string, ...string) ([]byte, error) {
-		t.Error("notification launched an external helper")
-		return nil, nil
-	})}
-	n := Notification{Kind: "waiting", Title: "Needs you", Body: "Project · permission", Sound: "Glass", ItemID: "item '$(bad) with spaces", MachineID: "local"}
-	var wg sync.WaitGroup
-	for range 8 {
-		wg.Go(func() {
-			if err := d.Notify(t.Context(), n); err != nil {
-				t.Error(err)
-			}
-		})
-	}
-	wg.Wait()
-	// Alerts arriving while permission is pending coalesce per destination.
-	deadline := time.Now().Add(2 * time.Second)
-	for f.count() == 0 && time.Now().Before(deadline) {
-		time.Sleep(time.Millisecond)
-	}
-	if f.authorizations != 1 || f.count() < 1 || f.count() > 8 {
-		t.Fatal(f)
-	}
-	first := f.requests[0]
-	if first.Title != n.Title || first.Body != n.Body || first.Sound != n.Sound || first.ItemID != n.ItemID || first.MachineID != n.MachineID || first.Kind != n.Kind || first.Identifier == "" || first.ThreadIdentifier != first.Identifier {
-		t.Fatal(first)
-	}
-	for _, next := range f.requests {
-		if next != first {
-			t.Fatal("re-send did not replace", next)
+	synctest.Test(t, func(t *testing.T) {
+		f := &fakeNotificationCenter{}
+		m := &MacNotifier{Center: f}
+		d := DesktopNotifier{OS: "darwin", Mac: m, Runner: runnerFunc(func(context.Context, string, ...string) ([]byte, error) {
+			t.Error("notification launched an external helper")
+			return nil, nil
+		})}
+		n := Notification{Kind: "waiting", Title: "Needs you", Body: "Project · permission", Sound: "Glass", ItemID: "item '$(bad) with spaces", MachineID: "local"}
+		var wg sync.WaitGroup
+		for range 8 {
+			wg.Go(func() {
+				if err := d.Notify(t.Context(), n); err != nil {
+					t.Error(err)
+				}
+			})
 		}
-	}
-	n.MachineID = "remote"
-	if nativeNotificationRequest(n).Identifier == first.Identifier {
-		t.Fatal("machines collided")
-	}
-	n.ItemID = ""
-	remote := nativeNotificationRequest(n)
-	if remote.ItemID != "" || remote.Identifier == first.Identifier {
-		t.Fatal(remote)
-	}
-	n.MachineID = ""
-	if nativeNotificationRequest(n).ItemID != "" {
-		t.Fatal("summary has a jump")
-	}
+		wg.Wait()
+		// Notify may return before the background flush posts queued alerts.
+		synctest.Wait()
+		// Alerts arriving while permission is pending coalesce per destination.
+		authorizations, requests := f.snapshot()
+		if authorizations != 1 || len(requests) < 1 || len(requests) > 8 {
+			t.Fatal(authorizations, requests)
+		}
+		first := requests[0]
+		if first.Title != n.Title || first.Body != n.Body || first.Sound != n.Sound || first.ItemID != n.ItemID || first.MachineID != n.MachineID || first.Kind != n.Kind || first.Identifier == "" || first.ThreadIdentifier != first.Identifier {
+			t.Fatal(first)
+		}
+		for _, next := range requests {
+			if next != first {
+				t.Fatal("re-send did not replace", next)
+			}
+		}
+		n.MachineID = "remote"
+		if nativeNotificationRequest(n).Identifier == first.Identifier {
+			t.Fatal("machines collided")
+		}
+		n.ItemID = ""
+		remote := nativeNotificationRequest(n)
+		if remote.ItemID != "" || remote.Identifier == first.Identifier {
+			t.Fatal(remote)
+		}
+		n.MachineID = ""
+		if nativeNotificationRequest(n).ItemID != "" {
+			t.Fatal("summary has a jump")
+		}
+	})
 }
 
 func TestMacAuthorizationFailureAndCancellation(t *testing.T) {
-	denied := errors.New("denied")
-	f := &fakeNotificationCenter{authErr: denied}
-	m := &MacNotifier{Center: f}
-	for range 2 {
-		if err := m.Notify(t.Context(), Notification{}); !errors.Is(err, denied) {
+	synctest.Test(t, func(t *testing.T) {
+		denied := errors.New("denied")
+		f := &fakeNotificationCenter{authErr: denied}
+		m := &MacNotifier{Center: f}
+		for range 2 {
+			if err := m.Notify(t.Context(), Notification{}); !errors.Is(err, denied) {
+				t.Fatal(err)
+			}
+		}
+		// A refusal is re-checked on the next notification, so allowing Driga in
+		// System Settings works without restarting the collector.
+		authorizations, requests := f.snapshot()
+		if authorizations != 2 || len(requests) != 0 {
+			t.Fatal(authorizations, requests)
+		}
+		f.mu.Lock()
+		f.authErr = nil
+		f.mu.Unlock()
+		err := m.Notify(t.Context(), Notification{})
+		_, requests = f.snapshot()
+		if err != nil || len(requests) != 1 {
+			t.Fatal("allowing later did not deliver", err, requests)
+		}
+		gate := make(chan struct{})
+		f = &fakeNotificationCenter{gate: gate}
+		m = &MacNotifier{Center: f}
+		ctx, cancel := context.WithCancel(t.Context())
+		if err := m.Notify(ctx, Notification{}); err != nil {
 			t.Fatal(err)
 		}
-	}
-	// A refusal is re-checked on the next notification, so allowing Driga in
-	// System Settings works without restarting the collector.
-	if f.authorizations != 2 || len(f.requests) != 0 {
-		t.Fatal(f)
-	}
-	f.authErr = nil
-	if err := m.Notify(t.Context(), Notification{}); err != nil || len(f.requests) != 1 {
-		t.Fatal("allowing later did not deliver", err, f)
-	}
-	gate := make(chan struct{})
-	f = &fakeNotificationCenter{gate: gate}
-	m = &MacNotifier{Center: f}
-	ctx, cancel := context.WithCancel(t.Context())
-	if err := m.Notify(ctx, Notification{}); err != nil {
-		t.Fatal(err)
-	}
-	cancel()
-	if err := m.Notify(ctx, Notification{}); !errors.Is(err, context.Canceled) {
-		t.Fatal(err)
-	}
-	close(gate)
-	<-m.authorized
-	if err := m.Notify(t.Context(), Notification{}); err != nil {
-		t.Fatal(err)
-	}
-	if f.authorizations != 1 || len(f.requests) != 1 {
-		t.Fatal(f)
-	}
-	f.addErr = errors.New("delivery failed")
-	if err := m.Notify(t.Context(), Notification{}); !errors.Is(err, f.addErr) {
-		t.Fatal(err)
-	}
+		cancel()
+		if err := m.Notify(ctx, Notification{}); !errors.Is(err, context.Canceled) {
+			t.Fatal(err)
+		}
+		close(gate)
+		<-m.authorized
+		synctest.Wait() // Drain the cancelled notification's background flush.
+		if err := m.Notify(t.Context(), Notification{}); err != nil {
+			t.Fatal(err)
+		}
+		authorizations, requests = f.snapshot()
+		if authorizations != 1 || len(requests) != 1 {
+			t.Fatal(authorizations, requests)
+		}
+		deliveryErr := errors.New("delivery failed")
+		f.mu.Lock()
+		f.addErr = deliveryErr
+		f.mu.Unlock()
+		if err := m.Notify(t.Context(), Notification{}); !errors.Is(err, deliveryErr) {
+			t.Fatal(err)
+		}
+	})
 }
 
 func TestMacUnconfiguredBackendUnavailable(t *testing.T) {
@@ -203,25 +217,27 @@ func TestDecimalBytes(t *testing.T) {
 }
 
 func TestMacPendingAuthorizationQueuesFirstAlert(t *testing.T) {
-	gate := make(chan struct{})
-	f := &fakeNotificationCenter{gate: gate, delivered: make(chan struct{}, 1)}
-	m := &MacNotifier{Center: f}
-	n := Notification{Title: "Low disk space", ItemID: "disk:1"}
-	// Notify must return while the permission prompt is still pending.
-	if err := m.Notify(t.Context(), n); err != nil {
-		t.Fatal(err)
-	}
-	close(gate)
-	select {
-	case <-f.delivered:
-	case <-time.After(5 * time.Second):
-		t.Fatal("pending notification lost")
-	}
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if len(f.requests) != 1 || f.requests[0].Title != n.Title {
-		t.Fatal(f.requests)
-	}
+	synctest.Test(t, func(t *testing.T) {
+		gate := make(chan struct{})
+		f := &fakeNotificationCenter{gate: gate, delivered: make(chan struct{}, 1)}
+		m := &MacNotifier{Center: f}
+		n := Notification{Title: "Low disk space", ItemID: "disk:1"}
+		// Notify must return while the permission prompt is still pending.
+		if err := m.Notify(t.Context(), n); err != nil {
+			t.Fatal(err)
+		}
+		close(gate)
+		select {
+		case <-f.delivered:
+		case <-time.After(5 * time.Second):
+			t.Fatal("pending notification lost")
+		}
+		synctest.Wait()
+		_, requests := f.snapshot()
+		if len(requests) != 1 || requests[0].Title != n.Title {
+			t.Fatal(requests)
+		}
+	})
 }
 
 func TestMacRequestPermissionAsksOnceBeforeAnyAlert(t *testing.T) {
@@ -230,23 +246,28 @@ func TestMacRequestPermissionAsksOnceBeforeAnyAlert(t *testing.T) {
 	m := &MacNotifier{Center: f}
 	m.RequestPermission()
 	m.RequestPermission()
-	if f.authorizations != 1 {
-		t.Fatalf("authorizations = %d, want 1", f.authorizations)
+	authorizations, _ := f.snapshot()
+	if authorizations != 1 {
+		t.Fatalf("authorizations = %d, want 1", authorizations)
 	}
 	if err := m.Notify(t.Context(), Notification{Kind: "waiting", Title: "Needs you", ItemID: "a", MachineID: "local"}); err != nil {
 		t.Fatal(err)
 	}
-	if f.authorizations != 1 || f.count() != 1 {
-		t.Fatalf("authorizations = %d, posts = %d; the startup answer must cover the first alert", f.authorizations, f.count())
+	authorizations, requests := f.snapshot()
+	if authorizations != 1 || len(requests) != 1 {
+		t.Fatalf("authorizations = %d, posts = %d; the startup answer must cover the first alert", authorizations, len(requests))
 	}
+	f.mu.Lock()
 	f.authErr = ErrNotificationsDenied
+	f.mu.Unlock()
 	m = &MacNotifier{Center: f}
 	m.RequestPermission()
 	if err := m.Notify(t.Context(), Notification{Kind: "waiting", Title: "Needs you", ItemID: "b", MachineID: "local"}); !errors.Is(err, ErrNotificationsDenied) {
 		t.Fatalf("Notify after refusal = %v", err)
 	}
-	if f.authorizations != 3 {
-		t.Fatalf("authorizations = %d; a refusal must be re-checked on the next alert", f.authorizations)
+	authorizations, _ = f.snapshot()
+	if authorizations != 3 {
+		t.Fatalf("authorizations = %d; a refusal must be re-checked on the next alert", authorizations)
 	}
 }
 

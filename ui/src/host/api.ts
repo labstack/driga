@@ -61,9 +61,10 @@ export function action(body: Record<string, unknown>): Promise<unknown> {
 
 // Chat runs through the collector's broker: one conversation, long-polled.
 export type ChatMessage = { id: string; role: string; text: string; status: string; html?: string; created_at: string };
-export type ChatEvent = { seq: number; kind: string; message?: ChatMessage; message_id?: string; text?: string; action?: ChatAction };
-export type ChatAction = { id: string; tool: string; title: string; status: string; result?: string };
-export type ChatState = { conversation: { id: string }; messages: ChatMessage[]; events: ChatEvent[]; actions: ChatAction[]; cursor: number; reset: boolean; active?: boolean; mode: string };
+export type ChatMode = "confirm" | "auto" | "full auto";
+export type ChatEvent = { seq: number; kind: string; message?: ChatMessage; message_id?: string; text?: string; action?: ChatAction; mode?: ChatMode; until?: string };
+export type ChatAction = { id: string; tool: string; title: string; input: unknown; directory: string; status: string; decided_by?: string; result?: string };
+export type ChatState = { conversation: { id: string }; messages: ChatMessage[]; events: ChatEvent[]; actions: ChatAction[]; cursor: number; reset: boolean; active?: boolean; mode: ChatMode; until?: string };
 
 export const chat = {
   history: () => get<{ id: string }[]>("/chat/api/history"),
@@ -71,6 +72,7 @@ export const chat = {
   send: (id: string, text: string, context: Record<string, unknown>) => post("/chat/api/send", { id, text, context }),
   stop: (id: string) => post("/chat/api/stop", { id }),
   decide: (id: string, action: string, allow: boolean) => post("/chat/api/decide", { id, action, allow }),
+  setMode: (id: string, mode: ChatMode) => post("/chat/api/mode", { id, mode }),
   prompts: () => get<Prompt[] | null>("/chat/api/prompts").then(p => p ?? []),
   answer: (id: string, allow: boolean) => post("/chat/api/prompt-answer", { id, allow }),
   wait: (id: string, after: number, signal: AbortSignal) => get<ChatState>(`/chat/api/wait?id=${encodeURIComponent(id)}&after=${after}`, signal),

@@ -71,7 +71,7 @@ export function fakeService(o: ServiceOptions = {}): Service {
       case "/chat/api/history": return json(o.chat ? [{ id: o.chat.conversation.id }] : []);
       case "/chat/api/prompts": return json(o.prompts ?? []);
       case "/chat/api/new": return json({ id: "conversation-1" });
-      case "/chat/api/send": case "/chat/api/stop": case "/chat/api/decide": case "/chat/api/prompt-answer": return json({ ok: true });
+      case "/chat/api/send": case "/chat/api/stop": case "/chat/api/mode": case "/chat/api/decide": case "/chat/api/prompt-answer": return json({ ok: true });
       case "/chat/api/wait": {
         // The first wait returns the conversation; later ones wait for a
         // change that never comes, until the page lets go.

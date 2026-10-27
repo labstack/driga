@@ -61,7 +61,7 @@ export const forgotten = conversation([
   msg("a1", "assistant", "One session looks stuck: the billing migration on build-01 has been busy with no output for 34 minutes."),
 ]);
 
-const stopAction: ChatAction = { id: "act1", tool: "kill", title: "Stop claude #19 · /home/dev/src/sandbox", status: "pending" };
+const stopAction: ChatAction = { id: "act1", tool: "kill", title: "Stop claude #19 · /home/dev/src/sandbox", input: { session_id: 19 }, directory: "/home/dev/src/sandbox", status: "pending" };
 
 export const awaitingApproval = conversation([
   msg("q1", "user", "Stop the agy session in sandbox."),
@@ -75,7 +75,13 @@ export const decided = conversation([
   msg("t1", "tool", "mcp__driga__delete_dashboard"),
   msg("act1", "action", "delete_dashboard scratch-test · done"),
   msg("a1", "assistant", "Deleted Scratch test. Your other dashboards are unchanged."),
-], [{ id: "act1", tool: "delete_dashboard", title: "delete_dashboard scratch-test", status: "done", result: "\"{}\"" }]);
+], [{ id: "act1", tool: "delete_dashboard", title: "delete_dashboard scratch-test", input: { id: "scratch-test" }, directory: "/home/dev/src/sandbox", status: "done", decided_by: "you", result: "\"{}\"" }]);
+
+export const longBash = "printf '%s\\n' " + "review-this-argument-".repeat(40) + "; rm -rf ./scratch-test";
+export const longBashPending = conversation([
+  msg("q1", "user", "Clean up the scratch directory."),
+  msg("bash1", "action", "Bash · pending"),
+], [{ id: "bash1", tool: "Bash", title: "Bash · printf '%s\\n' review-this-argument…", input: { command: longBash }, directory: "/home/dev/src/sandbox", status: "pending" }], true);
 
 export const working = conversation([
   msg("q1", "user", "Summarize what finished on harbor today."),

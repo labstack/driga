@@ -28,27 +28,7 @@ func (m *app) syncBoard() {
 			data.Nodes = append(data.Nodes, n)
 		}
 	}
-	for _, p := range m.prompts {
-		for i := range data.Nodes {
-			n := &data.Nodes[i]
-			if n.ID == p.SessionID && n.MachineID == m.localMachine() && n.EndedAt == nil {
-				n.Waits = append(append([]view.FlowWait(nil), n.Waits...), view.FlowWait{ID: p.ID, StartedAt: p.CreatedAt, Tool: p.Tool, Detail: p.Detail(), Reason: "permission"})
-			}
-		}
-	}
-	b := view.Board(data, time.Hour, m.opts.Now())
-	prompts := map[string]string{}
-	for _, p := range m.prompts {
-		prompts[fmt.Sprintf("%s/%d", m.localMachine(), p.SessionID)] = p.ID
-	}
-	b.WithPrompts(prompts)
-	for _, p := range m.prompts {
-		for i := range b.Needs {
-			if b.Needs[i].PromptID == p.ID {
-				b.Needs[i].Command = p.Detail()
-			}
-		}
-	}
+	b := view.ProjectAttention(m.snap.Inbox, m.snap.Agents, m.localMachine(), m.prompts).Board(data, time.Hour, m.opts.Now())
 	order := map[string]int{}
 	for i, k := range m.boardOrder {
 		order[k] = i
@@ -291,8 +271,8 @@ func (m *app) boardLayout() (string, []flowHit) {
 		mode = "Map"
 	}
 	add("Flow  [m Map] [t Timeline] [s Sessions] · " + mode + " · last 60m")
-	hcounts := view.HeaderCounts(m.snap.Inbox, m.snap.Agents, m.snap.Orphans, m.snap.Summary)
-	add(fmt.Sprintf("Need you %d · To review %d · Stuck %d", hcounts.NeedYou+m.extraPrompts(), hcounts.ToReview, hcounts.Stuck))
+	hcounts := view.ProjectAttention(m.snap.Inbox, m.snap.Agents, m.localMachine(), m.prompts).Header(m.snap.Orphans, m.snap.Summary)
+	add(fmt.Sprintf("Need you %d · To review %d · Stuck %d", hcounts.NeedYou, hcounts.ToReview, hcounts.Stuck))
 	add(fmt.Sprintf("Leftover %d · Reclaimable %s · Memory %s/%s", hcounts.Leftover, view.HumanBytes(hcounts.Reclaimable), view.HumanBytes(hcounts.MemoryUsed), view.HumanBytes(hcounts.MemoryTotal)))
 	add(view.BoardSpark(b.Spark) + " events/min · updated " + duration(max(time.Duration(0), m.opts.Now().Sub(b.ObservedAt))) + " ago")
 	add(fmt.Sprintf("NEEDS YOU · %d · oldest first", len(b.Needs)))
@@ -625,12 +605,4 @@ func (m *app) selectFlowView(key string) tea.Cmd {
 	m.flowOffset = 0
 	m.rebuild()
 	return nil
-}
-
-func (m *app) extraPrompts() int {
-	ids := make([]int64, 0, len(m.prompts))
-	for _, p := range m.prompts {
-		ids = append(ids, p.SessionID)
-	}
-	return view.ExtraPrompts(m.snap.Inbox, m.snap.Agents, m.localMachine(), ids)
 }

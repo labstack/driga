@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { busy, sessions } from "./Fleet-fixtures";
-import { childrenOf, counts, groupFleet, machineCard, needsYou, overlaps, roots, sortedMachines, turnCells, turnSummary, turnWords } from "./FleetModel";
+import { FleetRelationships, counts, machineCard, needsYou, sortedMachines, turnCells, turnSummary, turnWords } from "./FleetModel";
+import type { FleetSession } from "./FleetTypes";
 
 describe("groupFleet", () => {
-  const groups = groupFleet(busy);
+  const groups = new FleetRelationships(busy).groups;
   it("puts the local machine first and the rest by name", () => {
     expect(groups.map(g => g.machine.id)).toEqual(["studio", "build-01", "laptop-02"]);
     expect(sortedMachines([...busy.machines].reverse()).map(m => m.id)).toEqual(["studio", "build-01", "laptop-02"]);
@@ -23,7 +24,7 @@ describe("groupFleet", () => {
     expect(groups[0].projects[1].waiting).toBe(false);
   });
   it("keeps a machine without sessions", () => {
-    const [only] = groupFleet({ machines: busy.machines.slice(0, 1), projects: busy.projects, sessions: [] });
+    const [only] = new FleetRelationships({ machines: busy.machines.slice(0, 1), projects: busy.projects, sessions: [] }).groups;
     expect(only.projects).toEqual([]);
     expect(only.counts.working).toBe(0);
   });
@@ -35,14 +36,41 @@ describe("groupFleet", () => {
 });
 
 describe("relations", () => {
+  const model = new FleetRelationships(busy);
+  it("owns machine identity, cross-project ancestry and project membership", () => {
+    const base = sessions[0];
+    const local: FleetSession = { ...base, id: "1", machine: "studio", project: "atlas", parent: undefined };
+    const remote: FleetSession = { ...local, machine: "build-01" };
+    const child: FleetSession = { ...local, id: "2", parent: "1", project: "harbor" };
+    const grandchild: FleetSession = { ...child, id: "3", parent: "2" };
+    const missing: FleetSession = { ...local, id: "4", parent: "remote-only" };
+    const remoteParent: FleetSession = { ...remote, id: "remote-only" };
+    const model = new FleetRelationships({ ...busy, sessions: [local, remote, child, grandchild, missing, remoteParent] });
+    expect(model.session("1")).toBeUndefined();
+    expect(model.session("1", "studio")).toBe(local);
+    expect(model.parent(child)).toBe(local);
+    expect(model.children(remote)).toEqual([]);
+    expect(model.branch(local)).toEqual([{ session: local, depth: 0 }, { session: child, depth: 1 }, { session: grandchild, depth: 2 }]);
+    expect(model.roots("studio", "harbor")).toEqual([]);
+    expect(model.roots("studio", "atlas")).toContain(missing);
+    expect(model.parent(missing)).toBeUndefined();
+    expect(model.projectSessions("harbor")).toEqual([child, grandchild]);
+    expect(model.projectMachines("harbor").map(m => m.id)).toEqual(["studio"]);
+  });
+  it("terminates ancestry cycles inside the module", () => {
+    const a = { ...sessions[0], id: "a", parent: "b" };
+    const b = { ...a, id: "b", parent: "a" };
+    const model = new FleetRelationships({ ...busy, sessions: [a, b] });
+    expect(model.branch(a)).toEqual([{ session: a, depth: 0 }, { session: b, depth: 1 }]);
+  });
   it("nests subagents under their parent and keeps them out of the roots", () => {
-    expect(childrenOf(sessions, "113").map(s => s.id)).toEqual(["118"]);
-    expect(childrenOf(sessions, "095").map(s => s.id)).toEqual(["099"]);
-    expect(roots(sessions).map(s => s.id)).not.toContain("118");
-    expect(roots(sessions)).toHaveLength(12);
+    expect(model.children(sessions.find(s => s.id === "113")!).map(s => s.id)).toEqual(["118"]);
+    expect(model.children(sessions.find(s => s.id === "095")!).map(s => s.id)).toEqual(["099"]);
+    expect(model.groups.flatMap(g => g.projects.flatMap(p => model.roots(g.machine.id, p.project.id))).map(s => s.id)).not.toContain("118");
+    expect(model.groups.flatMap(g => g.projects.flatMap(p => model.roots(g.machine.id, p.project.id)))).toHaveLength(12);
   });
   it("finds the one file two sessions of one project edit, across machines", () => {
-    expect(overlaps(sessions)).toEqual([]);
+    expect(sessions.flatMap(s => model.overlaps(s))).toEqual([]);
   });
   it("counts states and what needs the person", () => {
     expect(counts(sessions)).toEqual({ waiting: 3, stuck: 2, working: 5, idle: 2, finished: 2 });

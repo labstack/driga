@@ -78,9 +78,6 @@ func TestFlowIdleNotificationsAgreeWithAppPanels(t *testing.T) {
 			if got := fragment.Results[0].Frame.Rows[0][0]; got != float64(want) {
 				t.Errorf("app Need you=%v, want %d", got, want)
 			}
-			if len(fragment.WaitingSessions) != want {
-				t.Errorf("app waiting sessions=%v, want %d", fragment.WaitingSessions, want)
-			}
 			fleet, err := panels.Run(m.snap, panels.RunRequest{Dashboard: panels.Dashboard{Name: "Sessions", Panels: []panels.Panel{{ID: "sessions", Title: "Sessions", Viz: "table", Source: "sessions", Columns: []string{"state"}}}}})
 			if err != nil {
 				t.Fatal(err)
