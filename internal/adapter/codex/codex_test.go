@@ -113,6 +113,16 @@ func TestExecOriginHeadless(t *testing.T) {
 	}
 }
 
+func TestTUIFromVSCodeIsInteractive(t *testing.T) {
+	data := strings.Replace(fixture(t), "codex_cli_rs", "codex-tui", 1)
+	data = strings.Replace(data, `"source":"cli"`, `"source":"vscode"`, 1)
+	env, _ := setup(t, data)
+	obs, _ := collect(t, codex.New(), env)
+	if obs.Hosted || obs.Origin != "interactive" {
+		t.Fatalf("a terminal session launched from VS Code is not hosted: %+v", obs)
+	}
+}
+
 func TestHostedOrigin(t *testing.T) {
 	for _, origin := range []string{"codex_vscode", "Codex Desktop", "app-server", "plugin", "mcp"} {
 		t.Run(origin, func(t *testing.T) {

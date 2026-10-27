@@ -34,7 +34,15 @@ func (a codexAdapter) Collect(ctx context.Context, env adapter.Env) ([]model.Ses
 	}
 	home := os.Getenv("CODEX_HOME")
 	if home == "" {
-		home = filepath.Join(env.Home, ".codex")
+		userHome := env.Home
+		if userHome == "" {
+			var err error
+			userHome, err = os.UserHomeDir()
+			if err != nil {
+				return nil, nil, fmt.Errorf("codex home: %w", err)
+			}
+		}
+		home = filepath.Join(userHome, ".codex")
 	}
 	db, warnings := openCatalog(ctx, filepath.Join(home, "codex-dev.db"))
 	if db != nil {

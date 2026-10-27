@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/labstack/driga/internal/adapter"
 	attention "github.com/labstack/driga/internal/attention"
+	"github.com/labstack/driga/internal/config"
 	"github.com/labstack/driga/internal/derive"
 	"github.com/labstack/driga/internal/gitscan"
 	"github.com/labstack/driga/internal/model"
@@ -158,7 +158,7 @@ func collectSources(ctx context.Context, d Deps, st *store.Store, p Plan, state 
 		result := &r.adapters[i]
 		i++
 		adapters.Go(func() {
-			result.obs, result.warnings, result.err = a.Collect(ctx, adapter.Env{Home: os.Getenv("HOME"), Now: now, CaptureSnippets: d.Cfg.CaptureSnippets(), Offsets: result.offsets, Alive: d.Plat.Alive, Baseline: r.first})
+			result.obs, result.warnings, result.err = a.Collect(ctx, adapter.Env{Home: config.ExpandHome("~"), Now: now, CaptureSnippets: d.Cfg.CaptureSnippets(), Offsets: result.offsets, Alive: d.Plat.Alive, Baseline: r.first})
 		})
 	}
 	wg.Go(func() {
@@ -269,45 +269,11 @@ func collectSources(ctx context.Context, d Deps, st *store.Store, p Plan, state 
 		}
 		reconcileClaude(r.sessions, r.observations, now)
 		reconcileSessions(r.sessions, procs, d.Plat, now)
-		// agy and Copilot without hooks use executable, PID identity, cwd and liveness.
-		for _, proc := range procs {
-			if (proc.Agent != "agy" && (proc.Agent != "copilot" || !d.Cfg.Adapters["copilot"].Enabled)) || (proc.Role != "interactive" && !(proc.Agent == "copilot" && proc.Role == "headless")) || !d.Plat.Alive(proc.PID, proc.StartTime) {
-				continue
-			}
-			linked := false
-			if proc.Agent == "copilot" {
-				for _, s := range r.sessions {
-					if s.Adapter == "copilot" && !strings.HasPrefix(s.ExternalID, "pid:") && s.PID == proc.PID && platform.SameStart(proc.StartTime, s.ProcStart) {
-						linked = true
-						break
-					}
-				}
-			}
-			if linked {
-				continue
-			}
-			id := fmt.Sprintf("pid:%d:%d", proc.PID, proc.StartTime.UnixNano())
-			i := -1
-			for j, s := range r.sessions {
-				if s.Adapter == proc.Agent && s.ExternalID == id {
-					i = j
-					break
-				}
-			}
-			if i < 0 {
-				i = len(r.sessions)
-				r.sessions = append(r.sessions, model.Session{})
-			}
-			s := &r.sessions[i]
-			s.SessionObs = model.SessionObs{Adapter: proc.Agent, ExternalID: id, Origin: proc.Role, PID: proc.PID, ProcStart: proc.StartTime, StartedAt: proc.StartTime, Cwd: proc.Cwd}
-			if proc.Agent == "copilot" && proc.Cwd != "" {
-				s.Title = filepath.Base(proc.Cwd)
-			}
-			s.EndedAt = nil
-		}
+		r.sessions = processSessions(r.sessions, procs, d)
 		r.sessions = hookSessions(r.sessions, spoolHooks(d, r.spool.events))
 		copilotCapturePolicy(r.sessions, d.Cfg.CaptureText)
 		reconcileCopilot(r.sessions, d.Plat, now)
+		retireProcessAliases(r.sessions, procs, now)
 		if p.Git || p.GitIdentity {
 			mode := gitscan.Cached
 			if p.GitFull {

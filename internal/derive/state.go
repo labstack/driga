@@ -228,6 +228,9 @@ func label(in StateInput, now time.Time, th Thresholds) (label string, heuristic
 		}
 		return "unknown", false, "agy process alive; unsupported-version: title/state schema not yet supported"
 	case "codex", "gemini":
+		if in.Proc != nil && in.Obs.LastActivityAt.IsZero() {
+			return "unknown", false, "process alive; no session activity observed"
+		}
 		// Gemini follows Codex without hooks: an open tool call may still be
 		// executing, so neither ever infers a permission wait.
 		if in.Obs.Hosted {

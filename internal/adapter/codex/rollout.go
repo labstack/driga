@@ -219,10 +219,17 @@ func patchFiles(obs *model.SessionObs, payload json.RawMessage, ts time.Time) er
 
 func origin(originator string, source json.RawMessage) (string, bool) {
 	value := strings.ToLower(originator + " " + string(source))
+	if strings.Contains(value, "exec") {
+		return "headless", false
+	}
+	// The TUI can record source=vscode when opened from VS Code's terminal.
+	// Its explicit producer identifies an interactive CLI, not a shared host.
+	if strings.EqualFold(originator, "codex-tui") {
+		return "interactive", false
+	}
 	// Exec takes precedence over hosted markers; all other/unknown origins
 	// use interactive. Match source strings and object variants alike.
 	for _, rule := range []struct{ marker, origin string }{
-		{"exec", "headless"},
 		{"desktop", "hosted"}, {"app-server", "hosted"},
 		{"vscode", "hosted"}, {"plugin", "hosted"}, {"mcp", "hosted"},
 	} {
