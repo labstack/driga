@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/labstack/driga/internal/collector"
+	"github.com/labstack/driga/internal/platform"
 )
 
 type localLifecycle struct{ opts LifecycleOptions }
@@ -31,7 +32,7 @@ func (h localLifecycle) run(ctx context.Context, action string) error {
 	defer cancel()
 	cmd := exec.CommandContext(ctx, h.opts.Executable, "service", action)
 	cmd.Env = h.opts.Environment
-	out, err := cmd.CombinedOutput()
+	out, err := platform.ChildOutput(cmd, true)
 	if err != nil {
 		lines := strings.Split(strings.TrimSpace(string(out)), "\n")
 		return fmt.Errorf("driga service %s: %s", action, cmp.Or(lines[len(lines)-1], err.Error()))

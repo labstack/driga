@@ -46,10 +46,13 @@ func StartChild(cmd *exec.Cmd) (func(), error) {
 	if cmd.SysProcAttr != nil {
 		attr = *cmd.SysProcAttr
 	}
-	attr.CreationFlags |= windows.CREATE_SUSPENDED | windows.CREATE_NEW_PROCESS_GROUP
+	// These children use pipes or files, never an interactive console. Without
+	// CREATE_NO_WINDOW, a console-less app or collector allocates a new console
+	// for every Git probe or agent call (HideWindow alone still allocates one).
+	attr.CreationFlags |= windows.CREATE_SUSPENDED | windows.CREATE_NEW_PROCESS_GROUP | windows.CREATE_NO_WINDOW
 	cmd.SysProcAttr = &attr
-	// Only our freshly created group can receive CTRL_BREAK. No console is
-	// attached/detached; a detached service simply proceeds to job termination.
+	// Console-less children cannot receive CTRL_BREAK. Cancellation retains
+	// the window-close attempt, grace period and job termination fallback.
 	ready := make(chan struct{})
 	var readyOnce sync.Once
 	markReady := func() { readyOnce.Do(func() { close(ready) }) }
