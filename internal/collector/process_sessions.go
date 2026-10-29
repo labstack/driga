@@ -44,6 +44,8 @@ func processSessions(ss []model.Session, procs []model.Proc, d Deps) []model.Ses
 		default:
 			continue
 		}
+		// Shared hosts have no process-only conversation. Their rollouts are
+		// collected independently; only interactive/headless processes get a row.
 		if launchers[proc.PID] || proc.StartTime.IsZero() || (proc.Role != "interactive" && proc.Role != "headless") || !d.Plat.Alive(proc.PID, proc.StartTime) {
 			continue
 		}
@@ -80,9 +82,15 @@ func processSessions(ss []model.Session, procs []model.Proc, d Deps) []model.Ses
 }
 
 // Retire provisional identities once a registry, rollout or hook identifies the
-// conversation, and remove launcher rows left by an older collector version.
+// conversation, and remove infrastructure rows left by an older collector version.
 func retireProcessAliases(ss []model.Session, procs []model.Proc, now time.Time) map[int64]int {
 	launchers := agentLaunchers(procs)
+	agentInfrastructure := make(map[int32]model.Proc)
+	for _, p := range procs {
+		if (p.Agent == "claude" || p.Agent == "codex") && (p.Role == "helper" || p.Role == "service" || p.Agent == "codex" && p.Role == "host") {
+			agentInfrastructure[p.PID] = p
+		}
+	}
 	replacements := make(map[int64]int)
 	for i := range ss {
 		p := &ss[i]
@@ -90,6 +98,9 @@ func retireProcessAliases(ss []model.Session, procs []model.Proc, now time.Time)
 			continue
 		}
 		retire := launchers[p.PID]
+		if proc, ok := agentInfrastructure[p.PID]; ok && proc.Agent == p.Adapter && !p.ProcStart.IsZero() && platform.SameStart(p.ProcStart, proc.StartTime) {
+			retire = true
+		}
 		for j, s := range ss {
 			if !strings.HasPrefix(s.ExternalID, "pid:") && s.Adapter == p.Adapter && s.PID == p.PID && !s.ProcStart.IsZero() && platform.SameStart(p.ProcStart, s.ProcStart) {
 				retire = true

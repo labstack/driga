@@ -1,6 +1,7 @@
 package derive
 
 import (
+	"strings"
 	"time"
 
 	"github.com/labstack/driga/internal/model"
@@ -15,9 +16,9 @@ type Classifier struct {
 }
 
 type processKey struct {
-	pid          int32
-	start        time.Time
-	cmdline, exe string
+	pid                int32
+	start              time.Time
+	cmdline, exe, argv string
 }
 
 type classification struct {
@@ -30,13 +31,13 @@ func NewClassifier(sigs *signatures.Set, size int) *Classifier {
 }
 
 func (c *Classifier) Match(p model.Proc) (signatures.Signature, bool) {
-	key := processKey{p.PID, p.StartTime, p.Cmdline, p.Exe}
+	key := processKey{p.PID, p.StartTime, p.Cmdline, p.Exe, strings.Join(p.Argv, "\x00")}
 	if result, ok := c.cache[key]; ok {
 		return result.sig, result.ok
 	}
 	var result classification
 	if c.sigs != nil {
-		result.sig, result.ok = c.sigs.Match(p.Cmdline, p.Exe)
+		result.sig, result.ok = c.sigs.Match(p.Cmdline, p.Exe, p.Argv)
 	}
 	c.cache[key] = result
 	return result.sig, result.ok

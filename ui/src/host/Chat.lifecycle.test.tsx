@@ -51,6 +51,23 @@ beforeEach(() => {
 afterEach(async () => { await act(async () => root.unmount()); container.remove(); vi.restoreAllMocks(); });
 
 describe("Chat lifecycle", () => {
+  it("labels the header mode as one non-wrapping value", async () => {
+    await mount();
+    const mode = container.querySelector<HTMLElement>('[aria-label="Current trust mode"]')!;
+    expect(mode.textContent).toBe("Mode: Confirm");
+    expect(mode.style.whiteSpace).toBe("nowrap");
+  });
+  it("lets wrapped suggestion labels show full glyphs", async () => {
+    await mount();
+    const labels = [...container.querySelectorAll<HTMLElement>(".mantine-Button-label")].filter(label => label.closest("button")?.querySelector("svg"));
+    expect(labels).toHaveLength(4);
+    for (const label of labels) {
+      expect(Number(label.style.lineHeight)).toBeGreaterThanOrEqual(1.3);
+      expect(label.style.overflow).toBe("visible");
+      expect(label.style.whiteSpace).toBe("normal");
+      expect(label.style.textAlign).toBe("left");
+    }
+  });
   it("does not claim Confirm while conversation history is loading or unavailable", async () => {
     const history = deferred<{ id: string }[]>(); api.history.mockReturnValue(history.promise);
     await mount();
@@ -78,21 +95,21 @@ describe("Chat lifecycle", () => {
       vi.setSystemTime(new Date("2026-03-14T15:00:00Z"));
       api.history.mockResolvedValue([{ id: "conversation" }]); await mount();
       await receive(state([], [], { mode: "full auto", until: "2026-03-14T15:30:00Z" }));
-      expect(container.querySelector('[aria-label="Current trust mode"]')?.textContent).toBe("Full auto · 30m left");
+      expect(container.querySelector('[aria-label="Current trust mode"]')?.textContent).toBe("Mode: Full auto · 30m left");
       expect(container.textContent).not.toContain("Actions wait for your approval");
       await act(async () => { vi.advanceTimersByTime(60_000); });
-      expect(container.querySelector('[aria-label="Current trust mode"]')?.textContent).toBe("Full auto · 29m left");
+      expect(container.querySelector('[aria-label="Current trust mode"]')?.textContent).toBe("Mode: Full auto · 29m left");
       await receive(state([], [], { reset: false, cursor: 2, mode: "auto", events: [{ seq: 2, kind: "mode", mode: "auto" }] }));
-      expect(container.querySelector('[aria-label="Current trust mode"]')?.textContent).toBe("Auto");
+      expect(container.querySelector('[aria-label="Current trust mode"]')?.textContent).toBe("Mode: Auto");
       await receive(state([], [], { reset: false, cursor: 2, mode: "confirm" }));
-      expect(container.querySelector('[aria-label="Current trust mode"]')?.textContent).toBe("Confirm");
+      expect(container.querySelector('[aria-label="Current trust mode"]')?.textContent).toBe("Mode: Confirm");
     } finally { vi.useRealTimers(); }
   });
   it("requires confirmation every time Full auto is enabled or renewed, and waits for authoritative state", async () => {
     api.history.mockResolvedValue([{ id: "conversation" }]); await mount(); await receive(state());
     await click("Auto");
     expect(api.setMode).toHaveBeenLastCalledWith("conversation", "auto");
-    expect(container.querySelector('[aria-label="Current trust mode"]')?.textContent).toBe("Confirm");
+    expect(container.querySelector('[aria-label="Current trust mode"]')?.textContent).toBe("Mode: Confirm");
     await receive(state([], [], { mode: "auto", reset: false, cursor: 2 }));
     await click("Full auto");
     expect(api.setMode).toHaveBeenCalledTimes(1);
@@ -115,7 +132,7 @@ describe("Chat lifecycle", () => {
     api.setMode.mockRejectedValueOnce(new Error("mode unavailable"));
     await click("Auto");
     expect(container.textContent).toContain("mode unavailable");
-    expect(container.querySelector('[aria-label="Current trust mode"]')?.textContent).toBe("Confirm");
+    expect(container.querySelector('[aria-label="Current trust mode"]')?.textContent).toBe("Mode: Confirm");
     await click("Auto");
     expect(api.setMode).toHaveBeenCalledTimes(2);
   });

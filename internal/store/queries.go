@@ -283,7 +283,7 @@ func (q *querier) Worktrees(repoID int64) ([]model.Worktree, error) {
 	})
 }
 
-const sessionColumns = "machine_id,adapter,external_id,parent_session_id,origin,version,pid,proc_start,cwd,branch,repo_id,worktree_id,title,last_prompt,registry_status,state,state_heuristic,evidence,started_at,last_activity_at,last_prompt_at,hosted,turn_open,ended_at,source_path,mixer,started_from,registry_updated_at"
+const sessionColumns = "machine_id,adapter,external_id,parent_session_id,origin,version,pid,proc_start,cwd,branch,repo_id,worktree_id,title,last_prompt,registry_status,state,state_heuristic,evidence,started_at,last_activity_at,last_prompt_at,hosted,turn_open,ended_at,source_path,mixer,started_from,registry_updated_at,conversation_claimed"
 
 // UpsertSession stores every scalar observation and derived session field.
 // Completions and FilesTouched are persisted separately by the collector.
@@ -292,7 +292,7 @@ func (tx *Tx) UpsertSession(s model.Session) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	return tx.upsertID("sessions", sessionColumns, "machine_id,adapter,external_id", tx.machineID, s.Adapter, s.ExternalID, s.ParentID, s.Origin, s.Version, s.PID, unix(s.ProcStart), s.Cwd, s.Branch, s.RepoID, s.WorktreeID, s.Title, s.LastPrompt, s.RegistryStatus, s.Label, s.Heuristic, s.Evidence, unix(s.StartedAt), unix(s.LastActivityAt), unix(s.LastPromptAt), s.Hosted, s.TurnOpen, nullableTime(s.EndedAt), s.SourcePath, string(mixer), nullableString(s.StartedFrom), unix(s.RegistryUpdatedAt))
+	return tx.upsertID("sessions", sessionColumns, "machine_id,adapter,external_id", tx.machineID, s.Adapter, s.ExternalID, s.ParentID, s.Origin, s.Version, s.PID, unix(s.ProcStart), s.Cwd, s.Branch, s.RepoID, s.WorktreeID, s.Title, s.LastPrompt, s.RegistryStatus, s.Label, s.Heuristic, s.Evidence, unix(s.StartedAt), unix(s.LastActivityAt), unix(s.LastPromptAt), s.Hosted, s.TurnOpen, nullableTime(s.EndedAt), s.SourcePath, string(mixer), nullableString(s.StartedFrom), unix(s.RegistryUpdatedAt), s.ConversationClaimed)
 }
 
 func scanSession(s scanner) (model.Session, error) {
@@ -301,7 +301,7 @@ func scanSession(s scanner) (model.Session, error) {
 	var ended sql.NullInt64
 	var mixer string
 	var startedFrom sql.NullString
-	err := s.Scan(&m.ID, &m.MachineID, &m.Adapter, &m.ExternalID, &m.ParentID, &m.Origin, &m.Version, &m.PID, &procStart, &m.Cwd, &m.Branch, &m.RepoID, &m.WorktreeID, &m.Title, &m.LastPrompt, &m.RegistryStatus, &m.Label, &m.Heuristic, &m.Evidence, &start, &activity, &promptAt, &m.Hosted, &m.TurnOpen, &ended, &m.SourcePath, &mixer, &startedFrom, &registryAt)
+	err := s.Scan(&m.ID, &m.MachineID, &m.Adapter, &m.ExternalID, &m.ParentID, &m.Origin, &m.Version, &m.PID, &procStart, &m.Cwd, &m.Branch, &m.RepoID, &m.WorktreeID, &m.Title, &m.LastPrompt, &m.RegistryStatus, &m.Label, &m.Heuristic, &m.Evidence, &start, &activity, &promptAt, &m.Hosted, &m.TurnOpen, &ended, &m.SourcePath, &mixer, &startedFrom, &registryAt, &m.ConversationClaimed)
 	if err == nil {
 		err = json.Unmarshal([]byte(mixer), &m.Mixer)
 	}

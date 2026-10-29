@@ -70,7 +70,11 @@ func TestMatch(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, ok := set.Match(tt.cmdline, tt.exe)
+			var argv []string
+			if strings.Contains(tt.cmdline, "claude") || strings.Contains(tt.cmdline, "codex") {
+				argv = commandFixtureArgv(t, tt.cmdline)
+			}
+			got, ok := set.Match(tt.cmdline, tt.exe, argv)
 			if ok != tt.wantMatch {
 				t.Fatalf("Match(%q, %q) = %+v, %v; want match %v", tt.cmdline, tt.exe, got, ok, tt.wantMatch)
 			}
@@ -108,11 +112,11 @@ match = ['^codex( |$)']
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, ok := set.Match("codex", "")
+	got, ok := set.Match("codex", "", nil)
 	if !ok || got.Name != "custom-first" || got.Agent != "custom" || got.Role != signatures.RoleHelper || !got.AppBundle || len(got.Match) != 2 {
 		t.Fatalf("extra signatures did not take precedence or retain fields: %+v, %v", got, ok)
 	}
-	if got, ok := set.Match("claude", ""); !ok || got.Agent != "claude" {
+	if got, ok := set.Match("claude", "", nil); !ok || got.Agent != "claude" {
 		t.Fatalf("embedded signatures missing after extras: %+v, %v", got, ok)
 	}
 }

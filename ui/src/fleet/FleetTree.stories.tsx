@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, fn, userEvent, within } from "storybook/test";
-import { busy, waitingSession } from "./Fleet-fixtures";
+import { busy, oneMachine, waitingSession } from "./Fleet-fixtures";
 import { FleetTree } from "./FleetTree";
 
 /** The Fleet as an accessible table: machines expand into projects into
@@ -42,4 +42,44 @@ export const Selected: Story = {
     await expect(args.onOpen).toHaveBeenCalledWith(waitingSession);
     await userEvent.unhover(title);
   },
+};
+import { Box } from "@mantine/core";
+
+export const ConstrainedNames: Story = {
+  args: { data: {
+    ...oneMachine,
+    projects: [{ id: "spare", name: "spare with a very long project name that should truncate before the count", repo: "/spare" }],
+    sessions: ["1037", "1036", "1028"].map((id, i) => ({ ...oneMachine.sessions[0], id, project: "spare", title: `Long nested session name ${id} that needs a proper ellipsis`, parent: i ? ["1037", "1036"][i - 1] : undefined })),
+  } },
+  render: args => <Box w={1000} maw="100%"><FleetTree {...args} /></Box>,
+  play: async ({ canvas }) => {
+    await document.fonts.ready;
+    const table = canvas.getByRole("table", { name: "Fleet tree" });
+    const name = within(table).getByRole("columnheader", { name: "Name" });
+    const branch = within(table).getByRole("columnheader", { name: "Branch" });
+    expect(name.getBoundingClientRect().width).toBeGreaterThanOrEqual(340);
+    expect(branch.getBoundingClientRect().width).toBeLessThanOrEqual(111);
+    const project = canvas.getByRole("button", { name: /^spare with/ });
+    const count = within(project.closest("tr")!).getByText("3 sessions");
+    expect(getComputedStyle(count).whiteSpace).toBe("nowrap");
+    expect(count.getBoundingClientRect().height).toBeLessThan(24);
+    const projectText = project.querySelector("p")!;
+    expect(getComputedStyle(projectText).textOverflow).toBe("ellipsis");
+    expect(projectText.scrollWidth).toBeGreaterThan(projectText.clientWidth);
+    expect(Math.abs(project.getBoundingClientRect().top - count.getBoundingClientRect().top)).toBeLessThan(4);
+    for (const id of ["1037", "1036", "1028"]) {
+      const identifier = canvas.getByText(`#${id}`);
+      const cell = identifier.closest("td")!.getBoundingClientRect();
+      expect(identifier.getBoundingClientRect().right).toBeLessThanOrEqual(cell.right);
+      expect(getComputedStyle(identifier).flexShrink).toBe("0");
+      const title = canvas.getByTitle(`Long nested session name ${id} that needs a proper ellipsis`);
+      expect(getComputedStyle(title).textOverflow).toBe("ellipsis");
+      expect(title.getBoundingClientRect().width).toBeGreaterThan(140);
+    }
+  },
+};
+
+export const NarrowNames: Story = {
+  ...ConstrainedNames,
+  render: args => <Box w={640} maw="100%"><FleetTree {...args} /></Box>,
 };

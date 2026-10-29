@@ -36,6 +36,9 @@ func hookSessions(ss []model.Session, hooks []model.HookEvent, procs []model.Pro
 			seen[key] = i
 			ss = append(ss, model.Session{SessionObs: model.SessionObs{Adapter: h.Adapter, ExternalID: h.SessionID, Cwd: h.Cwd, Origin: "hook", StartedAt: h.TS, Hosted: h.Adapter != "copilot"}})
 		}
+		if claudeTurnHookClaimed(h) {
+			ss[i].ConversationClaimed = true
+		}
 		if h.Adapter == "copilot" {
 			copilot.Fold(&ss[i].SessionObs, h)
 		} else if ss[i].PID == 0 && h.PID > 0 && !h.ProcStart.IsZero() {

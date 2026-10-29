@@ -18,8 +18,8 @@ export type BarGaugeProps = {
   thresholds?: [number, number];
   /** Track height in pixels. */
   size?: number;
-  /** Show the value and share above the track. */
-  caption?: boolean;
+  /** Show value/total and share, only the percent, or no caption. */
+  caption?: boolean | "percent";
 };
 
 /** pressureTone is the color a memory bar takes: the accent, then warning
@@ -35,8 +35,8 @@ export function BarGauge({ value, max, format, label, thresholds = [0.7, 0.9], s
   const tone = pressureTone(share, thresholds);
   const name = `${label}: ${format(value)} of ${format(max)}, ${pct}%`;
   return <Stack gap={4}>
-    {caption && <Group justify="space-between" gap="xs" wrap="nowrap" aria-hidden>
-      <Text size="xs" ff="monospace" lh={1.2} style={{ whiteSpace: "nowrap" }}>{format(value)} <Text span c="dimmed" ff="monospace" fz="inherit">/ {format(max)}</Text></Text>
+    {caption && <Group justify={caption === "percent" ? "flex-end" : "space-between"} gap="xs" wrap="nowrap" aria-hidden>
+      {caption !== "percent" && <Text size="xs" ff="monospace" lh={1.2} style={{ whiteSpace: "nowrap" }}>{format(value)} <Text span c="dimmed" ff="monospace" fz="inherit">/ {format(max)}</Text></Text>}
       <Text size="xs" ff="monospace" c={tone === "brand" ? "dimmed" : tone} lh={1.2}>{pct}%</Text>
     </Group>}
     <Box pos="relative" py={2}>

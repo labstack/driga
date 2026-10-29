@@ -7,11 +7,7 @@ import (
 // Only Windows-shaped inputs are adapted. Match still starts at argv[0], so
 // mentioning an agent in another program's arguments cannot classify it.
 func windowsSignatureInput(cmd, exe string) (string, string) {
-	shape := func(p string) bool {
-		p = strings.TrimPrefix(p, `"`)
-		return len(p) > 2 && p[1] == ':' && (p[2] == '\\' || p[2] == '/') || strings.HasPrefix(p, `\\`)
-	}
-	if !shape(exe) && !shape(cmd) {
+	if !windowsPathShape(exe) && !windowsPathShape(cmd) {
 		return cmd, exe
 	}
 	exe = windowsSignaturePath(exe, true)
@@ -30,6 +26,11 @@ func windowsSignatureInput(cmd, exe string) (string, string) {
 		args[i] = strings.ReplaceAll(strings.ReplaceAll(args[i], " ", "%20"), "\t", "%09")
 	}
 	return strings.Join(args, " "), exe
+}
+
+func windowsPathShape(p string) bool {
+	p = strings.TrimPrefix(p, `"`)
+	return len(p) > 2 && p[1] == ':' && (p[2] == '\\' || p[2] == '/') || strings.HasPrefix(p, `\\`)
 }
 func windowsSignaturePath(p string, executable bool) string {
 	p = strings.ReplaceAll(strings.ToLower(p), `\`, "/")

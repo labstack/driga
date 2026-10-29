@@ -987,6 +987,7 @@ func appendPassChanges(tx *store.Tx, before, after map[string]passFeedRow, now t
 
 func mergeObs(dst *model.SessionObs, src model.SessionObs) {
 	dst.Adapter, dst.ExternalID = src.Adapter, src.ExternalID
+	dst.ConversationClaimed = dst.ConversationClaimed || src.ConversationClaimed
 	if src.ParentExternalID != "" {
 		dst.ParentExternalID = src.ParentExternalID
 	}

@@ -1,0 +1,62 @@
+[
+  {
+    "pid": 1032,
+    "ppid": 900,
+    "started_at": "2026-10-18T11:00:00Z",
+    "rss_bytes": 100,
+    "cmdline": "/opt/bin/codex sandbox -c shell_environment_policy.inherit=\"all\" -c default_permissions=\"node_repl\"",
+    "argv": [
+      "/opt/bin/codex",
+      "sandbox",
+      "-c",
+      "shell_environment_policy.inherit=\"all\"",
+      "-c",
+      "default_permissions=\"node_repl\""
+    ],
+    "cwd": "/Users/fixture/Documents/Codex/2026-10-18/on"
+  },
+  {
+    "pid": 1132,
+    "ppid": 1032,
+    "started_at": "2026-10-18T11:00:00Z",
+    "rss_bytes": 100,
+    "cmdline": "node --experimental-vm-modules /opt/codex/kernel.js --session-id example",
+    "argv": [
+      "node",
+      "--experimental-vm-modules",
+      "/opt/codex/kernel.js",
+      "--session-id",
+      "example"
+    ],
+    "cwd": "/Users/fixture/Documents/Codex/2026-10-18/on"
+  },
+  {
+    "pid": 1033,
+    "ppid": 900,
+    "started_at": "2026-10-18T11:00:00Z",
+    "rss_bytes": 100,
+    "cmdline": "/opt/bin/codex sandbox -c shell_environment_policy.inherit=\"all\" -c default_permissions=\"node_repl\"",
+    "argv": [
+      "/opt/bin/codex",
+      "sandbox",
+      "-c",
+      "shell_environment_policy.inherit=\"all\"",
+      "-c",
+      "default_permissions=\"node_repl\""
+    ],
+    "cwd": "/Users/fixture/Documents/Codex/2026-10-18/on"
+  },
+  {
+    "pid": 1133,
+    "ppid": 1033,
+    "started_at": "2026-10-18T11:00:00Z",
+    "rss_bytes": 100,
+    "cmdline": "node --experimental-vm-modules /opt/codex/trusted-worker.js",
+    "argv": [
+      "node",
+      "--experimental-vm-modules",
+      "/opt/codex/trusted-worker.js"
+    ],
+    "cwd": "/Users/fixture/Documents/Codex/2026-10-18/on"
+  }
+]

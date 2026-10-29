@@ -67,7 +67,7 @@ function SessionPanel({ session: s, relationships, onSelect, onOpen, onReply }: 
   const quiet = Math.max(0, Date.now() - Date.parse(s.lastActivity));
   return <Stack gap="sm">
     <Group gap="xs" wrap="nowrap" justify="space-between">
-      <StatusBadge variant="pill" state={s.state} label={s.label} inferred={s.inferred} />
+      <StatusBadge variant="pill" state={s.state} label={s.label} inferred={s.inferred} evidence={s.evidence} />
       <Text ff="monospace" fz="xs" c="dimmed">#{s.id}</Text>
     </Group>
     <Title order={2} fz="md" lh={1.3} style={{ textWrap: "balance", letterSpacing: "-0.01em" }}>{s.title}</Title>

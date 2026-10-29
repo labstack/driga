@@ -200,7 +200,13 @@ func label(in StateInput, now time.Time, th Thresholds) (label string, heuristic
 			return "working", false, "API call " + stateDuration(now.Sub(*in.LastAPIRequest)) + " ago"
 		}
 		if in.Obs.RegistryStatus == "busy" {
-			if age < th.StuckAfter {
+			// A claimed background conversation may be busy before a transcript
+			// exists. The registry transition is also positive activity evidence.
+			busyAge := now.Sub(claudeBusyActivity(in.Obs))
+			if in.Obs.RegistryUpdatedAt.After(in.Obs.LastActivityAt) {
+				quiet = "registry updated " + stateDuration(busyAge) + " ago"
+			}
+			if busyAge < th.StuckAfter {
 				return "working", false, "busy, " + quiet
 			}
 			if in.Proc == nil {
@@ -264,6 +270,13 @@ func label(in StateInput, now time.Time, th Thresholds) (label string, heuristic
 	default:
 		return "unknown", false, "unrecognized adapter"
 	}
+}
+
+func claudeBusyActivity(o model.SessionObs) time.Time {
+	if o.RegistryUpdatedAt.After(o.LastActivityAt) {
+		return o.RegistryUpdatedAt
+	}
+	return o.LastActivityAt
 }
 
 // claudeOpenTurn compares positive work signals with explicit turn closures.

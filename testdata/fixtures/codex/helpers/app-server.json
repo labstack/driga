@@ -1,0 +1,98 @@
+[
+  {
+    "pid": 1035,
+    "ppid": 1,
+    "started_at": "2026-10-18T11:00:00Z",
+    "rss_bytes": 100,
+    "cmdline": "/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex -c features.code_mode_host=true app-server --analytics-default-enabled -c plugins.example.enabled=true",
+    "argv": [
+      "/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex",
+      "-c",
+      "features.code_mode_host=true",
+      "app-server",
+      "--analytics-default-enabled",
+      "-c",
+      "plugins.example.enabled=true"
+    ],
+    "cwd": "/"
+  },
+  {
+    "pid": 1040,
+    "ppid": 1035,
+    "started_at": "2026-10-18T11:00:00Z",
+    "rss_bytes": 100,
+    "cmdline": "claude mcp serve",
+    "argv": [
+      "claude",
+      "mcp",
+      "serve"
+    ],
+    "cwd": "/"
+  },
+  {
+    "pid": 1041,
+    "ppid": 1035,
+    "started_at": "2026-10-18T11:00:00Z",
+    "rss_bytes": 100,
+    "cmdline": "node /opt/plugin/server.js",
+    "argv": [
+      "node",
+      "/opt/plugin/server.js"
+    ],
+    "cwd": "/"
+  },
+  {
+    "pid": 1042,
+    "ppid": 1035,
+    "started_at": "2026-10-18T11:00:00Z",
+    "rss_bytes": 100,
+    "cmdline": "java -cp /opt/maestro/lib/* maestro.cli.AppKt mcp",
+    "argv": [
+      "java",
+      "-cp",
+      "/opt/maestro/lib/*",
+      "maestro.cli.AppKt",
+      "mcp"
+    ],
+    "cwd": "/"
+  },
+  {
+    "pid": 1043,
+    "ppid": 1035,
+    "started_at": "2026-10-18T11:00:00Z",
+    "rss_bytes": 100,
+    "cmdline": "codex-code-mode-host",
+    "argv": [
+      "codex-code-mode-host"
+    ],
+    "cwd": "/"
+  },
+  {
+    "pid": 1044,
+    "ppid": 1043,
+    "started_at": "2026-10-18T11:00:00Z",
+    "rss_bytes": 100,
+    "cmdline": "codex app-server --listen stdio://",
+    "argv": [
+      "codex",
+      "app-server",
+      "--listen",
+      "stdio://"
+    ],
+    "cwd": "/"
+  },
+  {
+    "pid": 1045,
+    "ppid": 1043,
+    "started_at": "2026-10-18T11:00:00Z",
+    "rss_bytes": 100,
+    "cmdline": "codex sandbox -c default_permissions=\"node_repl\"",
+    "argv": [
+      "codex",
+      "sandbox",
+      "-c",
+      "default_permissions=\"node_repl\""
+    ],
+    "cwd": "/"
+  }
+]

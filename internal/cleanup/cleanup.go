@@ -182,7 +182,7 @@ func read(ctx context.Context, e Env) (snapshot, error) {
 			if s.cwds[p.PID] == "" && e.Plat.Alive(p.PID, p.StartTime) {
 				// Only a process identified as a non-agent may be skipped: one
 				// with no readable command line could be an agent.
-				sig, ok := sigs.Match(p.Cmdline, p.Exe)
+				sig, ok := sigs.Match(p.Cmdline, p.Exe, p.Argv)
 				if p.Cmdline == "" && p.Exe == "" || ok && agentSignature(sig) {
 					return s, fmt.Errorf("cannot inspect cwd for live process %d", p.PID)
 				}

@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -116,5 +118,21 @@ func TestDashboardAPI(t *testing.T) {
 	}
 	if w := postJSON(s, "/app/api/open", `{"id":"`+created.ID+`"}`); w.Code != 404 {
 		t.Errorf("open deleted: %d", w.Code)
+	}
+}
+
+func TestDashboardOpenNativeWithoutOrigin(t *testing.T) {
+	s, err := New(appSource{}, Options{Dashboards: dashboard.New(t.TempDir())})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := httptest.NewRequest(http.MethodPost, "mygo://localhost/app/api/open", strings.NewReader(`{"id":"header"}`))
+	r.RemoteAddr = "mygo:1"
+	r.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	s.ServeHTTP(w, r)
+	var f panel.Fragment
+	if w.Code != http.StatusOK || json.Unmarshal(w.Body.Bytes(), &f) != nil || f.ID != panel.HeaderID || len(f.Results) == 0 {
+		t.Fatalf("native dashboard open: %d %s", w.Code, w.Body)
 	}
 }

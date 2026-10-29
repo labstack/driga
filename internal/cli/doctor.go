@@ -193,13 +193,13 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 		} else {
 			sigs, _ := signatures.Load(nil)
 			for _, p := range procs {
-				sig, ok := sigs.Match(p.Cmdline, p.Exe)
+				sig, ok := sigs.Match(p.Cmdline, p.Exe, p.Argv)
 				if p.Agent == "copilot" || ok && sig.Agent == "copilot" {
 					copilotSeen = true
 				}
 			}
 			for _, p := range procs {
-				sig, ok := sigs.Match(p.Cmdline, p.Exe)
+				sig, ok := sigs.Match(p.Cmdline, p.Exe, p.Argv)
 				if p.Agent == "agy" || ok && sig.Agent == "agy" {
 					add("agy", "info", "process-level (schema not yet supported)", "")
 					break

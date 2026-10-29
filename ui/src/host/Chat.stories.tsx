@@ -27,16 +27,43 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+async function assertSuggestionLabels(root: HTMLElement) {
+  await document.fonts.ready;
+  const names = ["Is anything stuck?", "What needs me first, and why?", "What finished since I was away, and is it safe to merge?", "Make a dashboard for the project I am working on", "Which processes can I reclaim?"];
+  const labels = [...root.querySelectorAll<HTMLElement>(".mantine-Button-label")].filter(label => names.includes(label.textContent ?? ""));
+  expect(labels).toHaveLength(4);
+  for (const label of labels) {
+    const style = getComputedStyle(label);
+    expect(Number.parseFloat(style.lineHeight) / Number.parseFloat(style.fontSize), label.textContent!).toBeGreaterThanOrEqual(1.3);
+    expect(style.overflowY, label.textContent!).toBe("visible");
+    expect(label.scrollHeight, label.textContent!).toBeLessThanOrEqual(label.clientHeight);
+  }
+}
+
 export const Brief: Story = {
   args: { inbox: { ...panelOf("inbox", "inbox"), listed: false } },
-  play: async ({ canvas }) => {
+  play: async ({ canvas, canvasElement }) => {
     await expect(await canvas.findByText(/2 sessions need you/)).toBeVisible();
     await expect(canvas.getByRole("button", { name: "What needs me first, and why?" })).toBeVisible();
+    await assertSuggestionLabels(canvasElement);
   },
 };
 export const NothingWaiting: Story = {
   args: { inbox: { ...panelOf("inbox_quiet", "inbox"), listed: true } },
-  play: async ({ canvas }) => { await expect(await canvas.findByText("Nothing is waiting on you.")).toBeVisible(); },
+  play: async ({ canvas, canvasElement }) => {
+    await expect(await canvas.findByText("Nothing is waiting on you.")).toBeVisible();
+    await assertSuggestionLabels(canvasElement);
+  },
+};
+export const WrappedSuggestions: Story = {
+  args: NothingWaiting.args,
+  decorators: [Story => <Box w={260}><Story /></Box>],
+  play: async ({ canvas, canvasElement }) => {
+    await expect(await canvas.findByText("Nothing is waiting on you.")).toBeVisible();
+    await assertSuggestionLabels(canvasElement);
+    const label = canvas.getByRole("button", { name: "What finished since I was away, and is it safe to merge?" }).querySelector<HTMLElement>(".mantine-Button-label")!;
+    expect(label.clientHeight).toBeGreaterThan(Number.parseFloat(getComputedStyle(label).lineHeight) * 1.5);
+  },
 };
 export const Answered: Story = {
   parameters: { service: service({ chat: answered }) },
@@ -65,14 +92,20 @@ export const Decided: Story = {
 export const Confirm: Story = {
   parameters: { service: service({ chat: { ...working, mode: "confirm" } }) },
   play: async ({ canvas }) => {
-    await waitFor(() => expect(canvas.getByLabelText("Current trust mode")).toHaveTextContent(/^Confirm$/));
+    await waitFor(() => expect(canvas.getByLabelText("Current trust mode")).toHaveTextContent(/^Mode: Confirm$/));
+    const mode = canvas.getByLabelText("Current trust mode");
+    expect(getComputedStyle(mode).whiteSpace).toBe("nowrap");
+    expect(mode.getBoundingClientRect().height).toBeLessThan(24);
+    const heading = canvas.getByRole("heading", { name: "Chat" }).getBoundingClientRect();
+    expect(mode.getBoundingClientRect().left).toBeGreaterThan(heading.right);
+    expect(Math.abs(mode.getBoundingClientRect().top - heading.top)).toBeLessThan(4);
     await waitFor(() => expect(canvas.getByRole("button", { name: "Confirm" })).toHaveAttribute("aria-pressed", "true"));
   },
 };
 export const Auto: Story = {
   parameters: { service: service({ chat: { ...working, mode: "auto" } }) },
   play: async ({ canvas }) => {
-    await waitFor(() => expect(canvas.getByLabelText("Current trust mode")).toHaveTextContent(/^Auto$/));
+    await waitFor(() => expect(canvas.getByLabelText("Current trust mode")).toHaveTextContent(/^Mode: Auto$/));
     await expect(canvas.getByRole("button", { name: "Auto" })).toHaveAttribute("aria-pressed", "true");
   },
 };
@@ -80,7 +113,7 @@ export const FullAuto: Story = {
   parameters: { service: service({ chat: { ...working, mode: "full auto", until: new Date(storyNow + 12 * 60_000).toISOString() } }) },
   play: async ({ canvas }) => {
     const mode = await canvas.findByLabelText("Current trust mode");
-    await waitFor(() => expect(mode).toHaveTextContent("Full auto · 12m left"));
+    await waitFor(() => expect(mode).toHaveTextContent("Mode: Full auto · 12m left"));
     await expect(mode.style.color).toBe("var(--mantine-color-danger-text)");
   },
 };

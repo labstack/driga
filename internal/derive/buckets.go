@@ -59,7 +59,7 @@ func PlaceProcesses(procs []model.Proc, sessions []model.Session, sigs *signatur
 	proven := make(map[int32]bool, len(procs))
 	mcp := make(map[int32]bool, len(procs))
 	for _, p := range procs {
-		sig, _ := sigs.Match(p.Cmdline, p.Exe)
+		sig, _ := sigs.Match(p.Cmdline, p.Exe, p.Argv)
 		agentRole := func(role signatures.Role) bool {
 			switch role {
 			case signatures.RoleInteractive, signatures.RoleHeadless, signatures.RoleHost, signatures.RoleService, signatures.RoleHelper:

@@ -241,8 +241,8 @@ var hookParentIdentity = func() (int32, time.Time, error) {
 	if err != nil {
 		return 0, time.Time{}, err
 	}
-	_, cmdMatch := sigs.Match(p.Cmdline, "")
-	_, exeMatch := sigs.Match("", p.Exe)
+	_, cmdMatch := sigs.Match(p.Cmdline, "", p.Argv)
+	_, exeMatch := sigs.Match("", p.Exe, nil)
 	if !cmdMatch && !exeMatch {
 		return 0, time.Time{}, nil
 	}

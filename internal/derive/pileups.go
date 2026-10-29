@@ -86,7 +86,7 @@ func MCPServers(procs []model.Proc, sigs *signatures.Set, now time.Time) MCPServ
 				packages[bin] = d.pkg
 			}
 		}
-		sig, ok := sigs.Match(p.Cmdline, p.Exe)
+		sig, ok := sigs.Match(p.Cmdline, p.Exe, p.Argv)
 		role, agent := sig.Role, sig.Agent
 		if p.Agent != "" && p.Role != "" {
 			role, agent = signatures.Role(p.Role), p.Agent
@@ -99,7 +99,7 @@ func MCPServers(procs []model.Proc, sigs *signatures.Set, now time.Time) MCPServ
 		if !p.StartTime.IsZero() {
 			age = max(0, now.Sub(p.StartTime))
 		}
-		hosts[p.PID] = MCPHost{PID: p.PID, Name: sigs.ProcessName(p.Cmdline, p.Exe), Exe: p.Exe, Cwd: p.Cwd, StartedAt: p.StartTime, Age: age}
+		hosts[p.PID] = MCPHost{PID: p.PID, Name: sigs.ProcessName(p.Cmdline, p.Exe, p.Argv), Exe: p.Exe, Cwd: p.Cwd, StartedAt: p.StartTime, Age: age}
 	}
 	// A global bin shim and a scoped package can identify the same server.
 	// Resolve that alias only when the observed package name is unambiguous.

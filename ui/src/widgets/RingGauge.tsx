@@ -23,9 +23,13 @@ export function RingGauge({ value, max, format, label, caption, thresholds, size
   const pct = Math.round(share * 100);
   const tone = pressureTone(share, thresholds);
   const detail = caption ?? `${format(value)} / ${format(max)}`;
+  const innerDiameter = size * 0.9 - 3 * Math.min(thickness || 12, size / 4);
+  // Budget the widest label (100% or 100) at a generous 0.7em per glyph,
+  // leaving 15% of Mantine's inner diameter clear across fallback fonts.
+  const labelSize = Math.min(11, Math.max(0, innerDiameter) * 0.85 / ((size > 36 ? 4 : 3) * 0.7));
   return <Group gap="sm" wrap="nowrap">
     <RingProgress size={size} thickness={thickness} rootColor="var(--driga-border)" sections={[{ value: pct, color: tone }]} role="img" aria-label={`${label}: ${detail}, ${pct}%`} style={{ flex: "none" }}
-      label={<Text ta="center" size="xs" ff="monospace" fw={500} lh={1} aria-hidden>{pct}%</Text>} />
+      label={<Text ta="center" fz={labelSize} ff="monospace" fw={400} lh={1} aria-hidden>{pct}{size > 36 && "%"}</Text>} />
     <Stack gap={2} style={{ minWidth: 0 }} aria-hidden>
       <Text size="sm" fw={500} lh={1.2} truncate title={label}>{label}</Text>
       <Text size="xs" c="dimmed" ff="monospace" lh={1.2} style={{ whiteSpace: "nowrap" }}>{detail}</Text>

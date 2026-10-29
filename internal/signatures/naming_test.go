@@ -18,15 +18,15 @@ func TestProcessNamePreservesVersions(t *testing.T) {
 		{"/opt/bin/tool", "", "tool"},
 		{"", "", "unknown"},
 	} {
-		if got := s.ProcessName(tc.cmd, tc.exe); got != tc.want {
+		if got := s.ProcessName(tc.cmd, tc.exe, nil); got != tc.want {
 			t.Errorf("%s %s: %q want %q", tc.exe, tc.cmd, got, tc.want)
 		}
 	}
-	sig, ok := s.Match("/Users/fixture/.local/share/claude/versions/2.1.304 --resume", "")
+	sig, ok := s.Match("/Users/fixture/.local/share/claude/versions/2.1.304 --resume", "", nil)
 	if !ok || sig.Agent != "claude" || sig.Role != RoleInteractive {
 		t.Fatalf("versioned signature: %+v %t", sig, ok)
 	}
-	if sig, ok := s.Match("2.1.304 --resume", "/home/fixture/.local/share/claude/versions/2.1.304"); !ok || sig.Agent != "claude" {
+	if sig, ok := s.Match("2.1.304 --resume", "/home/fixture/.local/share/claude/versions/2.1.304", nil); !ok || sig.Agent != "claude" {
 		t.Fatalf("basename argv0: %+v %t", sig, ok)
 	}
 }
@@ -40,7 +40,7 @@ func TestMCPPatternsAreReportOnly(t *testing.T) {
 		if _, ok := s.MCPName(cmd, ""); !ok {
 			t.Fatal("missing MCP evidence", cmd)
 		}
-		if sig, ok := s.Match(cmd, ""); ok {
+		if sig, ok := s.Match(cmd, "", nil); ok {
 			t.Fatalf("MCP report added orphan classification: %+v", sig)
 		}
 	}

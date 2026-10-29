@@ -7,6 +7,7 @@ import { chartTheme, type Option, type Point, type Theme } from "../panels/chart
 import { ChartCard } from "./ChartCard";
 import { heatmap, timeSeries } from "./charts";
 import { MachineCard, type Machine } from "./MachineCard";
+import { RingGauge } from "./RingGauge";
 import { Sparkline } from "./Measure";
 import { SessionCard, type Session } from "./SessionCard";
 import { stateOf, StatusBadge } from "./StatusBadge";
@@ -29,6 +30,39 @@ beforeEach(() => {
 afterEach(async () => { await act(async () => root.unmount()); container.remove(); vi.restoreAllMocks(); });
 
 describe("widget review regressions", () => {
+  it("shows CPU percent once while retaining the accessible gauge value", async () => {
+    await render(<MachineCard machine={{ ...machine, cpuPercent: 19 }} />);
+    expect(container.textContent?.match(/19%/g)).toHaveLength(1);
+    expect(container.textContent).not.toContain("/ 100%");
+    expect(container.querySelector('[role="progressbar"][aria-label="CPU on studio: 19% of 100%, 19%"]')).not.toBeNull();
+  });
+  it("shows unknown plainly and offers an underline only with service evidence", async () => {
+    await render(<StatusBadge state="idle" label="~unknown" inferred />);
+    const word = () => container.querySelector<HTMLElement>(".mantine-Text-root")!;
+    expect(word().textContent).toBe("unknown");
+    expect(word().style.borderBottom).toBe("");
+    await render(<StatusBadge state="idle" label="unknown" inferred evidence="No agent state was reported" />);
+    expect(word().textContent).toBe("unknown");
+    expect(word().style.borderBottom).not.toBe("");
+    expect(container.querySelector('[aria-description="No agent state was reported"]')?.getAttribute("tabindex")).toBe("0");
+    await render(<StatusBadge state="working" inferred evidence="   " />);
+    expect(word().textContent).toBe("~working");
+    expect(word().style.borderBottom).toBe("");
+  });
+  it.each([36, 44])("sizes a full gauge label to fit the %i px ring hole", async size => {
+    await render(<RingGauge value={100} max={100} format={String} label="Memory" size={size} />);
+    const ring = container.querySelector('[role="img"]')!;
+    expect(ring.getAttribute("aria-label")).toBe("Memory: 100 / 100, 100%");
+    const text = ring.querySelector<HTMLElement>(".mantine-Text-root")!;
+    expect(text.style.fontWeight).toBe("400");
+    // Happy DOM has no font metrics. Check the size rule with a conservative
+    // monospace advance; LabelFits measures the actual glyph width in Chromium.
+    const fontSize = Number(text.style.fontSize.match(/([\d.]+)rem/)?.[1]) * 16;
+    expect(fontSize).toBeGreaterThan(0);
+    const circle = ring.querySelector("circle")!;
+    const innerDiameter = Number(circle.getAttribute("r")) * 2 - Number(circle.getAttribute("stroke-width"));
+    expect(fontSize * 0.62 * text.textContent!.length).toBeLessThanOrEqual(innerDiameter);
+  });
   it("does not draw a full disk when its free-space sample is unknown", async () => {
     await render(<MachineCard machine={{ ...machine, diskFree: undefined }} />);
     expect(container.querySelector('[role="img"][aria-label^="Disk:"]')).toBeNull();

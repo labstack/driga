@@ -78,7 +78,7 @@ func FindOrphans(idx ProcIndex, sessions []model.Session, sigs *signatures.Set, 
 		protected[pid] = p.Role == string(signatures.RoleInternal) || p.Role == string(signatures.RoleService)
 		if sigs != nil {
 			if sig, ok := classifier.Match(p); ok {
-				protected[pid] = protected[pid] || sig.Role == signatures.RoleInternal || sig.Role == signatures.RoleService
+				protected[pid] = protected[pid] || sig.Role == signatures.RoleInternal || sig.Role == signatures.RoleService || sig.ProtectTree
 				if sig.Role != signatures.RoleApp {
 					continue
 				}

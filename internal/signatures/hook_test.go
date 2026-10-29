@@ -13,8 +13,8 @@ func TestLoadAgentSkipsMCPPatterns(t *testing.T) {
 			t.Fatal("hook compiled unused MCP patterns, or full set lost them")
 		}
 		for _, cmd := range []string{agent, agent + " --help"} {
-			got, ok := s.Match(cmd, "")
-			want, found := full.Match(cmd, "")
+			got, ok := s.Match(cmd, "", nil)
+			want, found := full.Match(cmd, "", nil)
 			if ok != found || got.Name != want.Name || got.Role != want.Role {
 				t.Fatal(cmd, got, want)
 			}
