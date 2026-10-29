@@ -18,6 +18,8 @@ import (
 )
 
 type tabRow struct {
+	burst       *chat.PromptBurst
+	grant       *chat.GrantDecision
 	prompt      *chat.Prompt
 	machineText string
 	mcpCommand  *derive.MCPCommand
@@ -48,7 +50,7 @@ func (m *app) tabVisible(tab int) bool {
 	case 1:
 		return len(m.snap.Projects.Rows) > 0
 	case 2:
-		return len(m.snap.Inbox.Rows) > 0 || len(m.prompts) > 0
+		return len(m.snap.Inbox.Rows) > 0 || len(m.prompts) > 0 || len(m.bursts) > 0 || len(m.grantHistory) > 0
 	case 3:
 		return len(m.snap.Orphans.Rows) > 0
 	case 4:
@@ -250,6 +252,27 @@ func (m *app) rebuild() {
 	case 2:
 		titles = []string{"", "REASON", "TOOL", "WAIT / AGE", "PROJECT · BRANCH", "TITLE / DETAIL"}
 		weights = []int{2, 18, 8, 10, 18, 32}
+		for _, g := range m.bursts {
+			if len(g.Members) > 1 {
+				copy := g
+				add(tabRow{key: g.ID, burst: &copy, cwd: g.Cwd, cells: []string{"", "permission burst", "", duration(m.opts.Now().Sub(g.OpenedAt)), g.Cwd, fmt.Sprintf("Allow all %d · Enter inspect every input", len(g.Members))}})
+			}
+		}
+		for _, p := range m.attentionPrompts() {
+			if m.promptBurst(p.ID) != nil {
+				continue
+			}
+			copy := p
+			add(tabRow{key: p.ID, prompt: &copy, cwd: p.Cwd, cells: []string{"", "permission", p.Tool, "", p.Cwd, p.Detail()}})
+		}
+		for _, g := range m.grantHistory {
+			copy := g
+			state := "r revoke grant"
+			if g.Revoked {
+				state = "grant retired"
+			}
+			add(tabRow{key: g.GrantID + g.ActionID + g.PromptID, grant: &copy, cells: []string{"", g.Attribution, "", "", g.Session + g.Conversation, state}})
+		}
 		for _, r := range m.snap.Inbox.Rows {
 			if attention.Active(r.InboxItem) && !r.Historical {
 				continue

@@ -1,4 +1,4 @@
-import { normalize, type Dashboard, type Fragment, type Panel, type Prompt } from "../panels/types";
+import { normalize, type Dashboard, type Fragment, type Panel, type Prompt, type PromptBurst } from "../panels/types";
 
 export class APIError extends Error {
   constructor(message: string, readonly status: number) { super(message); }
@@ -68,7 +68,10 @@ export function action(body: Record<string, unknown>): Promise<unknown> {
 export type ChatMessage = { id: string; role: string; text: string; status: string; html?: string; created_at: string };
 export type ChatMode = "confirm" | "auto" | "full auto";
 export type ChatEvent = { seq: number; kind: string; message?: ChatMessage; message_id?: string; text?: string; action?: ChatAction; mode?: ChatMode; until?: string };
-export type ChatAction = { id: string; tool: string; title: string; input: unknown; directory: string; status: string; decided_by?: string; result?: string };
+export type ProcessRow = { pid: number; owner: string; started_at: string; executable: string; argv: string[]; command_line: string; memory_bytes: number; reason?: string };
+export type CommandCard = { requested: { argv?: string[]; script?: string; cwd: string; timeout_seconds: number; network: boolean }; effective: string[][]; cwd: string; class: string; summary: string; boundary: string; error?: string; targets: ProcessRow[]; count: number; memory_bytes: number; force: boolean; stopped?: ProcessRow[]; vanished?: ProcessRow[]; skipped?: ProcessRow[]; survivors?: ProcessRow[] };
+export type GrantDecision = { grant_id: string; action_id?: string; prompt_id?: string; conversation?: string; session?: string; time: string; attribution: string; revoked?: boolean };
+export type ChatAction = { id: string; tool: string; title: string; input: unknown; directory: string; status: string; decided_by?: string; result?: string; command?: CommandCard; delegated?: Prompt; grant_id?: string; grant_eligible?: boolean; grant_pattern?: string; grant_expires_at?: string };
 export type ChatState = { conversation: { id: string }; messages: ChatMessage[]; events: ChatEvent[]; actions: ChatAction[]; cursor: number; reset: boolean; active?: boolean; mode: ChatMode; until?: string };
 
 export const chat = {
@@ -77,7 +80,13 @@ export const chat = {
   send: (id: string, text: string, context: Record<string, unknown>) => post("/chat/api/send", { id, text, context }),
   stop: (id: string) => post("/chat/api/stop", { id }),
   decide: (id: string, action: string, allow: boolean) => post("/chat/api/decide", { id, action, allow }),
+  decideSimilar: (id: string, action: string) => post("/chat/api/decide", { id, action, allow: true, similar: true }),
+  answerSimilar: (id: string) => post("/chat/api/prompt-answer", { id, allow: true, similar: true }),
+  revokeGrant: (id: string) => post("/chat/api/grant-revoke", { id }),
+  grantHistory: () => get<GrantDecision[] | null>("/chat/api/grant-history").then(h => h ?? []),
   setMode: (id: string, mode: ChatMode) => post("/chat/api/mode", { id, mode }),
+  bursts: () => get<PromptBurst[] | null>("/chat/api/prompt-bursts").then(b => b ?? []),
+  decideBurst: (id: string, members: string[], allow: boolean) => post("/chat/api/burst-decide", { id, members, allow }),
   prompts: () => get<Prompt[] | null>("/chat/api/prompts").then(p => p ?? []),
   answer: (id: string, allow: boolean) => post("/chat/api/prompt-answer", { id, allow }),
   wait: (id: string, after: number, signal: AbortSignal) => get<ChatState>(`/chat/api/wait?id=${encodeURIComponent(id)}&after=${after}`, signal),

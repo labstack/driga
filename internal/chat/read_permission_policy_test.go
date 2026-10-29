@@ -52,13 +52,13 @@ func TestOutsideReadsAskByMode(t *testing.T) {
 				in := Approval{Conversation: r.Conversation, Token: r.Token, Tool: tool, Input: json.RawMessage(`{"file_path":"/etc/hosts","command":"head /etc/hosts"}`)}
 				done := make(chan Permission, 1)
 				go func() { p, _ := b.Approve(ctx, in); done <- p }()
-				if mode != FullAuto {
+				{
 					card := waitAction(t, b, r.Conversation)
 					if err := b.Decide(ctx, r.Conversation, card.ID, false); err != nil {
 						t.Fatal(err)
 					}
 				}
-				if p := <-done; (p.Behavior == "allow") != (mode == FullAuto) {
+				if p := <-done; p.Behavior != "deny" {
 					t.Fatal(p)
 				}
 			})

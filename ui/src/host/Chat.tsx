@@ -1,6 +1,7 @@
-import { ActionIcon, Box, Button, Group, Modal, Paper, ScrollArea, Stack, Text, Textarea, Title } from "@mantine/core";
+import { Accordion, ActionIcon, Box, Button, Group, Modal, Paper, ScrollArea, Stack, Text, Textarea, Title } from "@mantine/core";
 import { Check, Sparkle, X } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
+import { bytes } from "../panels/format";
 import { useHost } from "../panels/host";
 import { PanelView, type Act } from "../panels/PanelView";
 import type { Panel, Result } from "../panels/types";
@@ -15,18 +16,25 @@ function said(result?: string): boolean {
   return text !== "" && !["{}", "[]", "null", '""', '"{}"', '"[]"'].includes(text);
 }
 
-function ActionCard({ conversation, action }: { conversation: string; action: ChatAction }) {
+export function ActionCard({ conversation, action }: { conversation: string; action: ChatAction }) {
   const pending = action.status === "pending";
   const [busy, setBusy] = useState(false);
+  const [revoked, setRevoked] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const deciding = useRef(false);
-  const decide = async (allow: boolean) => {
+  const identity = `${conversation}/${action.id}/${action.status}`;
+  const current = useRef(identity);
+  current.current = identity;
+  useEffect(() => { deciding.current = false; setBusy(false); setProblem(null); setRevoked(false); }, [identity]);
+  const decide = async (allow: boolean, similar = false) => {
+    const started = identity;
     if (deciding.current) return;
     deciding.current = true;
     setBusy(true);
     setProblem(null);
-    try { await chat.decide(conversation, action.id, allow); }
+    try { if (similar) await chat.decideSimilar(conversation, action.id); else await chat.decide(conversation, action.id, allow); }
     catch (e) {
+      if (current.current !== started) return;
       setProblem((e as Error).message);
       deciding.current = false;
       setBusy(false);
@@ -34,15 +42,30 @@ function ActionCard({ conversation, action }: { conversation: string; action: Ch
   };
   return <Paper withBorder p="xs" radius="md" style={{ background: "var(--driga-raised)", borderColor: pending ? "var(--mantine-color-warning-filled)" : undefined }}>
     <Text size="xs" ff="monospace" style={{ overflowWrap: "anywhere" }}>{action.tool} · {action.status}</Text>
-    <Text size="sm" fw={600} truncate="end" title={action.title}>{action.title}</Text>
-    {/* Input is the broker's live approval payload, never a title/snippet.
-        History after a restart contains only what capture_text retained. */}
-    <Text component="pre" size="xs" ff="monospace" my="xs" style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{JSON.stringify(action.input, null, 2)}</Text>
+    <Text size="sm" fw={600} style={{ overflowWrap: "anywhere" }}>{action.command?.summary ?? action.title}</Text>
+    {action.command ? <Stack gap={4} mt="xs">
+      <Text size="xs">{action.command.class} · {action.command.boundary}</Text>
+      <Text component="pre" size="xs" ff="monospace" style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{action.command.requested.script ?? JSON.stringify(action.command.requested.argv)}</Text>
+      {action.command.effective.map((argv, i) => <Text key={i} size="xs" ff="monospace" style={{ overflowWrap: "anywhere" }}>Effective: {JSON.stringify(argv)}</Text>)}
+      <Text size="xs" c="dimmed">Timeout: {action.command.requested.timeout_seconds}s</Text>
+      {action.command.error && <Text role="alert" size="xs" c="danger">{action.command.error}</Text>}
+      {[{ label: `${action.command.count} process targets`, rows: action.command.targets }, ...(["stopped", "vanished", "skipped", "survivors"] as const).map(label => ({ label, rows: action.command![label] ?? [] }))].filter(group => group.rows.length > 0).map(group => <Accordion key={group.label} variant="contained" transitionDuration={0}>
+        <Accordion.Item value="targets"><Accordion.Control aria-label={`Inspect ${group.label}`}>{group.label}</Accordion.Control><Accordion.Panel>
+          <Box mah={300} tabIndex={0} aria-label={group.label} style={{ overflowY: "auto" }}><Stack gap="xs">{group.rows.map(row => <Box key={row.pid}>
+            <Text size="xs" fw={600}>PID {row.pid} · {row.owner} · {bytes(row.memory_bytes)}</Text>
+            <Text size="xs" ff="monospace" style={{ overflowWrap: "anywhere" }}>{row.started_at} · {row.executable}{"\n"}{JSON.stringify(row.argv)} · {row.command_line}{row.reason && ` · ${row.reason}`}</Text>
+          </Box>)}</Stack></Box>
+        </Accordion.Panel></Accordion.Item>
+      </Accordion>)}
+    </Stack> : <Text component="pre" size="xs" ff="monospace" my="xs" style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{JSON.stringify(action.input, null, 2)}</Text>}
+    {action.delegated && <Text component="pre" size="xs" ff="monospace" style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{action.delegated.tool} · {action.delegated.cwd}{"\n"}{JSON.stringify(action.delegated.input, null, 2)}</Text>}
     {action.directory && <Text size="xs" c="dimmed" style={{ overflowWrap: "anywhere" }}>in {action.directory}</Text>}
     {action.decided_by && <Text size="xs" c="dimmed">Decided by {action.decided_by}</Text>}
     {said(action.result) && <Text size="xs" c="dimmed" mt={2} style={{ overflowWrap: "anywhere" }}>{action.result}</Text>}
+    {action.grant_id && <Button size="compact-xs" variant="subtle" disabled={revoked} onClick={() => { const started = identity; void chat.revokeGrant(action.grant_id!).then(() => { if(current.current === started) setRevoked(true); }, e => { if(current.current === started) setProblem((e as Error).message); }); }}>{revoked ? "Grant revoked" : "Revoke grant"}</Button>}
+    {pending && action.grant_eligible && <Stack gap={4} mt="xs"><Text size="xs" ff="monospace" style={{ overflowWrap: "anywhere" }}>{action.grant_pattern}</Text><Text size="xs" c="dimmed">Expires {action.grant_expires_at}</Text><Button variant="light" disabled={busy} onClick={() => void decide(true, true)}>Allow similar for this conversation</Button></Stack>}
     {pending && <Group gap={6} mt="xs">
-      <Button disabled={busy} aria-label={`Allow ${action.title}`} onClick={() => void decide(true)}>Allow</Button>
+      <Button disabled={busy || !!action.command?.error} aria-label={`Allow ${action.title}`} onClick={() => void decide(true)}>Allow</Button>
       <Button variant="default" disabled={busy} aria-label={`Deny ${action.title}`} onClick={() => void decide(false)}>Deny</Button>
     </Group>}
     {problem && <Text size="xs" c="danger" role="alert">{problem}</Text>}
@@ -260,7 +283,7 @@ export function Chat({ inbox, act, ask, onOpen, onClose }: {
       </Group>
     </Box>
     {fullAsk && <Modal opened onClose={() => setFullAsk(false)} title="Enable Full auto?" centered>
-      <Text size="sm">Full auto runs every action without asking for 30 minutes</Text>
+      <Text size="sm">Full auto runs reads and sandboxed Other commands automatically for 30 minutes. Process and Destructive commands still ask.</Text>
       <Group justify="flex-end" mt="md">
         <Button variant="default" onClick={() => setFullAsk(false)}>Cancel</Button>
         <Button color="danger" onClick={() => void setTrustMode("full auto")}>Enable Full auto</Button>

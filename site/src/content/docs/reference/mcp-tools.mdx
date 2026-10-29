@@ -1,7 +1,7 @@
 ---
 title: "MCP tools"
 description: "Every tool driga's MCP server exposes, with its inputs, generated from the server's tools/list answer."
-summary: "The 14 read-only tools and 11 panel and dashboard tools `driga mcp` serves to your agents and the 8 tools only Driga's own Chat receives, with their inputs."
+summary: "The 14 read-only tools and 11 panel and dashboard tools `driga mcp` serves to your agents and the 9 tools only Driga's own Chat receives, with their inputs."
 read_when:
   - "You are connecting an agent to driga over MCP and want to know what it can call."
   - "You need a tool's exact input fields, defaults or limits."
@@ -313,6 +313,7 @@ see [Chat and actions](/guides/chat).
 | [`jump`](#jump) | no |
 | [`kill`](#kill) | no |
 | [`list_prompts`](#list_prompts) | yes |
+| [`run_command`](#run_command) | no |
 | [`summarize`](#summarize) | no |
 
 ### ack_inbox
@@ -326,7 +327,7 @@ Acknowledge a local inbox id or all local items.
 
 ### answer_prompt
 
-Answer one pending local Claude permission prompt. Always asks in Auto.
+Answer one pending local Claude permission prompt. Always requires a person in every mode.
 
 | Input | Type | Required | Description |
 |---|---|---|---|
@@ -361,7 +362,7 @@ Jump to a local session terminal. Never types into the terminal.
 
 ### kill
 
-Kill a local agent session or orphan id after identity and idle verification. Force also escalates survivors.
+Kill a local agent session or orphan id after identity and idle verification. Force is refused here; use run_command for a second card over surviving identities.
 
 | Input | Type | Required | Description |
 |---|---|---|---|
@@ -374,6 +375,18 @@ Kill a local agent session or orphan id after identity and idle verification. Fo
 Read pending local Claude permission prompts. Inputs are visible only under snippets capture.
 
 No inputs.
+
+### run_command
+
+Run one local bounded command through broker preparation and approval. Use literal argv or an explicit shell script; 120 second default, 600 maximum. Process and destructive commands always need a person.
+
+| Input | Type | Required | Description |
+|---|---|---|---|
+| `argv` | array |  |  |
+| `cwd` | string |  |  |
+| `network` | boolean |  |  |
+| `script` | string |  | Must not be empty. |
+| `timeout_seconds` | integer |  | Range 0–600. |
 
 ### summarize
 

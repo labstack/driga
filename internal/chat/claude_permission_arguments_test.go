@@ -21,7 +21,7 @@ echo '{"type":"result","result":"answer"}'`)
 	}
 	raw, _ := os.ReadFile(record + ".args")
 	args := string(raw)
-	for _, want := range []string{"--tools\nRead,Glob,Grep,TodoWrite\n", "--permission-prompts\nhost\n", "--permission-prompt-tool\nmcp__driga__approve\n", "TodoWrite,mcp__driga__list_prompts"} {
+	for _, want := range []string{"--tools\nRead,Glob,Grep,TodoWrite\n", "--permission-prompts\nhost\n", "--permission-prompt-tool\nmcp__driga__approve\n", "TodoWrite,mcp__driga__list_prompts,mcp__driga__run_command"} {
 		if !strings.Contains(args, want) {
 			t.Fatal("missing", want, args)
 		}
@@ -45,8 +45,7 @@ echo '{"type":"result","result":"answer"}'`)
 	}
 }
 
-// Chat that can act reads files but never runs commands or writes them: it
-// refuses a claude that offers Bash, Edit or Write anyway.
+// Native command and write tools remain unavailable; commands enter only the broker gateway.
 func TestChatRefusesCommandAndWriteTools(t *testing.T) {
 	for _, tool := range []string{"Bash", "Edit", "Write"} {
 		a, _ := fakeCLI(t, flags+"\n --permission-prompts <host> Permission prompts", `echo '{"type":"system","subtype":"init","mcp_servers":[{"name":"driga","status":"connected"}],"tools":["Read","`+tool+`"]}'

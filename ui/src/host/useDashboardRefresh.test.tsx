@@ -5,8 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Fragment, Prompt } from "../panels/types";
 import { useDashboardRefresh } from "./useDashboardRefresh";
 
-const api = vi.hoisted(() => ({ open: vi.fn(), run: vi.fn(), list: vi.fn(), prompts: vi.fn(), edit: vi.fn() }));
-vi.mock("./api", () => ({ dashboards: api, chat: { prompts: api.prompts } }));
+const api = vi.hoisted(() => ({ open: vi.fn(), run: vi.fn(), list: vi.fn(), prompts: vi.fn(), bursts:vi.fn(), grantHistory: vi.fn().mockResolvedValue([]), edit: vi.fn() }));
+vi.mock("./api", () => ({ dashboards: api, chat: { prompts: api.prompts, grantHistory: api.grantHistory, bursts: api.bursts } }));
 const fragment = (id: string, version = 1): Fragment => ({ id, version, dashboard: { name: id, panels: [] }, results: [], history: { attention: [], polls: [] }, observed_at: "2026-03-14T15:00:00Z" });
 const deferred = <T,>() => {
   let resolve!: (value: T) => void;
@@ -25,11 +25,11 @@ function Harness({ id = "home", variables = vars }: { id?: string; variables?: R
 const mount = (id = "home", variables = vars) => act(async () => { root.render(<Harness id={id} variables={variables} />); });
 
 beforeEach(() => {
-  vi.resetAllMocks();
+  vi.resetAllMocks(); api.grantHistory.mockResolvedValue([]);
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   api.open.mockImplementation((id: string) => Promise.resolve(fragment(id)));
   api.run.mockImplementation((d: { name: string }) => Promise.resolve(fragment(d.name)));
-  api.prompts.mockResolvedValue([]);
+  api.prompts.mockResolvedValue([]); api.bursts.mockResolvedValue([]);
   api.list.mockResolvedValue([]);
   container = document.createElement("div");
   document.body.append(container);

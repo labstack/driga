@@ -152,8 +152,14 @@ func TestRetiredPromptActionCard(t *testing.T) {
 		t.Fatal(err)
 	}
 	in := Approval{Conversation: r.Conversation, Token: r.Token, Tool: "mcp__driga__answer_prompt", Input: json.RawMessage(`{"id":"gone","allow":true}`)}
-	if p, err := b.Approve(context.Background(), in); err != nil || p.Behavior != "allow" {
-		t.Fatal(p, err)
+	permission := make(chan Permission, 1)
+	go func() { p, _ := b.Approve(context.Background(), in); permission <- p }()
+	card := waitAction(t, b, r.Conversation)
+	if err := b.Decide(context.Background(), r.Conversation, card.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	if p := <-permission; p.Behavior != "allow" {
+		t.Fatal(p)
 	}
 	id, err := b.Claim(in)
 	if err != nil {
@@ -161,14 +167,14 @@ func TestRetiredPromptActionCard(t *testing.T) {
 	}
 	cancel()
 	<-done
-	if err := b.AnswerApprovedPrompt(in, id); err == nil || err.Error() != "prompt no longer waiting" {
+	if err := b.AnswerApprovedPrompt(in, id); err == nil || err.Error() != "prompt no longer waiting or changed" {
 		t.Fatal(err)
 	}
 	s, err := b.Read(context.Background(), r.Conversation, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s.Actions[0].Status != "failed" || s.Actions[0].Result != "prompt no longer waiting" {
+	if s.Actions[0].Status != "failed" || s.Actions[0].Result != "prompt no longer waiting or changed" {
 		t.Fatal(s.Actions)
 	}
 }

@@ -830,6 +830,7 @@ func (tx *Tx) Prune(now time.Time) error {
 		query string
 		args  []any
 	}{
+		// Command chunks cascade with their action messages and conversations.
 		{"DELETE FROM messages WHERE machine_id=? AND created_at<?", []any{tx.machineID, month}},
 		{"DELETE FROM conversations WHERE machine_id=? AND updated_at<?", []any{tx.machineID, month}},
 		{"DELETE FROM events WHERE machine_id=? AND ts<?", []any{tx.machineID, month}},

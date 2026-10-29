@@ -13,6 +13,14 @@ import (
 // Console group membership is not exposed by Toolhelp: never infer a group ID
 // from a PID or attach and broadcast to somebody else's console.
 func signalIdentity(p model.Proc, sig syscall.Signal) error {
+	return signalChecked(p, sig, false)
+}
+
+func signalSnapshotIdentity(p model.Proc, sig syscall.Signal) error {
+	return signalChecked(p, sig, true)
+}
+
+func signalChecked(p model.Proc, sig syscall.Signal, strict bool) error {
 	h, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION|windows.PROCESS_TERMINATE, false, uint32(p.PID))
 	if err != nil {
 		if err == windows.ERROR_INVALID_PARAMETER {
@@ -21,11 +29,23 @@ func signalIdentity(p model.Proc, sig syscall.Signal) error {
 		return err
 	}
 	defer windows.CloseHandle(h)
+	if strict {
+		now, e := platform.InspectProcessHandle(h, p.PID)
+		if e != nil {
+			return e
+		}
+		if !Owned(now) || !SameIdentity(p, now) {
+			return fmt.Errorf("PID %d: %w", p.PID, errSnapshotIdentityChanged)
+		}
+	}
 	var created, exit, kernel, user windows.Filetime
 	if err := windows.GetProcessTimes(h, &created, &exit, &kernel, &user); err != nil {
 		return err
 	}
 	if p.StartTime.IsZero() || created.Nanoseconds() != p.StartTime.UnixNano() {
+		if strict {
+			return fmt.Errorf("PID %d start time changed: %w", p.PID, errSnapshotIdentityChanged)
+		}
 		return fmt.Errorf("PID %d start time changed", p.PID)
 	}
 	alive := func() bool { var code uint32; return windows.GetExitCodeProcess(h, &code) == nil && code == 259 }

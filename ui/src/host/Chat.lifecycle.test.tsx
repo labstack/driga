@@ -115,7 +115,7 @@ describe("Chat lifecycle", () => {
     await receive(state([], [], { mode: "auto", reset: false, cursor: 2 }));
     await click("Full auto");
     expect(api.setMode).toHaveBeenCalledTimes(1);
-    expect(document.body.textContent).toContain("Full auto runs every action without asking for 30 minutes");
+    expect(document.body.textContent).toContain("Full auto runs reads and sandboxed Other commands automatically for 30 minutes. Process and Destructive commands still ask.");
     const modalClick = async (label: string) => { await act(async () => { [...document.body.querySelectorAll("button")].find(b => b.textContent === label)!.click(); }); };
     await modalClick("Cancel");
     expect(api.setMode).toHaveBeenCalledTimes(1);

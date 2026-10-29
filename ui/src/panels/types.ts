@@ -57,7 +57,9 @@ export type Fragment = { leftover_count?: number;
 };
 
 /** Prompt is a pending Claude permission prompt, answered from the inbox. */
-export type Prompt = { id: string; session: string; session_id?: number; cwd: string; tool: string; input?: unknown; created_at: string };
+export type Prompt = { id: string; session: string; session_id?: number; cwd: string; tool: string; input?: unknown; created_at: string; grant_eligible?: boolean; grant_pattern?: string; grant_expires_at?: string };
+
+export type PromptBurst = { id: string; session: string; cwd: string; opened_at: string; members: { id: string; input_hash: string; prompt: Prompt }[] };
 
 /** isFragment checks the shape a tool result must have before it renders. */
 export function isFragment(value: unknown): value is Fragment {

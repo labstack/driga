@@ -5,7 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/labstack/driga/internal/chat"
+	"github.com/labstack/driga/internal/command"
+	"net"
+	"net/http"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -15,6 +20,7 @@ import (
 	"github.com/labstack/driga/internal/config"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/platform"
+	"github.com/labstack/driga/internal/secfile"
 	"github.com/labstack/driga/internal/spool"
 	"github.com/labstack/driga/internal/store"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -158,6 +164,15 @@ func TestChatListPromptsOnlyWithActions(t *testing.T) {
 						found = true
 					}
 				}
+				commandFound := false
+				for _, tool := range listing.Tools {
+					if tool.Name == "run_command" {
+						commandFound = true
+					}
+				}
+				if commandFound != actions {
+					t.Fatalf("actions=%t: run_command=%t", actions, commandFound)
+				}
 				if found != actions {
 					t.Fatalf("actions=%t: advertised list_prompts=%t", actions, found)
 				}
@@ -211,5 +226,56 @@ func TestAgentsKillAndChatShareIdentityAndIdleChecks(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestRunCommandBrokerDispatch(t *testing.T) {
+	readEnv(t)
+	dir := t.TempDir()
+	if err := secfile.Protect(dir); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "broker.sock")
+	listener, err := net.Listen("unix", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	if runtime.GOOS != "windows" {
+		if err = os.Chmod(path, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	calls := make(chan chat.Approval, 2)
+	server := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/run-command" {
+			http.Error(w, "wrong route", 400)
+			return
+		}
+		var in chat.Approval
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			http.Error(w, "bad request", 400)
+			return
+		}
+		calls <- in
+		_ = json.NewEncoder(w).Encode(command.Result{Output: "broker output"})
+	})}
+	go server.Serve(listener)
+	defer server.Close()
+	t.Setenv("DRIGA_CHAT_SOCKET", path)
+	t.Setenv("DRIGA_CHAT_CONVERSATION", "conversation")
+	t.Setenv("DRIGA_CHAT_TOKEN", "turn-token")
+	marker := filepath.Join(dir, "must-not-exist")
+	raw, _ := json.Marshal(map[string]any{"script": "echo executed > " + marker, "cwd": dir})
+	result, err := chatAction(&Globals{})(context.Background(), "run_command", raw)
+	if err != nil || !strings.Contains(result, "broker output") {
+		t.Fatal(result, err)
+	}
+	in := <-calls
+	if in.Tool != "mcp__driga__run_command" || in.Token != "turn-token" || in.Conversation != "conversation" || in.ToolUseID == "" || string(in.Input) != string(raw) {
+		t.Fatal(in)
+	}
+	if _, err = os.Stat(marker); !os.IsNotExist(err) {
+		t.Fatal("MCP child executed command")
 	}
 }

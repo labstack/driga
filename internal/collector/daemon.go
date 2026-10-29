@@ -282,7 +282,7 @@ func run(ctx context.Context, d Deps, dataDir string) error {
 	}); err != nil {
 		return err
 	}
-	broker, err := chat.New(ctx, st, &chat.Claude{DataDir: dataDir}, chat.Options{Snippets: d.Cfg.CaptureSnippets(), DataDir: dataDir})
+	broker, err := chat.New(ctx, st, &chat.Claude{DataDir: dataDir}, chat.Options{CommandPlatform: d.Plat, Snippets: d.Cfg.CaptureSnippets(), DataDir: dataDir})
 	if err != nil {
 		return err
 	}

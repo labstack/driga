@@ -5,6 +5,8 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 	"unicode/utf16"
 
@@ -24,6 +26,8 @@ type winEntry struct {
 var errWinProcessGone = errors.New("Windows process exited")
 
 type winDetails struct {
+	OwnerSID            string
+	OwnerKnown          bool
 	Start, Kernel, User uint64
 	RSS, Private        uint64
 	Exe, Cmdline        string
@@ -75,6 +79,7 @@ func (p winPlatform) Procs(ctx context.Context) ([]model.Proc, error) {
 			continue
 		}
 		if err == nil {
+			proc.OwnerSID, proc.OwnerKnown = d.OwnerSID, d.OwnerKnown && d.OwnerSID != ""
 			proc.StartTime = winTime(d.Start)
 			proc.CPUSeconds = float64(d.Kernel)/1e7 + float64(d.User)/1e7
 			proc.RSS, proc.Footprint, proc.MemoryMeasure = d.RSS, d.Private, "private_bytes"
@@ -86,6 +91,22 @@ func (p winPlatform) Procs(ctx context.Context) ([]model.Proc, error) {
 		ps = append(ps, proc)
 	}
 	return ps, ctx.Err()
+}
+
+// procOwnerUID parses the kernel status field shared by Linux's live collector
+// and fixtures. Failed/overflowing queries stay unknown; uid zero is valid.
+func procOwnerUID(status []byte) (uint32, bool) {
+	for _, line := range strings.Split(string(status), "\n") {
+		if value, ok := strings.CutPrefix(line, "Uid:"); ok {
+			f := strings.Fields(value)
+			if len(f) == 0 {
+				return 0, false
+			}
+			n, e := strconv.ParseUint(f[0], 10, 32)
+			return uint32(n), e == nil
+		}
+	}
+	return 0, false
 }
 func (p winPlatform) Cwds(ctx context.Context, pids []int32) (map[int32]string, error) {
 	out := make(map[int32]string)

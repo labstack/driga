@@ -19,6 +19,7 @@ func TestSocketApprovalCapabilities(t *testing.T) {
 	}
 	defer client.Close()
 	in := activeApproval(t, b, a, Context{})
+	in.Tool = "mcp__driga__ack_inbox"
 	if err := client.SetMode(context.Background(), in.Conversation, FullAuto); err != nil {
 		t.Fatal(err)
 	}

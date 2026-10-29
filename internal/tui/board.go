@@ -28,7 +28,7 @@ func (m *app) syncBoard() {
 			data.Nodes = append(data.Nodes, n)
 		}
 	}
-	b := view.ProjectAttention(m.snap.Inbox, m.snap.Agents, m.localMachine(), m.prompts).Board(data, time.Hour, m.opts.Now())
+	b := view.ProjectAttention(m.snap.Inbox, m.snap.Agents, m.localMachine(), m.attentionPrompts()).Board(data, time.Hour, m.opts.Now())
 	order := map[string]int{}
 	for i, k := range m.boardOrder {
 		order[k] = i
@@ -189,6 +189,9 @@ func (m *app) boardKey(k string) (tea.Cmd, bool) {
 		if r := m.boardSelected(); r != nil {
 			row := tabRow{machine: r.Node.MachineID, agent: r.Node.ID, key: r.Key, cwd: r.Cwd}
 			if m.flowAttention {
+				if g := m.promptBurst(r.PromptID); g != nil {
+					row.burst = g
+				}
 				for _, p := range m.prompts {
 					if p.ID == r.PromptID {
 						copy := p
@@ -217,8 +220,15 @@ func (m *app) boardKey(k string) (tea.Cmd, bool) {
 		return nil, true
 	case "y", "n":
 		if r := m.boardSelected(); m.flowAttention && r != nil && r.PromptID != "" {
-			if m.boardPromptFocus != r.PromptID || m.opts.Now().Sub(m.boardPromptAt) < 600*time.Millisecond {
+			if m.boardPromptFocus != m.promptArmIdentity(r.PromptID) || m.opts.Now().Sub(m.boardPromptAt) < 600*time.Millisecond {
 				m.status = "Review prompt before answering"
+				return nil, true
+			}
+			if g := m.promptBurst(r.PromptID); g != nil {
+				if k == "y" {
+					return m.decidePromptBurst(*g), true
+				}
+				m.openDetail(tabRow{burst: g})
 				return nil, true
 			}
 			for _, p := range m.prompts {
@@ -248,8 +258,8 @@ func (m *app) armBoardPrompt() {
 		return
 	}
 	r := m.board.Needs[min(m.flowAskCursor, len(m.board.Needs)-1)]
-	if r.PromptID != m.boardPromptFocus {
-		m.boardPromptFocus = r.PromptID
+	if identity := m.promptArmIdentity(r.PromptID); identity != m.boardPromptFocus {
+		m.boardPromptFocus = identity
 		m.boardPromptAt = m.opts.Now()
 	}
 }
@@ -271,7 +281,7 @@ func (m *app) boardLayout() (string, []flowHit) {
 		mode = "Map"
 	}
 	add("Flow  [m Map] [t Timeline] [s Sessions] · " + mode + " · last 60m")
-	hcounts := view.ProjectAttention(m.snap.Inbox, m.snap.Agents, m.localMachine(), m.prompts).Header(m.snap.Orphans, m.snap.Summary)
+	hcounts := view.ProjectAttention(m.snap.Inbox, m.snap.Agents, m.localMachine(), m.attentionPrompts()).Header(m.snap.Orphans, m.snap.Summary)
 	add(fmt.Sprintf("Need you %d · To review %d · Stuck %d", hcounts.NeedYou, hcounts.ToReview, hcounts.Stuck))
 	add(fmt.Sprintf("Leftover %d · Reclaimable %s · Memory %s/%s", hcounts.Leftover, view.HumanBytes(hcounts.Reclaimable), view.HumanBytes(hcounts.MemoryUsed), view.HumanBytes(hcounts.MemoryTotal)))
 	add(view.BoardSpark(b.Spark) + " events/min · updated " + duration(max(time.Duration(0), m.opts.Now().Sub(b.ObservedAt))) + " ago")
@@ -304,6 +314,9 @@ func (m *app) boardLayout() (string, []flowHit) {
 			action = "Tab, then y Allow · n Deny · Enter open full command"
 			if m.flowAttention {
 				action = "y Allow · n Deny · Enter open full command"
+				if g := m.promptBurst(r.PromptID); g != nil {
+					action = fmt.Sprintf("y Allow all %d · Enter inspect / deny one", len(g.Members))
+				}
 			}
 		}
 		add("  " + action)

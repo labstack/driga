@@ -30,6 +30,25 @@ func (m *app) openDetail(r tabRow) {
 		}
 	}
 	switch {
+	case r.burst != nil:
+		g := r.burst
+		identity := burstIdentity(*g)
+		if identity != m.burstFocus {
+			m.burstFocus = identity
+			m.burstAt = m.opts.Now()
+			m.burstIndex = 0
+		}
+		m.burstIndex = min(max(0, m.burstIndex), len(g.Members)-1)
+		fmt.Fprintf(&buf, "Allow all %d · %s · %s\ny Allow all %d · [ / ] select item · n deny selected · scroll for all inputs\n", len(g.Members), clean(g.Session), clean(g.Cwd), len(g.Members))
+		for i, member := range g.Members {
+			mark := " "
+			if i == m.burstIndex {
+				mark = ">"
+			}
+			fmt.Fprintf(&buf, "\n%s Item %d · %s · %s\nInput hash: %s\n%s\n", mark, i+1, clean(member.ID), clean(member.Prompt.Tool), clean(member.InputHash), wrapText(markdownClean(member.Prompt.InputText()), m.width))
+		}
+	case r.grant != nil:
+		fmt.Fprintf(&buf, "%s · %s\nGrant %s · r revoke grant\n", clean(r.grant.Attribution), clean(r.grant.Session+r.grant.Conversation), clean(r.grant.GrantID))
 	case r.prompt != nil:
 		fmt.Fprintf(&buf, "Permission · %s · %s\n%s\ny allow · n deny\n", clean(r.prompt.Session), clean(r.prompt.Tool), wrapText(markdownClean(r.prompt.Detail()), m.width)+"\n\nRaw JSON\n"+wrapText(markdownClean(r.prompt.InputText()), m.width))
 	case r.mcpCommand != nil:

@@ -11,8 +11,16 @@ import { Tabs, TabItem } from "@astrojs/starlight/components";
 
 `driga mcp` serves read views and editable Driga dashboards over stdio. Every response is the same
 schema-2 envelope as `--json`, and reading never acknowledges inbox items. The
-server cannot answer prompts, kill processes or remove anything; those actions
+server has no `run_command` or approval tools and cannot answer prompts, kill processes or remove anything; those actions
 exist only inside Driga's own [Chat](/guides/chat), behind approval cards.
+
+Chat's private `driga mcp --chat` bridge binds requests to an active
+conversation and turn. The service prepares and executes commands through
+its sandbox/identity checks; the MCP child cannot decide cards or create
+grants. Adding `--chat` to an external client's configuration does not grant
+command authority. `driga ask` also stays read-only. See
+[Chat commands and approvals](/guides/chat/#commands) for trust modes,
+process snapshots, platform availability and `driga doctor` remediation.
 
 Keep the installed `driga` binary on the client's `PATH`, and run the
 Driga service for history and merged fleet data. Without one, tools answer from a

@@ -8,10 +8,10 @@ import { PanelView } from "../panels/PanelView";
 import { useHost } from "../panels/host";
 import { App } from "./App";
 
-const api = vi.hoisted(() => ({ open: vi.fn(), run: vi.fn(), list: vi.fn(), prompts: vi.fn(), edit: vi.fn() }));
+const api = vi.hoisted(() => ({ open: vi.fn(), run: vi.fn(), list: vi.fn(), prompts: vi.fn(), bursts:vi.fn(), grantHistory:vi.fn(), edit: vi.fn() }));
 vi.mock("./api", () => ({
   dashboards: { open: api.open, run: api.run, list: api.list, edit: api.edit },
-  chat: { prompts: api.prompts }, action: vi.fn(), confirmedAction: vi.fn(), confirm: vi.fn(),
+  chat: { bursts:api.bursts, grantHistory:api.grantHistory, prompts: api.prompts }, action: vi.fn(), confirmedAction: vi.fn(), confirm: vi.fn(),
 }));
 vi.mock("./ClustersHeader", () => ({ ClustersHeader: ({ onToggleChat, search, data }: { onToggleChat: () => void; search: ReactNode; data: { checkedAt: string } | null }) => <><button onClick={onToggleChat}>Toggle Chat</button><output data-testid="header">{data?.checkedAt}</output>{search}</> }));
 vi.mock("./Search", () => ({ Search: ({ open }: { open: (id: string) => void }) => <><button onClick={() => open("other")}>Other dashboard</button><button onClick={() => open("home")}>Home dashboard</button></> }));
@@ -48,7 +48,7 @@ beforeEach(() => {
   api.open.mockImplementation((id: string) => Promise.resolve(fragment(id)));
   api.run.mockResolvedValue(fragment("run"));
   api.list.mockResolvedValue([]);
-  api.prompts.mockResolvedValue([]);
+  api.prompts.mockResolvedValue([]); api.bursts.mockResolvedValue([]); api.grantHistory.mockResolvedValue([]);
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);

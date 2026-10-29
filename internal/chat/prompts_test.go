@@ -119,14 +119,14 @@ func TestPromptChatCaptureAndGate(t *testing.T) {
 				}
 				permissions := make(chan Permission, 1)
 				go func() { p, _ := Bridge(ctx, r.Socket, in); permissions <- p }()
-				if mode != FullAuto {
+				{
 					a := waitAction(t, b, r.Conversation)
 					if err := b.Decide(ctx, r.Conversation, a.ID, allow); err != nil {
 						t.Fatal(err)
 					}
 				}
 				p := <-permissions
-				if mode != FullAuto && !allow {
+				if !allow {
 					if p.Behavior != "deny" {
 						t.Fatal(p)
 					}

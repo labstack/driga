@@ -79,6 +79,11 @@ type app struct {
 	chatMode       chat.Mode
 	chatUntil      time.Time // Full auto end, from the broker.
 	chatFullAsk    bool      // m pressed once on the way to Full auto.
+	grantHistory   []chat.GrantDecision
+	bursts         []chat.PromptBurst
+	burstFocus     string
+	burstAt        time.Time
+	burstIndex     int
 	prompts        []chat.Prompt
 	chatActions    []chat.Action
 	chatAppeared   map[string]time.Time
@@ -149,11 +154,13 @@ type confirmation struct {
 type tickMsg struct{}
 type heartbeatMsg struct{ err error }
 type refreshMsg struct {
-	prompts []chat.Prompt
-	snap    Snapshot
-	version int64
-	changed bool
-	err     error
+	bursts       []chat.PromptBurst
+	grantHistory []chat.GrantDecision
+	prompts      []chat.Prompt
+	snap         Snapshot
+	version      int64
+	changed      bool
+	err          error
 }
 type actionMsg struct {
 	status    string
@@ -227,6 +234,16 @@ func (m *app) poll() tea.Cmd {
 		if client, ok := opts.Chat.(chat.PromptClient); ok {
 			ctx, cancel := context.WithTimeout(opts.Context, time.Second)
 			r.prompts, _ = client.Prompts(ctx)
+			cancel()
+		}
+		if client, ok := opts.Chat.(chat.BurstClient); ok {
+			ctx, cancel := context.WithTimeout(opts.Context, time.Second)
+			r.bursts, _ = client.PromptBursts(ctx)
+			cancel()
+		}
+		if client, ok := opts.Chat.(chat.GrantClient); ok {
+			ctx, cancel := context.WithTimeout(opts.Context, time.Second)
+			r.grantHistory, _ = client.GrantHistory(ctx)
 			cancel()
 		}
 		if err := heartbeat(opts.DataDir, opts.Now()); err != nil {
@@ -438,7 +455,23 @@ func (m *app) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.viewport.SetContent("")
 			}
 		}
+		m.bursts = msg.bursts
+		if m.detailRow != nil && m.detailRow.burst != nil {
+			old := m.detailRow.burst
+			next := m.promptBurst(old.ID)
+			if next == nil {
+				m.detail = false
+				m.detailRow = nil
+				m.detailText = ""
+				m.viewport.SetContent("")
+			} else if burstIdentity(*next) != burstIdentity(*old) {
+				r := *m.detailRow
+				r.burst = next
+				m.openDetail(r)
+			}
+		}
 		m.prompts = msg.prompts
+		m.grantHistory = msg.grantHistory
 		m.pollPending = false
 		if msg.err != nil {
 			m.status = "refresh: " + msg.err.Error()
@@ -454,6 +487,9 @@ func (m *app) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.loaded {
 			m.showAckPending()
 			m.rebuild()
+			if m.flowAttention {
+				m.armBoardPrompt()
+			}
 		}
 		return m, nil
 	case cleanupMsg:
@@ -534,7 +570,7 @@ func (m *app) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, m.chatInput.Focus()
 			}
 			switch k {
-			case "ctrl+n", "ctrl+h", "ctrl+x", "ctrl+t", "ctrl+0", "pgup", "pgdown", "ctrl+end", "alt+up", "y", "n", "alt+y", "alt+n", "m":
+			case "ctrl+n", "ctrl+h", "ctrl+x", "ctrl+t", "ctrl+0", "pgup", "pgdown", "ctrl+end", "alt+up", "y", "n", "alt+y", "alt+n", "m", "r":
 				return m, m.chatKey(msg)
 			}
 		}
@@ -632,6 +668,11 @@ func (m *app) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		}
+		if m.detail && m.detailRow != nil && m.detailRow.burst != nil {
+			if cmd, handled := m.burstKey(k); handled {
+				return m, cmd
+			}
+		}
 		if m.tab == flowTab && !m.detail {
 			if cmd, handled := m.boardKey(k); handled {
 				return m, cmd
@@ -649,6 +690,15 @@ func (m *app) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, cmd
 		case "r":
+			if m.tab == 2 && !m.busy {
+				if row, ok := m.selected(); ok && row.grant != nil {
+					client, ok := m.opts.Chat.(chat.GrantClient)
+					if ok {
+						id, ctx := row.grant.GrantID, m.opts.Context
+						return m, func() tea.Msg { return actionMsg{status: "Grant revoked", err: client.RevokeGrant(ctx, id)} }
+					}
+				}
+			}
 			if m.tab == 5 && m.opts.CleanupList != nil && !m.busy {
 				m.detail = false
 				return m, m.loadCleanup()
@@ -766,6 +816,10 @@ func (m *app) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "y", "n":
 			if m.tab == 2 && !m.busy {
+				if r, ok := m.selected(); ok && r.burst != nil {
+					m.openDetail(r)
+					return m, nil
+				}
 				if r, ok := m.selected(); ok && r.prompt != nil {
 					return m, m.answerPrompt(*r.prompt, k == "y")
 				}

@@ -25,7 +25,7 @@ type PermissionRequest struct {
 	Input      json.RawMessage
 }
 
-// WaitPermission waits for Chat or a matching terminal transcript answer.
+// WaitPermission waits for a person through a Chat card or a matching terminal transcript answer.
 // The caller owns payload parsing, secure file opening and fail-open transport.
 func WaitPermission(parent context.Context, c *Remote, in PermissionRequest, started time.Time, open func(string) (*os.File, error)) (PromptDecision, error) {
 	ctx, cancel := context.WithTimeout(parent, ApprovalTTL)

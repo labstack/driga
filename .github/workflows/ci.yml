@@ -75,6 +75,60 @@ jobs:
       - name: Verify repository
         run: just ci
 
+  chat-sandbox:
+    name: Chat sandbox (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    env:
+      GOTOOLCHAIN: local
+      GOWORK: "off"
+      GOFLAGS: ""
+      GOEXPERIMENT: ""
+      DRIGATEST_REQUIRE_SANDBOX: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          check-latest: false
+          cache: true
+      - name: Install Linux sandbox and enable its namespaces
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y bubblewrap
+          # Ubuntu's AppArmor restriction can block unprivileged bwrap even
+          # with user namespaces enabled. Relax it only on this disposable
+          # CI VM; product code never changes the host's sysctls.
+          if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+          bwrap --unshare-all --ro-bind / / /bin/true
+      - name: Record native sandbox versions
+        run: |
+          uname -a
+          if [ "$RUNNER_OS" = macOS ]; then
+            sw_vers
+            ls -l /usr/bin/sandbox-exec
+          else
+            cat /etc/os-release
+            bwrap --version
+            sysctl kernel.unprivileged_userns_clone kernel.apparmor_restrict_unprivileged_userns || true
+          fi
+          go version
+      - name: Explain native sandbox probe
+        run: scripts/isolated.sh go test ./internal/command -run '^TestProbeDiagnostics$' -v -count=1
+      - name: Require real sandbox denials and doctor diagnostics
+        run: scripts/isolated.sh go test ./internal/cli ./internal/command -run 'Test(DoctorSandbox|CommandSandboxIntegration)' -v -count=1
+      - name: Chat commands through the built binary
+        run: scripts/isolated.sh go test -tags e2e ./cmd/driga -run '^TestChatCommandsBuiltBinary$' -v -count=1 -timeout 25m
+
   windows:
     name: Windows tests
     runs-on: windows-2025
@@ -128,6 +182,10 @@ jobs:
         run: go vet ./...
       - name: Test on Windows
         run: go test ./...
+      - name: Native Chat process identities and sandbox refusal
+        run: |
+          go test ./internal/platform ./internal/kill ./internal/command ./internal/cli -run 'Test(ProcessOwnerCollection|ProcessSnapshotIdentity|SnapshotOwnedChild|SnapshotSignalResults|ProcessCommandSnapshot|ProcessProtectedTargets|CommandRunnerUnavailable|DoctorSandbox)' -v -count=1
+          go test -tags e2e ./cmd/driga -run '^TestChatCommandsBuiltBinary$' -v -count=1 -timeout 25m
       - name: Build the cgo-free Windows targets
         run: |
           go build ./...

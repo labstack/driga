@@ -36,7 +36,8 @@ Code**.
 Chat reads through Driga's read-only tools. With approval it can also
 acknowledge inbox items, jump to a session terminal, kill an agent or orphan,
 clean up a candidate, refresh project summaries and answer Claude permission
-prompts. It also has Claude's built-in shell and file tools. Actions are
+prompts. Commands use Driga's `run_command` gateway. Claude's built-ins remain
+Read, Glob, Grep and TodoWrite; Bash, Edit and Write stay disabled. Actions are
 local-only and keep the CLI's process, cleanup and jump safety checks. Chat
 never types into a live agent terminal.
 
@@ -47,14 +48,15 @@ buttons in the app or `m` in the TUI's navigate mode.
 
 | Mode | Runs without asking | Asks |
 | --- | --- | --- |
-| Confirm | Driga read tools; reads inside the working directory | Reads elsewhere and every other call |
-| Auto | Confirm's list, plus inbox acknowledgments, jumps and summaries; Edit/Write only inside a git project working directory that is not your home, the Driga data directory or an ancestor of either, and never on hidden paths or agent instruction files | Everything else |
-| Full auto | Everything | Nothing |
+| Confirm | Driga read tools; built-in reads inside the working directory | Every command request and other action |
+| Auto | Confirm's list, validated Read commands, inbox acknowledgments, jumps and summaries | Process, Other and Destructive commands; other actions |
+| Full auto | Auto's list and sandboxed Other commands | Reads outside the project/scratch boundary, Process and Destructive commands; delegated permission answers and other actions requiring a person |
 
-Answering a permission prompt always asks in Auto.
+Answering another agent's permission prompt always needs a person, including
+in Full auto and when a grant exists. The card shows that agent's exact tool input.
 
 **Full auto** needs confirmation, is shown in red with its remaining time, and
-lasts at most 30 minutes. It ends when you switch it off, close the
+lasts at most 30 minutes, then returns to Auto. It ends when you switch it off, close the
 conversation or restart the broker, and is never persisted. Only you, through a
 client, can change modes or decide cards; model text, files and tool output
 cannot.
@@ -71,6 +73,104 @@ decided and the result.
 Stop denies pending cards before stopping the turn. Unanswered cards expire
 after ten minutes.
 
+## Commands
+
+`run_command` takes either a literal `argv` array (preferred) or an explicit
+shell `script`, never both. Arguments in `argv` are not interpreted as shell
+text. The request can set `cwd` and `timeout_seconds`: the default is **120
+seconds**, the maximum **600 seconds**. Timeout or Stop ends a running command
+and its children. Interactive terminals and long-running servers are outside
+this gateway.
+
+Every request is prepared, authorized, executed once and recorded. Its card
+shows the exact requested argv or script, effective invocation, working
+directory, classification and filesystem/network boundary. Read commands use
+a conservative executable and flag allowlist; ambiguous shell expressions
+are not Read. Automatic reads require the working directory and every path
+operand to resolve inside the selected project or conversation scratch,
+including through symlinks. Outside, missing or unresolvable paths require
+an individual card in every mode, including Full auto, and cannot use similar
+approval grants. For example, `cat ~/notes.txt` needs a card; `cat README.md`
+can run automatically in Auto or Full auto when the file resolves inside the
+project. Commands without path operands, such as `ps`, `df` and `uptime`,
+remain Read when their working directory is in scope.
+
+Builds, tests and file changes are Other. Destructive commands
+include `rm` outside scratch, destructive git operations and any request for
+network. Privilege escalation, unsandboxed requests and changes to Driga's
+settings, hooks or approval state are refused without an approval card.
+
+The sandbox allows writes in the selected project, private conversation
+scratch and Git metadata directories needed by a selected worktree. Execution
+persistence paths stay protected even in these writable roots: `.git/hooks/`,
+`.git/config`, `.git/config.worktree`, `.git/info/attributes`, `.gitattributes`,
+`.envrc`, `.vscode/`, `.idea/` and `.husky/`. This prevents planting Git hooks,
+helper configuration, attribute filters, direnv scripts or editor tasks that
+could later run outside the sandbox. The same protection covers existing
+nested repositories, worktree gitdirs and their common Git directory, including
+Gitdir/commondir pointer files. Missing protected paths cannot be created.
+Ordinary Git objects, refs, index, HEAD and logs stay writable, so `git add`
+and `git commit` still work.
+Protected paths containing symlinks are refused, as are nested Git pointers
+that would add an unrelated external write directory.
+
+Agent credentials, SSH/cloud credentials, keychains and
+Driga's config/data/approval state are protected. The command environment
+excludes tokens and keys. Network is denied unless the request sets
+`network: true` and you approve the card. Approval never expands the write
+boundary; even a network grant does not allow host Unix sockets.
+
+### Stopping processes
+
+Commands such as `kill`, `pkill -f <pattern>` and `killall` (Windows:
+`taskkill` or literal `Stop-Process`) always need a card in every mode.
+Before asking, Driga resolves a snapshot of owned processes. Expand the list
+to inspect every PID, owner, start time, executable and command line.
+
+Allow signals only those identities after checking them again. A later
+matching process survives; Driga never repeats the pattern match. Other
+owners, PID 1, process groups and Driga/Chat's own process tree are refused.
+The result reports **stopped, vanished, skipped and survivors**. SIGTERM is
+the default. Surviving identities need a separate **force** card before
+SIGKILL (Windows uses its native close/terminate operations). There is no
+general undo for process termination or network effects.
+
+### Sandbox availability
+
+Run `driga doctor` and inspect **chat-sandbox** (`chat_sandbox` in JSON).
+
+- **macOS 15+:** Seatbelt via `/usr/bin/sandbox-exec`. If the probe fails,
+  check the system executable and any sandbox enclosing Driga, then rerun doctor.
+- **Linux:** install `bubblewrap` (`bwrap`). If installed but unusable, check
+  unprivileged user namespaces and AppArmor's policy for bwrap with your system
+  administrator. Driga does not change host security settings. The disposable
+  Ubuntu CI job explicitly relaxes `kernel.apparmor_restrict_unprivileged_userns`
+  when present so it can test bwrap; this is not a blanket host setup instruction.
+- **Windows:** “Running commands needs a sandbox, which Windows does not have
+  yet.” Only validated Read and Process commands are available.
+
+A missing or unusable backend is an explicit card error, with no silent
+unsandboxed fallback. Only reads that can be validated safely and the process
+family remain available; some read forms still require a working sandbox.
+
+## Similar approvals and prompt groups
+
+Eligible app cards offer **Allow similar for this conversation** for Chat,
+or **Allow similar for this session** for another agent's prompt. The offer
+shows a classified command family and argv pattern. A grant lasts until the
+conversation/session ends or **30 minutes**, whichever comes first. Process,
+Destructive and refused commands never offer grants. Only a person clicking
+in the app can create one; model text cannot.
+
+Later actions still pass through preparation and recording. Their timeline
+says **allowed by your grant**, with a revoke control. Revoking requires a
+fresh decision for subsequent requests.
+
+Prompts from one session arriving within **3 seconds** appear together with
+**Allow all N**. Each exact input remains visible and can be denied
+individually. The decision covers only the displayed members; late arrivals
+need another decision.
+
 ## Where conversations live
 
 The Driga service owns the Chat broker. Without the service, the client you open
@@ -84,6 +184,13 @@ capture policy first. Under the default `capture_text = "titles"` Driga keeps
 no chat message bodies; `snippets` keeps scrubbed 200-character snippets.
 Claude's own session history is managed by Claude and is not controlled by
 Driga's capture policy.
+
+Command results join that action log under the same capture policy and
+30-day retention. Long command output keeps its head and tail in the
+conversation; retained full output is scrubbed and follows the capture
+policy (`titles` does not retain command output). Process result counts and
+per-target outcomes appear on the card. External `driga mcp` clients and
+`driga ask` have no command actions.
 
 ## Summaries
 

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/google/uuid"
 	"os"
 	"strings"
 
@@ -44,6 +45,12 @@ func chatAction(base *Globals) func(context.Context, string, json.RawMessage) (s
 		approval, err := chatApproval(request)
 		if err != nil {
 			return "", err
+		}
+		if name == "run_command" {
+			approval.ToolUseID = uuid.NewString()
+			result, err := chat.RunCommand(ctx, os.Getenv("DRIGA_CHAT_SOCKET"), approval)
+			raw, encodeErr := json.Marshal(result)
+			return string(raw), errors.Join(err, encodeErr)
 		}
 		action, err := chat.Claim(ctx, os.Getenv("DRIGA_CHAT_SOCKET"), approval)
 		if err != nil {

@@ -33,7 +33,7 @@ func TestFullAutoWarningSurvivesActivePoll(t *testing.T) {
 	for _, active := range []bool{true, false, true} {
 		m.Update(chatStateMsg{state: chat.State{Mode: chat.Auto, Active: active, Conversation: store.Conversation{ID: "conversation"}}})
 		got := m.View().Content
-		if !m.chatFullAsk || !strings.Contains(got, "without asking for 30 minutes") || !strings.Contains(got, "m again to confirm") {
+		if !m.chatFullAsk || !strings.Contains(got, "automatically for 30 minutes") || !strings.Contains(got, "m again to confirm") {
 			t.Fatal(got)
 		}
 	}
@@ -63,6 +63,25 @@ func TestActionHeaderKeepsStatusAndActor(t *testing.T) {
 			if len([]rune(line)) > m.width {
 				t.Fatal("unwrapped card")
 			}
+		}
+	}
+}
+
+func TestCommandCardTUI(t *testing.T) {
+	for _, size := range [][2]int{{80, 24}, {140, 50}} {
+		m := setup(t, fixture(), Options{NoColor: true}).(*app)
+		m.width, m.height = size[0], size[1]
+		c := &chat.CommandCard{Summary: "Stop 65 processes owned by you", Boundary: "Host process snapshot only", Class: "Process"}
+		for i := 0; i < 65; i++ {
+			c.Targets = append(c.Targets, chat.ProcessRow{PID: int32(100 + i), Owner: "UID 501", Executable: "/bin/java"})
+		}
+		a := chat.Action{ID: "cmd", Tool: "mcp__driga__run_command", Status: "pending", Input: []byte(`{"argv":["pkill","-f","maestro"]}`), Command: c}
+		if got := m.chatCard(a); !strings.Contains(got, "Stop 65") || !strings.Contains(got, "ctrl+t details") {
+			t.Fatal(got)
+		}
+		details := chatActionDetails(a)
+		if !strings.Contains(details, `"pid": 164`) || !strings.Contains(details, "UID 501") {
+			t.Fatal(details)
 		}
 	}
 }

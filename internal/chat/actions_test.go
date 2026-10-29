@@ -201,9 +201,14 @@ func TestTrustModesAndClaims(t *testing.T) {
 		t.Fatal(err)
 	}
 	in.Tool = "Unknown"
-	p, err = Bridge(ctx, r.Socket, in)
-	if err != nil || p.Behavior != "allow" {
-		t.Fatal(p, err)
+	pending := make(chan Permission, 1)
+	go func() { p, _ := Bridge(ctx, r.Socket, in); pending <- p }()
+	card := waitAction(t, b, r.Conversation)
+	if err := b.Decide(ctx, r.Conversation, card.ID, false); err != nil {
+		t.Fatal(err)
+	}
+	if p := <-pending; p.Behavior != "deny" {
+		t.Fatal(p)
 	}
 	b.mu.Lock()
 	b.conversations[r.Conversation].remote = true

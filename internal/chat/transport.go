@@ -94,7 +94,7 @@ func listen(ctx context.Context, dataDir string, b *Broker) (func(), error) {
 		return nil, err
 	}
 	b.socket = path
-	server := &http.Server{Handler: handler(b), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: ApprovalTTL + time.Minute, WriteTimeout: ApprovalTTL + time.Minute, IdleTimeout: time.Minute, BaseContext: func(net.Listener) context.Context { return ctx }}
+	server := &http.Server{Handler: handler(b), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 2*ApprovalTTL + 22*time.Minute, WriteTimeout: 2*ApprovalTTL + 22*time.Minute, IdleTimeout: time.Minute, BaseContext: func(net.Listener) context.Context { return ctx }}
 	done := make(chan struct{})
 	go func() { defer close(done); _ = server.Serve(l) }()
 	var once sync.Once
@@ -106,7 +106,7 @@ func handler(b *Broker) http.Handler {
 		w.Header().Set("Content-Type", "application/json")
 		var out any
 		var err error
-		bridge := r.URL.Path == "/approve" || r.URL.Path == "/claim" || r.URL.Path == "/complete" || r.URL.Path == "/chat-prompts" || r.URL.Path == "/answer-approved-prompt"
+		bridge := r.URL.Path == "/run-command" || r.URL.Path == "/approve" || r.URL.Path == "/claim" || r.URL.Path == "/complete" || r.URL.Path == "/chat-prompts" || r.URL.Path == "/answer-approved-prompt"
 		if !bridge && (b.clientToken == "" || subtle.ConstantTimeCompare([]byte(r.Header.Get("Authorization")), []byte(b.clientToken)) != 1) {
 			http.Error(w, "invalid client token", 403)
 			return
@@ -123,6 +123,8 @@ func handler(b *Broker) http.Handler {
 			err = decoder.Decode(&in)
 			if err == nil {
 				switch r.URL.Path {
+				case "/run-command":
+					out, err = b.RunCommand(r.Context(), in.Approval)
 				case "/approve":
 					out, err = b.Approve(r.Context(), in.Approval)
 				case "/claim":
@@ -139,16 +141,23 @@ func handler(b *Broker) http.Handler {
 			var in struct {
 				ID, Action string
 				Mode       Mode
+				Similar    bool
 				Allow      bool
 			}
-			decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096))
-			decoder.DisallowUnknownFields()
-			err = decoder.Decode(&in)
+			err = decodeClientJSON(w, r, &in, 4096)
 			if err == nil {
 				if r.URL.Path == "/mode" {
 					err = b.SetMode(r.Context(), in.ID, in.Mode)
 				} else {
-					err = b.Decide(r.Context(), in.ID, in.Action, in.Allow)
+					if in.Similar {
+						if !in.Allow {
+							err = errors.New("similar requires allow")
+						} else {
+							err = b.DecideSimilar(r.Context(), in.ID, in.Action)
+						}
+					} else {
+						err = b.Decide(r.Context(), in.ID, in.Action, in.Allow)
+					}
 				}
 			}
 		case r.Method == "POST" && r.URL.Path == "/hook-prompt":
@@ -163,16 +172,45 @@ func handler(b *Broker) http.Handler {
 			if err == nil {
 				b.EndPrompts(in.Session, in.Cwd)
 			}
+		case r.Method == "GET" && r.URL.Path == "/prompt-bursts":
+			out, err = b.PromptBursts(r.Context())
+		case r.Method == "POST" && r.URL.Path == "/burst-decide":
+			var in struct {
+				ID      string
+				Members []string
+				Allow   bool
+			}
+			err = decodeClientJSON(w, r, &in, MaxText)
+			if err == nil {
+				err = b.DecideBurst(r.Context(), in.ID, in.Members, in.Allow)
+			}
+		case r.Method == "GET" && r.URL.Path == "/grant-history":
+			out, err = b.GrantHistory(r.Context())
+		case r.Method == "POST" && r.URL.Path == "/grant-revoke":
+			var in struct{ ID string }
+			err = decodeClientJSON(w, r, &in, 4096)
+			if err == nil {
+				err = b.RevokeGrant(r.Context(), in.ID)
+			}
 		case r.Method == "GET" && r.URL.Path == "/prompts":
 			out, err = b.Prompts(r.Context())
 		case r.Method == "POST" && r.URL.Path == "/prompt-answer":
 			var in struct {
-				ID    string
-				Allow bool
+				ID      string
+				Similar bool
+				Allow   bool
 			}
-			err = json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&in)
+			err = decodeClientJSON(w, r, &in, 4096)
 			if err == nil {
-				err = b.AnswerPrompt(r.Context(), in.ID, in.Allow)
+				if in.Similar {
+					if !in.Allow {
+						err = errors.New("similar requires allow")
+					} else {
+						err = b.AnswerPromptSimilar(r.Context(), in.ID)
+					}
+				} else {
+					err = b.AnswerPrompt(r.Context(), in.ID, in.Allow)
+				}
 			}
 		case r.Method == "GET" && r.URL.Path == "/health":
 			out = map[string]bool{"ok": true}
@@ -286,7 +324,9 @@ func (c *Remote) call(ctx context.Context, method, path string, in, out any) err
 }
 func (c *Remote) callOnce(ctx context.Context, method, path string, in, out any, retry bool) error {
 	timeout := 10 * time.Second
-	if path == "/approve" || path == "/hook-prompt" {
+	if path == "/run-command" {
+		timeout = 2*ApprovalTTL + 22*time.Minute
+	} else if path == "/approve" || path == "/hook-prompt" {
 		timeout = ApprovalTTL + time.Minute
 	} else if strings.HasPrefix(path, "/wait?") {
 		// The broker answers a quiet wait with the current state once
@@ -503,4 +543,16 @@ func (c *Remote) Wait(ctx context.Context, id string, after uint64) (State, erro
 	var out State
 	err := c.call(ctx, "GET", fmt.Sprintf("/wait?id=%s&after=%d", id, after), nil, &out)
 	return out, err
+}
+
+func decodeClientJSON(w http.ResponseWriter, r *http.Request, out any, limit int64) error {
+	d := json.NewDecoder(http.MaxBytesReader(w, r.Body, limit))
+	d.DisallowUnknownFields()
+	if err := d.Decode(out); err != nil {
+		return err
+	}
+	if d.Decode(new(any)) != io.EOF {
+		return errors.New("expected one JSON value")
+	}
+	return nil
 }

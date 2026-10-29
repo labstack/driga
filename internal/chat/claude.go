@@ -22,9 +22,8 @@ import (
 
 var ReadTools = []string{"get_flow", "get_activity", "get_summary", "list_agents", "get_agent", "list_projects", "inspect_project", "list_inbox", "list_conflicts", "list_orphans", "get_machine", "list_machines", "inspect_setup", "list_cleanup_candidates", "describe_panels", "show_panels", "open_dashboard", "list_dashboards", "list_dashboard_versions"}
 
-// NativeTools are the claude built-in tools Chat may use when it can act:
-// reading files and its own task list. It never runs commands or changes
-// files; what Chat changes goes through Driga's own tools and their cards.
+// NativeTools are the read and planning built-ins. Commands enter through
+// run_command and the broker permission gate; Bash, Edit and Write stay off.
 var NativeTools = []string{"Read", "Glob", "Grep", "TodoWrite"}
 
 // DashboardWrites are the bounded dashboard changes Chat may pre-approve.
@@ -122,7 +121,7 @@ func (a *Claude) Run(ctx context.Context, r Request, emit func(Delta) error) (er
 		nativeTools = strings.Join(NativeTools, ",")
 		// Claude permits reads in cwd itself; pre-allowing read tools would
 		// also bypass the permission bridge for paths outside that directory.
-		tools = append(tools, "TodoWrite", "mcp__driga__list_prompts")
+		tools = append(tools, "TodoWrite", "mcp__driga__list_prompts", "mcp__driga__run_command")
 		for _, t := range DashboardWrites {
 			tools = append(tools, "mcp__driga__"+t)
 		}
@@ -558,7 +557,7 @@ func (s *stream) validTool(name string) bool {
 	switch name {
 	case "mcp__driga__create_dashboard", "mcp__driga__edit_dashboard", "mcp__driga__replace_dashboard", "mcp__driga__restore_dashboard_version", "mcp__driga__delete_dashboard":
 		return true
-	case "mcp__driga__list_prompts", "mcp__driga__answer_prompt", "mcp__driga__ack_inbox", "mcp__driga__jump", "mcp__driga__kill", "mcp__driga__cleanup", "mcp__driga__summarize", "mcp__driga__approve":
+	case "mcp__driga__run_command", "mcp__driga__list_prompts", "mcp__driga__answer_prompt", "mcp__driga__ack_inbox", "mcp__driga__jump", "mcp__driga__kill", "mcp__driga__cleanup", "mcp__driga__summarize", "mcp__driga__approve":
 		return true
 	}
 	return false

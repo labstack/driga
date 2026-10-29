@@ -112,6 +112,10 @@ export function fakeService(o: ServiceOptions = {}): Service {
         return json({confirmed:true,token});
       }
       case "/chat/api/history": return json(o.chat ? [{ id: o.chat.conversation.id }] : []);
+      case "/chat/api/prompt-bursts": return json([]);
+      case "/chat/api/burst-decide": return json({ok:true});
+      case "/chat/api/grant-history": return json([]);
+      case "/chat/api/grant-revoke": return json({ok:true});
       case "/chat/api/prompts": return json(o.prompts ?? []);
       case "/chat/api/new": return json({ id: "conversation-1" });
       case "/chat/api/send": case "/chat/api/stop": case "/chat/api/mode": case "/chat/api/decide": case "/chat/api/prompt-answer": return json({ ok: true });
