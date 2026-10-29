@@ -3,9 +3,11 @@ package chat
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/labstack/driga/internal/command"
 	"io"
 	"log/slog"
 	"sort"
@@ -15,13 +17,16 @@ import (
 
 // Prompt inputs live only in memory, independently of conversations and their logs.
 type Prompt struct {
-	ID        string          `json:"id"`
-	Session   string          `json:"session"`
-	SessionID int64           `json:"session_id,omitempty"`
-	Cwd       string          `json:"cwd"`
-	Tool      string          `json:"tool"`
-	Input     json.RawMessage `json:"input,omitempty"`
-	CreatedAt time.Time       `json:"created_at"`
+	GrantEligible  bool            `json:"grant_eligible,omitempty"`
+	GrantPattern   string          `json:"grant_pattern,omitempty"`
+	GrantExpiresAt time.Time       `json:"grant_expires_at,omitzero"`
+	ID             string          `json:"id"`
+	Session        string          `json:"session"`
+	SessionID      int64           `json:"session_id,omitempty"`
+	Cwd            string          `json:"cwd"`
+	Tool           string          `json:"tool"`
+	Input          json.RawMessage `json:"input,omitempty"`
+	CreatedAt      time.Time       `json:"created_at"`
 }
 
 func (p Prompt) InputText() string { return string(p.Input) }
@@ -84,6 +89,9 @@ type PromptDecision struct {
 	Message  string `json:"message,omitempty"`
 }
 type pendingPrompt struct {
+	grantPrepared *command.Prepared
+	grantDigest   [32]byte
+	sessionEpoch  string
 	Prompt
 	answer chan PromptDecision
 	wait   context.Context
@@ -98,19 +106,35 @@ func (b *Broker) WaitPrompt(ctx context.Context, in Prompt) (PromptDecision, err
 	if in.ID == "" || len(in.ID) > 128 || in.Session == "" || len(in.Session) > 256 || in.Tool == "" || len(in.Tool) > 256 || len(in.Cwd) > 4096 || len(in.Input) > MaxText || !json.Valid(in.Input) {
 		return PromptDecision{}, errors.New("invalid prompt")
 	}
+	var lifetime string
 	// One indexed lookup on registration supplies the UI's session link.
 	if s, err := b.stateStore().SessionByKey("claude", in.Session); err == nil && s.Cwd == in.Cwd {
 		if s.EndedAt != nil {
 			return PromptDecision{}, nil
 		}
 		in.SessionID = s.ID
+		lifetime = sessionLifetime(s)
 	} else {
 		in.SessionID = 0
 	}
 	// Persist the interval before offering the prompt: an answer must never
 	// turn a history-write failure into a successful approval. Inputs stay in
 	// memory, and store I/O stays outside the broker lock.
-	in.CreatedAt = time.Now().UTC()
+	in.CreatedAt = b.now()
+	// Model/hook-authored offer fields are never trusted.
+	in.GrantEligible = false
+	in.GrantPattern = ""
+	in.GrantExpiresAt = time.Time{}
+	var prepared *command.Prepared
+	if lifetime != "" {
+		prepared = b.preparePromptGrant(ctx, in)
+	}
+	if prepared != nil {
+		pattern, _ := command.NewArgvPattern(*prepared)
+		in.GrantEligible = true
+		in.GrantPattern = pattern.String()
+		in.GrantExpiresAt = in.CreatedAt.Add(GrantTTL)
+	}
 	if err := b.st.StartPromptHistory(ctx, in.ID, in.SessionID, in.CreatedAt); err != nil {
 		logPromptHistoryFailure("start", err)
 		return PromptDecision{}, fmt.Errorf("record prompt wait: %w", err)
@@ -143,8 +167,25 @@ func (b *Broker) WaitPrompt(ctx context.Context, in Prompt) (PromptDecision, err
 	}
 	wait, cancel := context.WithTimeout(ctx, ttl)
 	defer cancel()
-	p := &pendingPrompt{Prompt: in, answer: make(chan PromptDecision, 1), wait: wait}
+	if b.promptIDs == nil {
+		b.promptIDs = map[string]bool{}
+	}
+	if b.promptIDs[in.ID] || len(b.promptIDs) >= 8192 {
+		b.mu.Unlock()
+		return PromptDecision{}, errors.New("prompt identity already used or registration limit reached")
+	}
+	b.promptIDs[in.ID] = true
+	p := &pendingPrompt{Prompt: in, answer: make(chan PromptDecision, 1), wait: wait, grantPrepared: prepared, sessionEpoch: b.promptEpoch(in, lifetime)}
+	p.grantDigest = promptDigest(in)
 	b.prompts[in.ID] = p
+	b.groupPrompt(p)
+	if prepared != nil {
+		if g := b.matchingGrant(*prepared, "", p.sessionEpoch); g != nil {
+			if err := b.answerPrompt(in.ID, true); err == nil {
+				b.grantDecision(*g, "", in.ID)
+			}
+		}
+	}
 	b.wakePromptWatcher()
 	b.mu.Unlock()
 	var out PromptDecision
@@ -160,6 +201,7 @@ func (b *Broker) WaitPrompt(ctx context.Context, in Prompt) (PromptDecision, err
 	defer b.mu.Unlock()
 	if b.prompts[in.ID] == p {
 		delete(b.prompts, in.ID)
+		b.pruneBursts()
 		b.wakePromptWatcher()
 	}
 	// An answer committed under this same lock wins over cancellation. Never
@@ -176,8 +218,8 @@ func logPromptHistoryFailure(operation string, err error) {
 	slog.Warn("Chat prompt history failed", "operation", operation, "error_type", fmt.Sprintf("%T", err))
 }
 
-// Only pending hooks need the collector-end fallback. Idle TUI and web brokers
-// sleep until registration, retirement or shutdown changes that requirement.
+// Pending hooks and live session grants need the collector-end fallback.
+// Idle clients sleep once both kinds of live authority have retired.
 func (b *Broker) wakePromptWatcher() {
 	select {
 	case b.promptWake <- struct{}{}:
@@ -201,7 +243,11 @@ func (b *Broker) watchPromptChanges(start func() (<-chan time.Time, func())) {
 	}()
 	for {
 		b.mu.Lock()
+		b.pruneGrants()
 		pending := len(b.prompts) > 0
+		for _, g := range b.grants {
+			pending = pending || g.Session != ""
+		}
 		b.mu.Unlock()
 		if pending && ticks == nil {
 			ticks, stop = start()
@@ -231,6 +277,11 @@ func (b *Broker) refreshPrompts() {
 	for _, p := range b.prompts {
 		sessions[p.Session] = true
 	}
+	for _, g := range b.grants {
+		if g.Session != "" {
+			sessions[g.Session] = true
+		}
+	}
 	b.mu.Unlock()
 	for session := range sessions {
 		s, err := b.stateStore().SessionByKey("claude", session)
@@ -239,18 +290,24 @@ func (b *Broker) refreshPrompts() {
 		}
 		var links []discoveredPrompt
 		b.mu.Lock()
+		scope := b.sessionScopes[sessionKey{session, s.Cwd}]
+		if s.EndedAt != nil || scope.id != 0 && scope.id != s.ID || scope.epoch != "" && scope.identity != sessionLifetime(s) {
+			b.retireSessionGrants(session, s.Cwd)
+		}
 		for id, p := range b.prompts {
 			if p.Session == session && p.Cwd == s.Cwd {
 				if p.SessionID != s.ID {
 					links = append(links, discoveredPrompt{id: id, pending: p, started: p.CreatedAt})
 				}
 				if s.EndedAt != nil {
+					b.retireSessionGrants(p.Session, p.Cwd)
 					delete(b.prompts, id)
 					b.wakePromptWatcher()
 					p.answer <- PromptDecision{}
 				}
 			}
 		}
+		b.pruneBursts()
 		b.mu.Unlock()
 		for _, link := range links {
 			// Bind the durable interval before publishing its session link.
@@ -289,6 +346,7 @@ func (b *Broker) answerPrompt(id string, allow bool) error {
 		return errors.New("prompt no longer waiting")
 	}
 	delete(b.prompts, id)
+	b.pruneBursts()
 	b.wakePromptWatcher()
 	out := PromptDecision{Behavior: "deny", Message: "Denied from driga"}
 	if allow {
@@ -305,6 +363,8 @@ func (b *Broker) AnswerPrompt(ctx context.Context, id string, allow bool) error 
 func (b *Broker) EndPrompts(session, cwd string) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	b.retireSessionGrants(session, cwd)
+	defer b.pruneBursts()
 	for id, p := range b.prompts {
 		if p.Session == session && p.Cwd == cwd {
 			delete(b.prompts, id)
@@ -353,7 +413,11 @@ func (b *Broker) AnswerApprovedPrompt(in Approval, action string) error {
 			if err != nil {
 				return err
 			}
-			err = b.answerPrompt(id, allow)
+			if !b.delegatedLive(a) {
+				err = errors.New("prompt no longer waiting or changed")
+			} else {
+				err = b.answerPrompt(id, allow)
+			}
 			status, result := "done", "Prompt answered"
 			if err != nil {
 				status, result = "failed", err.Error()
@@ -400,4 +464,23 @@ func AnswerApprovedPrompt(ctx context.Context, path string, in Approval, action 
 		Approval
 		ID string
 	}{in, action}, nil)
+}
+
+func copyPrompt(p Prompt) Prompt { p.Input = append(json.RawMessage(nil), p.Input...); return p }
+func promptDigest(p Prompt) [32]byte {
+	// The collector may discover a UI session link later; authority is bound to
+	// the hook identity, scope, creation time and exact tool input.
+	p.SessionID = 0
+	p.GrantEligible = false
+	p.GrantPattern = ""
+	p.GrantExpiresAt = time.Time{}
+	raw, _ := json.Marshal(p)
+	return sha256.Sum256(raw)
+}
+func (b *Broker) delegatedLive(a *pendingAction) bool {
+	if a.Delegated == nil {
+		return false
+	}
+	p := b.prompts[a.Delegated.ID]
+	return p != nil && p == a.delegatedPending && p.wait.Err() == nil && b.ctx.Err() == nil && promptDigest(p.Prompt) == a.delegatedDigest
 }

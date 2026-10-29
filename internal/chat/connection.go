@@ -234,3 +234,90 @@ var (
 	_ Client       = (*Connection)(nil)
 	_ PromptClient = (*Connection)(nil)
 )
+
+func (c *Connection) DecideSimilar(ctx context.Context, conversation, action string) error {
+	r, err := c.client(ctx)
+	if err != nil {
+		return err
+	}
+	g, ok := r.(GrantClient)
+	if !ok {
+		return errors.New("Approval grants unavailable")
+	}
+	err = g.DecideSimilar(ctx, conversation, action)
+	c.failed(r, err)
+	return err
+}
+
+func (c *Connection) AnswerPromptSimilar(ctx context.Context, id string) error {
+	r, err := c.client(ctx)
+	if err != nil {
+		return err
+	}
+	g, ok := r.(GrantClient)
+	if !ok {
+		return errors.New("Approval grants unavailable")
+	}
+	err = g.AnswerPromptSimilar(ctx, id)
+	c.failed(r, err)
+	return err
+}
+
+func (c *Connection) RevokeGrant(ctx context.Context, id string) error {
+	r, err := c.client(ctx)
+	if err != nil {
+		return err
+	}
+	g, ok := r.(GrantClient)
+	if !ok {
+		return errors.New("Approval grants unavailable")
+	}
+	err = g.RevokeGrant(ctx, id)
+	c.failed(r, err)
+	return err
+}
+
+func (c *Connection) GrantHistory(ctx context.Context) ([]GrantDecision, error) {
+	r, err := c.client(ctx)
+	if err != nil {
+		return nil, err
+	}
+	g, ok := r.(GrantClient)
+	if !ok {
+		return nil, errors.New("Approval grants unavailable")
+	}
+	out, err := g.GrantHistory(ctx)
+	c.failed(r, err)
+	return out, err
+}
+
+var _ GrantClient = (*Connection)(nil)
+
+func (c *Connection) PromptBursts(ctx context.Context) ([]PromptBurst, error) {
+	r, err := c.client(ctx)
+	if err != nil {
+		return nil, err
+	}
+	g, ok := r.(BurstClient)
+	if !ok {
+		return nil, errors.New("Prompt bursts unavailable")
+	}
+	out, err := g.PromptBursts(ctx)
+	c.failed(r, err)
+	return out, err
+}
+func (c *Connection) DecideBurst(ctx context.Context, id string, members []string, allow bool) error {
+	r, err := c.client(ctx)
+	if err != nil {
+		return err
+	}
+	g, ok := r.(BurstClient)
+	if !ok {
+		return errors.New("Prompt bursts unavailable")
+	}
+	err = g.DecideBurst(ctx, id, members, allow)
+	c.failed(r, err)
+	return err
+}
+
+var _ BurstClient = (*Connection)(nil)

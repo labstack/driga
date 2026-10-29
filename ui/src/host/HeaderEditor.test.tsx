@@ -11,7 +11,7 @@ import { APIError, type Operation } from "./api";
 
 const api = vi.hoisted(() => ({ open: vi.fn(), run: vi.fn(), list: vi.fn(), prompts: vi.fn(), edit: vi.fn(), replace: vi.fn(), catalog: vi.fn(), reset: vi.fn(), delete: vi.fn() }));
 const size = vi.hoisted(() => ({ width: 10000 }));
-vi.mock("./api", async importOriginal => ({ ...await importOriginal<typeof import("./api")>(), dashboards: api, chat: { prompts: api.prompts } }));
+vi.mock("./api", async importOriginal => ({ ...await importOriginal<typeof import("./api")>(), dashboards: api, chat: { prompts: api.prompts, bursts: async () => [], grantHistory: async () => [] } }));
 vi.mock("@mantine/hooks", async importOriginal => ({ ...await importOriginal<typeof import("@mantine/hooks")>(), useElementSize: (options?: unknown) => ({ ref: () => {}, width: options ? 288 : size.width, height: 56 }) }));
 vi.mock("../panels/Chart", () => ({ Chart: () => null }));
 vi.mock("./Search", () => ({ Search: () => <span /> }));

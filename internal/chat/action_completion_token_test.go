@@ -13,6 +13,7 @@ func TestStoppedActionCompletesWithOwnToken(t *testing.T) {
 			b, a, _ := fixture(t, true)
 			ctx := context.Background()
 			in := activeApproval(t, b, a, Context{})
+			in.Tool = "mcp__driga__ack_inbox"
 			if err := b.SetMode(ctx, in.Conversation, FullAuto); err != nil {
 				t.Fatal(err)
 			}

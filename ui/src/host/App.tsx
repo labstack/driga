@@ -70,7 +70,7 @@ export function App() {
   const [chatOpen, setChatOpen] = useState(() => remembered("driga-chat-open") !== "false");
   const [ask, setAsk] = useState<{ text: string; at: number } | null>(null);
   const say = (message: string) => notifications.show({ message, autoClose: 4000, closeButtonProps: { "aria-label": "Dismiss" } });
-  const { fragment, header, inbox, fleet, prompts, list, fresh, editing, setEditing, refresh: load, edit, mutateHeader, forgetPrompt } = useDashboardRefresh({ id, vars, onError: say, onMissing: () => setId(homeID) });
+  const { fragment, header, inbox, fleet, prompts, bursts, grantHistory, list, fresh, editing, setEditing, refresh: load, edit, mutateHeader, forgetPrompt } = useDashboardRefresh({ id, vars, onError: say, onMissing: () => setId(homeID) });
   useEffect(() => { remember("driga-chat-open", String(chatOpen)); }, [chatOpen]);
   // Chat and the board share the window; dragging the line between them
   // sets Chat's width, which is remembered. Hiding Chat collapses its pane.
@@ -195,6 +195,12 @@ export function App() {
     try { await chat.answer(prompt.id, allow); forgetPrompt(prompt.id); say(allow ? `Allowed ${prompt.tool}` : `Denied ${prompt.tool}`); }
     catch (e) { say((e as Error).message); }
   };
+  const decideBurst = async (id: string, members: string[], allow: boolean) => {
+    try { await chat.decideBurst(id, members, allow); members.forEach(forgetPrompt); }
+    catch(e) { void load(); throw e; }
+  };
+  const answerSimilar = async (prompt: Prompt) => { try { await chat.answerSimilar(prompt.id); forgetPrompt(prompt.id); void load(); } catch(e) { say((e as Error).message); } };
+  const revokeGrant = async (id: string) => { try { await chat.revokeGrant(id); void load(); } catch(e) { say((e as Error).message); } };
   const remove = async () => {
     if (!fragment?.id) return;
     const name = fragment.dashboard.name;
@@ -204,7 +210,7 @@ export function App() {
   const sessions = fleet?.results.find(r => r.id === "sessions")?.frame;
   const sessionRows = rows(sessions);
   const stuck = sessions ? { ...sessions, rows: sessions.rows.filter((_, i) => sessionRows[i].state === "stuck" || sessionRows[i].label === "stuck") } : undefined;
-  const host: Host = { clearInboxFilter: () => setFilter(null), stuck, act, local: (fragment ?? header)?.local_machine, prompts, answer, inboxFilter: filter, ask: askChat };
+  const host: Host = { clearInboxFilter: () => setFilter(null), stuck, act, local: (fragment ?? header)?.local_machine, prompts, bursts, decideBurst, answer, answerSimilar, grantHistory, revokeGrant, inboxFilter: filter, ask: askChat };
 
   // The app's menus drive the page through drigaCommand.
   useEffect(() => {

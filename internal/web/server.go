@@ -168,7 +168,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (s *Server) newRoutes() *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /chat/api/", s.chatAPI)
-	for _, path := range []string{"/chat/api/prompt-answer", "/chat/api/new", "/chat/api/send", "/chat/api/stop", "/chat/api/mode", "/chat/api/decide"} {
+	for _, path := range []string{"/chat/api/burst-decide", "/chat/api/grant-revoke", "/chat/api/prompt-answer", "/chat/api/new", "/chat/api/send", "/chat/api/stop", "/chat/api/mode", "/chat/api/decide"} {
 		mux.HandleFunc("POST "+path, s.chatAPI)
 	}
 	s.appRoutes(mux)

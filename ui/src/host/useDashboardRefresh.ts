@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fleetSpec } from "../fleet/FleetSpec";
-import type { Dashboard, Fragment, Prompt } from "../panels/types";
-import { chat, dashboards, type Operation, type Summary } from "./api";
+import type { Dashboard, Fragment, Prompt, PromptBurst } from "../panels/types";
+import { chat, dashboards, type Operation, type Summary, type GrantDecision } from "./api";
 
 export const refreshMs = 5000;
 export const headerID = "header";
@@ -19,6 +19,8 @@ export function useDashboardRefresh({ id, vars, onError, onMissing }: Scope & { 
   const [inbox, setInbox] = useState<Fragment | null>(null);
   const [fleet, setFleet] = useState<Fragment | null>(null);
   const [selected, setSelected] = useState<{ id: string; navigation: number; fragment: Fragment | null; fresh: Freshness }>({ id, navigation: 0, fragment: null, fresh: unknown });
+  const [grantHistory, setGrantHistory] = useState<GrantDecision[]>([]);
+  const [bursts, setBursts] = useState<PromptBurst[]>([]);
   const [prompts, setPrompts] = useState<Prompt[]>([]);
   const [list, setList] = useState<Summary[]>([]);
   const [editing, setEditingState] = useState(false);
@@ -44,6 +46,8 @@ export function useDashboardRefresh({ id, vars, onError, onMissing }: Scope & { 
     if (h.status === "fulfilled") setHeader(h.value);
     if (i.status === "fulfilled") setInbox(i.value);
     if (f.status === "fulfilled") setFleet(f.value);
+    chat.bursts().then(bs => { if (current()) setBursts(bs); }, () => undefined);
+    chat.grantHistory().then(h => { if (current()) setGrantHistory(h); }, () => undefined);
     chat.prompts().then(ps => { if (current()) setPrompts(ps); }, () => undefined);
     try {
       const next = await dashboards.open(id, vars);
@@ -132,6 +136,7 @@ export function useDashboardRefresh({ id, vars, onError, onMissing }: Scope & { 
   const forgetPrompt = (id: string) => {
     control.current.generation++;
     setPrompts(ps => ps.filter(p => p.id !== id));
+    setBursts(bs => bs.map(b => ({...b, members:b.members.filter(m => m.id !== id)})).filter(b => b.members.length > 0));
   };
-  return { fragment, header, inbox, fleet, prompts, list, fresh, editing, setEditing, refresh: () => refresh(true), edit, mutateHeader, forgetPrompt };
+  return { fragment, header, inbox, fleet, prompts, bursts, grantHistory, list, fresh, editing, setEditing, refresh: () => refresh(true), edit, mutateHeader, forgetPrompt };
 }

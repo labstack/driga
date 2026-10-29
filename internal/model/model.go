@@ -59,6 +59,7 @@ type Proc struct {
 	// stored or shared.
 	OwnerUID   uint32 `json:"-"`
 	OwnerKnown bool   `json:"-"`
+	OwnerSID   string `json:"-"`
 }
 
 // MachineSample is one machine-health reading.

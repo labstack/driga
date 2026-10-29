@@ -3,6 +3,7 @@ package chat
 import (
 	"context"
 	"encoding/json"
+	"reflect"
 	"testing"
 )
 
@@ -51,4 +52,39 @@ func TestReadReturnsIndependentActionPayloads(t *testing.T) {
 	if err != nil || replay.Events[0].Action.Title != "Write plain.txt" || replay.Events[0].Message.Text == "client changed message" || string(replay.Events[0].Action.Input) != raw {
 		t.Fatal("snapshot mutated replay", replay.Events, err)
 	}
+}
+
+func TestReadReturnsIndependentPreparedCommands(t *testing.T) {
+	b, in, _ := commandTurn(t)
+	ctx := context.Background()
+	p, err := b.prepareCommand(ctx, in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { _, err := b.approveCommand(ctx, in, p); done <- err }()
+	card := waitAction(t, b, in.Conversation)
+	state, err := b.Read(ctx, in.Conversation, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state.Actions[0].Command.Requested.Argv[0] = "modified"
+	state.Actions[0].Command.Effective[0][0] = "modified"
+	again, err := b.Read(ctx, in.Conversation, 0)
+	if err != nil || !reflect.DeepEqual(*again.Actions[0].Command, PresentCommand(p)) {
+		t.Fatal("client mutated prepared command", err)
+	}
+	events, err := b.Read(ctx, in.Conversation, again.Cursor-1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range events.Events {
+		if e.Action != nil {
+			e.Action.Command.Requested.Argv[0] = "changed"
+		}
+	}
+	if err = b.Decide(ctx, in.Conversation, card.ID, false); err != nil {
+		t.Fatal(err)
+	}
+	<-done
 }

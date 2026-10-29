@@ -91,7 +91,11 @@ func (s *Store) InterruptChat(ctx context.Context) error {
 
 // RedactChat also handles a policy downgrade before a broker serves history.
 func (s *Store) RedactChat(ctx context.Context) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE messages SET text='' WHERE machine_id=? AND role!='tool'`, s.MachineID())
+	_, err := s.db.ExecContext(ctx, `DELETE FROM chat_command_output WHERE action_id IN (SELECT id FROM messages WHERE machine_id=?)`, s.MachineID())
+	if err != nil {
+		return err
+	}
+	_, err = s.db.ExecContext(ctx, `UPDATE messages SET text='' WHERE machine_id=? AND role!='tool'`, s.MachineID())
 	return err
 }
 

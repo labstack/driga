@@ -15,7 +15,7 @@ func TestApprovalModesRemoteAndAsk(t *testing.T) {
 			if err := b.SetMode(context.Background(), in.Conversation, mode); err != nil {
 				t.Fatal(err)
 			}
-			if mode == Auto {
+			if mode == Auto || mode == FullAuto {
 				in.Tool = "mcp__driga__jump"
 				in.Input = json.RawMessage(`{"session_id":1}`)
 			}

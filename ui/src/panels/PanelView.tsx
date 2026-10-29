@@ -1,7 +1,7 @@
-import { ActionIcon, Box, Card, Group, Paper, Pill, ScrollArea, SimpleGrid, Stack, Table, Text, Title, Tooltip, UnstyledButton } from "@mantine/core";
+import { ActionIcon, Box, Button, Card, Group, Paper, Pill, ScrollArea, SimpleGrid, Stack, Table, Text, Title, Tooltip, UnstyledButton } from "@mantine/core";
 import { CaretDown, CaretUp, Info } from "@phosphor-icons/react";
 import { createSortedRowModel, rowSortingFeature, sortFn_alphanumeric, sortFn_basic, tableFeatures, useTable, type ColumnDef, type SortingState } from "@tanstack/react-table";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { BarGauge } from "../widgets/BarGauge";
@@ -18,7 +18,7 @@ import { summary, timeseriesOf } from "./charts";
 import { cell, exact, label, value } from "./format";
 import { rowActions, useHost, type Act, type ActionKind, type InboxFilter } from "./host";
 import { RowMenu, rowProps } from "./RowMenu";
-import { rows, type Cell, type Column, type Frame, type Panel, type Prompt, type Result, type Row } from "./types";
+import { rows, type Cell, type Column, type Frame, type Panel, type Prompt, type PromptBurst, type Result, type Row } from "./types";
 
 export type { Act } from "./host";
 
@@ -42,7 +42,7 @@ export function PanelView({ panel, result, act: given, fill }: { panel: Panel; r
   if (panel.viz === "text") body = <ScrollArea style={{ flex: 1 }} type="auto" viewportProps={scrollable}><Text component="div" size="sm" className="markdown"><Markdown remarkPlugins={[remarkGfm]} components={{ img: () => null }}>{panel.content ?? ""}</Markdown></Text></ScrollArea>;
   else if (!result) body = <Text size="sm" c="dimmed">Loading…</Text>;
   else if (result.status === "error") body = <EmptyState kind="error" title={result.message ?? "This panel could not run."} />;
-  else if (panel.viz === "inbox" && (host.prompts?.length || host.inboxFilter)) body = <Inbox frame={result.frame ?? { columns: [], rows: [] }} act={act} prompts={host.prompts} answer={host.answer} filter={host.inboxFilter} />;
+  else if (panel.viz === "inbox" && (host.prompts?.length || host.bursts?.length || host.grantHistory?.length || host.inboxFilter)) body = <Inbox frame={result.frame ?? { columns: [], rows: [] }} act={act} prompts={host.prompts} answer={host.answer} filter={host.inboxFilter} />;
   else if (!result.frame || result.status === "empty") body = <Empty panel={panel} message={result.message} />;
   else body = <Body panel={panel} result={result} frame={result.frame} act={act} filter={host.inboxFilter} />;
   const said = panel.viz === "bar" && result?.frame ? summary(result.frame, panel) : "";
@@ -253,9 +253,13 @@ export function entryOf(r: Row, now: number): InboxEntry {
  * how long, then machine warnings, then completions. Only what needs the
  * person carries color. The header narrows it to one kind. */
 function Inbox({ frame, act, prompts, answer, filter }: { frame: Frame; act?: Act; prompts?: Prompt[]; answer?: (p: Prompt, allow: boolean) => Promise<void>; filter?: InboxFilter | null }) {
-  const { stuck } = useHost();
+  const host = useHost();
+  const { stuck } = host;
   const now = Date.now();
   if (filter === "stuck") return stuck?.rows.length ? <DataTable frame={stuck} source="sessions" act={act} /> : <EmptyState kind="empty" title="No session looks stuck." />;
+  const groups = (host.bursts ?? []).filter(b => b.members.length > 1);
+  const grouped = new Set(groups.flatMap(b => b.members.map(m => m.id)));
+  const individual = prompts?.filter(p => !grouped.has(p.id)) ?? [];
   const items = rows(frame);
   const waits = items.filter(r => r.kind === "waiting");
   // Machine warnings, such as memory pressure, need the person too; they are
@@ -270,9 +274,10 @@ function Inbox({ frame, act, prompts, answer, filter }: { frame: Frame; act?: Ac
   const needs = filter !== "review";
   const review = filter !== "waiting";
   return <ScrollArea style={{ flex: 1 }} type="auto" viewportProps={scrollable}><Stack gap="sm">
-    {needs && section("Permission prompts", "waiting", "warning", prompts?.length ?? 0, prompts?.map(p => <PromptItem key={p.id} prompt={p} answer={answer} />))}
+    {needs && section("Permission prompts", "waiting", "warning", individual.length + groups.length, <>{groups.map(b => <PromptBurstItem key={b.id} burst={b} answer={answer} decide={host.decideBurst}/>)}{individual.map(p => <PromptItem key={p.id} prompt={p} answer={answer}/>)}</>)}
     {needs && section("Needs you", "waiting", "warning", waits.length, waits.map(r => <InboxItem key={String(r.id)} entry={entryOf(r, now)} onOpen={jump(r)} />))}
     {needs && section("Machines", "waiting", "warning", warnings.length, warnings.map(r => <InboxItem key={String(r.id)} entry={entryOf(r, now)} onDismiss={ack(r)} />))}
+    {host.grantHistory?.map(d => <Paper withBorder p="xs" radius="md" key={`${d.grant_id}/${d.action_id ?? d.prompt_id}`}><Text size="xs">{d.attribution} · {d.session ?? d.conversation} · {d.time}</Text><Button size="compact-xs" variant="subtle" disabled={d.revoked} onClick={() => void host.revokeGrant?.(d.grant_id)}>{d.revoked ? "Grant revoked" : "Revoke grant"}</Button></Paper>)}
     {review && section("To review", "finished", "info", done.length, done.map(r => <InboxItem key={String(r.id)} entry={entryOf(r, now)} onApprove={ack(r)} onOpen={jump(r)} />))}
   </Stack></ScrollArea>;
 }
@@ -343,18 +348,49 @@ function Timeline({ frame, act, title }: { frame: Frame; act?: Act; title: strin
 /** PromptItem is one pending permission prompt: the tool and exactly what it
  * asks to run. Its answers arm after a moment, so a click meant for the row
  * that was there before never answers the one that moved into place. */
-function PromptItem({ prompt, answer }: { prompt: Prompt; answer?: (p: Prompt, allow: boolean) => Promise<void> }) {
+export function PromptItem({ prompt, answer }: { prompt: Prompt; answer?: (p: Prompt, allow: boolean) => Promise<void> }) {
+  const host = useHost();
   const [armed, setArmed] = useState(false);
   const [busy, setBusy] = useState(false);
-  useEffect(() => { const t = window.setTimeout(() => setArmed(true), 600); return () => window.clearTimeout(t); }, [prompt.id]);
+  useEffect(() => { setArmed(false); const t = window.setTimeout(() => setArmed(true), 600); return () => window.clearTimeout(t); }, [prompt.id, JSON.stringify(prompt.input)]);
   const respond = async (allow: boolean) => { if (!answer) return; setBusy(true); try { await answer(prompt, allow); } finally { setBusy(false); } };
   const detail = promptDetail(prompt);
   const entry: InboxEntry = { id: prompt.id, kind: "permission", title: prompt.session, agent: "claude", reason: detail ? `${prompt.tool}(${detail})` : prompt.tool, project: prompt.cwd, at: prompt.created_at, since: prompt.created_at };
-  return <InboxItem entry={entry} armed={armed && !busy} onApprove={answer ? () => void respond(true) : undefined} onDeny={answer ? () => void respond(false) : undefined} />;
+  return <Stack gap={4}><InboxItem entry={entry} armed={armed && !busy} onApprove={answer ? () => void respond(true) : undefined} onDeny={answer ? () => void respond(false) : undefined} />
+    <Text component="pre" size="xs" ff="monospace" style={{ whiteSpace:"pre-wrap", overflowWrap:"anywhere" }}>{JSON.stringify(prompt.input,null,2)}</Text>
+    {prompt.grant_eligible && host.answerSimilar && <Stack gap={4}><Text size="xs" ff="monospace" style={{overflowWrap:"anywhere"}}>{prompt.grant_pattern}</Text><Text size="xs" c="dimmed">Expires {prompt.grant_expires_at}</Text><Button size="compact-xs" variant="light" disabled={!armed || busy} onClick={() => {setBusy(true);void host.answerSimilar!(prompt).finally(()=>setBusy(false));}}>Allow similar for this session</Button></Stack>}
+  </Stack>;
 }
 
 function promptDetail(p: Prompt): string {
   const input = (p.input ?? {}) as Record<string, unknown>;
   for (const key of ["command", "file_path", "url", "pattern"]) if (typeof input[key] === "string") return String(input[key]);
   return "";
+}
+
+/** Bulk decisions capture the visible member IDs. New arrivals re-arm the
+ * control and cannot enter an already submitted request. */
+export function PromptBurstItem({ burst, answer, decide }: { burst: PromptBurst; answer?: (p: Prompt, allow: boolean) => Promise<void>; decide?: (id: string, members: string[], allow: boolean) => Promise<void> }) {
+  const identity = `${burst.id}/${burst.members.map(m => `${m.id}:${m.input_hash}`).join("/")}`;
+  const [armed, setArmed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<string>();
+  const current = useRef(identity); current.current = identity;
+  const submitting = useRef(false);
+  useEffect(() => { setArmed(false); setBusy(false); setProblem(undefined); submitting.current = false; const t = window.setTimeout(() => setArmed(true), 600); return () => window.clearTimeout(t); }, [identity]);
+  const allow = async () => {
+    if (!armed || submitting.current || !decide) return;
+    submitting.current = true; setBusy(true);
+    const snapshot = burst.members.map(m => m.id), started = identity;
+    try { await decide(burst.id, snapshot, true); }
+    catch(e) { if(current.current === started) setProblem((e as Error).message); }
+    finally { if(current.current === started) { submitting.current = false; setBusy(false); } }
+  };
+  return <Paper withBorder p="xs" radius="md" style={{background:"var(--driga-raised)"}}><Stack gap="xs">
+    <Text size="sm" fw={600}>{burst.members.length} permission prompts · {burst.session}</Text>
+    <Text size="xs" c="dimmed" style={{overflowWrap:"anywhere"}}>in {burst.cwd}</Text>
+    {burst.members.map(m => <PromptItem key={`${m.id}/${m.input_hash}`} prompt={m.prompt} answer={answer}/>)}
+    {decide && <Button disabled={!armed || busy} onClick={() => void allow()}>Allow all {burst.members.length}</Button>}
+    {problem && <Text size="xs" c="danger" role="alert">{problem}</Text>}
+  </Stack></Paper>;
 }

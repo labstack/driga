@@ -3,6 +3,15 @@
 Date: 2026-10-23. Phase 2 of Chat. Phase 1 (read-only Chat) is in the
 binary today; this phase lets Chat act.
 
+> Historical design. The [2026-10-29 Chat commands design](2026-10-29-chat-commands-design.md)
+> supersedes the default built-in tool set, Bash/Edit/Write execution, automatic
+> Edit/Write rules, unrestricted Full auto and force behavior below. Current
+> built-ins are Read, Glob, Grep and TodoWrite; commands enter only through
+> `run_command`. Process/Destructive commands and delegated permission answers
+> always require a person. Force requires a second card over surviving snapshot
+> identities. Full auto retains its 30-minute window within sandbox boundaries.
+> The newer design also defines grants, prompt groups and platform availability.
+
 ## Intent
 
 Chat should be able to do what the maintainer would do at the keyboard:
@@ -49,7 +58,7 @@ Chat should be able to do what the maintainer would do at the keyboard:
 - A second approval path, for example a tool that runs before asking.
 - Typing into a live agent terminal.
 
-## How it works
+## How it works (superseded tool and execution rules)
 
 1. **Tools Chat's Claude gets.**
    - Built-in tools: the default set (`--tools default`).
@@ -117,7 +126,7 @@ Chat should be able to do what the maintainer would do at the keyboard:
   such as `head /etc/hosts` outside that directory reach the permission tool.
   The broker shows a card in Confirm and Auto; Full auto runs them.
 
-## Trust modes
+## Trust modes (superseded mode matrix)
 
 | Mode | Runs without asking | Asks |
 |---|---|---|

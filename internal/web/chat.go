@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strconv"
 
@@ -12,7 +13,7 @@ import (
 )
 
 func isChatPOST(path string) bool {
-	return path == "/chat/api/prompt-answer" || path == "/chat/api/send" || path == "/chat/api/stop" || path == "/chat/api/new" || path == "/chat/api/mode" || path == "/chat/api/decide"
+	return path == "/chat/api/burst-decide" || path == "/chat/api/grant-revoke" || path == "/chat/api/prompt-answer" || path == "/chat/api/send" || path == "/chat/api/stop" || path == "/chat/api/new" || path == "/chat/api/mode" || path == "/chat/api/decide"
 }
 func (s *Server) chatAPI(w http.ResponseWriter, r *http.Request) {
 	if isChatPOST(r.URL.Path) {
@@ -37,6 +38,50 @@ func (s *Server) chatAPI(w http.ResponseWriter, r *http.Request) {
 	var out any
 	var err error
 	switch r.URL.Path {
+	case "/chat/api/prompt-bursts":
+		if client, ok := s.opts.Chat.(chat.BurstClient); ok {
+			out, err = client.PromptBursts(ctx)
+		} else {
+			out = []chat.PromptBurst{}
+		}
+	case "/chat/api/burst-decide":
+		var in struct {
+			ID      string   `json:"id"`
+			Members []string `json:"members"`
+			Allow   bool     `json:"allow"`
+		}
+		decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, chat.MaxText))
+		decoder.DisallowUnknownFields()
+		err = decodeChatValue(decoder, &in)
+		if err == nil {
+			if client, ok := s.opts.Chat.(chat.BurstClient); ok {
+				err = client.DecideBurst(ctx, in.ID, in.Members, in.Allow)
+			} else {
+				err = errors.New("Prompt bursts unavailable")
+			}
+		}
+		out = map[string]bool{"ok": err == nil}
+	case "/chat/api/grant-history":
+		if client, ok := s.opts.Chat.(chat.GrantClient); ok {
+			out, err = client.GrantHistory(ctx)
+		} else {
+			err = errors.New("Approval grants unavailable")
+		}
+	case "/chat/api/grant-revoke":
+		var in struct {
+			ID string `json:"id"`
+		}
+		decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096))
+		decoder.DisallowUnknownFields()
+		err = decodeChatValue(decoder, &in)
+		if err == nil {
+			if client, ok := s.opts.Chat.(chat.GrantClient); ok {
+				err = client.RevokeGrant(ctx, in.ID)
+			} else {
+				err = errors.New("Approval grants unavailable")
+			}
+		}
+		out = map[string]bool{"ok": err == nil}
 	case "/chat/api/prompts":
 		if client, ok := s.opts.Chat.(chat.PromptClient); ok {
 			out, err = client.Prompts(ctx)
@@ -45,15 +90,24 @@ func (s *Server) chatAPI(w http.ResponseWriter, r *http.Request) {
 		}
 	case "/chat/api/prompt-answer":
 		var in struct {
-			ID    string `json:"id"`
-			Allow bool   `json:"allow"`
+			ID      string `json:"id"`
+			Allow   bool   `json:"allow"`
+			Similar bool   `json:"similar"`
 		}
 		decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096))
 		decoder.DisallowUnknownFields()
-		err = decoder.Decode(&in)
+		err = decodeChatValue(decoder, &in)
 		if err == nil {
 			if client, ok := s.opts.Chat.(chat.PromptClient); ok {
-				err = client.AnswerPrompt(ctx, in.ID, in.Allow)
+				if in.Similar {
+					if grant, ok := s.opts.Chat.(chat.GrantClient); ok && in.Allow {
+						err = grant.AnswerPromptSimilar(ctx, in.ID)
+					} else {
+						err = errors.New("Approval grant unavailable")
+					}
+				} else {
+					err = client.AnswerPrompt(ctx, in.ID, in.Allow)
+				}
 			} else {
 				err = errors.New("Prompts unavailable")
 			}
@@ -71,7 +125,7 @@ func (s *Server) chatAPI(w http.ResponseWriter, r *http.Request) {
 		}
 		decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, chat.MaxText+8192))
 		decoder.DisallowUnknownFields()
-		err = decoder.Decode(&in)
+		err = decodeChatValue(decoder, &in)
 		if err == nil {
 			if r.URL.Path == "/chat/api/stop" {
 				err = s.opts.Chat.Stop(ctx, in.ID)
@@ -82,19 +136,28 @@ func (s *Server) chatAPI(w http.ResponseWriter, r *http.Request) {
 		out = map[string]bool{"ok": err == nil}
 	case "/chat/api/mode", "/chat/api/decide":
 		var in struct {
-			ID     string    `json:"id"`
-			Mode   chat.Mode `json:"mode"`
-			Action string    `json:"action"`
-			Allow  bool      `json:"allow"`
+			ID      string    `json:"id"`
+			Mode    chat.Mode `json:"mode"`
+			Action  string    `json:"action"`
+			Allow   bool      `json:"allow"`
+			Similar bool      `json:"similar"`
 		}
 		decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096))
 		decoder.DisallowUnknownFields()
-		err = decoder.Decode(&in)
+		err = decodeChatValue(decoder, &in)
 		if err == nil {
 			if r.URL.Path == "/chat/api/mode" {
 				err = s.opts.Chat.SetMode(ctx, in.ID, in.Mode)
 			} else {
-				err = s.opts.Chat.Decide(ctx, in.ID, in.Action, in.Allow)
+				if in.Similar {
+					if grant, ok := s.opts.Chat.(chat.GrantClient); ok && in.Allow {
+						err = grant.DecideSimilar(ctx, in.ID, in.Action)
+					} else {
+						err = errors.New("Approval grant unavailable")
+					}
+				} else {
+					err = s.opts.Chat.Decide(ctx, in.ID, in.Action, in.Allow)
+				}
 			}
 		}
 		out = map[string]bool{"ok": err == nil}
@@ -198,4 +261,15 @@ func renderChatEvents(state chat.State) []chatHTMLEvent {
 		events[i] = rendered
 	}
 	return events
+}
+
+func decodeChatValue(decoder *json.Decoder, out any) error {
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(out); err != nil {
+		return err
+	}
+	if decoder.Decode(new(any)) != io.EOF {
+		return errors.New("expected one JSON value")
+	}
+	return nil
 }

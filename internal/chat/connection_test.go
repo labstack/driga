@@ -230,3 +230,60 @@ func TestConnectionCloseAllowsClientReentry(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+type grantRemote struct {
+	fakeConnectionRemote
+	calls int
+}
+
+func (r *grantRemote) DecideSimilar(context.Context, string, string) error { r.calls++; return io.EOF }
+func (r *grantRemote) AnswerPromptSimilar(context.Context, string) error   { r.calls++; return io.EOF }
+func (r *grantRemote) RevokeGrant(context.Context, string) error           { r.calls++; return io.EOF }
+func (r *grantRemote) GrantHistory(context.Context) ([]GrantDecision, error) {
+	return []GrantDecision{{GrantID: "g"}}, nil
+}
+func TestGrantConnectionForwarding(t *testing.T) {
+	var _ GrantClient = (*Connection)(nil)
+	r := &grantRemote{}
+	c := &Connection{dial: func(context.Context, string) (connectionRemote, error) { return r, nil }}
+	defer c.Close()
+	if err := c.DecideSimilar(context.Background(), "c", "a"); !errors.Is(err, io.EOF) || r.calls != 1 {
+		t.Fatal(err, r.calls)
+	}
+	old := &Connection{dial: func(context.Context, string) (connectionRemote, error) { return &fakeConnectionRemote{}, nil }}
+	defer old.Close()
+	if err := old.AnswerPromptSimilar(context.Background(), "p"); err == nil {
+		t.Fatal("unsupported peer accepted")
+	}
+}
+
+type burstRemote struct {
+	fakeConnectionRemote
+	calls int
+}
+
+func (r *burstRemote) PromptBursts(context.Context) ([]PromptBurst, error) {
+	return []PromptBurst{{ID: "b"}}, nil
+}
+func (r *burstRemote) DecideBurst(context.Context, string, []string, bool) error {
+	r.calls++
+	return io.EOF
+}
+func TestPromptBurstConnection(t *testing.T) {
+	var _ BurstClient = (*Connection)(nil)
+	r := &burstRemote{}
+	c := &Connection{dial: func(context.Context, string) (connectionRemote, error) { return r, nil }}
+	defer c.Close()
+	groups, err := c.PromptBursts(context.Background())
+	if err != nil || len(groups) != 1 {
+		t.Fatal(groups, err)
+	}
+	if err = c.DecideBurst(context.Background(), "b", []string{"p"}, true); !errors.Is(err, io.EOF) || r.calls != 1 {
+		t.Fatal(err, r.calls)
+	}
+	unsupported := &Connection{dial: func(context.Context, string) (connectionRemote, error) { return &fakeConnectionRemote{}, nil }}
+	defer unsupported.Close()
+	if err = unsupported.DecideBurst(context.Background(), "b", []string{"p"}, true); err == nil {
+		t.Fatal("unsupported peer accepted")
+	}
+}

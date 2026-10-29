@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/labstack/driga/internal/command"
 	"github.com/labstack/driga/internal/gitscan"
 	"github.com/labstack/driga/internal/platform"
 	"github.com/labstack/driga/internal/scrub"
@@ -30,7 +31,7 @@ const (
 const ApprovalTTL = 10 * time.Minute
 
 // FullAutoTTL keeps unattended runs short: Chat reads transcripts, files and
-// pages that may try to steer it, and Full auto shows no cards.
+// pages that may try to steer it. Process and destructive commands still ask.
 const FullAutoTTL = 30 * time.Minute
 
 type Approval struct {
@@ -46,21 +47,33 @@ type Permission struct {
 	Message      string          `json:"message,omitempty"`
 }
 type Action struct {
-	ID        string          `json:"id"`
-	Tool      string          `json:"tool"`
-	Title     string          `json:"title"`
-	Input     json.RawMessage `json:"input"`
-	Directory string          `json:"directory"`
-	Status    string          `json:"status"`
-	DecidedBy string          `json:"decided_by,omitempty"`
-	Result    string          `json:"result,omitempty"`
+	GrantID        string          `json:"grant_id,omitempty"`
+	GrantEligible  bool            `json:"grant_eligible,omitempty"`
+	GrantPattern   string          `json:"grant_pattern,omitempty"`
+	GrantExpiresAt time.Time       `json:"grant_expires_at,omitzero"`
+	Delegated      *Prompt         `json:"delegated,omitempty"`
+	Command        *CommandCard    `json:"command,omitempty"`
+	ID             string          `json:"id"`
+	Tool           string          `json:"tool"`
+	Title          string          `json:"title"`
+	Input          json.RawMessage `json:"input"`
+	Directory      string          `json:"directory"`
+	Status         string          `json:"status"`
+	DecidedBy      string          `json:"decided_by,omitempty"`
+	Result         string          `json:"result,omitempty"`
 }
 type pendingAction struct {
 	Action
-	token     string
-	toolUseID string
-	answer    chan Permission
-	claimed   bool
+	token            string
+	toolUseID        string
+	answer           chan Permission
+	claimed          bool
+	prepared         *command.Prepared
+	digest           [32]byte
+	consumed         bool
+	execCancel       context.CancelFunc
+	delegatedPending *pendingPrompt
+	delegatedDigest  [32]byte
 }
 
 func (a *pendingAction) awaitingResult() bool {
@@ -134,7 +147,9 @@ func (b *Broker) Decide(ctx context.Context, id, action string, allow bool) erro
 }
 func (b *Broker) actionEvent(c *conversation, a *pendingAction) error {
 	a.Title = scrub.Snippet(strings.Join(strings.Fields(a.Title), " "))
-	a.Result = scrub.Snippet(strings.Join(strings.Fields(a.Result), " "))
+	if a.prepared == nil {
+		a.Result = scrub.Snippet(strings.Join(strings.Fields(a.Result), " "))
+	}
 	title := a.Title
 	if a.Tool == "mcp__driga__answer_prompt" {
 		// Another session's prompt input stays in memory, including its card title.
@@ -152,7 +167,7 @@ func (b *Broker) actionEvent(c *conversation, a *pendingAction) error {
 		return err
 	}
 	b.updateMessage(c, m)
-	copy := a.Action
+	copy := copyAction(a.Action)
 	b.appendEvent(c, Event{Kind: "action", Message: &m, Action: &copy})
 	return nil
 }
@@ -164,6 +179,11 @@ func (b *Broker) resolve(c *conversation, a *pendingAction, allow bool, who, rea
 	p := Permission{Behavior: "deny", Message: reason}
 	if p.Message == "" {
 		p.Message = "Denied by user"
+	}
+	if allow && a.Delegated != nil && !b.delegatedLive(a) {
+		allow = false
+		p.Message = "prompt no longer waiting or changed"
+		a.Result = p.Message
 	}
 	if allow {
 		a.Status = "allowed"
@@ -197,6 +217,12 @@ func (b *Broker) approvalConversation(in Approval) (*conversation, error) {
 	return c, nil
 }
 func (b *Broker) Approve(ctx context.Context, in Approval) (Permission, error) {
+	if in.Tool == "mcp__driga__run_command" {
+		return Permission{}, errors.New("commands execute only through the broker gateway")
+	}
+	return b.approve(ctx, in, nil)
+}
+func (b *Broker) approve(ctx context.Context, in Approval, prepared *command.Prepared) (Permission, error) {
 	if len(in.Input) > MaxText || !json.Valid(in.Input) || len(in.Tool) > 256 || in.Tool == "" || len(in.ToolUseID) > 256 {
 		return Permission{}, errors.New("invalid approval request")
 	}
@@ -216,10 +242,51 @@ func (b *Broker) Approve(ctx context.Context, in Approval) (Permission, error) {
 		b.mu.Unlock()
 		return Permission{}, err
 	}
+	if prepared != nil {
+		if c.commandRequests == nil {
+			c.commandRequests = make(map[string]bool)
+		}
+		if c.commandRequests[in.ToolUseID] || len(c.commandRequests) >= 4096 {
+			b.mu.Unlock()
+			return Permission{}, errors.New("command request already used or turn limit reached")
+		}
+		c.commandRequests[in.ToolUseID] = true
+	}
+	var delegated *Prompt
+	var delegatedPending *pendingPrompt
+	if in.Tool == "mcp__driga__answer_prompt" {
+		id, _, e := ParsePromptAnswer(in.Input)
+		if e != nil {
+			b.mu.Unlock()
+			return Permission{}, e
+		}
+		delegatedPending = b.prompts[id]
+		if delegatedPending == nil || delegatedPending.wait.Err() != nil {
+			b.mu.Unlock()
+			return Permission{}, errors.New("prompt no longer waiting")
+		}
+		cp := copyPrompt(delegatedPending.Prompt)
+		delegated = &cp
+	}
 	// Historical cards must never consume the outstanding-work budget.
 	// Their audit messages remain in storage after leaving this live window.
-	size := func(a *pendingAction) int { return len(a.Input) + len(a.Title) + len(a.Directory) + len(a.Result) }
+	size := func(a *pendingAction) int {
+		n := actionBytes(a.Action)
+		if a.Command != nil {
+			raw, _ := json.Marshal(a.Command)
+			n += 2 * len(raw)
+		}
+		return n
+	}
 	bytes := len(in.Input) + len(title) + len(c.directory)
+	if delegated != nil {
+		raw, _ := json.Marshal(delegated)
+		bytes += len(raw)
+	}
+	if prepared != nil {
+		raw, _ := json.Marshal(prepared)
+		bytes += 2 * len(raw)
+	}
 	for _, a := range c.actions {
 		bytes += size(a)
 	}
@@ -239,14 +306,47 @@ func (b *Broker) Approve(ctx context.Context, in Approval) (Permission, error) {
 		return Permission{}, errors.New("too many actions in conversation")
 	}
 	a := &pendingAction{Action: Action{ID: uuid.NewString(), Tool: in.Tool, Title: title, Input: append(json.RawMessage(nil), in.Input...), Directory: c.directory, Status: "pending"}, token: c.token, toolUseID: in.ToolUseID, answer: make(chan Permission, 1)}
+	if delegated != nil {
+		a.Delegated = delegated
+		a.delegatedPending = delegatedPending
+		a.delegatedDigest = promptDigest(*delegated)
+	}
+	if prepared != nil {
+		cp := clonePrepared(*prepared)
+		a.prepared = &cp
+		a.digest = command.Digest(cp)
+		visible := PresentCommand(cp)
+		a.Command = &visible
+		if pattern, e := command.NewArgvPattern(cp); e == nil {
+			a.GrantEligible = true
+			a.GrantPattern = pattern.String()
+			a.GrantExpiresAt = b.now().Add(GrantTTL)
+		}
+		a.Title = visible.Summary
+	}
 	c.actions = append(c.actions, a)
 	b.expireFullAuto(c)
 	if c.remote || remote {
 		err = b.resolve(c, a, false, "", "Actions on another machine are unavailable; run driga there")
-	} else if c.mode == FullAuto {
-		err = b.resolve(c, a, true, "full auto", "")
-	} else if c.mode == Auto && auto {
-		err = b.resolve(c, a, true, "auto", "")
+	} else if legacyForce(in) {
+		err = b.resolve(c, a, false, "", "Force needs a separate run_command approval over surviving identities")
+	} else if prepared != nil && !prepared.Sandbox.Available && prepared.Policy.Class != command.Read && prepared.Policy.Class != command.Process {
+		err = b.resolve(c, a, false, "", prepared.Sandbox.Reason)
+	} else if prepared != nil {
+		if g := b.matchingGrant(*prepared, c.row.ID, ""); g != nil {
+			a.GrantID = g.ID
+			a.GrantExpiresAt = g.ExpiresAt
+			err = b.resolve(c, a, true, grantAttribution, "")
+			if err == nil {
+				b.grantDecision(*g, a.ID, "")
+			}
+		} else if commandAutomatic(c.mode, *prepared) {
+			err = b.resolve(c, a, true, string(c.mode), "")
+		} else {
+			err = b.actionEvent(c, a)
+		}
+	} else if (c.mode == Auto || c.mode == FullAuto) && auto {
+		err = b.resolve(c, a, true, string(c.mode), "")
 	} else {
 		err = b.actionEvent(c, a)
 	}
@@ -280,7 +380,7 @@ func (b *Broker) Approve(ctx context.Context, in Approval) (Permission, error) {
 }
 func (b *Broker) finishAction(c *conversation, toolUseID, status, result string) {
 	for _, a := range c.actions {
-		if a.token == c.token && (a.toolUseID == toolUseID || a.ID == toolUseID) && a.Status == "allowed" {
+		if a.token == c.token && (a.toolUseID == toolUseID || a.ID == toolUseID) && a.Status == "allowed" && a.prepared == nil {
 			a.Status, a.Result = status, result
 			_ = b.actionEvent(c, a)
 			return
@@ -303,7 +403,7 @@ func (b *Broker) Claim(in Approval) (string, error) {
 		if err != nil {
 			continue
 		}
-		if a.token == c.token && a.Status == "allowed" && !a.claimed && a.Tool == in.Tool && want == got {
+		if a.prepared == nil && a.Tool != "mcp__driga__run_command" && a.token == c.token && a.Status == "allowed" && !a.claimed && a.Tool == in.Tool && want == got {
 			a.claimed = true
 			return a.ID, nil
 		}
@@ -324,7 +424,7 @@ func (b *Broker) Complete(in Approval, id, result string, failed bool) error {
 		status = "failed"
 	}
 	for _, a := range c.actions {
-		if a.ID == id && subtle.ConstantTimeCompare([]byte(a.token), []byte(in.Token)) == 1 && a.claimed && (a.Status == "allowed" || a.Status == "stopped") {
+		if a.prepared == nil && a.ID == id && subtle.ConstantTimeCompare([]byte(a.token), []byte(in.Token)) == 1 && a.claimed && (a.Status == "allowed" || a.Status == "stopped") {
 			a.Status, a.Result = status, result
 			return b.actionEvent(c, a)
 		}
@@ -600,3 +700,15 @@ func canonicalInput(raw json.RawMessage) (string, error) {
 	data, err := json.Marshal(v)
 	return string(data), err
 }
+
+func legacyForce(in Approval) bool {
+	if in.Tool != "mcp__driga__kill" {
+		return false
+	}
+	var v struct {
+		Force bool `json:"force"`
+	}
+	return json.Unmarshal(in.Input, &v) == nil && v.Force
+}
+
+func actionBytes(a Action) int { raw, _ := json.Marshal(a); return len(raw) }

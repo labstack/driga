@@ -7,9 +7,11 @@ import (
 	"path/filepath"
 	"runtime"
 	"sync"
+	"syscall"
 	"unsafe"
 
 	"github.com/labstack/driga/internal/config"
+	"github.com/labstack/driga/internal/model"
 	"golang.org/x/sys/windows"
 )
 
@@ -57,6 +59,10 @@ func winInspect(pid int32) (winDetails, error) {
 		return winDetails{}, err
 	}
 	defer windows.CloseHandle(h)
+	return winInspectHandle(h)
+}
+
+func winInspectHandle(h windows.Handle) (winDetails, error) {
 	var code uint32
 	if err := windows.GetExitCodeProcess(h, &code); err != nil {
 		return winDetails{}, err
@@ -69,6 +75,14 @@ func winInspect(pid int32) (winDetails, error) {
 		return winDetails{}, err
 	}
 	d := winDetails{Start: winTicks(start), Kernel: winTicks(kernel), User: winTicks(user)}
+	var token windows.Token
+	if e := windows.OpenProcessToken(h, windows.TOKEN_QUERY, &token); e == nil {
+		if u, e := token.GetTokenUser(); e == nil {
+			d.OwnerSID = u.User.Sid.String()
+			d.OwnerKnown = d.OwnerSID != ""
+		}
+		token.Close()
+	}
 	buf := make([]uint16, 1024)
 	n := uint32(len(buf))
 	queryErr := windows.QueryFullProcessImageName(h, 0, &buf[0], &n)
@@ -238,4 +252,17 @@ func winReadPageFiles(pageSize uint64) (uint64, uint64) {
 		return 0, 0
 	}
 	return winPageState.total * pageSize, winPageState.used * pageSize
+}
+
+// InspectProcessHandle reads identity from the very handle retained by the
+// snapshot signal path. It never resolves a PID into a different process.
+func InspectProcessHandle(h windows.Handle, pid int32) (model.Proc, error) {
+	d, e := winInspectHandle(h)
+	if e != nil {
+		if errors.Is(e, errWinProcessGone) {
+			return model.Proc{}, syscall.ESRCH
+		}
+		return model.Proc{}, e
+	}
+	return model.Proc{PID: pid, StartTime: winTime(d.Start), Exe: d.Exe, Argv: d.Argv, Cmdline: d.Cmdline, OwnerSID: d.OwnerSID, OwnerKnown: d.OwnerKnown, Partial: d.Partial}, nil
 }

@@ -18,7 +18,7 @@ import (
 )
 
 const chatTab = 8
-const fullAutoWarning = "Full auto runs every action without asking for 30 minutes · m again to confirm"
+const fullAutoWarning = "Full auto runs reads and sandboxed Other commands automatically for 30 minutes. Process and Destructive commands still ask. · m again to confirm"
 
 type chatStateMsg struct {
 	generation uint64
@@ -119,6 +119,10 @@ func (m *app) chatKey(msg tea.KeyPressMsg) tea.Cmd {
 	case "y", "n":
 		if !m.chatInput.Focused() {
 			return m.decideChat(msg.String() == "y")
+		}
+	case "r":
+		if !m.chatInput.Focused() {
+			return m.revokeLatestGrant()
 		}
 	case "m":
 		if !m.chatInput.Focused() {
@@ -235,6 +239,16 @@ func (m *app) chatView() string {
 	previousBodies := m.chatBodies
 	m.chatBodies = make(map[string]chatBodyRender, len(m.chatMessages))
 	var lines []string
+	for _, g := range m.grantHistory {
+		label := g.Attribution + " · " + g.Session + g.Conversation + " · " + g.GrantID
+		if g.Revoked {
+			label += " · grant retired"
+		}
+		lines = append(lines, wrapText(clean(label), m.width))
+	}
+	if len(m.grantHistory) > 0 {
+		lines = append(lines, "r revoke latest active grant")
+	}
 	tools := 0
 	for _, row := range m.chatTranscript() {
 		if row.Role == "assistant" && strings.TrimSpace(row.Text) == "" {
@@ -309,7 +323,7 @@ func (m *app) chatView() string {
 	if a := m.pendingChat(); a != nil && m.chatTools {
 		// Expanded raw input uses the transcript viewport, so every byte remains
 		// reachable with paging while the decision title and keys stay pinned.
-		lines = append(lines, dim.Render("Raw JSON · "+clean(a.Tool)), wrapText(markdownClean(string(a.Input)), m.width), "")
+		lines = append(lines, dim.Render("Raw JSON · "+clean(a.Tool)), wrapText(markdownClean(chatActionDetails(*a)), m.width), "")
 	}
 	if tools > 0 {
 		lines = append(lines, dim.Render(fmt.Sprintf("▸ tools used · %d · ctrl+t expand/collapse", tools)))
@@ -584,6 +598,9 @@ func (m *app) decideChat(allow bool) tea.Cmd {
 	if a == nil || m.opts.Chat == nil {
 		return nil
 	}
+	if allow && a.Command != nil && a.Command.Error != "" {
+		return nil
+	}
 	client, ctx, id, action, generation := m.opts.Chat, m.opts.Context, m.chatID, a.ID, m.chatGeneration
 	return func() tea.Msg { return chatSentMsg{err: client.Decide(ctx, id, action, allow), generation: generation} }
 }
@@ -655,6 +672,12 @@ func (m *app) chatCard(a chat.Action, heights ...int) string {
 	}
 	_ = json.Unmarshal(a.Input, &input)
 	fields := clean(a.Title)
+	if a.Command != nil {
+		fields = a.Command.Summary + "\n" + string(a.Command.Class) + " · " + a.Command.Boundary
+		if a.Command.Error != "" {
+			fields += "\n" + a.Command.Error
+		}
+	}
 	switch a.Tool {
 	case "Bash":
 		fields = input.Command
@@ -696,7 +719,11 @@ func (m *app) chatCard(a chat.Action, heights ...int) string {
 		count := fmt.Sprintf(" · +%d more waiting", waiting-1)
 		rows[0] = accent.Render(truncate("Approve? · "+clean(a.Tool), max(1, width-ansi.StringWidth(count)))) + dim.Render(count)
 	}
-	rows = append(rows, accent.Render(truncate("y allow · n deny · alt+y/alt+n while typing", width)))
+	keys := "y allow · n deny · alt+y/alt+n while typing"
+	if a.Command != nil && a.Command.Error != "" {
+		keys = "unavailable · n dismiss · ctrl+t details"
+	}
+	rows = append(rows, accent.Render(truncate(keys, width)))
 	box := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(0, 1).Width(width + 4)
 	if !m.opts.NoColor {
 		box = box.BorderForeground(view.ThemeColor("accent"))
@@ -786,4 +813,13 @@ func (m *app) chatPanelView() string {
 	m.tab = tab
 	m.width = width
 	return lipgloss.JoinHorizontal(lipgloss.Top, lipgloss.NewStyle().Width(width-panelWidth-3).Render(left), " │ ", lipgloss.NewStyle().Width(panelWidth).Render(right))
+}
+
+func chatActionDetails(a chat.Action) string {
+	raw, _ := json.MarshalIndent(struct {
+		Input     json.RawMessage   `json:"input"`
+		Command   *chat.CommandCard `json:"command,omitempty"`
+		Delegated *chat.Prompt      `json:"delegated,omitempty"`
+	}{a.Input, a.Command, a.Delegated}, "", "  ")
+	return string(raw)
 }

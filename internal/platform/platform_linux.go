@@ -84,7 +84,9 @@ func (p linuxPlatform) Procs(ctx context.Context) ([]model.Proc, error) {
 			continue
 		}
 		status, _ := os.ReadFile(filepath.Join(p.root, strconv.FormatInt(int64(proc.Pid), 10), "status"))
+		owner, ownerKnown := procOwnerUID(status)
 		out = append(out, model.Proc{
+			OwnerUID: owner, OwnerKnown: ownerKnown,
 			Swap: ParseVmSwap(status), MemoryMeasure: "rss_swap",
 			TTY: ttys[controllingTTYDevice(stat)],
 			PID: proc.Pid, PPID: ppid, StartTime: time.UnixMilli(start),

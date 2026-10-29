@@ -1,5 +1,6 @@
 import { createContext, useContext } from "react";
-import type { Frame, Prompt, Row } from "./types";
+import type { GrantDecision } from "../host/api";
+import type { Frame, Prompt, PromptBurst, Row } from "./types";
 
 /** An action a panel row offers. The host decides how to run it: the app
  * asks its own dialog for anything that changes the machine and runs it
@@ -19,6 +20,11 @@ export type Host = {
   /** local is the machine the app runs on; actions are offered only there. */
   local?: string;
   prompts?: Prompt[];
+  bursts?: PromptBurst[];
+  decideBurst?: (id: string, members: string[], allow: boolean) => Promise<void>;
+  answerSimilar?: (prompt: Prompt) => Promise<void>;
+  grantHistory?: GrantDecision[];
+  revokeGrant?: (id: string) => Promise<void>;
   answer?: (prompt: Prompt, allow: boolean) => Promise<void>;
   /** The inbox shows only this kind while set. */
   inboxFilter?: InboxFilter | null;

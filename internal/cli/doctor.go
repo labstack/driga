@@ -22,6 +22,7 @@ import (
 	"github.com/labstack/driga/internal/chat"
 	"github.com/labstack/driga/internal/cleanup"
 	"github.com/labstack/driga/internal/collector"
+	"github.com/labstack/driga/internal/command"
 	"github.com/labstack/driga/internal/config"
 	"github.com/labstack/driga/internal/fleet"
 	"github.com/labstack/driga/internal/hooks"
@@ -67,9 +68,10 @@ type DoctorDeps struct {
 	Now                time.Time
 	ProcessAlive       func(int32, time.Time) bool // Optional PID/start validation for fixtures.
 	LockProbe          func(dataDir string) (owner collector.Owner, held bool, err error)
-	ServicePlistStale  func() (bool, error)   // macOS plist path, read-only.
-	ServiceState       func() (string, error) // Windows Task Scheduler, read-only.
-	NotificationStatus func() (string, error) // Native API status, no authorization/registration/display.
+	ServicePlistStale  func() (bool, error)                     // macOS plist path, read-only.
+	ServiceState       func() (string, error)                   // Windows Task Scheduler, read-only.
+	NotificationStatus func() (string, error)                   // Native API status, no authorization/registration/display.
+	SandboxProbe       func(context.Context) command.Capability // Optional native Chat sandbox probe.
 }
 
 // Doctor checks stored evidence without collecting, writing, or controlling launchd.
@@ -81,6 +83,7 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 	checks := []Check{}
 	copilotSeen := false
 	add := func(name, status, detail, fix string) { checks = append(checks, Check{name, status, detail, fix}) }
+	checks = append(checks, doctorSandbox(ctx, d, goos))
 	for _, warning := range d.Config.Warnings {
 		add("config", "warn", warning, "correct the pattern in "+config.Path())
 	}
@@ -459,6 +462,37 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 	}
 	checks = append(checks, doctorIntake(d, held))
 	return checks
+}
+
+func doctorSandbox(ctx context.Context, d DoctorDeps, goos string) Check {
+	probe := d.SandboxProbe
+	if probe == nil {
+		if goos != runtime.GOOS {
+			return Check{"chat_sandbox", "info", "sandbox probe requires native " + goos, "run driga doctor on that machine"}
+		}
+		probe = command.ProbeSandbox
+	}
+	c := probe(ctx)
+	if c.Available {
+		return Check{"chat_sandbox", "ok", c.Backend + " · OS " + c.OSVersion, ""}
+	}
+	fix := "use validated Read and Process commands only"
+	switch goos {
+	case "windows":
+		return Check{"chat_sandbox", "info", c.Reason, fix}
+	case "linux":
+		fix = "install bubblewrap; check unprivileged user namespaces and AppArmor policy for bwrap; rerun driga doctor"
+	case "darwin":
+		fix = "check /usr/bin/sandbox-exec on macOS 15+ and enclosing sandbox restrictions; rerun driga doctor"
+	}
+	detail := c.Reason
+	if c.Backend != "" {
+		detail += " · " + c.Backend
+	}
+	if c.OSVersion != "" {
+		detail += " · OS " + c.OSVersion
+	}
+	return Check{"chat_sandbox", "warn", detail, fix}
 }
 
 func doctorChatSocket(d DoctorDeps, held bool) Check {
