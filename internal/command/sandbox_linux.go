@@ -39,63 +39,62 @@ func nativeCapability(ctx context.Context) Capability {
 	return probeBackend(ctx, c)
 }
 
-func bubbleArgs(p Prepared) []string {
-	a := []string{"--unshare-all", "--disable-userns", "--new-session", "--die-with-parent", "--cap-drop", "ALL"}
-	if p.Parsed.Request.Network {
-		a = append(a, "--share-net")
+func sandboxProfile(p Prepared) (string, error) {
+	args, err := bubbleArgs(p)
+	if err != nil {
+		return "", err
 	}
-	// Build a fresh root. Host /run, /tmp, home and pathname sockets are absent.
-	for _, dir := range []string{"/usr", "/bin", "/sbin", "/lib", "/lib64"} {
-		if _, e := os.Stat(dir); e == nil {
-			a = append(a, "--ro-bind", dir, dir)
-		}
-	}
-	a = append(a, "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp")
-	for _, file := range []string{"/etc/resolv.conf", "/etc/hosts", "/etc/nsswitch.conf", "/etc/ld.so.cache"} {
-		if _, e := os.Stat(file); e == nil {
-			a = append(a, "--ro-bind", file, file)
-		}
-	}
-	for _, root := range []string{p.Scope.Project, p.Scope.Scratch} {
-		if root != "" {
-			a = append(a, "--bind", root, root)
-		}
-	}
-	for _, root := range p.Scope.Denied {
-		// Only roots made visible by a bind need masking; absent paths stay absent.
-		visible := within(root, p.Scope.Project) || within(root, p.Scope.Scratch) || within(root, "/usr")
-		if !visible {
-			continue
-		}
-		if st, e := os.Stat(root); e == nil {
-			if st.IsDir() {
-				a = append(a, "--tmpfs", root, "--remount-ro", root)
-			} else {
-				a = append(a, "--ro-bind", "/dev/null", root)
-			}
-		}
-	}
-	return append(a, "--chdir", p.Parsed.Request.Cwd, "--seccomp", "3", "--")
-}
-func sandboxProfile(p Prepared) string {
 	b, _ := json.Marshal(struct {
 		Args   []string
 		Arch   string
 		Filter string
-	}{bubbleArgs(p), runtime.GOARCH, "deny-unix-sockets-and-io-uring-v2"})
-	return string(b)
+	}{args, runtime.GOARCH, "deny-unix-sockets-and-io-uring-v2"})
+	return string(b), nil
 }
 
 func sandboxCommand(ctx context.Context, p Prepared, argv []string) (*exec.Cmd, func(), error) {
-	f, err := seccompFile(p.Scope)
+	args, err := bubbleArgs(p)
 	if err != nil {
 		return nil, func() {}, err
 	}
-	cleanup := func() { f.Close() }
-	cmd := exec.CommandContext(ctx, p.Sandbox.Backend, append(bubbleArgs(p), argv...)...)
-	// This is the sole intentional extra descriptor. bwrap consumes/closes the
-	// seccomp program before exec; no caller descriptors or sockets are inherited.
+	remove, err := bubblePlaceholders(args)
+	if err != nil {
+		return nil, func() {}, err
+	}
+	f, err := seccompFile(p.Scope)
+	if err != nil {
+		remove()
+		return nil, func() {}, err
+	}
+	cleanup := func() { f.Close(); remove() }
+	cmd := exec.CommandContext(ctx, p.Sandbox.Backend, append(args, argv...)...)
+	// bwrap consumes these private policy descriptors before exec; no caller
+	// descriptors or sockets are inherited.
 	cmd.ExtraFiles = []*os.File{f}
+	for _, arg := range args {
+		if arg != "--ro-bind-data" {
+			continue
+		}
+		data, err := os.CreateTemp("", "driga-git-commondir-")
+		if err != nil {
+			cleanup()
+			return nil, func() {}, err
+		}
+		if err = os.Remove(data.Name()); err == nil {
+			_, err = data.WriteString(".\n")
+		}
+		if err == nil {
+			_, err = data.Seek(0, 0)
+		}
+		if err != nil {
+			data.Close()
+			cleanup()
+			return nil, func() {}, err
+		}
+		cmd.ExtraFiles = append(cmd.ExtraFiles, data)
+		oldCleanup := cleanup
+		cleanup = func() { data.Close(); oldCleanup() }
+	}
 	if runtime.GOARCH != "amd64" && runtime.GOARCH != "arm64" {
 		cleanup()
 		return nil, func() {}, fmt.Errorf("unsupported sandbox ABI")

@@ -5,10 +5,63 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/labstack/driga/internal/command"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestOutsideReadsAlwaysRequireCard(t *testing.T) {
+	for _, mode := range []Mode{Confirm, Auto, FullAuto} {
+		for _, operand := range []string{"outside", "symlink", "tilde"} {
+			t.Run(string(mode)+"/"+operand, func(t *testing.T) {
+				b, in, project := commandTurn(t)
+				outside := filepath.Join(t.TempDir(), "notes.txt")
+				if err := os.WriteFile(outside, []byte("private"), 0600); err != nil {
+					t.Fatal(err)
+				}
+				path := outside
+				if operand == "symlink" {
+					path = filepath.Join(project, "escape")
+					if err := os.Symlink(outside, path); err != nil {
+						t.Fatal(err)
+					}
+				}
+				req := command.Request{Argv: []string{"cat", path}}
+				if operand == "tilde" {
+					req = command.Request{Script: "cat ~/notes.txt"}
+				}
+				in.Input, _ = json.Marshal(req)
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
+				p, err := b.prepareCommand(ctx, in)
+				if err != nil {
+					t.Fatal(err)
+				}
+				p.Sandbox.Available = true // Approval seam only; no execution.
+				if commandAutomatic(mode, p) {
+					t.Fatalf("%s auto-approved %s", mode, operand)
+				}
+				if err := b.SetMode(ctx, in.Conversation, mode); err != nil {
+					t.Fatal(err)
+				}
+				done := make(chan error, 1)
+				go func() { _, err := b.approveCommand(ctx, in, p); done <- err }()
+				card := waitAction(t, b, in.Conversation)
+				if card.Status != "pending" || card.GrantEligible {
+					t.Fatal("read needs an individual card", card)
+				}
+				if err := b.Decide(ctx, in.Conversation, card.ID, false); err != nil {
+					t.Fatal(err)
+				}
+				if err := <-done; err == nil {
+					t.Fatal("denial ignored")
+				}
+			})
+		}
+	}
+}
 
 func TestCommandRunnersCardedInFullAuto(t *testing.T) {
 	for _, argv := range [][]string{

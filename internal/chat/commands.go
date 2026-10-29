@@ -19,6 +19,7 @@ import (
 )
 
 func clonePrepared(p command.Prepared) command.Prepared {
+	p.WritableRoots = append([]string(nil), p.WritableRoots...)
 	p.Parsed.Request.Argv = append([]string(nil), p.Parsed.Request.Argv...)
 	p.Parsed.Commands = append([][]string(nil), p.Parsed.Commands...)
 	for i := range p.Parsed.Commands {
@@ -57,6 +58,9 @@ func copyAction(a Action) Action {
 	return a
 }
 func commandAutomatic(mode Mode, p command.Prepared) bool {
+	if p.Policy.RequiresCard {
+		return false
+	}
 	return (mode == Auto || mode == FullAuto) && p.Policy.Class == command.Read || mode == FullAuto && p.Policy.Class == command.Other && p.Sandbox.Available
 }
 func decodeCommand(raw json.RawMessage) (command.Request, error) {

@@ -52,3 +52,10 @@ func TestCommandCardEffectiveInvocation(t *testing.T) {
 		t.Fatal("unavailable read claims a sandbox", c.Boundary)
 	}
 }
+
+func TestCommandCardDisclosesWorktreeWriteRoots(t *testing.T) {
+	p := command.Prepared{WritableRoots: []string{"/project", "/scratch", "/main/.git"}, Sandbox: command.Capability{Available: true}}
+	if got := PresentCommand(p).Boundary; !strings.Contains(got, "/main/.git") {
+		t.Fatal("common Git directory missing from write boundary", got)
+	}
+}

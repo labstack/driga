@@ -46,6 +46,8 @@ type Policy struct {
 	Class    Class
 	Reason   string
 	Commands []Executable
+	// RequiresCard excludes unconfined reads from Full auto and similarity grants.
+	RequiresCard bool
 }
 
 // Prepared is a value snapshot. Callers must deep-copy slices at trust boundaries;
@@ -57,6 +59,7 @@ type Prepared struct {
 	Sandbox           Capability
 	BackendExecutable Executable
 	Profile           string
+	WritableRoots     []string
 	ProcessSnapshot   *ProcessSnapshot
 	seal              [32]byte
 }

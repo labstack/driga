@@ -6,6 +6,7 @@ import (
 	"github.com/labstack/driga/internal/command"
 	"github.com/labstack/driga/internal/model"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -68,6 +69,9 @@ func PresentCommand(p command.Prepared) CommandCard {
 		roots = p.Scope.Scratch
 	} else {
 		roots += " and " + p.Scope.Scratch
+	}
+	if len(p.WritableRoots) > 0 {
+		roots = strings.Join(p.WritableRoots, " and ")
 	}
 	network := "no network"
 	if p.Parsed.Request.Network {

@@ -20,9 +20,13 @@ type ArgvPattern struct {
 	Executable     string         `json:"executable"`
 	ExecutableHash [32]byte       `json:"-"`
 	TimeoutSeconds int            `json:"timeout_seconds"`
+	WritableRoots  []string       `json:"writable_roots,omitempty"`
 }
 
 func NewArgvPattern(p Prepared) (ArgvPattern, error) {
+	if p.Policy.RequiresCard {
+		return ArgvPattern{}, errors.New("read outside scope requires individual approval")
+	}
 	r := p.Parsed.Request
 	if (p.Policy.Class != Read && p.Policy.Class != Other) || r.Network || r.Script != "" || len(r.Argv) == 0 || len(p.Policy.Commands) != 1 || (!p.Sandbox.Available && p.Policy.Class != Read) || p.Parsed.Complex || p.Parsed.Pipeline {
 		return ArgvPattern{}, errors.New("command is not eligible for a grant")
@@ -32,6 +36,7 @@ func NewArgvPattern(p Prepared) (ArgvPattern, error) {
 		return ArgvPattern{}, errors.New("grant cwd must be canonical")
 	}
 	pat := ArgvPattern{Family: p.Policy.Class, Argv: append([]string(nil), r.Argv...), Cwd: cwd, Project: p.Scope.Project, Scratch: p.Scope.Scratch, Executable: p.Policy.Commands[0].Path, ExecutableHash: p.Policy.Commands[0].SHA256, TimeoutSeconds: r.TimeoutSeconds}
+	pat.WritableRoots = slices.Clone(p.WritableRoots)
 	if len(r.Argv) == 4 && filepath.Base(r.Argv[0]) == "git" && r.Argv[1] == "worktree" && r.Argv[2] == "remove" && p.Scope.Project != "" {
 		pat.PathPositions = map[int]string{3: p.Scope.Project}
 		if !boundedPatternPath(p.Scope.Project, cwd, r.Argv[3]) {
@@ -68,6 +73,9 @@ func boundedPatternPath(root, cwd, path string) bool {
 }
 func MatchPattern(pattern ArgvPattern, p Prepared) bool {
 	candidate, err := NewArgvPattern(p)
+	if !slices.Equal(candidate.WritableRoots, pattern.WritableRoots) {
+		return false
+	}
 	if err != nil || candidate.Family != pattern.Family || candidate.Cwd != pattern.Cwd || candidate.Project != pattern.Project || candidate.Scratch != pattern.Scratch || candidate.Executable != pattern.Executable || candidate.ExecutableHash != pattern.ExecutableHash || candidate.TimeoutSeconds != pattern.TimeoutSeconds || len(candidate.Argv) != len(pattern.Argv) {
 		return false
 	}

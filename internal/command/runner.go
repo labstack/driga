@@ -94,8 +94,16 @@ func Prepare(ctx context.Context, in Request, s Scope) (Prepared, error) {
 	}
 	p := Prepared{Parsed: parsed, Scope: s, Policy: pol, Sandbox: ProbeSandbox(ctx)}
 	if p.Sandbox.Available {
+		writes, err := sandboxWrites(s)
+		if err != nil {
+			return Prepared{}, err
+		}
+		p.WritableRoots = writes.Roots
 		p.BackendExecutable = resolve(p.Sandbox.Backend, in.Cwd)
-		p.Profile = sandboxProfile(p)
+		p.Profile, err = sandboxProfile(p)
+		if err != nil {
+			return Prepared{}, err
+		}
 	}
 	p.seal = Digest(p)
 	return p, nil
@@ -209,7 +217,8 @@ func Run(ctx context.Context, p Prepared, stdout, stderr io.Writer) (Result, err
 		return runSafeRead(ctx, p, stdout)
 	}
 	cap := ProbeSandbox(ctx)
-	if cap != p.Sandbox || sandboxProfile(p) != p.Profile || !reflect.DeepEqual(resolve(cap.Backend, p.Parsed.Request.Cwd), p.BackendExecutable) {
+	profile, profileErr := sandboxProfile(p)
+	if profileErr != nil || cap != p.Sandbox || profile != p.Profile || !reflect.DeepEqual(resolve(cap.Backend, p.Parsed.Request.Cwd), p.BackendExecutable) {
 		return result, fmt.Errorf("sandbox capability or profile changed")
 	}
 	for _, d := range []string{p.Scope.Scratch, filepath.Join(p.Scope.Scratch, "home"), filepath.Join(p.Scope.Scratch, "tmp")} {

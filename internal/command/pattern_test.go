@@ -31,6 +31,7 @@ func TestGrantPatternContainment(t *testing.T) {
 		{"flags", func(p *Prepared) { p.Parsed.Request.Argv[2] = "remove --force" }, false},
 		{"cwd", func(p *Prepared) { p.Parsed.Request.Cwd = outside }, false},
 		{"network", func(p *Prepared) { p.Parsed.Request.Network = true }, false},
+		{"write roots", func(p *Prepared) { p.WritableRoots = []string{outside} }, false},
 		{"class", func(p *Prepared) { p.Policy.Class = Destructive }, false},
 		{"executable", func(p *Prepared) { p.Policy.Commands[0].SHA256 = [32]byte{2} }, false},
 	} {

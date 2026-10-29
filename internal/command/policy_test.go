@@ -44,6 +44,11 @@ func policyFor(t *testing.T, script string, s Scope) Policy {
 
 func TestCommandReadPolicy(t *testing.T) {
 	s := Scope{Project: t.TempDir(), Scratch: t.TempDir()}
+	for _, name := range []string{"file", "file with spaces"} {
+		if err := os.WriteFile(filepath.Join(s.Project, name), []byte("fixture"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
 	for _, script := range []string{"ls -la -- .", "cat 'file with spaces'", "head -n 2 file", "tail -n 3 file", "wc -l file", "ps -ef", "pgrep -f pattern", "lsof -n -P", "du -sh .", "df -h", "uptime", "grep -i -- needle file", "find . -type f -name '*.go'", "git status --short", "git log -n 3", "git diff --stat", "git show HEAD", "git branch --list", "stat file", "which cat", "cat file | grep word | wc -l"} {
 		if got := policyFor(t, script, s); got.Class != Read {
 			if len(got.Commands) > 0 && got.Commands[0].SHA256 == ([32]byte{}) {

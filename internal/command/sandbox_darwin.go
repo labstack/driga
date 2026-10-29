@@ -22,17 +22,28 @@ func nativeCapability(ctx context.Context) Capability {
 	return probeBackend(ctx, c)
 }
 
-func sandboxProfile(p Prepared) string {
+func sandboxProfile(p Prepared) (string, error) {
+	writes, err := sandboxWrites(p.Scope)
+	if err != nil {
+		return "", err
+	}
 	// Default deny includes host signals, networking (including pathname Unix
 	// sockets), mach services, process inspection and inherited IPC authority.
 	var b strings.Builder
 	b.WriteString("(version 1)\n(deny default)\n(allow process-exec process-fork sysctl-read)\n(allow signal (target self))\n(allow file-read* file-map-executable)\n")
-	for _, root := range []string{p.Scope.Project, p.Scope.Scratch} {
+	for _, root := range writes.Roots {
 		if root != "" {
 			fmt.Fprintf(&b, "(allow file-write* (subpath %s))\n", strconv.Quote(root))
 		}
 	}
 	b.WriteString("(allow file-write-data (literal \"/dev/null\"))\n")
+	for _, path := range writes.Protected {
+		filter := "subpath"
+		if path.Literal {
+			filter = "literal"
+		}
+		fmt.Fprintf(&b, "(deny file-write* (%s %s))\n", filter, strconv.Quote(path.Path))
+	}
 	for _, root := range p.Scope.Denied {
 		fmt.Fprintf(&b, "(deny file-read* file-write* (subpath %s))\n", strconv.Quote(root))
 	}
@@ -40,9 +51,13 @@ func sandboxProfile(p Prepared) string {
 	if p.Parsed.Request.Network {
 		b.WriteString("(allow network-outbound (remote ip))\n(allow network-inbound (local ip))\n")
 	}
-	return b.String()
+	return b.String(), nil
 }
 func sandboxCommand(ctx context.Context, p Prepared, argv []string) (*exec.Cmd, func(), error) {
-	args := append([]string{"-p", sandboxProfile(p), "--"}, argv...)
+	profile, err := sandboxProfile(p)
+	if err != nil {
+		return nil, func() {}, err
+	}
+	args := append([]string{"-p", profile, "--"}, argv...)
 	return exec.CommandContext(ctx, p.Sandbox.Backend, args...), func() {}, nil
 }

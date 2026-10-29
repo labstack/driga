@@ -38,13 +38,13 @@ Environment: macOS **27.0.1**, build **26A434**, Darwin **27.0.0**,
 arm64; Go **1.27.3**. Seatbelt backend: `/usr/bin/sandbox-exec`, supplied
 by that OS (no independent backend version).
 
-This agent session is itself restricted. Seatbelt's initialization probe
+The original implementation session was itself restricted. Seatbelt's initialization probe
 returns **exit status 71**, so the optional native integration test skips.
 With `DRIGATEST_REQUIRE_SANDBOX=1`, it must fail, not skip. Native process-list
 inspection returns **operation not permitted**, preventing completion of the
 strict process E2E cases here. These are environment failures, not red-test
 evidence and not proof of working sandbox boundaries. No native denial
-claim is made for this machine, Linux or Windows from this session.
+claim was made for this machine, Linux or Windows from that session.
 
 The doctor tests inject available/failed Seatbelt, available/missing/unusable
 bwrap, and Windows capabilities. They verify status, backend/OS, reason and
@@ -78,6 +78,28 @@ or an instruction to weaken a user's host. Driga only diagnoses the condition.
 The descendant-cleanup fixture checks its unique generated executable in
 the host process list. It never mistakes bwrap's namespace-local printed PIDs
 for host PIDs, and cleanup rechecks each fixture identity's start time.
+
+## Security follow-up
+
+The follow-up session on macOS 27.0.1 could use Seatbelt. Real sandbox tests
+verified that existing and absent persistence paths reject writes and atomic
+replacement in project, nested repository and worktree layouts. The cases
+cover project/scratch roots, the selected and sibling worktree gitdirs, and
+the common Git directory. Staging and committing ordinary files succeeded
+inside the same sandbox. These assertions now run under
+`TestCommandSandboxIntegration/execution-hooks`, including the required
+sandbox CI job. Linux mount arguments and placeholder cleanup are unit-tested
+on the native host; native Linux execution still needs the Linux CI runner.
+
+Red evidence: before the read fix, outside operands, escaping symlinks and
+missing files classified as Read, and Auto/Full auto bypassed their cards.
+Clustered grep options and a literal `-` pattern exposed two further failing
+operand cases before their fixes. The original Seatbelt profile test failed
+for missing write denials. Temporarily removing the restored backend
+protections made a real sandbox `.gitattributes` write succeed and failed the
+Linux read-only mount assertions. Those mutations were restored. Additional
+tests first failed for nested external gitdir pointers, non-metadata external
+targets, protected symlinks and grant reuse with changed write roots.
 
 `TestCommandSandboxIntegration` logs the capability/OS and Linux bwrap version,
 then executes assertions for project/scratch writes, denied outside/symlink

@@ -150,6 +150,7 @@ func classify(p Parsed, scope Scope, depth int) (Policy, error) {
 	}
 	pol := Policy{Class: Other, Reason: "Sandboxed command requires authorization"}
 	allRead := !p.Complex && len(p.Commands) > 0
+	readScoped := scopedReadPath(p.Request.Cwd, "", s)
 	var process, destructive bool
 	for _, args := range p.Commands {
 		if len(args) == 0 || args[0] == "" {
@@ -301,6 +302,12 @@ func classify(p Parsed, scope Scope, depth int) (Policy, error) {
 		}
 		if !trusted(exe, args[0]) || !readArgs(lower, args[1:]) {
 			allRead = false
+		} else {
+			for _, path := range readPaths(lower, args[1:], p.Request.Cwd) {
+				if !scopedReadPath(path, p.Request.Cwd, s) {
+					readScoped = false
+				}
+			}
 		}
 	}
 	// Compound/expanded scripts may conceal writes or process selectors. They
@@ -309,6 +316,7 @@ func classify(p Parsed, scope Scope, depth int) (Policy, error) {
 		destructive = true
 		process = false
 	}
+	pol.RequiresCard = !readScoped
 	switch {
 	case p.Request.Network || destructive:
 		pol.Class = Destructive
@@ -316,11 +324,121 @@ func classify(p Parsed, scope Scope, depth int) (Policy, error) {
 	case process:
 		pol.Class = Process
 		pol.Reason = "Only an approved process snapshot may be signalled"
+	case allRead && !readScoped:
+		pol.Reason = "Read paths must resolve inside the project or scratch; explicit approval required"
 	case allRead:
 		pol.Class = Read
 		pol.Reason = "Validated read-only command"
 	}
 	return pol, nil
+}
+
+func scopedReadPath(path, cwd string, s Scope) bool {
+	if path == "" {
+		return false
+	}
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(cwd, path)
+	}
+	q, err := filepath.EvalSymlinks(path)
+	return err == nil && (within(q, s.Project) || within(q, s.Scratch)) && !denied(q, s)
+}
+
+// Called only after readArgs validates the grammar. Option values and search
+// patterns are not file operands. Git revisions before -- are not paths.
+func readPaths(name string, args []string, cwd string) []string {
+	var paths []string
+	var operands string
+	long := map[string]bool{}
+	pattern := false
+	explicitPattern := false
+	gitRevisions := false
+	switch name {
+	case "ps", "pgrep", "uptime":
+		return nil
+	case "which":
+		for _, a := range args {
+			if strings.ContainsAny(a, "/\\") {
+				paths = append(paths, a)
+			}
+		}
+		return paths
+	case "head", "tail":
+		operands = "nc"
+		long["--lines"] = true
+		long["--bytes"] = true
+	case "lsof":
+		operands = "pi"
+	case "du":
+		operands = "d"
+	case "rg", "grep":
+		operands = "emg"
+		long["--glob"] = true
+		long["--max-count"] = true
+		pattern = true
+	case "find":
+		for _, a := range args {
+			if strings.HasPrefix(a, "-") {
+				break
+			}
+			paths = append(paths, a)
+		}
+		return paths
+	case "git":
+		if args[0] == "branch" {
+			return nil
+		}
+		gitRevisions = args[0] != "status"
+		operands = "n"
+		long["--max-count"] = true
+		args = args[1:]
+	}
+	options := true
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if options && a == "--" {
+			options = false
+			gitRevisions = false
+			continue
+		}
+		if options && strings.HasPrefix(a, "-") && a != "-" {
+			if strings.HasPrefix(a, "--") {
+				if name == "rg" && a == "--files" {
+					explicitPattern = true
+				}
+				key, _, eq := strings.Cut(a, "=")
+				if long[key] && !eq {
+					i++
+				}
+			} else {
+				for j := 1; j < len(a); j++ {
+					if strings.ContainsRune(operands, rune(a[j])) {
+						if pattern && a[j] == 'e' {
+							explicitPattern = true
+						}
+						if j == len(a)-1 {
+							i++
+						}
+						break
+					}
+				}
+			}
+			continue
+		}
+		if gitRevisions && !strings.ContainsAny(a, "/\\") {
+			if _, err := os.Lstat(filepath.Join(cwd, a)); os.IsNotExist(err) {
+				continue
+			}
+		}
+		paths = append(paths, a)
+	}
+	if pattern && !explicitPattern && len(paths) > 0 {
+		paths = paths[1:]
+	}
+	if slices.Contains([]string{"cat", "head", "tail", "wc", "grep", "rg"}, name) {
+		paths = slices.DeleteFunc(paths, func(path string) bool { return path == "-" })
+	}
+	return paths
 }
 
 // Extract only unambiguous literal nested argv. An unsupported wrapper grammar

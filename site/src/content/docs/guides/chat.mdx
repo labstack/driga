@@ -50,7 +50,7 @@ buttons in the app or `m` in the TUI's navigate mode.
 | --- | --- | --- |
 | Confirm | Driga read tools; built-in reads inside the working directory | Every command request and other action |
 | Auto | Confirm's list, validated Read commands, inbox acknowledgments, jumps and summaries | Process, Other and Destructive commands; other actions |
-| Full auto | Auto's list and sandboxed Other commands | Process and Destructive commands; delegated permission answers and other actions requiring a person |
+| Full auto | Auto's list and sandboxed Other commands | Reads outside the project/scratch boundary, Process and Destructive commands; delegated permission answers and other actions requiring a person |
 
 Answering another agent's permission prompt always needs a person, including
 in Full auto and when a grant exists. The card shows that agent's exact tool input.
@@ -86,13 +86,35 @@ Every request is prepared, authorized, executed once and recorded. Its card
 shows the exact requested argv or script, effective invocation, working
 directory, classification and filesystem/network boundary. Read commands use
 a conservative executable and flag allowlist; ambiguous shell expressions
-are not Read. Builds, tests and file changes are Other. Destructive commands
+are not Read. Automatic reads require the working directory and every path
+operand to resolve inside the selected project or conversation scratch,
+including through symlinks. Outside, missing or unresolvable paths require
+an individual card in every mode, including Full auto, and cannot use similar
+approval grants. For example, `cat ~/notes.txt` needs a card; `cat README.md`
+can run automatically in Auto or Full auto when the file resolves inside the
+project. Commands without path operands, such as `ps`, `df` and `uptime`,
+remain Read when their working directory is in scope.
+
+Builds, tests and file changes are Other. Destructive commands
 include `rm` outside scratch, destructive git operations and any request for
 network. Privilege escalation, unsandboxed requests and changes to Driga's
 settings, hooks or approval state are refused without an approval card.
 
-The sandbox allows writes only in the selected project and private
-conversation scratch. Agent credentials, SSH/cloud credentials, keychains and
+The sandbox allows writes in the selected project, private conversation
+scratch and Git metadata directories needed by a selected worktree. Execution
+persistence paths stay protected even in these writable roots: `.git/hooks/`,
+`.git/config`, `.git/config.worktree`, `.git/info/attributes`, `.gitattributes`,
+`.envrc`, `.vscode/`, `.idea/` and `.husky/`. This prevents planting Git hooks,
+helper configuration, attribute filters, direnv scripts or editor tasks that
+could later run outside the sandbox. The same protection covers existing
+nested repositories, worktree gitdirs and their common Git directory, including
+Gitdir/commondir pointer files. Missing protected paths cannot be created.
+Ordinary Git objects, refs, index, HEAD and logs stay writable, so `git add`
+and `git commit` still work.
+Protected paths containing symlinks are refused, as are nested Git pointers
+that would add an unrelated external write directory.
+
+Agent credentials, SSH/cloud credentials, keychains and
 Driga's config/data/approval state are protected. The command environment
 excludes tokens and keys. Network is denied unless the request sets
 `network: true` and you approve the card. Approval never expands the write

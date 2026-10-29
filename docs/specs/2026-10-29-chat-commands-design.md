@@ -38,7 +38,18 @@ approval cover a bounded, visible set of similar actions.
      under the existing capture policy and retention.
 3. **The sandbox is the default.** Commands run inside an OS sandbox:
    - writes are allowed only to the conversation's selected project
-     directory and a per-conversation scratch directory;
+     directory, a per-conversation scratch directory, and the Git metadata
+     directories needed by a selected worktree;
+   - every writable root protects execution persistence paths: `.git/hooks/`,
+     `.git/config` (including hooksPath, fsmonitor, aliases and filters),
+     `.git/config.worktree`, `.git/info/attributes`, `.gitattributes`, `.envrc`,
+     `.vscode/`, `.idea/` and `.husky/`. Existing nested repositories, resolved
+     worktree gitdirs and the common Git directory get the same protections.
+     Gitdir/commondir pointer files cannot be replaced. Missing protected paths
+     cannot be created. Ordinary Git state (objects, refs, index, HEAD and logs)
+     remains writable, so staging and committing continue to work;
+     protected-path symlinks and nested gitdir pointers that would widen the
+     selected write scope are refused;
    - there is no network unless the card granted it;
    - reads of Driga's data, config and approval secrets, and of agent
      credential stores (`~/.claude*`, `~/.codex`, `~/.ssh`, keychains,
@@ -71,11 +82,20 @@ approval cover a bounded, visible set of similar actions.
      allowed only between such reads. Any ambiguous syntax
      (substitution, redirection to files, `eval`, unknown flags) is not a
      read.
+     The cwd and every file/path operand must resolve with `EvalSymlinks`
+     inside the project or scratch. Missing paths and symlinks escaping those
+     roots do not qualify. Recognized reads outside that boundary become
+     **Other with an individual-card requirement**, including in Full auto;
+     similarity grants cannot approve them. For example, `cat ~/notes.txt`
+     always needs a card, while `cat README.md` can be automatic when the file
+     resolves inside the project. Commands with no path operands, such as
+     `ps`, `df` and `uptime`, retain Read when their cwd is in scope.
    - **Process** (always carded, any mode): the kill family above.
    - **Other:** builds, tests, package managers, git writes, file
      changes, scripts. These run sandboxed. They get a card in Confirm
      and Auto. In Full auto they run without a card inside the sandbox,
-     except destructive ones (see below).
+     except destructive ones and reads outside the project/scratch boundary
+     (see above).
    - **Destructive** (always carded, any mode): `rm` outside scratch,
      `git push|reset --hard|clean|branch -D|checkout -- .`,
      `docker rm|rmi|volume rm`, writes to paths outside the project, and
@@ -90,8 +110,8 @@ approval cover a bounded, visible set of similar actions.
    exact argv or script, the cwd, "sandboxed: writes only to <project>,
    no network", and the classification.
 7. **Full auto changes.** Today it approves everything. It now approves
-   reads and sandboxed "other" commands. Process and destructive actions
-   still need a card.
+   reads and sandboxed "other" commands. Process, destructive actions and
+   reads outside the project/scratch boundary still need a card.
 8. **Delegated approvals are contained.** When Chat answers another
    agent's permission prompt (`answer_prompt`), it can never answer
    "allow" automatically in any mode. The person approves through a
@@ -139,9 +159,14 @@ approval cover a bounded, visible set of similar actions.
 
 - **macOS:** Seatbelt via `sandbox-exec` with a generated profile. The
   builder validates it on macOS 15+ and records the tested versions.
+  Protected paths receive `deny file-write*` rules after all write allows.
 - **Linux:** `bubblewrap` (`bwrap`) when it is installed. Without it, the
   sandbox is unavailable (see the anti-goals) and the card and
   `driga doctor` say so.
+  Protected paths are rebound read-only after writable roots. Absent paths
+  use empty read-only mounts at their first missing ancestor, with temporary
+  host mountpoints removed after execution. An absent `commondir` receives a
+  read-only `.` self-reference so ordinary repositories keep working.
 - **Windows:** no sandbox in v1. Only reads and the process family are
   available. Other commands are refused with "Running commands needs a
   sandbox, which Windows does not have yet."

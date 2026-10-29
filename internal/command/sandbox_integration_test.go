@@ -137,6 +137,9 @@ func TestCommandSandboxIntegration(t *testing.T) {
 		TestCommandRunnerBoundaries(t)
 		t.Log("verified project/scratch writes; denied outside writes, symlink escapes, protected-store reads and host signalling; stripped secret environment")
 	})
+	t.Run("execution-hooks", func(t *testing.T) {
+		testSandboxExecutionHooks(t)
+	})
 	t.Run("network", func(t *testing.T) {
 		TestCommandRunnerNetwork(t)
 		t.Log("verified TCP with explicit grant; denied default TCP/DNS and Unix sockets even with a network grant")
