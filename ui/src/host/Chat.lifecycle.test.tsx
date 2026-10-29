@@ -3,13 +3,15 @@ import { MantineProvider } from "@mantine/core";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { HostContext } from "../panels/host";
+import type { Panel } from "../panels/types";
 import type { ChatAction, ChatMessage, ChatState } from "./api";
 import { Chat } from "./Chat";
 
 const api = vi.hoisted(() => ({ history: vi.fn(), create: vi.fn(), send: vi.fn(), wait: vi.fn(), decide: vi.fn(), stop: vi.fn(), setMode: vi.fn() }));
 vi.mock("./api", () => ({ chat: api }));
 vi.mock("./ChatCard", () => ({ ChatCard: () => null }));
-vi.mock("../panels/PanelView", () => ({ PanelView: () => null }));
+vi.mock("../panels/PanelView", () => ({ PanelView: ({ panel }: { panel: Panel }) => <div data-panel={panel.id} /> }));
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -220,4 +222,9 @@ describe("Chat lifecycle", () => {
     await act(async () => container.querySelector("textarea")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
     expect(api.send).toHaveBeenCalledWith("conversation", "next question", { page: "/app/" });
   });
+});
+
+it("keeps the Chat inbox available for an active filter even when the queue is empty", async () => {
+  await act(async () => root.render(<MantineProvider><HostContext.Provider value={{ inboxFilter: "stuck" }}><Chat ask={null} onOpen={() => {}} inbox={{ panel: { id: "inbox", title: "Inbox", viz: "inbox" }, result: { id: "inbox", status: "empty" }, listed: false }} /></HostContext.Provider></MantineProvider>));
+  expect(container.querySelector('[data-panel="inbox"]')).not.toBeNull();
 });

@@ -158,7 +158,7 @@ func merge(p, patch panel.Panel, clear []string) (panel.Panel, error) {
 		fields[k] = v
 	}
 	for _, name := range clear {
-		if !slices.Contains([]string{"description", "where", "by", "measure", "columns", "sort", "limit", "unit", "max", "total", "empty", "width", "height", "content", "grid"}, name) {
+		if !slices.Contains([]string{"description", "where", "by", "measure", "columns", "sort", "limit", "unit", "max", "total", "caption", "empty", "width", "height", "content", "grid"}, name) {
 			return p, fmt.Errorf("cannot clear panel field %q", name)
 		}
 		delete(fields, name)

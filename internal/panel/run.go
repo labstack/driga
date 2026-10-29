@@ -45,6 +45,8 @@ type Result struct {
 	Trend []any `json:"trend,omitempty"`
 	// Total is what a stat is out of, when its panel names one.
 	Total any `json:"total,omitempty"`
+	// Caption is the secondary value shown after a stat's value.
+	Caption any `json:"caption,omitempty"`
 	// Title is the panel's title with its $variables filled in, when it has any.
 	Title string `json:"title,omitempty"`
 }
@@ -149,6 +151,9 @@ func runPanel(p Panel, vars map[string]string, rows func(string) [][]any) Result
 		frame = Frame{Columns: []Column{{Name: "value", Type: Number, Unit: cmp.Or(p.Unit, unit)}}, Rows: [][]any{{value}}}
 		if p.Total != "" {
 			r.Total, _ = aggregate(s, data, p.Total)
+		}
+		if p.Caption != "" {
+			r.Caption, _ = aggregate(s, data, p.Caption)
 		}
 	case p.Viz == "timeseries":
 		frame = timeseries(s, data, p)

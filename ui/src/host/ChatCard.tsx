@@ -62,6 +62,7 @@ export function changes(card: Card, before?: Dashboard): string[] {
       case "add": return `Added ${op.panel.title}`;
       case "update": return `Changed ${op.panel?.title ?? title(op.id)}`;
       case "remove": return `Removed ${title(op.id)}`;
+      case "move": return `Moved ${title(op.id)}`;
       case "layout": return "Moved panels";
       case "rename": return `Renamed to ${op.name}`;
     }

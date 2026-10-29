@@ -5,12 +5,12 @@ import { Eye, HandWaving, Hourglass, type Icon } from "@phosphor-icons/react";
 import type { ReactNode } from "react";
 import type { FleetData } from "../fleet/FleetTypes";
 import { bytes, relative } from "../panels/format";
-import type { Fragment } from "../panels/types";
-import type { Polarity } from "../widgets/DeltaChip";
+import type { Fragment, Panel } from "../panels/types";
 import type { Machine as MachineCard } from "../widgets/MachineCard";
+import { behaviorOf, type TileBehavior } from "./headerTiles";
 import { liveStates, type LiveState } from "../widgets/types";
 
-/** The three counts that mean someone must act, in the order the header shows them. */
+/** The attention shortcut order, independent of the stored tile order. */
 export type AttentionKind = "waiting" | "review" | "stuck";
 export const attentionKinds: readonly AttentionKind[] = ["waiting", "review", "stuck"];
 
@@ -18,7 +18,7 @@ export const attentionKinds: readonly AttentionKind[] = ["waiting", "review", "s
 export type HeaderTarget = "inbox" | "stuck" | "leftover" | "reclaim" | "memory";
 
 /** What each attention count is called, the tone it takes above zero, its
- * icon, the key that focuses its tile, what filtering by it means, and the
+ * icon, the key that filters the inbox, what filtering by it means, and the
  * Home panel it is about. */
 export const kinds: Record<AttentionKind, { label: string; tone: "warning" | "info" | "danger"; icon: Icon; key: string; hint: string; target: HeaderTarget }> = {
   waiting: { label: "Need you", tone: "warning", icon: HandWaving, key: "1", hint: "Filter the inbox to what needs you", target: "inbox" },
@@ -47,21 +47,16 @@ export type Machine = {
   seenAt: string;
 };
 
-/** The local machine's memory: used of total now, its readings over the
- * last hour and the change over that hour, all in bytes. */
-export type LocalMemory = { machine: string; used: number; total: number; trend: (number | null)[]; delta: number };
-
-/** Chores rather than alarms: leftover process trees and what they hold,
- * and the bytes a cleanup would reclaim. The count comes directly from the service, independently of the
- * paginated Fleet tables. */
-export type Hygiene = { leftover: { count?: number; bytes: number }; reclaimable: number };
+export type HeaderTile = {
+  id: string; title: string; viz: "stat" | "gauge"; panel: Panel;
+  value: number | null; unit?: string; total?: number | null; caption?: number | null;
+  trend?: (number | null)[]; max?: number; error?: string; behavior: TileBehavior;
+};
 
 export type HeaderData = {
-  attention: Record<AttentionKind, Attention>;
-  hygiene: Hygiene;
-  memory: LocalMemory;
+  tiles: HeaderTile[];
+  localMachine: string;
   machines: Machine[];
-  /** When the counts were last checked. */
   checkedAt: string;
 };
 
@@ -76,11 +71,15 @@ export type HeaderProps = {
   onSearch: () => void;
   onToggleChat: () => void;
   /** A tile asks for its panel on Home. */
-  onShow: (target: HeaderTarget) => void;
+  onShow: (panel: Panel) => void;
   /** A tile asks Chat about itself. */
   onAsk?: (about: string) => void;
   /** The app's search control, in place of the header's own button. */
   search?: ReactNode;
+  editor?: ReactNode;
+  busy?: boolean;
+  onRemove?: (id: string) => void;
+  onMove?: (id: string, before?: string) => void;
 };
 
 const severity: readonly LiveState[] = ["stuck", "waiting", "working", "idle"];
@@ -121,44 +120,30 @@ export function fleetSummary(machines: Machine[]): string {
   return `Fleet: ${machines.length} machine${machines.length === 1 ? "" : "s"} · ${fleetNotes(machines)}`;
 }
 
-/** polarity says whether a change is good news. More to review is neutral;
- * more waiting, more stuck and more memory used are bad; a memory change
- * under 2% of the machine is noise. */
-export function polarity(kind: AttentionKind | "memory", delta: number, total?: number): Polarity {
-  if (kind === "review" || delta === 0) return "neutral";
-  if (kind === "memory" && total && Math.abs(delta) / total < 0.02) return "neutral";
-  return delta > 0 ? "bad" : "good";
-}
-
 /** changeWords says an attention count's hour in words: "up 2 in the last hour". */
 export function changeWords(a: Attention): string {
-  if (a.trend.length < 2) return "not enough history for an hour’s change";
+  if (a.trend.length < 2 || a.trend[0] === null || a.trend[a.trend.length - 1] === null) return "not enough history for an hour’s change";
   return a.delta === 0 ? "steady over the last hour" : `${a.delta > 0 ? "up" : "down"} ${Math.abs(a.delta)} in the last hour`;
 }
 
-const hhmm = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
-
-/** clock is a time as HH:MM, local. */
-export function clock(iso: string): string {
-  const t = Date.parse(iso);
-  return Number.isNaN(t) ? "–" : hhmm.format(t);
-}
-
-/** stat reads a stat panel's value from the header fragment. */
-export function stat(fragment: Fragment, id: string): number | null {
-  const v = fragment.results.find(r => r.id === id)?.frame?.rows[0]?.[0];
-  return typeof v === "number" ? v : null;
+/** tilesOf projects only the stored panels, in their stored order. */
+export function tilesOf(header: Fragment): HeaderTile[] {
+  const results = new Map(header.results.map(r => [r.id, r]));
+  const number = (n: unknown) => typeof n === "number" && Number.isFinite(n) ? n : null;
+  return header.dashboard.panels.filter(p => p.viz === "stat" || p.viz === "gauge").map(p => {
+    const r = results.get(p.id);
+    const ok = r?.status === "ok";
+    return { id: p.id, title: r?.title || p.title, viz: p.viz as HeaderTile["viz"], panel: p,
+      value: ok ? number(r.frame?.rows[0]?.[0]) : null, unit: p.unit ?? r?.frame?.columns[0]?.unit,
+      total: ok ? number(r.total) : null, caption: ok && p.caption ? number(r.caption) : null,
+      trend: ok ? r.trend : undefined, max: p.max, error: r?.status === "error" ? r.message ?? "This panel could not run." : undefined, behavior: behaviorOf(p) };
+  });
 }
 
 /** History served by the service: each attention count's last hour and each machine's last polls. */
 export type Kept = { attention: Record<AttentionKind, (number | null)[]>; polls: Record<string, Poll[]> };
 
 export const nothingKept: Kept = { attention: { waiting: [], review: [], stuck: [] }, polls: {} };
-
-/** counts reads the reconciled attention values served by Go. */
-export function counts(header: Fragment): Record<AttentionKind, number> {
-  return { waiting: stat(header, "waiting") ?? 0, review: stat(header, "finished") ?? 0, stuck: stat(header, "stuck") ?? 0 };
-}
 
 /** machineOf reads one fleet machine with its sessions by state. */
 export function machinesOf(fleet: FleetData, polls: Kept["polls"]): Machine[] {
@@ -173,27 +158,13 @@ export function pollOf(m: Machine): Poll {
   return m.reachable ? worst(m) ?? "quiet" : "offline";
 }
 
-/** headerOf maps what the app has onto the header: the fragment's counts
- * and memory, the fleet's machines, and the service history.
- * Without the fleet the header still shows its counts, with the local
- * machine named by its id and no dots. */
+/** headerOf combines the spec projection with fleet names and durable history. */
 export function headerOf(header: Fragment, fleet: FleetData | null, kept: Kept): HeaderData {
-  const now = counts(header);
-  const attention = Object.fromEntries(attentionKinds.map(k => {
-    const trend = kept.attention[k];
-    return [k, { count: now[k], trend, delta: trend.length > 1 && trend[trend.length - 1] !== null && trend[0] !== null ? trend[trend.length - 1]! - trend[0]! : 0 }];
-  })) as Record<AttentionKind, Attention>;
   const machines = fleet ? machinesOf(fleet, kept.polls) : [];
-  const local = machines.find(m => m.local) ?? fleet?.machines.find(m => m.id === header.local_machine);
-  const memory = header.results.find(r => r.id === "memory");
-  const trend = memory?.trend ?? [];
-  const known = trend.filter((n): n is number => typeof n === "number");
   return {
-    attention,
-    hygiene: { leftover: { count: header.leftover_count, bytes: stat(header, "leftover") ?? 0 }, reclaimable: stat(header, "reclaim") ?? 0 },
-    memory: { machine: local?.name ?? header.local_machine ?? "this machine", used: stat(header, "memory") ?? 0, total: memory?.total ?? 0, trend, delta: known.length > 1 ? known[known.length - 1] - known[0] : 0 },
-    machines,
-    checkedAt: header.observed_at,
+    tiles: tilesOf(header).map(tile => tile.behavior.attention ? { ...tile, trend: kept.attention[tile.behavior.attention] } : tile),
+    localMachine: machines.find(m => m.local || m.id === header.local_machine)?.name ?? header.local_machine ?? "this machine",
+    machines, checkedAt: header.observed_at,
   };
 }
 

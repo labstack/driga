@@ -1,208 +1,391 @@
 import { Box } from "@mantine/core";
+import { spotlight } from "@mantine/spotlight";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect, fn, screen, userEvent, waitFor } from "storybook/test";
+import { expect, fn, screen, userEvent, waitFor, within } from "storybook/test";
+import { fakeService } from "../fixtures/service";
+import { fragments } from "../fixtures/fragments";
+import { value as format } from "../panels/format";
+import { App } from "./App";
 import { ClustersHeader } from "./ClustersHeader";
-import { allClear, busy, fresh, hot, manyMachines, oneStuck } from "./Header-fixtures";
+import { allClear, allWidgets, busy, fresh, headerCatalog, hot, manyMachines, oneStuck, widgetData } from "./Header-fixtures";
 
-/** The app's header row: four clusters set apart by hairlines, inside the shell. */
+const headerViewports = { headerWide: { name: "Header 1280", styles: { width: "1280px", height: "900px" } }, headerNarrow: { name: "Header 640", styles: { width: "640px", height: "900px" } } };
 const meta = {
-  id: "header-clusters",
-  title: "Components/Header",
-  component: ClustersHeader,
+  id: "header-clusters", title: "Components/Header", component: ClustersHeader,
   args: { data: busy, filter: null, chatOpen: true, onFilter: fn(), onOpenFleet: fn(), onSearch: fn(), onToggleChat: fn(), onShow: fn(), onAsk: fn() },
-  // The row as the shell holds it: 56 px on the translucent ground.
-  decorators: [Story => <Box h={56} px="md" data-testid="header-shell" style={{ background: "var(--driga-ground)", borderBottom: "1px solid var(--driga-border)" }}><Story /></Box>],
-  parameters: {
-    layout: "fullscreen",
-    docs: {
-      story: { inline: false, iframeHeight: 120 },
-      description: {
-        component: [
-          "The header as four clusters set apart by hairlines: attention (Need you, To review, Stuck), hygiene (Leftover, Reclaimable), this machine's memory with a sparkline, a delta chip and a 3 px pressure bar, and one dot per machine in the fleet. Then search with ⌘K and the Chat toggle. Every tile is the KPI tile at its header size, with the tile menu (Show on Home, Ask Chat) in its corner and on right-click.",
-          "A count that needs you takes its tone: its tint, a 2 px left rule and a dot before the number; only the waiting dot pulses, and not under reduced motion. Zeros stay quiet. When all three are zero the tiles fold into one line, \"Nothing needs you · checked HH:MM\". A tile's tooltip names its filter, the hour's change in words and its key: 1, 2 and 3 focus the tiles; g then f opens the Fleet. The memory bar stays the accent until 90%, then turns red.",
-          "Below 1200 px the hygiene cluster folds into one Reclaim tile, the memory cluster drops its delta chip, the fleet dots fold into a count with the worst state's dot, and search keeps only its icon and key.",
-        ].join("\n\n"),
-      },
-    },
-  },
+  decorators: [(Story, context) => context.parameters.fullApp ? <Story /> : <Box h={56} px="md" data-testid="header-shell" style={{ background: "var(--driga-ground)", borderBottom: "1px solid var(--driga-border)" }}><Story /></Box>],
+  parameters: { layout: "fullscreen", viewport: { options: headerViewports }, docs: { story: { inline: false, iframeHeight: 120 }, description: { component: "Stored stat and gauge panels in spec order, in one 56 px row. Trailing widgets remain live in +N. Zero counts stay visible; unknown readings show an em dash. Menus act on the panel wherever it appears." } } },
 } satisfies Meta<typeof ClustersHeader>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-/** rest leaves the row as a reviewer should see it: nothing hovered or focused. */
-async function rest(canvasRoot: HTMLElement) {
-  // The pointer leaves every control it may have crossed, and focus with it.
-  for (const control of canvasRoot.querySelectorAll<HTMLElement>("button, [role=img]")) await userEvent.unhover(control);
+async function ready(root: HTMLElement) {
+  await waitFor(() => expect(root.querySelector("[data-header-ready=true]")).toBeTruthy());
+}
+/** Find a stored tile in the row or its live overflow menu. */
+async function tile(root: HTMLElement, id: string): Promise<HTMLElement> {
+  await ready(root);
+  const selector = `[data-header-tile="${id}"] .w-tile`;
+  let found = root.querySelector<HTMLElement>(selector);
+  if (!found) {
+    const more = within(root).getByRole("button", { name: /^\+\d+$/ });
+    if (more.getAttribute("aria-expanded") !== "true") await userEvent.click(more);
+    const menu = await screen.findByRole("menu");
+    await waitFor(() => expect(menu).toBeVisible());
+    found = menu.querySelector<HTMLElement>(selector);
+  }
+  // Mounting precedes the dropdown's fade-in. Assert its visible state,
+  // rather than accepting a hidden item or racing the opening transition.
+  await waitFor(() => expect(found).toBeVisible());
+  return found!;
+}
+async function rest(root: HTMLElement) {
+  await userEvent.keyboard("{Escape}");
+  await userEvent.pointer({ target: document.body });
   (document.activeElement as HTMLElement | null)?.blur();
-  // A tooltip opens after the theme's 300 ms delay, so one the last click
-  // started can appear after an immediate check; wait the delay out first.
   await new Promise(resolve => setTimeout(resolve, 400));
-  await waitFor(() => expect(screen.queryByRole("tooltip")).toBeNull());
+  await waitFor(() => expect(screen.queryAllByRole("tooltip")).toHaveLength(0));
+  await ready(root);
+}
+function geometry(root: HTMLElement) {
+  const row = root.querySelector<HTMLElement>("[data-header-row]")!;
+  const bounds = row.getBoundingClientRect();
+  expect(bounds.height).toBeLessThanOrEqual(56);
+  expect(row.scrollHeight).toBeLessThanOrEqual(56);
+  const children = [...row.children].filter(el => el.checkVisibility());
+  for (const child of children) {
+    const rect = child.getBoundingClientRect();
+    expect(rect.top).toBeGreaterThanOrEqual(bounds.top - 1);
+    expect(rect.bottom).toBeLessThanOrEqual(bounds.bottom + 1);
+  }
+  for (let i = 1; i < children.length; i++) {
+    expect(children[i - 1].getBoundingClientRect().right).toBeLessThanOrEqual(children[i].getBoundingClientRect().left + 1);
+  }
+  const more = within(root).queryByRole("button", { name: /^\+\d+$/ });
+  if (more) expect(more.getBoundingClientRect().right).toBeLessThanOrEqual(more.parentElement!.parentElement!.getBoundingClientRect().right + 1);
+  const slots = [...row.querySelectorAll<HTMLElement>("[data-header-tile]")];
+  for (const slot of slots) {
+    const rect = slot.getBoundingClientRect();
+    expect(rect.top).toBeGreaterThanOrEqual(bounds.top - 1);
+    expect(rect.bottom).toBeLessThanOrEqual(bounds.bottom + 1);
+    expect(rect.right).toBeLessThanOrEqual(slot.parentElement!.parentElement!.getBoundingClientRect().right + 1);
+    expect(rect.right).toBeLessThanOrEqual(within(root).getByRole("button", { name: /^Fleet:/ }).getBoundingClientRect().left);
+  }
 }
 
 export const Busy: Story = {
-  parameters: { docs: { description: { story: "Three agents wait on you, three turns await review, nothing is stuck; two leftover process trees; memory at 75% and falling; one of four machines unreachable (the hollow dot). Click a tile to filter the inbox to its kind." } } },
-  play: async ({ canvas, args , canvasElement }) => {
-    const needYou = canvas.getByRole("button", { name: /^Need you\s*3$/ });
-    await expect(needYou).toBeVisible();
-    await expect(needYou).toHaveAttribute("aria-pressed", "false");
-    await expect(canvas.getByRole("button", { name: /^To review\s*10$/ })).toBeVisible();
-    await expect(canvas.getByRole("button", { name: /^Stuck\s*0$/ })).toBeVisible();
-    await expect(canvas.getByRole("button", { name: /^Memory · studio\s*24.*32\s*GB/ })).toBeVisible();
-    await expect(canvas.getByRole("progressbar", { name: /75%/ })).toBeInTheDocument();
-    await expect(canvas.getByRole("button", { name: /^Fleet: 4 machines · studio waiting · build-01 stuck · build-02 unreachable/ })).toBeVisible();
-    await userEvent.click(needYou);
-    await expect(args.onFilter).toHaveBeenCalledWith("waiting");
-    await userEvent.click(canvas.getByRole("button", { name: /^Fleet: 4 machines/ }));
-    await expect(args.onOpenFleet).toHaveBeenCalled();
-    await userEvent.click(canvas.getByRole("button", { name: /^Memory · studio/ }));
-    await expect(args.onShow).toHaveBeenCalledWith("memory");
-    await userEvent.click(canvas.getByRole("button", { name: "Chat" }));
-    await expect(args.onToggleChat).toHaveBeenCalled();
-    await userEvent.click(canvas.getByRole("button", { name: "Search" }));
-    await expect(args.onSearch).toHaveBeenCalled();
+  play: async ({ canvas, args, canvasElement }) => {
+    const need = await tile(canvasElement, "waiting");
+    await expect(need).toHaveTextContent(/Need you\s*3/);
+    await expect(need).toHaveAttribute("aria-pressed", "false");
+    await userEvent.click(need); await expect(args.onFilter).toHaveBeenCalledWith("waiting");
+    await expect(await tile(canvasElement, "finished")).toHaveTextContent(/To review\s*10/);
+    await rest(canvasElement);
+    await expect(await tile(canvasElement, "stuck")).toHaveTextContent(/Stuck\s*0/);
+    await rest(canvasElement);
+    const memory = await tile(canvasElement, "memory");
+    await expect(memory).toHaveTextContent(/Memory · studio\s*24.*32\s*GB/);
+    await expect(within(memory).getByRole("progressbar", { name: /75%/ })).toBeVisible();
+    await userEvent.click(memory); await expect(args.onShow).toHaveBeenCalledWith(expect.objectContaining({ id: "memory", source: "local_activity", measure: "max:mem_used_bytes" }));
+    await rest(canvasElement);
+    await userEvent.click(canvas.getByRole("button", { name: /^Fleet: 4 machines/ })); await expect(args.onOpenFleet).toHaveBeenCalled();
+    await userEvent.unhover(canvas.getByRole("button", { name: /^Fleet: 4 machines/ }));
+    await rest(canvasElement);
+    await userEvent.click(canvas.getByRole("button", { name: "Chat" })); await expect(args.onToggleChat).toHaveBeenCalled();
+    await userEvent.unhover(canvas.getByRole("button", { name: "Chat" }));
+    await rest(canvasElement);
+    await userEvent.click(canvas.getByRole("button", { name: "Search" })); await expect(args.onSearch).toHaveBeenCalled();
     await rest(canvasElement);
   },
 };
-
 export const TileMenu: Story = {
-  name: "Tile menu",
-  parameters: { docs: { description: { story: "Every tile keeps its menu: Show on Home and Ask Chat about it, behind the ⋯ in its corner or on right-click." } } },
-  play: async ({ canvas, args , canvasElement }) => {
-    await userEvent.click(canvas.getByRole("button", { name: "More for To review" }));
+  play: async ({ args, canvasElement }) => {
+    const review = await tile(canvasElement, "finished");
+    await userEvent.click(within(review.parentElement!).getByRole("button", { name: "More for To review" }));
     await userEvent.click(await screen.findByRole("menuitem", { name: "Show on Home" }));
-    await expect(args.onShow).toHaveBeenCalledWith("inbox");
-    await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
-    await userEvent.pointer({ keys: "[MouseRight]", target: canvas.getByRole("button", { name: /^Memory · studio/ }) });
+    await expect(args.onShow).toHaveBeenCalledWith(expect.objectContaining({ id: "finished", measure: "sum:to_review" }));
+    await rest(canvasElement);
+    await userEvent.pointer({ keys: "[MouseRight]", target: await tile(canvasElement, "memory") });
     await userEvent.click(await screen.findByRole("menuitem", { name: "Ask Chat about it" }));
     await expect(args.onAsk).toHaveBeenCalledWith("Memory");
-    await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
     await rest(canvasElement);
   },
 };
-
 export const AllClear: Story = {
-  name: "All clear",
   args: { data: allClear },
-  parameters: { docs: { description: { story: "Every attention count is zero, so the three tiles fold into one line with the time of the last check. Hygiene zeros stay quiet." } } },
-  play: async ({ canvas }) => {
-    const status = canvas.getByRole("status");
-    await expect(status).toHaveTextContent(/Nothing needs you/);
-    await expect(status).toHaveTextContent(/checked \d{1,2}:\d{2}/);
-    await expect(canvas.queryByRole("button", { name: /^Need you/ })).toBeNull();
+  parameters: { docs: { description: { story: "Zero attention counts remain stored, visible and clickable. No all-clear substitution removes widgets." } } },
+  play: async ({ canvas, canvasElement }) => {
+    for (const [id, label] of [["waiting", "Need you"], ["finished", "To review"], ["stuck", "Stuck"]]) {
+      await expect(await tile(canvasElement, id)).toHaveTextContent(new RegExp(`${label}\\s*0`));
+      await rest(canvasElement);
+    }
     await expect(canvas.getByRole("button", { name: /^Fleet: 3 machines · all working or idle/ })).toBeVisible();
+    await expect(await tile(canvasElement, "leftover")).toHaveTextContent("· 0 trees");
+    await rest(canvasElement);
   },
 };
-
 export const OneStuck: Story = {
-  name: "One stuck",
   args: { data: oneStuck },
-  parameters: { docs: { description: { story: "One session has gone quiet for too long: only the Stuck tile takes its tone; Need you and To review are quiet zeros, and the tiles do not fold." } } },
-  play: async ({ canvas }) => {
-    await expect(canvas.getByRole("button", { name: /^Stuck\s*1$/ })).toBeVisible();
-    await expect(canvas.getByRole("button", { name: /^Need you\s*0$/ })).toBeVisible();
-    await expect(canvas.queryByRole("status")).toBeNull();
-    await expect(canvas.getByRole("button", { name: /build-01 stuck/ })).toBeVisible();
+  play: async ({ args, canvasElement }) => {
+    const stuck = await tile(canvasElement, "stuck");
+    await expect(stuck).toHaveTextContent(/Stuck\s*1/);
+    await expect(stuck).toHaveAttribute("data-attention", "danger");
+    await userEvent.click(stuck); await expect(args.onFilter).toHaveBeenCalledWith("stuck");
+    await expect(await tile(canvasElement, "waiting")).toHaveTextContent(/Need you\s*0/);
+    await rest(canvasElement);
   },
 };
-
 export const Hot: Story = {
-  name: "Memory past 90%",
-  args: { data: hot },
-  parameters: { docs: { description: { story: "The memory bar is the accent until the danger threshold and red from it; there is no amber step, since a dev machine sits at 70–80% all day." } } },
-  play: async ({ canvas }) => { await expect(canvas.getByRole("progressbar", { name: /94%/ })).toBeInTheDocument(); },
-};
-
-export const FirstLoad: Story = {
-  name: "First load",
-  args: { data: fresh },
-  globals: { viewport: { value: "desktop", isRotated: false } },
-  parameters: { docs: { description: { story: "Before the fleet or any kept reading: the counts without a change, the leftover bytes without a count, no dots." } } },
-  play: async ({ canvas }) => {
-    await expect(canvas.getByRole("button", { name: /^Leftover\s*2\s*GB/ })).toBeVisible();
-    await expect(canvas.getByRole("button", { name: /^Fleet: 0 machines/ })).toBeVisible();
+  name: "Memory past 90%", args: { data: hot },
+  play: async ({ canvasElement }) => {
+    const memory = await tile(canvasElement, "memory");
+    await expect(within(memory).getByRole("progressbar", { name: /94%/ })).toBeVisible();
+    await expect(memory).toHaveTextContent(/30.*32\s*GB/);
+    await rest(canvasElement);
   },
 };
-
+export const FirstLoad: Story = {
+  args: { data: fresh },
+  play: async ({ canvas, canvasElement }) => {
+    await expect(await tile(canvasElement, "leftover")).toHaveTextContent(/Leftover\s*1\.8\s*GB\s*· 2 trees/);
+    await expect(canvas.getByRole("button", { name: /^Fleet: 0 machines/ })).toBeVisible();
+    await rest(canvasElement);
+  },
+};
 export const Loading: Story = {
   args: { data: null },
-  parameters: { docs: { description: { story: "Until the first load the header shows its mark, search and Chat only." } } },
   play: async ({ canvas }) => {
     await expect(canvas.getByRole("img", { name: "Driga" })).toBeVisible();
     await expect(canvas.queryByRole("button", { name: /^Need you/ })).toBeNull();
     await expect(canvas.getByRole("button", { name: "Chat" })).toBeVisible();
   },
 };
-
 export const ManyMachines: Story = {
-  name: "Many machines",
   args: { data: manyMachines },
-  parameters: { docs: { description: { story: "Ten machines: the fleet pulse shows eight dots and +2. Hover a dot for the machine's line; click anywhere on the pulse to open the Fleet." } } },
-  play: async ({ canvas }) => {
-    const fleet = canvas.getByRole("button", { name: /^Fleet: 10 machines/ });
-    await expect(fleet).toBeVisible();
-    await expect(fleet).toHaveTextContent(/\+2|10/);
+  play: async ({ canvas, canvasElement }) => {
+    await ready(canvasElement);
+    await expect(canvas.getByRole("button", { name: /^Fleet: 10 machines/ })).toHaveTextContent("10");
   },
 };
-
 export const LaptopWidth: Story = {
-  name: "Laptop width",
   globals: { viewport: { value: "laptop", isRotated: false } },
-  parameters: { docs: { description: { story: "At 1024 px: one Reclaim tile stands for both hygiene counts, the memory cluster keeps its sparkline but drops the delta chip, the fleet folds into a count, and search keeps only its icon and key." } } },
-  play: async ({ canvas }) => {
-    await expect(canvas.getByRole("button", { name: /^Reclaim\s*2\s*· 6.1 GB leftover process trees, 1.8 GB; 6.1 GB reclaimable/ })).toBeVisible();
-    await expect(canvas.queryByRole("button", { name: /^Reclaimable/ })).toBeNull();
-    const fleet = canvas.getByRole("button", { name: /^Fleet: 4 machines/ });
-    await expect(fleet).toBeVisible();
-    await expect(fleet).toHaveTextContent("4");
-    await expect(canvas.getByRole("button", { name: /^Need you\s*3$/ })).toBeVisible();
+  play: async ({ canvas, canvasElement }) => {
+    await ready(canvasElement);
+    await expect(canvas.getByRole("button", { name: /^\+\d+$/ })).toBeVisible();
+    await expect(await tile(canvasElement, "reclaim")).toHaveTextContent(/Reclaimable\s*6.1\s*GB/);
+    await rest(canvasElement);
+    await expect(await tile(canvasElement, "leftover")).toHaveTextContent(/Leftover\s*1\.8\s*GB\s*· 2 trees/);
+    await rest(canvasElement); geometry(canvasElement);
   },
 };
-
-/** Match Linux's taller Plex Mono bounds on every review platform. */
 export const TallFontMetrics: Story = {
-  name: "Tall font metrics",
   beforeEach: async () => {
-    const face = new FontFace("Catalog tall mono", 'url("/static/fonts/ibm-plex-mono-latin-600-normal.woff2")', {
-      weight: "400 700", ascentOverride: "120%", descentOverride: "40%", lineGapOverride: "0%",
-    });
-    await face.load();
-    document.fonts.add(face);
+    const face = new FontFace("Catalog tall mono", 'url("/static/fonts/ibm-plex-mono-latin-600-normal.woff2")', { weight: "400 700", ascentOverride: "120%", descentOverride: "40%", lineGapOverride: "0%" });
+    await face.load(); document.fonts.add(face);
     return () => { document.fonts.delete(face); };
   },
   decorators: [Story => <Box h="100%" style={{ "--mantine-font-family-monospace": '"Catalog tall mono", monospace' }}><Story /></Box>],
-  parameters: { docs: { description: { story: "Linux reports taller Plex Mono text bounds. The labels and values keep their space, including the memory machine name, while every tile fits inside the 56 px shell." } } },
-  play: async ({ canvas, canvasElement }) => {
-    await expect(canvas.getByRole("button", { name: /^Memory · studio/ })).toBeVisible();
-    const shell = canvas.getByTestId("header-shell").getBoundingClientRect();
-    for (const tile of canvasElement.querySelectorAll<HTMLElement>(".w-tile")) {
-      if (!tile.checkVisibility()) continue;
-      const bounds = tile.getBoundingClientRect();
-      expect(bounds.top).toBeGreaterThanOrEqual(shell.top);
-      expect(bounds.bottom).toBeLessThanOrEqual(shell.bottom);
-    }
+  play: async ({ canvasElement }) => {
+    await expect(await tile(canvasElement, "memory")).toHaveTextContent(/Memory · studio/);
+    await rest(canvasElement); geometry(canvasElement);
   },
 };
-
 export const Filtering: Story = {
   args: { filter: "waiting" },
-  parameters: { docs: { description: { story: "The inbox is filtered to what needs you: the tile is pressed, with an inset ring in the accent." } } },
-  play: async ({ canvas }) => {
-    await expect(canvas.getByRole("button", { name: /^Need you\s*3$/ })).toHaveAttribute("aria-pressed", "true");
-    await expect(canvas.getByRole("button", { name: /^To review\s*10$/ })).toHaveAttribute("aria-pressed", "false");
+  play: async ({ canvasElement }) => {
+    await expect(await tile(canvasElement, "waiting")).toHaveAttribute("aria-pressed", "true");
+    await expect(await tile(canvasElement, "finished")).toHaveAttribute("aria-pressed", "false");
+    await rest(canvasElement);
+  },
+};
+export const KeyboardFocus: Story = {
+  play: async ({ args, canvasElement }) => {
+    await ready(canvasElement); await userEvent.tab();
+    const need = await tile(canvasElement, "waiting");
+    await expect(need).toHaveFocus();
+    await expect(await screen.findByRole("tooltip")).toHaveTextContent(/up 2 in the last hour/);
+    await userEvent.keyboard("{Enter}"); await expect(args.onFilter).toHaveBeenCalledWith("waiting");
+    await rest(canvasElement);
   },
 };
 
-export const KeyboardFocus: Story = {
-  name: "Keyboard focus",
-  parameters: { docs: { description: { story: "Tab reaches the first tile, with the accent focus ring and a tooltip naming its filter, the hour's change and its key. Enter filters. The keys themselves are the app's, beside ⌘K." } } },
-  play: async ({ canvas, args , canvasElement }) => {
-    await userEvent.tab();
-    const needYou = canvas.getByRole("button", { name: /^Need you\s*3$/ });
-    await expect(needYou).toHaveFocus();
-    await expect(await screen.findByRole("tooltip")).toHaveTextContent(/up 2 in the last hour/);
-    await userEvent.keyboard("{Enter}");
-    await expect(args.onFilter).toHaveBeenCalledWith("waiting");
+/** Each catalog entry uses the same header-size renderer and engine result. */
+function widget(id: string): Story {
+  const panel = headerCatalog.find(p => p.id === id)!;
+  return { args: { data: widgetData(id) }, play: async ({ canvasElement }) => {
+    const rendered = await tile(canvasElement, id);
+    await expect(rendered).toHaveAttribute("data-size", "header");
+    await expect(rendered).toHaveTextContent(panel.title);
+    const reading = allWidgets.tiles.find(t => t.id === id)!;
+    expect(reading.value).not.toBeNull();
+    const number = format(reading.value!, reading.unit).split(" ")[0];
+    // A gauge shows its share inside the ring and names the full reading for assistive tech.
+    if (panel.viz === "gauge") await expect(within(rendered).getByRole("img")).toHaveAccessibleName(new RegExp(number));
+    else await expect(rendered).toHaveTextContent(number);
+    if (reading.total != null) await expect(rendered).toHaveTextContent(`/ ${format(reading.total, reading.unit).split(" ")[0]}`);
+    if (reading.caption != null) await expect(rendered).toHaveTextContent(`· ${reading.caption} trees`);
+    geometry(canvasElement);
+  } };
+}
+export const Waiting = widget("waiting");
+export const Finished = widget("finished");
+export const Stuck = widget("stuck");
+export const Leftover = widget("leftover");
+export const LeftoverOne: Story = {
+  ...widget("leftover"),
+  args: { data: { ...widgetData("leftover"), tiles: widgetData("leftover").tiles.map(t => ({ ...t, caption: 1 })) } },
+  play: async ({ canvasElement }) => {
+    await expect(await tile(canvasElement, "leftover")).toHaveTextContent(/· 1 tree$/);
+    geometry(canvasElement);
+  },
+};
+export const Reclaim = widget("reclaim");
+export const Memory: Story = {
+  ...widget("memory"),
+  parameters: { docs: { description: { story: "Memory keeps its total and pressure bar in 56 px; the redundant trend and delta are omitted." } } },
+  play: async context => {
+    await widget("memory").play!(context);
+    const memory = await tile(context.canvasElement, "memory");
+    await expect(within(memory).getByRole("progressbar")).toBeVisible();
+    expect(memory.querySelector('[role="img"]')).toBeNull();
+    expect(memory.textContent).not.toContain("1h");
+    geometry(context.canvasElement);
+  },
+};
+export const CPU = widget("cpu");
+export const Disk = widget("disk");
+export const Load = widget("load");
+export const Swap = widget("swap");
+export const Events = widget("events");
+export const Agents = widget("agents");
+export const Working = widget("working");
+export const WaitingNow = widget("waiting_now");
+export const Inbox = widget("inbox");
+export const Orphans = widget("orphans");
+export const MachinesUp = widget("machines_up");
+export const AgentMemory = widget("agent_memory");
+
+export const AllWidgets: Story = {
+  args: { data: allWidgets }, globals: { viewport: { value: "headerWide", isRotated: false } },
+  parameters: { docs: { description: { story: "All 18 catalog entries stress overflow (stored headers allow 16). This story owns its 1280 px viewport; its companion owns 640 px." } } },
+  play: async ({ canvas, canvasElement, args, globals }) => {
+    expect(window.innerWidth).toBe(globals.viewport.value === "headerNarrow" ? 640 : 1280);
+    await ready(canvasElement); geometry(canvasElement);
+    const more = canvas.getByRole("button", { name: /^\+\d+$/ });
+    await expect(more).toBeVisible();
+    const hidden = Number(more.textContent?.slice(1));
+    const visible = canvasElement.querySelectorAll("[data-header-tile]").length;
+    expect(hidden + visible).toBe(18);
+    await userEvent.click(more);
+    const menu = await screen.findByRole("menu");
+    expect(menu.querySelectorAll("[data-header-tile]").length).toBe(hidden);
+    const last = within(menu).getByRole("menuitem", { name: /Agent memory/ });
+    await expect(last).toHaveTextContent(/GB/);
+    await userEvent.click(last);
+    await expect(args.onShow).toHaveBeenCalledWith(expect.objectContaining({ id: "agent_memory" }));
     await rest(canvasElement);
+  },
+};
+export const AllWidgetsNarrow: Story = { ...AllWidgets, globals: { viewport: { value: "headerNarrow", isRotated: false } } };
+
+const editingRequests = fn();
+export const Editing: Story = {
+  render: () => <App />,
+  globals: { viewport: { value: "headerWide", isRotated: false } },
+  parameters: { fullApp: true, makeService: () => {
+    const header = structuredClone(fragments.header);
+    header.dashboard.panels = header.dashboard.panels.filter(p => ["waiting", "reclaim", "memory"].includes(p.id));
+    return fakeService({ open: { header }, onRequest: editingRequests });
+  }, docs: { story: { iframeHeight: 900 } } },
+  beforeEach: () => { editingRequests.mockClear(); spotlight.close(); history.replaceState(null, "", "/app/"); return () => spotlight.close(); },
+  play: async ({ canvas, canvasElement }) => {
+    // App supplies the editor and versioned mutations through the fake service.
+    const add = await canvas.findByRole("combobox", { name: "Add widget" });
+    await expect(add).toBeVisible();
+    const reclaim = await tile(canvasElement, "reclaim");
+    await userEvent.click(within(reclaim.parentElement!).getByRole("button", { name: "More for Reclaimable" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "Remove from header" }));
+    await waitFor(() => expect(editingRequests).toHaveBeenCalledWith("/app/api/edit", expect.objectContaining({ base_version: 0, operations: [{ op: "remove", id: "reclaim" }] })));
+    await waitFor(() => expect(canvasElement.querySelector('[data-header-tile="reclaim"]')).toBeNull());
+    await userEvent.click(canvas.getByRole("combobox", { name: "Add widget" }));
+    const search = await screen.findByRole("textbox", { name: "Find a widget" });
+    await userEvent.type(search, "CPU");
+    await expect(await screen.findByRole("option", { name: "CPU" })).toBeVisible();
+    await userEvent.keyboard("{Enter}");
+    await expect(await tile(canvasElement, "cpu")).toHaveTextContent(/CPU/);
+    await expect(editingRequests).toHaveBeenCalledWith("/app/api/edit", expect.objectContaining({ base_version: 1, operations: [{ op: "add", panel: headerCatalog.find(p => p.id === "cpu") }] }));
+    await rest(canvasElement);
+    const handle = canvas.getByRole("button", { name: "Reorder Memory" });
+    handle.focus(); await userEvent.keyboard("[Space][ArrowLeft][Space]");
+    await waitFor(() => expect(editingRequests).toHaveBeenCalledWith("/app/api/edit", expect.objectContaining({ base_version: 2, operations: [{ op: "move", id: "memory", before: "waiting" }] })));
+    await waitFor(() => expect(canvasElement.querySelector("[data-header-tile]")).toHaveAttribute("data-header-tile", "memory"));
+    const undo = screen.getAllByRole("button", { name: "Undo" }).at(-1)!;
+    await userEvent.click(undo);
+    await waitFor(() => expect(editingRequests).toHaveBeenCalledWith("/app/api/replace", expect.objectContaining({ base_version: 3 })));
+    await waitFor(() => expect(canvasElement.querySelector("[data-header-tile]")).toHaveAttribute("data-header-tile", "waiting"));
+    await expect(await tile(canvasElement, "cpu")).toBeVisible();
+    const restored = await screen.findByText("Header restored");
+    await waitFor(() => expect(restored).toBeVisible());
+    // Undoing the move leaves the earlier remove/add toasts and creates a
+    // restoration toast. Close all of them before checking the page layout.
+    for (const dismiss of screen.getAllByRole("button", { name: "Dismiss" })) await userEvent.click(dismiss);
+    await waitFor(() => expect(screen.queryAllByRole("alert")).toHaveLength(0));
+    await rest(canvasElement);
+  },
+};
+
+export const DefaultLaptop: Story = {
+  render: () => <App />,
+  globals: { viewport: { value: "laptop", isRotated: false } },
+  parameters: { fullApp: true, makeService: () => {
+    const header = structuredClone(fragments.header_quiet);
+    // A quiet inbox still has a live local memory reading, as in the app screenshots.
+    header.results = header.results.map(r => r.id === "memory" ? structuredClone(fragments.header.results.find(r => r.id === "memory")!) : r);
+    return fakeService({ open: { header } });
+  }, docs: { story: { iframeHeight: 768 }, description: { story: "The default six tiles, editor, fleet, Search and open Chat fit together at 1024 px." } } },
+  beforeEach: () => { spotlight.close(); history.replaceState(null, "", "/app/"); return () => spotlight.close(); },
+  play: async ({ canvas, canvasElement }) => {
+    expect(window.innerWidth).toBe(1024);
+    await canvas.findByRole("combobox", { name: "Add widget" });
+    await ready(canvasElement);
+    expect([...canvasElement.querySelectorAll("[data-header-tile]")].map(el => el.getAttribute("data-header-tile")))
+      .toEqual(["waiting", "finished", "stuck", "leftover", "reclaim", "memory"]);
+    expect(canvas.queryByRole("button", { name: /^\+\d+$/ })).toBeNull();
+    await expect(canvas.getByRole("button", { name: "Header options" })).toBeVisible();
+    await expect(canvas.getByRole("button", { name: /^Fleet:/ })).toBeVisible();
+    await expect(canvas.getByRole("button", { name: "Search" })).toBeVisible();
+    await expect(canvas.getByRole("button", { name: "Chat" })).toHaveAttribute("aria-pressed", "true");
+    await expect(canvas.getByRole("button", { name: "Close chat" })).toBeVisible();
+    await expect(await tile(canvasElement, "leftover")).toHaveTextContent(/0\s*B\s*· 0 trees/);
+    await expect(within(await tile(canvasElement, "memory")).getByRole("progressbar")).toBeVisible();
+    await rest(canvasElement); geometry(canvasElement);
+  },
+};
+
+export const PointerReorder: Story = {
+  args: { data: { ...allClear, tiles: allClear.tiles.slice(0, 3) }, onMove: fn() },
+  play: async ({ canvas, canvasElement, args }) => {
+    const need = await tile(canvasElement, "waiting");
+    const review = await tile(canvasElement, "finished");
+    await userEvent.click(need);
+    await expect(args.onFilter).toHaveBeenCalledTimes(1);
+    await expect(args.onMove).not.toHaveBeenCalled();
+    const handle = canvas.getByRole("button", { name: "Reorder Need you" });
+    expect(getComputedStyle(handle).opacity).toBe("0");
+    handle.focus();
+    expect(getComputedStyle(handle).opacity).toBe("1");
+    handle.blur();
+    const from = need.getBoundingClientRect(), to = review.getBoundingClientRect();
+    const x = from.x + from.width / 2, y = from.y + from.height / 2;
+    await userEvent.pointer([
+      { target: need, keys: "[MouseLeft>]", coords: { x, y } },
+      { target: need, coords: { x: x + 8, y } },
+      { target: review, coords: { x: to.x + to.width / 2, y } },
+      { keys: "[/MouseLeft]" },
+    ]);
+    await expect(args.onMove).toHaveBeenCalledWith("waiting", "stuck");
+    await expect(args.onFilter).toHaveBeenCalledTimes(1);
+    await userEvent.unhover(review);
+    await rest(canvasElement); geometry(canvasElement);
   },
 };

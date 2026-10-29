@@ -36,7 +36,7 @@ type Panel struct {
 	Title       string   `json:"title" jsonschema:"Panel title, at most 80 characters; may reference $variables"`
 	Description string   `json:"description,omitempty" jsonschema:"Help text, at most 280 characters"`
 	Viz         string   `json:"viz" jsonschema:"stat, gauge, timeseries, bar, table, list, inbox, cards, timeline or text; cards shows rows as tiles, timeline draws each session from start to end with its waits"`
-	Source      string   `json:"source,omitempty" jsonschema:"sessions, flow, waits, inbox, projects, orphans, cleanup, activity, memory, costs, machines, summary or activity_heatmap; every viz except text needs one"`
+	Source      string   `json:"source,omitempty" jsonschema:"sessions, flow, waits, inbox, projects, orphans, cleanup, activity, local_activity, memory, costs, machines, summary or activity_heatmap; every viz except text needs one"`
 	Where       []Filter `json:"where,omitempty" jsonschema:"Filters on source columns, all of which must match"`
 	By          string   `json:"by,omitempty" jsonschema:"Column to group rows by; bar and table group, other vizzes ignore it"`
 	Measure     string   `json:"measure,omitempty" jsonschema:"count, or sum:, avg:, max: or min: followed by a numeric column, e.g. sum:mem_bytes; stat, gauge, bar and grouped tables aggregate with it"`
@@ -46,6 +46,7 @@ type Panel struct {
 	Unit        string   `json:"unit,omitempty" jsonschema:"count, bytes, percent, duration, usd or none; inferred from the measured column when omitted"`
 	Max         *float64 `json:"max,omitempty" jsonschema:"gauge: the value that fills the gauge"`
 	Total       string   `json:"total,omitempty" jsonschema:"stat: a second measure the value is out of, shown as value / total, e.g. max:mem_total_bytes"`
+	Caption     string   `json:"caption,omitempty" jsonschema:"stat: a second measure shown after the value, e.g. sum:leftover"`
 	Empty       string   `json:"empty,omitempty" jsonschema:"What the panel says when nothing matches: what would appear here and why, at most 160 characters"`
 	Width       int      `json:"width,omitempty" jsonschema:"Grid columns from 1 to 12; default depends on viz"`
 	Height      string   `json:"height,omitempty" jsonschema:"s, m or l; default depends on viz"`
@@ -157,6 +158,9 @@ func Validate(d Dashboard) error {
 		if p.Limit < 0 || p.Limit > 200 {
 			add(path+".limit", "must be 1 to 200")
 		}
+		if p.Caption != "" && p.Viz != "stat" {
+			add(path+".caption", "only stat panels show a caption")
+		}
 		if p.Viz == "text" {
 			if strings.TrimSpace(p.Content) == "" || utf8.RuneCountInString(p.Content) > 4000 {
 				add(path+".content", "text panels need 1 to 4000 characters of Markdown")
@@ -195,7 +199,7 @@ func Validate(d Dashboard) error {
 		if sortBy := strings.TrimPrefix(p.Sort, "-"); sortBy != "" && !has(sortBy) && sortBy != "value" {
 			add(path+".sort", "%q is not a column of %s (%s)", sortBy, p.Source, schema.names())
 		}
-		for field, m := range map[string]string{"measure": p.Measure, "total": p.Total} {
+		for field, m := range map[string]string{"measure": p.Measure, "total": p.Total, "caption": p.Caption} {
 			if m == "" {
 				continue
 			}

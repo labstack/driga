@@ -22,7 +22,7 @@ export type Direction = "up-good" | "down-good" | "neutral";
 
 export type Delta = { change: number; window: string };
 
-export type MenuItem = { label: string; icon?: Icon; onClick: () => void };
+export type MenuItem = { label: string; icon?: Icon; onClick: () => void; disabled?: boolean; hint?: string };
 
 export type KpiTileProps = {
   label: string;
@@ -57,6 +57,8 @@ export type KpiTileProps = {
   menu?: MenuItem[];
   /** Below the value row: a pressure bar under memory. */
   children?: ReactNode;
+  visual?: ReactNode;
+  menuItem?: boolean;
   visibleFrom?: MantineBreakpoint;
   hiddenFrom?: MantineBreakpoint;
 };
@@ -69,7 +71,7 @@ export function polarityOf(change: number, direction: Direction): Polarity {
   return (change > 0) === (direction === "up-good") ? "good" : "bad";
 }
 
-export function KpiTile({ label, sublabel, icon: Glyph, value, unit, total, caption, detail, delta, direction = "neutral", trend, attention, description, tooltip, selected, onClick, shortcut, size = "board", menu, children, visibleFrom, hiddenFrom }: KpiTileProps) {
+export function KpiTile({ label, sublabel, icon: Glyph, value, unit, total, caption, detail, delta, direction = "neutral", trend, attention, description, tooltip, selected, onClick, shortcut, size = "board", menu, children, visual, menuItem, visibleFrom, hiddenFrom }: KpiTileProps) {
   const scheme = useComputedColorScheme("dark");
   const [open, setOpen] = useState(false);
   const zero = value === null || value === 0;
@@ -78,11 +80,11 @@ export function KpiTile({ label, sublabel, icon: Glyph, value, unit, total, capt
   const chip = delta && !zero ? <DeltaChip delta={delta.change} amount={format(Math.abs(delta.change), unit)} polarity={polarityOf(delta.change, direction)} window={delta.window} /> : null;
   // The sparkline draws on a canvas, which reads no CSS variable: the tone resolved per scheme, or the accent.
   const line = trend && trend.length > 1 && !zero ? <Sparkline trend={trend} title={label} color={tones[scheme][tone ?? "brand"]} /> : null;
-  const Root = onClick ? UnstyledButton : Box;
+  const Root = menuItem ? Menu.Item : onClick ? UnstyledButton : Box;
   const onContext = (e: MouseEvent) => { if (menu?.length) { e.preventDefault(); setOpen(true); } };
   const tile = <Root className="w-tile" data-size={size} data-clickable={onClick ? "" : undefined} data-selected={selected ? "true" : undefined} data-attention={tone}
-    aria-pressed={onClick && selected !== undefined ? selected : undefined} aria-keyshortcuts={shortcut} onClick={onClick} onContextMenu={onContext} title={description} px={header ? 8 : "sm"} py={header ? 1 : "sm"} miw={header ? 104 : undefined}>
-    <Stack gap={header ? 2 : 4}>
+    aria-pressed={!menuItem && onClick && selected !== undefined ? selected : undefined} aria-keyshortcuts={shortcut} onClick={onClick} onContextMenu={onContext} title={description} px={header ? 8 : "sm"} py={header ? 1 : "sm"}>
+    {visual ?? <Stack gap={header ? 2 : 4}>
       <Group gap={6} wrap="nowrap" c={tone ? tone : "var(--driga-faint)"}>
         {Glyph && <Glyph size={14} aria-hidden style={{ flex: "none" }} />}
         <Text size="xs" fw={500} tt="uppercase" lts="0.04em" c={tone ? "var(--driga-text)" : "dimmed"} lh={header ? 1.4 : 1.2} truncate title={sublabel ? `${label} · ${sublabel}` : label} style={{ whiteSpace: "nowrap" }}>
@@ -103,16 +105,20 @@ export function KpiTile({ label, sublabel, icon: Glyph, value, unit, total, capt
         {line && <Box h={24} style={{ flex: "1 1 48px", minWidth: 40, maxWidth: 96 }}>{line}</Box>}
       </Group>}
       {children}
-    </Stack>
+    </Stack>}
   </Root>;
   return <Box className="w-tile-box" visibleFrom={visibleFrom} hiddenFrom={hiddenFrom} style={header ? { display: "inline-block" } : undefined}>
     {tooltip ? <Tooltip label={tooltip} events={{ hover: true, focus: true, touch: true }}>{tile}</Tooltip> : tile}
-    {menu && menu.length > 0 && <Menu opened={open} onChange={setOpen} position="bottom-end" withinPortal shadow="md" width={200}>
+    {menu && menu.length > 0 && <Menu opened={open} onChange={setOpen} position="bottom-end" withinPortal={!menuItem} shadow="md" width={200}>
       <Menu.Target>
         <ActionIcon className="w-tile-menu" size={18} aria-label={`More for ${label}`}><DotsThree size={14} /></ActionIcon>
       </Menu.Target>
       <Menu.Dropdown>
-        {menu.map(item => { const I = item.icon; return <Menu.Item key={item.label} leftSection={I ? <I /> : undefined} onClick={item.onClick}>{item.label}</Menu.Item>; })}
+        {menu.map(item => {
+          const I = item.icon;
+          const action = <Menu.Item key={item.label} disabled={item.disabled} leftSection={I ? <I /> : undefined} onClick={item.onClick}>{item.label}</Menu.Item>;
+          return item.hint ? <Tooltip key={item.label} label={item.hint} events={{ hover: true, focus: true, touch: true }}><Box tabIndex={0}>{action}</Box></Tooltip> : action;
+        })}
       </Menu.Dropdown>
     </Menu>}
   </Box>;

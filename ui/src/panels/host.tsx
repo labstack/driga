@@ -1,5 +1,5 @@
 import { createContext, useContext } from "react";
-import type { Prompt, Row } from "./types";
+import type { Frame, Prompt, Row } from "./types";
 
 /** An action a panel row offers. The host decides how to run it: the app
  * asks its own dialog for anything that changes the machine and runs it
@@ -12,7 +12,7 @@ export type Act = (action: Action) => Promise<void>;
 
 /** What the inbox is narrowed to from the header: what needs the person,
  * or what finished. */
-export type InboxFilter = "waiting" | "review";
+export type InboxFilter = "waiting" | "review" | "stuck";
 
 export type Host = {
   act?: Act;
@@ -22,6 +22,8 @@ export type Host = {
   answer?: (prompt: Prompt, allow: boolean) => Promise<void>;
   /** The inbox shows only this kind while set. */
   inboxFilter?: InboxFilter | null;
+  clearInboxFilter?: () => void;
+  stuck?: Frame;
   /** ask puts a question to Chat, when the host has one. */
   ask?: (text: string) => void;
 };

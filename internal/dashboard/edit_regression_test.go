@@ -13,11 +13,11 @@ func TestUpdateClearsOptionalFields(t *testing.T) {
 	before := panel.Panel{
 		ID: "memory", Title: "Memory", Viz: "stat", Source: "sessions", Description: "Help",
 		Where: []panel.Filter{{Column: "agent", Value: "claude"}}, By: "agent", Measure: "sum:mem_bytes",
-		Columns: []string{"title"}, Sort: "-age", Limit: 20, Unit: "bytes", Max: &max, Total: "max:mem_bytes", Empty: "No sessions",
+		Columns: []string{"title"}, Sort: "-age", Limit: 20, Unit: "bytes", Max: &max, Total: "max:mem_bytes", Caption: "count", Empty: "No sessions",
 		Width: 6, Height: "l", Content: "Markdown", Grid: &panel.Grid{X: 0, Y: 0, W: 6, H: 3},
 	}
 	current := panel.Dashboard{Name: "Mine", Panels: []panel.Panel{before}}
-	fields := []string{"description", "where", "by", "measure", "columns", "sort", "limit", "unit", "max", "total", "empty", "width", "height", "content", "grid"}
+	fields := []string{"description", "where", "by", "measure", "columns", "sort", "limit", "unit", "max", "total", "caption", "empty", "width", "height", "content", "grid"}
 	after, err := Apply(current, []Operation{{Op: "update", ID: "memory", Clear: fields}})
 	if err != nil {
 		t.Fatal(err)
@@ -61,5 +61,26 @@ func TestMoveBeforeSelfIsExplicit(t *testing.T) {
 	_, err := Apply(current, []Operation{{Op: "move", ID: "memory", Before: "memory"}})
 	if err == nil || !strings.Contains(err.Error(), "cannot move a panel before itself") {
 		t.Fatalf("move before self: %v", err)
+	}
+}
+
+func TestHeaderEditDuplicateRejected(t *testing.T) {
+	s := New(t.TempDir())
+	var cpu panel.Panel
+	for _, p := range panel.HeaderCatalog() {
+		if p.ID == "cpu" {
+			cpu = p
+		}
+	}
+	if cpu.ID == "" {
+		t.Fatal("CPU missing from catalog")
+	}
+	_, err := s.Edit(panel.HeaderID, []Operation{{Op: "add", Panel: &cpu}, {Op: "add", Panel: &cpu}}, 0, Author{Kind: "user"}, "")
+	if err == nil || !strings.Contains(err.Error(), `panel "cpu" already exists`) {
+		t.Fatalf("duplicate add: %v", err)
+	}
+	r, err := s.Get(panel.HeaderID)
+	if err != nil || r.Version != 0 || !reflect.DeepEqual(r.Spec, panel.Header()) {
+		t.Fatalf("rejected edit changed header: %+v %v", r, err)
 	}
 }

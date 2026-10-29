@@ -8,7 +8,7 @@ import type { Cell } from "../panels/types";
 /** Measure shows a number with its unit at a smaller size, as Canon's stat
  * tile does: "1.8" then "GB". */
 export function Measure({ n, unit, size = 28, total, lineHeight = 1.1 }: { n: Cell; unit?: string; size?: number; total?: Cell; lineHeight?: number }) {
-  if (typeof n !== "number") return <Text ff="monospace" fz={size} fw={600} lh={lineHeight} c="dimmed">–</Text>;
+  if (typeof n !== "number") return <Text ff="monospace" fz={size} fw={600} lh={lineHeight} c="dimmed">—</Text>;
   const [number, suffix] = splitUnit(value(n, unit));
   // Out of a total, the value and the total share the total's unit: 25 / 32 GB.
   if (typeof total === "number") {

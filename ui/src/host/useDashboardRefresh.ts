@@ -22,7 +22,7 @@ export function useDashboardRefresh({ id, vars, onError, onMissing }: Scope & { 
   const [prompts, setPrompts] = useState<Prompt[]>([]);
   const [list, setList] = useState<Summary[]>([]);
   const [editing, setEditingState] = useState(false);
-  const control = useRef({ scope: { id, vars, mutations: 0, reconcile: false, navigation: 0 }, generation: 0, editing: false });
+  const control = useRef({ scope: { id, vars, mutations: 0, reconcile: false, navigation: 0 }, generation: 0, editing: false, headerMutations: 0 });
   const callbacks = useRef({ onError, onMissing });
   callbacks.current = { onError, onMissing };
   const c = control.current;
@@ -35,7 +35,7 @@ export function useDashboardRefresh({ id, vars, onError, onMissing }: Scope & { 
 
   const refresh = useCallback(async (explicit = false) => {
     const c = control.current;
-    if (c.scope.id !== id || c.scope.vars !== vars || c.scope.mutations > 0 || c.editing && !explicit) return;
+    if (c.scope.id !== id || c.scope.vars !== vars || c.scope.mutations > 0 || c.headerMutations > 0 || c.editing && !explicit) return;
     const scope = c.scope;
     const generation = ++c.generation;
     const current = () => c.generation === generation && c.scope === scope;
@@ -54,6 +54,9 @@ export function useDashboardRefresh({ id, vars, onError, onMissing }: Scope & { 
       if (id !== homeID) { callbacks.current.onError((e as Error).message); callbacks.current.onMissing(); }
     }
   }, [id, vars]);
+
+  const latestRefresh = useRef(() => refresh(true));
+  latestRefresh.current = () => refresh(true);
 
   useEffect(() => {
     void refresh(true);
@@ -89,6 +92,7 @@ export function useDashboardRefresh({ id, vars, onError, onMissing }: Scope & { 
       if (c.scope !== scope) return;
       if (target === headerID) setHeader(next);
       else if (target === scope.id) setSelected({ id: scope.id, navigation: scope.navigation, fragment: next, fresh: { at: Date.now(), failed: false } });
+      return next;
     } catch (e) {
       if (c.scope === scope) { callbacks.current.onError((e as Error).message); scope.reconcile = true; }
     } finally {
@@ -100,9 +104,34 @@ export function useDashboardRefresh({ id, vars, onError, onMissing }: Scope & { 
     }
   };
 
+  // Header edits outlive navigation. Polls cannot publish over their response,
+  // and a conflict reloads the spec once without replaying the mutation.
+  const mutateHeader = async (save: () => Promise<Fragment>) => {
+    const c = control.current;
+    if (c.headerMutations > 0) return;
+    const scope = c.scope;
+    c.headerMutations++;
+    c.generation++;
+    try {
+      const next = await save();
+      setHeader(next);
+      return next;
+    } catch (e) {
+      const conflict = e instanceof Error && "status" in e && e.status === 409;
+      try {
+        setHeader(await dashboards.open(headerID));
+        callbacks.current.onError(conflict ? "Header changed elsewhere; reloaded" : (e as Error).message);
+      } catch (reload) { callbacks.current.onError((reload as Error).message); }
+    } finally {
+      c.headerMutations--;
+      c.generation++;
+      if (c.scope !== scope) void latestRefresh.current();
+    }
+  };
+
   const forgetPrompt = (id: string) => {
     control.current.generation++;
     setPrompts(ps => ps.filter(p => p.id !== id));
   };
-  return { fragment, header, inbox, fleet, prompts, list, fresh, editing, setEditing, refresh: () => refresh(true), edit, forgetPrompt };
+  return { fragment, header, inbox, fleet, prompts, list, fresh, editing, setEditing, refresh: () => refresh(true), edit, mutateHeader, forgetPrompt };
 }

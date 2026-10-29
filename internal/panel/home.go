@@ -56,29 +56,31 @@ func Home() Dashboard {
 // what runaway processes and leftover disk cost, and the machine's memory
 // over the last hour.
 func Header() Dashboard {
-	return Dashboard{
+	d := Dashboard{
 		Name:        "Header",
-		Description: "The numbers shown above Chat in the app. Only stat panels.",
-		Panels: []Panel{
-			{ID: "waiting", Title: "Need you", Description: "Agents waiting on you and machine warnings in effect.", Viz: "stat", Source: "summary", Measure: "sum:need_you"},
-			{ID: "finished", Title: "To review", Viz: "stat", Source: "summary", Measure: "sum:to_review"},
-			{ID: "stuck", Title: "Stuck", Viz: "stat", Source: "summary", Measure: "sum:attention_stuck"},
-			{ID: "leftover", Title: "Leftover memory", Viz: "stat", Source: "summary", Measure: "sum:leftover_bytes"},
-			{ID: "reclaim", Title: "Reclaimable", Viz: "stat", Source: "summary", Measure: "sum:reclaim_bytes"},
-			{ID: "memory", Title: "Memory used", Viz: "stat", Source: "local_activity", Measure: "max:mem_used_bytes", Total: "max:mem_total_bytes"},
-		},
+		Description: "The numbers shown above Chat in the app. Stat or gauge panels, at most 16.",
 	}
+	catalog := HeaderCatalog()
+	for _, id := range HeaderDefault() {
+		for _, p := range catalog {
+			if p.ID == id {
+				d.Panels = append(d.Panels, p)
+				break
+			}
+		}
+	}
+	return d
 }
 
-// ValidateHeader checks what the header can show: a short row of stats.
+// ValidateHeader checks what the header can show: a short row of stats and gauges.
 func ValidateHeader(d Dashboard) error {
 	var problems Problems
-	if len(d.Panels) > 8 {
-		problems = append(problems, Problem{Path: "panels", Message: "the header shows at most 8 metrics"})
+	if len(d.Panels) > 16 {
+		problems = append(problems, Problem{Path: "panels", Message: "the header shows at most 16 metrics"})
 	}
 	for i, p := range d.Panels {
-		if p.Viz != "stat" {
-			problems = append(problems, Problem{Path: fmt.Sprintf("panels[%d].viz", i), Message: "the header shows only stat panels"})
+		if p.Viz != "stat" && p.Viz != "gauge" {
+			problems = append(problems, Problem{Path: fmt.Sprintf("panels[%d].viz", i), Message: "the header shows only stat and gauge panels"})
 		}
 	}
 	if len(problems) > 0 {

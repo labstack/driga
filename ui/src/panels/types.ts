@@ -22,6 +22,7 @@ export type Panel = {
   unit?: string;
   max?: number;
   total?: string;
+  caption?: string;
   empty?: string;
   width?: number;
   height?: "s" | "m" | "l";
@@ -41,7 +42,7 @@ export type Span = { machine_id: string; session_id: number; kind: string; from:
 
 export type Frame = { columns: Column[]; rows: Cell[][]; spans?: Span[] };
 
-export type Result = { id: string; status: "ok" | "empty" | "error"; message?: string; frame?: Frame; trend?: (number | null)[]; total?: number | null; title?: string };
+export type Result = { id: string; status: "ok" | "empty" | "error"; message?: string; frame?: Frame; trend?: (number | null)[]; total?: number | null; caption?: number | null; title?: string };
 
 export type Fragment = { leftover_count?: number;
   history: { attention: { ts: string; waiting: number; review: number; stuck: number | null }[] | null; polls: { machine_id: string; ts: string; state: "working" | "waiting" | "stuck" | "idle" | "quiet" | "offline" }[] | null };

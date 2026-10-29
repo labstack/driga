@@ -152,11 +152,12 @@ func storyDashboards() map[string]RunRequest {
 		{ID: "ended", Title: "Ended", Viz: "table", Source: "history"},
 	}}
 	return map[string]RunRequest{
-		"home":   {Dashboard: Home()},
-		"header": {Dashboard: Header()},
-		"inbox":  {Dashboard: Dashboard{Name: "Inbox", Panels: []Panel{{ID: "inbox", Title: "Inbox", Viz: "inbox", Source: "inbox"}}}},
-		"search": {Dashboard: search},
-		"all":    {Dashboard: all},
+		"home":           {Dashboard: Home()},
+		"header":         {Dashboard: Header()},
+		"header_catalog": {Dashboard: Dashboard{Name: "Header widget catalog", Panels: HeaderCatalog()}},
+		"inbox":          {Dashboard: Dashboard{Name: "Inbox", Panels: []Panel{{ID: "inbox", Title: "Inbox", Viz: "inbox", Source: "inbox"}}}},
+		"search":         {Dashboard: search},
+		"all":            {Dashboard: all},
 	}
 }
 

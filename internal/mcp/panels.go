@@ -142,8 +142,12 @@ func registerPanels(s *sdk.Server, o Options) {
 	}, func(ctx context.Context, _ *sdk.CallToolRequest, in openInput) (*sdk.CallToolResult, panel.Fragment, error) {
 		return saved(live.Open(ctx, in.ID, in.Vars))
 	})
+	var widgets []string
+	for _, p := range panel.HeaderCatalog() {
+		widgets = append(widgets, fmt.Sprintf("%s (%s)", p.ID, p.Title))
+	}
 	sdk.AddTool(s, &sdk.Tool{Name: "list_dashboards", Title: "Dashboards", Annotations: readOnly,
-		Description: "List saved dashboards with their ids, panel counts and versions. The first, id header, holds the metrics the Driga app shows above Chat: only stat panels, at most 8; edit it when the user wants a number there. Next, id home, is the dashboard the app opens on, with Chat beside it.",
+		Description: "List saved dashboards with their ids, panel counts and versions. The first, id header, holds the metrics the Driga app shows above Chat: stat or gauge panels, at most 16; edit it when the user wants a number there. Next, id home, is the dashboard the app opens on, with Chat beside it. Header widget catalog: " + strings.Join(widgets, ", ") + ".",
 	}, func(context.Context, *sdk.CallToolRequest, struct{}) (*sdk.CallToolResult, listOutput, error) {
 		list, err := o.Dashboards.List()
 		if err != nil {
