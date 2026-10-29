@@ -1,0 +1,2 @@
+{"type":"user","sessionId":"background-conversation","cwd":"/Users/fixture/src/project","timestamp":"2026-10-18T11:59:57Z","message":{"content":"Inspect the project"}}
+{"type":"assistant","sessionId":"background-conversation","timestamp":"2026-10-18T11:59:58Z","message":{"content":[{"type":"text","text":"Inspection complete."}],"stop_reason":"end_turn"}}

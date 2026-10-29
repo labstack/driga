@@ -67,7 +67,7 @@ function Brief({ inbox, act, ask }: { inbox?: { panel: Panel; result?: Result; l
       ? <Text size="sm" c="dimmed">{prompts.length > 0 && `${prompts.length} permission ${prompts.length === 1 ? "prompt" : "prompts"} to answer. `}{waits ? `${waits} ${waits === 1 ? "session needs" : "sessions need"} you.` : ""}</Text>
       : <EmptyState kind="all-clear" title="Nothing is waiting on you." />}
     {inbox && !inbox.listed && items > 0 && <PanelView panel={inbox.panel} result={inbox.result} act={act} />}
-    <Stack gap={6} align="flex-start">{suggestions.map(s => <Button key={s} variant="default" radius="xl" leftSection={<Sparkle />} onClick={() => ask(s)} styles={{ label: { whiteSpace: "normal", textAlign: "left" } }} h="auto" py={6}>{s}</Button>)}</Stack>
+    <Stack gap={6} align="flex-start">{suggestions.map(s => <Button key={s} variant="default" radius="xl" leftSection={<Sparkle />} onClick={() => ask(s)} styles={{ label: { whiteSpace: "normal", textAlign: "left", lineHeight: 1.35, overflow: "visible" } }} h="auto" py={6}>{s}</Button>)}</Stack>
   </Stack>;
 }
 
@@ -186,7 +186,7 @@ export function Chat({ inbox, act, ask, onOpen, onClose }: {
     onClose?.();
   };
   const modeLabels: Record<ChatMode, string> = { confirm: "Confirm", auto: "Auto", "full auto": "Full auto" };
-  let modeLabel = mode ? modeLabels[mode] : !id && historyStatus === "empty" ? "Confirm" : !id && historyStatus === "unavailable" ? "Mode unavailable" : "Loading mode…";
+  let modeLabel = mode ? `Mode: ${modeLabels[mode]}` : !id && historyStatus === "empty" ? "Mode: Confirm" : !id && historyStatus === "unavailable" ? "Mode unavailable" : "Loading mode…";
   if (mode === "full auto" && until) modeLabel += ` · ${Math.max(0, Math.ceil((Date.parse(until) - now) / 60_000))}m left`;
 
   const send = async (text: string) => {
@@ -218,10 +218,10 @@ export function Chat({ inbox, act, ask, onOpen, onClose }: {
   const lastCard = ordered.map(m => m.role).lastIndexOf("panel");
   return <Stack component="section" aria-label="Chat" h="100%" gap={0}>
     <Group justify="space-between" px="md" py="sm" style={{ borderBottom: "1px solid var(--driga-border)" }}>
-      <Stack gap={2}>
-        <Group gap={8} align="baseline"><Title order={2} fz="sm" fw={600}>Chat</Title><Text size="xs" c="dimmed">through your Claude Code login</Text></Group>
-        <Text size="xs" c={mode === "full auto" ? "danger" : "dimmed"} fw={mode === "full auto" ? 600 : undefined} aria-label="Current trust mode">{modeLabel}</Text>
-      </Stack>
+      <Group gap={8} align="baseline" wrap="nowrap">
+        <Title order={2} fz="sm" fw={600}>Chat</Title>
+        <Text size="xs" c={mode === "full auto" ? "danger" : "dimmed"} fw={mode === "full auto" ? 600 : undefined} aria-label="Current trust mode" style={{ whiteSpace: "nowrap" }}>{modeLabel}</Text>
+      </Group>
       {onClose && <ActionIcon aria-label="Close chat" disabled={modeBusy} onClick={() => void close()}><X /></ActionIcon>}
     </Group>
     <ScrollArea viewportRef={log} style={{ flex: 1 }} type="auto">

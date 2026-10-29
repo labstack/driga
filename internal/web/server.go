@@ -313,7 +313,7 @@ func (w *headerWriter) Write(b []byte) (int, error) {
 }
 
 // HTTP is loopback-only; POSTs must originate at the same authority. The
-// toolkit's private protocol has its own exact app origin.
+// toolkit's private protocol identifies requests by its transport address.
 func appRequestOrigin(r *http.Request) bool {
 	scheme := r.URL.Scheme
 	if scheme == "" {
@@ -330,10 +330,13 @@ func appRequestOrigin(r *http.Request) bool {
 		if !strings.HasPrefix(r.RemoteAddr, "mygo:") || r.Host != "localhost" {
 			return false
 		}
-		if r.Method != http.MethodPost && origin == "" {
-			return true
+		if r.Header.Values("Sec-Fetch-Site") != nil {
+			if site := r.Header.Get("Sec-Fetch-Site"); site != "same-origin" && site != "none" {
+				return false
+			}
 		}
-		return origin == "mygo://localhost" || origin == "http://mygo.localhost"
+		// WKWebView omits Origin for fetches over the private scheme.
+		return origin == "" || origin == "mygo://localhost" || origin == "http://mygo.localhost"
 	}
 	if scheme != "http" && scheme != "https" {
 		return false

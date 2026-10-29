@@ -1,0 +1,32 @@
+[
+  {
+    "pid": 1031, "ppid": 1, "started_at": "2026-10-18T11:00:00Z", "rss_bytes": 100,
+    "cmdline": "/Users/fixture/.local/bin/claude daemon run --json-path /Users/fixture/.claude/daemon.json --log-file /Users/fixture/.claude/daemon.log",
+    "argv": ["/Users/fixture/.local/bin/claude", "daemon", "run", "--json-path", "/Users/fixture/.claude/daemon.json", "--log-file", "/Users/fixture/.claude/daemon.log"],
+    "cwd": "/Users/fixture"
+  },
+  {
+    "pid": 1037, "ppid": 1031, "started_at": "2026-10-18T11:00:01Z", "rss_bytes": 200,
+    "cmdline": "claude bg-pty-host --bg-pty-host /tmp/cc-daemon-501/3238e64a/spare/8545f960.pty.sock 200 50 -- /Users/fixture/.local/share/claude/versions/2.1.314",
+    "argv": ["claude", "bg-pty-host", "--bg-pty-host", "/tmp/cc-daemon-501/3238e64a/spare/8545f960.pty.sock", "200", "50", "--", "/Users/fixture/.local/share/claude/versions/2.1.314"],
+    "cwd": "/tmp/cc-daemon-501/3238e64a/spare"
+  },
+  {
+    "pid": 1036, "ppid": 1037, "started_at": "2026-10-18T11:00:02Z", "rss_bytes": 300,
+    "cmdline": "claude bg-spare --bg-spare /tmp/cc-daemon-501/3238e64a/spare/8545f960.claim.sock",
+    "argv": ["claude", "bg-spare", "--bg-spare", "/tmp/cc-daemon-501/3238e64a/spare/8545f960.claim.sock"],
+    "cwd": "/tmp/cc-daemon-501/3238e64a/spare"
+  },
+  {
+    "pid": 1029, "ppid": 1031, "started_at": "2026-10-18T11:00:01Z", "rss_bytes": 200,
+    "cmdline": "claude bg-pty-host --bg-pty-host /tmp/cc-daemon-501/3238e64a/spare/second.pty.sock 200 50 -- /Users/fixture/.local/bin/claude",
+    "argv": ["claude", "bg-pty-host", "--bg-pty-host", "/tmp/cc-daemon-501/3238e64a/spare/second.pty.sock", "200", "50", "--", "/Users/fixture/.local/bin/claude"],
+    "cwd": "/tmp/cc-daemon-501/3238e64a/spare"
+  },
+  {
+    "pid": 1028, "ppid": 1029, "started_at": "2026-10-18T11:00:02Z", "rss_bytes": 300,
+    "cmdline": "claude bg-spare --bg-spare /tmp/cc-daemon-501/3238e64a/spare/second.claim.sock",
+    "argv": ["claude", "bg-spare", "--bg-spare", "/tmp/cc-daemon-501/3238e64a/spare/second.claim.sock"],
+    "cwd": "/tmp/cc-daemon-501/3238e64a/spare"
+  }
+]

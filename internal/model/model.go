@@ -143,6 +143,9 @@ type SessionObs struct {
 	FilesTouched      []FileTouch       `json:"files_touched,omitempty"`
 	TurnOpen          bool              `json:"turn_open"`
 	SourcePath        string            `json:"source_path,omitempty"`
+
+	// ConversationClaimed retains positive conversation evidence across idle registry updates.
+	ConversationClaimed bool `json:"conversation_claimed,omitempty"`
 }
 
 // CompletionEvent is one finished turn.

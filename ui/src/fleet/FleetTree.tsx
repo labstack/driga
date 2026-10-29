@@ -24,17 +24,18 @@ export function FleetTree({ data, selected, onSelect, onOpen, onReply }: FleetAc
   const is = (kind: FleetSelection["kind"], id: string) => selected?.kind === kind && selected.id === id;
   const sessionRows = (root: FleetSession) => relationships.branch(root).map(({ session: s, depth }) =>
     <SessionRow key={sessionKey(s)} session={s} level={depth + 2} selected={is("session", s.id) && (!selected?.machine || selected.machine === s.machine)} onSelect={onSelect} onOpen={onOpen} onReply={onReply} />);
-  return <Table.ScrollContainer minWidth={760} type="native">
+  // Preserve nested name space while reserving room for both action buttons.
+  return <Table.ScrollContainer minWidth={1032} type="native">
     <Table aria-label="Fleet tree" layout="fixed">
       <Table.Thead>
         <Table.Tr>
-          <Table.Th w={96}>State</Table.Th>
+          <Table.Th w={100}>State</Table.Th>
           <Table.Th>Name</Table.Th>
           <Table.Th w={120}>Agent</Table.Th>
-          <Table.Th w={134}>Branch</Table.Th>
+          <Table.Th w={100}>Branch</Table.Th>
           <Table.Th w={124} ta="right">Memory</Table.Th>
           <Table.Th w={96} ta="right">Last activity</Table.Th>
-          <Table.Th w={120}><VisuallyHidden>Actions</VisuallyHidden></Table.Th>
+          <Table.Th w={144}><VisuallyHidden>Actions</VisuallyHidden></Table.Th>
         </Table.Tr>
       </Table.Thead>
       <Table.Tbody>
@@ -67,10 +68,10 @@ function MachineRow({ group: g, open, selected, onToggle, onSelect }: { group: F
     <Table.Td>
       <Group gap={4} wrap="nowrap">
         <ActionIcon size="sm" aria-label={`${open ? "Collapse" : "Expand"} ${m.name}`} aria-expanded={open} onClick={onToggle}>{open ? <CaretDown size={14} /> : <CaretRight size={14} />}</ActionIcon>
-        <Glyph size={14} aria-hidden />
-        <UnstyledButton className="fleet-row-title" onClick={() => onSelect({ kind: "machine", id: m.id })} aria-pressed={selected}><Text fz="sm" fw={600} ff="monospace">{m.name}</Text></UnstyledButton>
-        {m.local && <Badge size="xs" variant="default">local</Badge>}
-        <Text fz="xs" c="dimmed" ff="monospace">{plural(total, "session")}</Text>
+        <Glyph size={14} aria-hidden style={{ flex: "none" }} />
+        <UnstyledButton className="fleet-row-title" miw={0} onClick={() => onSelect({ kind: "machine", id: m.id })} aria-pressed={selected}><Text fz="sm" fw={600} ff="monospace" truncate title={m.name}>{m.name}</Text></UnstyledButton>
+        {m.local && <Badge size="xs" variant="default" style={{ flex: "none" }}>local</Badge>}
+        <Text fz="xs" c="dimmed" ff="monospace" style={{ flex: "none", whiteSpace: "nowrap" }}>{plural(total, "session")}</Text>
       </Group>
     </Table.Td>
     <Table.Td />
@@ -86,9 +87,9 @@ function ProjectRow({ group: p, selected, onSelect }: { group: FleetProjectGroup
     <Table.Td />
     <Table.Td>
       <Group gap={4} wrap="nowrap" pl={indent}>
-        <FolderSimple size={14} aria-hidden />
-        <UnstyledButton className="fleet-row-title" onClick={() => onSelect({ kind: "project", id: p.project.id })} aria-pressed={selected}><Text fz="sm" fw={500} ff="monospace">{p.project.name}</Text></UnstyledButton>
-        <Text fz="xs" c="dimmed" ff="monospace">{plural(p.sessions.length, "session")}</Text>
+        <FolderSimple size={14} aria-hidden style={{ flex: "none" }} />
+        <UnstyledButton className="fleet-row-title" miw={0} onClick={() => onSelect({ kind: "project", id: p.project.id })} aria-pressed={selected}><Text fz="sm" fw={500} ff="monospace" truncate title={p.project.name}>{p.project.name}</Text></UnstyledButton>
+        <Text fz="xs" c="dimmed" ff="monospace" style={{ flex: "none", whiteSpace: "nowrap" }}>{plural(p.sessions.length, "session")}</Text>
       </Group>
     </Table.Td>
     <Table.Td />
@@ -101,14 +102,14 @@ function ProjectRow({ group: p, selected, onSelect }: { group: FleetProjectGroup
 
 function SessionRow({ session: s, level, selected, onSelect, onOpen, onReply }: FleetActions & { session: FleetSession; level: number; selected: boolean }) {
   return <Table.Tr className="fleet-row" data-selected={selected}>
-    <Table.Td><StatusBadge state={s.state} label={s.label} inferred={s.inferred} /></Table.Td>
+    <Table.Td><StatusBadge state={s.state} label={s.label} inferred={s.inferred} evidence={s.evidence} /></Table.Td>
     <Table.Td>
       <Group gap={4} wrap="nowrap" pl={indent * level} style={{ minWidth: 0 }}>
-        {level > 2 && <Text fz="xs" c="dimmed" aria-hidden>↳</Text>}
+        {level > 2 && <Text fz="xs" c="dimmed" aria-hidden style={{ flex: "none" }}>↳</Text>}
         <UnstyledButton className="fleet-row-title" onClick={() => onSelect({ kind: "session", id: s.id, machine: s.machine })} aria-pressed={selected} style={{ minWidth: 0 }}>
           <Text fz="sm" truncate title={s.title}>{s.title}</Text>
         </UnstyledButton>
-        <Text fz="xs" c="dimmed" ff="monospace" style={{ flex: "none" }}>#{s.id}</Text>
+        <Text fz="xs" c="dimmed" ff="monospace" style={{ flex: "none", whiteSpace: "nowrap" }}>#{s.id}</Text>
       </Group>
     </Table.Td>
     <Table.Td><AgentChip agent={s.agent} name size={16} /></Table.Td>
@@ -117,8 +118,8 @@ function SessionRow({ session: s, level, selected, onSelect, onOpen, onReply }: 
     <Table.Td ta="right"><Text fz="xs" ff="monospace" c="dimmed" title={exact(s.lastActivity)}>{relative(s.lastActivity)}</Text></Table.Td>
     <Table.Td>
       <Group gap={2} wrap="nowrap" justify="flex-end" className="fleet-row-actions">
-        {s.state === "waiting" && <Button size="compact-xs" variant="subtle" aria-label={`Reply to ${s.title}`} onClick={() => onReply(s)}>Reply</Button>}
-        <Button size="compact-xs" variant="subtle" color="gray" aria-label={`Open ${s.title}`} onClick={() => onOpen(s)}>Open</Button>
+        {s.state === "waiting" && <Button size="compact-xs" variant="subtle" style={{ flex: "none", whiteSpace: "nowrap" }} aria-label={`Reply to ${s.title}`} onClick={() => onReply(s)}>Reply</Button>}
+        <Button size="compact-xs" variant="subtle" color="gray" style={{ flex: "none", whiteSpace: "nowrap" }} aria-label={`Open ${s.title}`} onClick={() => onOpen(s)}>Open</Button>
       </Group>
     </Table.Td>
   </Table.Tr>;

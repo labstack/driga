@@ -55,7 +55,7 @@ func machineAppsPlaced(procs []model.Proc, placements map[int32]derive.ProcPlace
 		}
 		id, name := bundle, strings.TrimSuffix(path.Base(bundle), ".app")
 		if bundle == "" {
-			name = signatures.Builtin().ProcessName(p.Cmdline, p.Exe)
+			name = signatures.Builtin().ProcessName(p.Cmdline, p.Exe, p.Argv)
 			id = "exe:" + name
 		}
 		a := apps[id]

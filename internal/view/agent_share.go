@@ -119,7 +119,7 @@ func buildAgentShare(v *MachineView, procs []model.Proc, sessions []model.Sessio
 			c.CPUPercent += p.CPUPercent
 			c.Processes = append(c.Processes, row)
 		case derive.BucketAgent, derive.BucketLikely:
-			name := sigs.ProcessName(p.Cmdline, p.Exe)
+			name := sigs.ProcessName(p.Cmdline, p.Exe, p.Argv)
 			id := "exe:" + name
 			groups := agents
 			if placement.Bucket == derive.BucketLikely {
@@ -133,7 +133,7 @@ func buildAgentShare(v *MachineView, procs []model.Proc, sessions []model.Sessio
 				id = bundle
 				if bundle == "" {
 					host := byPID[placement.SharedHost]
-					name = sigs.ProcessName(host.Cmdline, host.Exe)
+					name = sigs.ProcessName(host.Cmdline, host.Exe, host.Argv)
 					id = "exe:" + name
 				}
 				name += " (shared with editor)"

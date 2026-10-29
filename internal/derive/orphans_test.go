@@ -107,7 +107,7 @@ func TestCodexAppServerDaemonNeverOrphan(t *testing.T) {
 			t.Run(fmt.Sprintf("%s/classified=%t", cmd, classified), func(t *testing.T) {
 				root := model.Proc{PID: 10, PPID: 1, Cmdline: cmd, Argv: fixtureArgv(cmd), StartTime: now.Add(-time.Hour)}
 				if classified {
-					sig, _ := sigs.Match(cmd, "")
+					sig, _ := sigs.Match(cmd, "", root.Argv)
 					root.Role = string(sig.Role)
 				}
 				procs := []model.Proc{root, {PID: 11, PPID: 10, Cmdline: "claude mcp serve", Argv: []string{"claude", "mcp", "serve"}, StartTime: root.StartTime}}

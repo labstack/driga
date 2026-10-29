@@ -95,7 +95,7 @@ func describeMCP(p model.Proc, sigs *signatures.Set) mcpIdentity {
 	} else {
 		d.name = base
 		if executableVersion.MatchString(path.Base(exe)) {
-			d.name = sigs.ProcessName(p.Cmdline, exe)
+			d.name = sigs.ProcessName(p.Cmdline, exe, p.Argv)
 		} else if before, _, ok := strings.Cut(d.entry, "/target/"); ok {
 			// Cargo build paths identify the project even for binaries called server.
 			d.name = path.Base(path.Dir(before)) + "/" + path.Base(before)

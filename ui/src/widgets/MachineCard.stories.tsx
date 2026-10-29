@@ -17,6 +17,15 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+export const Cpu: Story = {
+  args: { machine: { ...f.studio, cpuPercent: 19 } },
+  play: async ({ canvas }) => {
+    await expect(canvas.getAllByText("19%")).toHaveLength(1);
+    await expect(canvas.queryByText("/ 100%")).toBeNull();
+    await expect(canvas.getByRole("progressbar", { name: "CPU on studio: 19% of 100%, 19%" })).toBeVisible();
+  },
+};
+
 export const Studio: Story = {
   play: async ({ args, canvas, userEvent, step }) => {
     await expect(canvas.getByText("studio")).toBeVisible();

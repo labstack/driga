@@ -251,3 +251,26 @@ func TestMixerMissingClaudeSampleIsNotProcessDeath(t *testing.T) {
 		t.Fatal(m)
 	}
 }
+
+func TestClaudeBusyRegistryActivityWithoutTranscript(t *testing.T) {
+	now := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
+	for _, tc := range []struct {
+		name, want           string
+		registry, transcript time.Time
+	}{
+		{"recent registry", "working", now.Add(-time.Second), time.Time{}},
+		{"old registry", "stuck", now.Add(-time.Hour), time.Time{}},
+		{"newer transcript", "working", now.Add(-time.Hour), now.Add(-time.Second)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			in := StateInput{Obs: model.SessionObs{Adapter: "claude", PID: 1036, RegistryStatus: "busy", RegistryUpdatedAt: tc.registry, LastActivityAt: tc.transcript}, Proc: &model.Proc{PID: 1036}}
+			m := LabelWithEvidence(in, now, Thresholds{})
+			if m.Verdict != tc.want || m.Heuristic || !m.Rows[0].Supports {
+				t.Fatalf("busy registry timing: %+v", m)
+			}
+			if got := SessionMixer(model.Session{Mixer: &m}); got.Verdict != tc.want {
+				t.Fatalf("replayed mixer lost registry timing: %+v", got)
+			}
+		})
+	}
+}

@@ -295,6 +295,7 @@ func TestRegistryToleranceAndOrigins(t *testing.T) {
 		{"sdk-ts", "interactive", "headless"}, {"sdk-py", "interactive", "headless"},
 		{"future-sdk", "interactive", "headless"}, {"unknown", "headless", "headless"},
 		{"cli", "print", "headless"}, {"unknown", "interactive", "interactive"},
+		{"cli", "bg", "background"},
 	} {
 		t.Run(tc.entrypoint+"/"+tc.kind, func(t *testing.T) {
 			env := testEnv(t)

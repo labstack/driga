@@ -69,7 +69,7 @@ export function MachineCard({ machine: m, selected, onSelect, onOpen, onReclaim 
         <Text size="xs" lh={1.2} c={late ? "danger" : "dimmed"} fw={late ? 500 : undefined} style={{ whiteSpace: "nowrap" }}>{m.reachable ? "reachable" : `last seen ${duration(sinceSeen)} ago`}</Text>
       </Group>
     </Group>
-    {m.cpuPercent !== undefined && <Stack gap={4}><Text size="xs" c="dimmed">CPU</Text><BarGauge value={m.cpuPercent} max={100} format={n => `${Math.round(n)}%`} label={`CPU on ${m.name}`} /></Stack>}
+    {m.cpuPercent !== undefined && <Stack gap={4}><Text size="xs" c="dimmed">CPU</Text><BarGauge value={m.cpuPercent} max={100} format={n => `${Math.round(n)}%`} label={`CPU on ${m.name}`} caption="percent" /></Stack>}
     {m.diskTotal && m.diskFree !== undefined ? <Group gap="sm" wrap="wrap" role="group" aria-label="Pressure">
       <RingGauge value={m.memUsed} max={m.memTotal} format={bytes} label="Memory" caption={bytes(m.memUsed)} size={36} />
       <RingGauge value={Math.max(0, m.diskTotal - m.diskFree)} max={m.diskTotal} format={bytes} label="Disk" caption={bytes(m.diskTotal - m.diskFree)} size={36} />

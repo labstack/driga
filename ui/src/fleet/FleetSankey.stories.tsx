@@ -129,6 +129,39 @@ export const LaptopWidth: Story = {
   },
 };
 
+export const ManyMachinesLaptop: Story = {
+  name: "Twelve machines on a laptop",
+  globals: { viewport: { value: "laptop", isRotated: false } },
+  decorators: [Story => <Box h={700} maw={992} style={{ display: "flex", flexDirection: "column" }}><Story /></Box>],
+  args: {
+    machines: [...busy.machines, ...Array.from({ length: 9 }, (_, i) => ({ ...busy.machines[1], id: `worker-${i + 1}`, name: `worker-${i + 1}` }))],
+    defaultMode: "tree",
+    defaultSelected: { kind: "session", id: waitingSession.id, machine: waitingSession.machine },
+  },
+  play: async ({ canvas, args }) => {
+    const strip = canvas.getByRole("list", { name: "Machines" });
+    expect(within(strip).getAllByRole("button")).toHaveLength(12);
+    const body = canvas.getByRole("region", { name: /^Fleet$/ });
+    expect(body.getBoundingClientRect().height).toBeGreaterThanOrEqual(240);
+    expect(strip.scrollHeight).toBeGreaterThan(strip.clientHeight);
+    strip.scrollTop = strip.scrollHeight;
+    const lastMachine = within(strip).getByRole("button", { name: /^worker-9/ });
+    expect(lastMachine.getBoundingClientRect().bottom).toBeLessThanOrEqual(strip.getBoundingClientRect().bottom + 1);
+    strip.scrollTop = 0;
+    await expect(canvas.getByRole("table", { name: "Fleet tree" })).toBeVisible();
+    const inspector = within(canvas.getByRole("group", { name: "Inspector" }));
+    const open = inspector.getByRole("button", { name: "Open" });
+    open.scrollIntoView({ block: "nearest" });
+    const action = open.getBoundingClientRect();
+    const viewport = body.getBoundingClientRect();
+    expect(action.top).toBeGreaterThanOrEqual(viewport.top - 1);
+    expect(action.bottom).toBeLessThanOrEqual(viewport.bottom + 1);
+    await userEvent.click(open);
+    await expect(args.onOpen).toHaveBeenCalledWith(waitingSession);
+    await userEvent.unhover(open);
+  },
+};
+
 export const EmptyFleet: Story = {
   args: empty,
   parameters: { docs: { description: { story: "No machines yet: a short title and how the fleet appears." } } },

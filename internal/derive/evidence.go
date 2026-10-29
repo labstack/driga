@@ -124,6 +124,7 @@ func LabelWithEvidence(in StateInput, now time.Time, th Thresholds) model.StateM
 			deciding = "process"
 		}
 	case "claude":
+		age = now.Sub(claudeBusyActivity(in.Obs))
 		switch verdict {
 		case "waiting":
 			support[1] = true // label checked Notification against activity and cleared waits.

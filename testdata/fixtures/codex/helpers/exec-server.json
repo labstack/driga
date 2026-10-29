@@ -1,0 +1,28 @@
+[
+  {
+    "pid": 1100,
+    "ppid": 1,
+    "started_at": "2026-10-18T10:00:00Z",
+    "cmdline": "/Applications/ChatGPT.app/Contents/MacOS/ChatGPT",
+    "argv": ["/Applications/ChatGPT.app/Contents/MacOS/ChatGPT"]
+  },
+  {
+    "pid": 1101,
+    "ppid": 1100,
+    "started_at": "2026-10-18T11:00:00Z",
+    "rss_bytes": 100,
+    "exe": "/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex",
+    "cmdline": "/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex -c forced_login_method=\"chatgpt\" exec-server --remote https://example.invalid/api --environment-id fixture-environment",
+    "argv": [
+      "/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex",
+      "-c",
+      "forced_login_method=\"chatgpt\"",
+      "exec-server",
+      "--remote",
+      "https://example.invalid/api",
+      "--environment-id",
+      "fixture-environment"
+    ],
+    "cwd": "/"
+  }
+]

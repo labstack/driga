@@ -77,26 +77,35 @@ func TestDestructiveActionsRequireBoundOneTimeToken(t *testing.T) {
 func TestAppRejectsForgedHostAndOrigin(t *testing.T) {
 	s, _ := New(appSource{}, Options{})
 	for _, tc := range []struct {
-		method, target, host, origin string
-		allowed                      bool
+		method, target, host, remote, origin, fetchSite string
+		allowed                                         bool
 	}{
-		{"GET", "/app/", "evil.example:47801", "", false},
-		{"GET", "/app/", "localhost.evil:47801", "", false},
-		{"POST", "/chat/api/new", "127.0.0.1:47801", "http://evil.example", false},
-		{"POST", "/chat/api/new", "127.0.0.1:47801", "http://127.0.0.1:5173", false},
-		{"POST", "/chat/api/new", "127.0.0.1:47801", "", false},
-		{"POST", "/chat/api/new", "127.0.0.1:47801", "null", false},
-		{"GET", "/app/", "127.0.0.1:47801", "", true},
-		{"POST", "/app/confirm", "[::1]:47801", "http://[::1]:47801", true},
-		{"POST", "mygo://localhost/app/confirm", "localhost", "mygo://localhost", true},
-		{"POST", "/app/confirm", "mygo.localhost", "http://mygo.localhost", false},
+		{"GET", "/app/", "evil.example:47801", "", "", "", false},
+		{"GET", "/app/", "localhost.evil:47801", "", "", "", false},
+		{"POST", "/chat/api/new", "127.0.0.1:47801", "", "http://evil.example", "", false},
+		{"POST", "/chat/api/new", "127.0.0.1:47801", "", "http://127.0.0.1:5173", "", false},
+		{"POST", "/chat/api/new", "127.0.0.1:47801", "", "", "", false},
+		{"POST", "/chat/api/new", "127.0.0.1:47801", "", "null", "", false},
+		{"GET", "/app/", "127.0.0.1:47801", "", "", "", true},
+		{"POST", "/app/confirm", "[::1]:47801", "", "http://[::1]:47801", "", true},
+		{"POST", "mygo://localhost/app/confirm", "localhost", "mygo:1", "mygo://localhost", "", true},
+		{"POST", "mygo://localhost/app/confirm", "localhost", "mygo:1", "", "", true},
+		{"POST", "mygo://localhost/app/confirm", "localhost", "mygo:1", "null", "", false},
+		{"POST", "mygo://localhost/app/confirm", "localhost", "mygo:1", "https://evil.example", "", false},
+		{"POST", "mygo://localhost/app/confirm", "localhost", "mygo:1", "", "cross-site", false},
+		{"POST", "mygo://localhost/app/confirm", "localhost", "mygo:1", "", "same-origin", true},
+		{"POST", "mygo://localhost/app/confirm", "localhost", "127.0.0.1:12345", "", "", false},
+		{"POST", "/app/confirm", "mygo.localhost", "", "http://mygo.localhost", "", false},
 	} {
 		r := httptest.NewRequest(tc.method, tc.target, strings.NewReader(`{}`))
 		r.Host = tc.host
-		if strings.HasPrefix(tc.target, "mygo://") && tc.allowed {
-			r.RemoteAddr = "mygo:1"
+		if tc.remote != "" {
+			r.RemoteAddr = tc.remote
 		}
 		r.Header.Set("Origin", tc.origin)
+		if tc.fetchSite != "" {
+			r.Header.Set("Sec-Fetch-Site", tc.fetchSite)
+		}
 		r.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
 		s.ServeHTTP(w, r)
@@ -244,21 +253,28 @@ func TestEveryEndpointRejectsForgedOriginsBeforeRouting(t *testing.T) {
 
 func TestNativeProtocolOriginsRequireToolkitTransport(t *testing.T) {
 	for _, tc := range []struct {
-		name, target, host, remote, origin string
-		allowed                            bool
+		name, target, host, remote, origin, fetchSite string
+		allowed                                       bool
 	}{
-		{"native macOS and Linux", "mygo://localhost/app/confirm", "localhost", "mygo:1", "mygo://localhost", true},
-		{"transformed native Windows", "mygo://localhost/app/confirm", "localhost", "mygo:2", "http://mygo.localhost", true},
-		{"network forged private scheme", "mygo://localhost/app/confirm", "localhost", "127.0.0.1:12345", "mygo://localhost", false},
-		{"network forged Windows request", "mygo://localhost/app/confirm", "localhost", "127.0.0.1:12345", "http://mygo.localhost", false},
-		{"raw HTTP Windows address", "http://mygo.localhost/app/confirm", "mygo.localhost", "127.0.0.1:12345", "http://mygo.localhost", false},
-		{"HTTP loopback private origin", "http://127.0.0.1:47801/app/confirm", "127.0.0.1:47801", "127.0.0.1:12345", "mygo://localhost", false},
-		{"HTTP loopback Windows origin", "http://127.0.0.1:47801/app/confirm", "127.0.0.1:47801", "127.0.0.1:12345", "http://mygo.localhost", false},
-		{"native missing Origin", "mygo://localhost/app/confirm", "localhost", "mygo:1", "", false},
-		{"native opaque Origin", "mygo://localhost/app/confirm", "localhost", "mygo:1", "null", false},
-		{"native unrelated Origin", "mygo://localhost/app/confirm", "localhost", "mygo:1", "https://evil.example", false},
-		{"native wrong host", "mygo://evil.example/app/confirm", "evil.example", "mygo:1", "mygo://localhost", false},
-		{"native host port", "mygo://localhost:80/app/confirm", "localhost:80", "mygo:1", "mygo://localhost", false},
+		{"native macOS and Linux", "mygo://localhost/app/confirm", "localhost", "mygo:1", "mygo://localhost", "", true},
+		{"transformed native Windows", "mygo://localhost/app/confirm", "localhost", "mygo:2", "http://mygo.localhost", "", true},
+		{"network forged private scheme", "mygo://localhost/app/confirm", "localhost", "127.0.0.1:12345", "mygo://localhost", "", false},
+		{"network forged Windows request", "mygo://localhost/app/confirm", "localhost", "127.0.0.1:12345", "http://mygo.localhost", "", false},
+		{"raw HTTP Windows address", "http://mygo.localhost/app/confirm", "mygo.localhost", "127.0.0.1:12345", "http://mygo.localhost", "", false},
+		{"HTTP loopback private origin", "http://127.0.0.1:47801/app/confirm", "127.0.0.1:47801", "127.0.0.1:12345", "mygo://localhost", "", false},
+		{"HTTP loopback Windows origin", "http://127.0.0.1:47801/app/confirm", "127.0.0.1:47801", "127.0.0.1:12345", "http://mygo.localhost", "", false},
+		{"native missing Origin", "mygo://localhost/app/confirm", "localhost", "mygo:1", "", "", true},
+		{"native opaque Origin", "mygo://localhost/app/confirm", "localhost", "mygo:1", "null", "", false},
+		{"native unrelated Origin", "mygo://localhost/app/confirm", "localhost", "mygo:1", "https://evil.example", "", false},
+		{"native cross-site", "mygo://localhost/app/confirm", "localhost", "mygo:1", "", "cross-site", false},
+		{"native same-site", "mygo://localhost/app/confirm", "localhost", "mygo:1", "", "same-site", false},
+		{"native same-origin", "mygo://localhost/app/confirm", "localhost", "mygo:1", "", "same-origin", true},
+		{"native none", "mygo://localhost/app/confirm", "localhost", "mygo:1", "", "none", true},
+		{"native explicit Origin cross-site", "mygo://localhost/app/confirm", "localhost", "mygo:1", "mygo://localhost", "cross-site", false},
+		{"native Windows Origin same-site", "mygo://localhost/app/confirm", "localhost", "mygo:2", "http://mygo.localhost", "same-site", false},
+		{"network missing Origin", "mygo://localhost/app/confirm", "localhost", "127.0.0.1:12345", "", "", false},
+		{"native wrong host", "mygo://evil.example/app/confirm", "evil.example", "mygo:1", "mygo://localhost", "", false},
+		{"native host port", "mygo://localhost:80/app/confirm", "localhost:80", "mygo:1", "mygo://localhost", "", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			dialogs := 0
@@ -270,6 +286,9 @@ func TestNativeProtocolOriginsRequireToolkitTransport(t *testing.T) {
 			r.Host = tc.host
 			r.RemoteAddr = tc.remote
 			r.Header.Set("Origin", tc.origin)
+			if tc.fetchSite != "" {
+				r.Header.Set("Sec-Fetch-Site", tc.fetchSite)
+			}
 			r.Header.Set("Content-Type", "application/json")
 			// Headers cannot forge the transport identity the toolkit stamps.
 			r.Header.Set("Remote-Addr", "mygo:1")
@@ -284,5 +303,15 @@ func TestNativeProtocolOriginsRequireToolkitTransport(t *testing.T) {
 				t.Fatalf("forged native request accepted: %d dialogs=%d", w.Code, dialogs)
 			}
 		})
+	}
+}
+
+func TestNativeProtocolRejectsEmptyFetchSite(t *testing.T) {
+	r := httptest.NewRequest(http.MethodPost, "mygo://localhost/app/confirm", nil)
+	r.RemoteAddr = "mygo:1"
+	r.Header.Set("Origin", "mygo://localhost")
+	r.Header.Set("Sec-Fetch-Site", "")
+	if appRequestOrigin(r) {
+		t.Fatal("native request with empty Sec-Fetch-Site accepted")
 	}
 }

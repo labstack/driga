@@ -230,6 +230,21 @@ func collectSources(ctx context.Context, d Deps, st *store.Store, p Plan, state 
 		state.applyCwds(r.procs)
 	})
 	adapters.Wait()
+	r.original = make(map[int64]model.Session, len(ss))
+	knownClaude := make(map[string]bool)
+	for _, s := range ss {
+		r.original[s.ID] = s
+		if claudeConversationClaimed(s.SessionObs) {
+			knownClaude[s.ExternalID] = true
+		}
+	}
+	for _, h := range spoolHooks(d, r.spool.events) {
+		if claudeTurnHookClaimed(h) {
+			knownClaude[h.SessionID] = true
+		}
+	}
+	backgroundRegistries := make(map[string]bool)
+	var observations []model.SessionObs
 	for _, result := range r.adapters {
 		for _, o := range result.obs {
 			if o.Adapter == "" {
@@ -238,13 +253,51 @@ func collectSources(ctx context.Context, d Deps, st *store.Store, p Plan, state 
 			if o.Adapter == "claude" && r.internalChats[o.ExternalID] {
 				continue
 			}
-			r.observations = append(r.observations, o)
+			if o.Adapter == "claude" && strings.TrimSuffix(o.Origin, "/temporary") == "background" && o.RegistryStatus != "" {
+				backgroundRegistries[o.ExternalID] = true
+			}
+			if claudeConversationClaimed(o) {
+				o.ConversationClaimed = true
+				knownClaude[o.ExternalID] = true
+			}
+			observations = append(observations, o)
 		}
 	}
-	r.original = make(map[int64]model.Session, len(ss))
+	// Even an unclaimed spare can replace a conversation's registry identity.
+	// Detach its predecessor before deciding whether to admit the replacement.
+	reconcileClaude(ss, observations, now)
+	for i := range ss {
+		s := &ss[i]
+		if s.Adapter != "claude" {
+			continue
+		}
+		s.ConversationClaimed = knownClaude[s.ExternalID]
+		storedBackground := strings.TrimSuffix(s.Origin, "/temporary") == "background" && s.RegistryStatus != ""
+		if !s.ConversationClaimed && (storedBackground || backgroundRegistries[s.ExternalID]) {
+			// Retire registry-only spares persisted by older collectors. Retain
+			// their historical row, but never their live process ownership.
+			// Main-era rows used interactive/headless origins for bg registries;
+			// the incoming identity must retire those before admission filtering.
+			s.PID, s.Hosted, s.TurnOpen = 0, false, false
+			if s.RegistryStatus != "ended" {
+				s.RegistryStatus, s.RegistryUpdatedAt = "ended", now
+			}
+			if s.EndedAt == nil {
+				at := now
+				s.EndedAt = &at
+			}
+		}
+	}
+	for _, o := range observations {
+		// A pre-warmed bg spare has a sessionId and an idle registry too.
+		// Only positive evidence (including a persisted claim) admits it.
+		if o.Adapter == "claude" && strings.TrimSuffix(o.Origin, "/temporary") == "background" && !knownClaude[o.ExternalID] {
+			continue
+		}
+		r.observations = append(r.observations, o)
+	}
 	byKey := make(map[string]int, len(ss))
 	for i, s := range ss {
-		r.original[s.ID] = s
 		byKey[sessionKey(s.Adapter, s.ExternalID)] = i
 	}
 	for _, o := range r.observations {
@@ -268,7 +321,6 @@ func collectSources(ctx context.Context, d Deps, st *store.Store, p Plan, state 
 			// The pass reports both the scan error and any stored-read error.
 			procs, _ = state.storedProcs(st.Procs)
 		}
-		reconcileClaude(r.sessions, r.observations, now)
 		reconcileSessions(r.sessions, procs, d.Plat, now)
 		r.sessions = processSessions(r.sessions, procs, d)
 		r.sessions = hookSessions(r.sessions, spoolHooks(d, r.spool.events), procs)
@@ -339,6 +391,23 @@ func collectSources(ctx context.Context, d Deps, st *store.Store, p Plan, state 
 		r.peers, r.socketErr = collectSocketPeers(ctx, d, st, state, r.procs, sessions, r.procAt, now, r.subreaper, spoolHooks(d, r.spool.events), r.processAliases)
 	}
 	return r, ctx.Err()
+}
+
+func claudeConversationClaimed(o model.SessionObs) bool {
+	return o.Adapter == "claude" && !strings.HasPrefix(o.ExternalID, "pid:") && (o.ConversationClaimed || o.RegistryStatus == "busy" || o.SourcePath != "")
+}
+
+// Lifecycle hooks can fire for pre-warmed spares. Only turn activity proves a
+// conversation was claimed; keep this list aligned with migration 0006.
+func claudeTurnHookClaimed(h model.HookEvent) bool {
+	if h.Adapter != "claude" || h.SessionID == "" || strings.HasPrefix(h.SessionID, "pid:") {
+		return false
+	}
+	switch h.Event {
+	case "UserPromptSubmit", "Stop", "PreToolUse", "PostToolUse", "PostToolUseFailure", "PermissionRequest":
+		return true
+	}
+	return false
 }
 
 func collectGit(ctx context.Context, d Deps, ss []model.Session, known []model.Repo, mode gitscan.ScanMode, now time.Time) ([]repoResult, error) {

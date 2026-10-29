@@ -140,9 +140,16 @@ func LinkParents(sessions []model.Session, idx ProcIndex) map[int64]int64 {
 			role, ok := roles[pid]
 			if !ok {
 				role = signatures.Role(p.Role)
-				if role == "" && sigs != nil {
-					sig, _ := sigs.Match(p.Cmdline, p.Exe)
-					role = sig.Role
+				if (role == "" || role == signatures.RoleService) && sigs != nil {
+					sig, _ := sigs.Match(p.Cmdline, p.Exe, p.Argv)
+					if role == "" {
+						role = sig.Role
+					}
+					// Managed shared hosts retain the same family evidence as
+					// ordinary hosts; their service role only protects cleanup.
+					if role == signatures.RoleService && sig.HostName != "" {
+						role = signatures.RoleHost
+					}
 				}
 				roles[pid] = role
 			}

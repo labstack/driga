@@ -84,6 +84,9 @@ func registryTime(raw json.RawMessage) (time.Time, error) {
 }
 
 func registryOrigin(r registryEntry) string {
+	if r.Kind == "bg" {
+		return "background"
+	}
 	if strings.Contains(r.Entrypoint, "sdk") || r.Kind == "headless" || r.Kind == "print" {
 		return "headless"
 	}

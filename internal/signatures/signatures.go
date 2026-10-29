@@ -26,7 +26,7 @@ const (
 	RoleApp         Role = "app"         // A desktop app's main executable.
 )
 
-// Signature identifies a process when any of its Match regexes matches.
+// Signature identifies a process by command-mode argv or Match regexes.
 type Signature struct {
 	Name      string   `toml:"name"`
 	Agent     string   `toml:"agent"`
@@ -34,11 +34,20 @@ type Signature struct {
 	Match     []string `toml:"match"`
 	AppBundle bool     `toml:"app_bundle"`
 	HostName  string   `toml:"host_name"`
+	// ProtectTree excludes this helper and its descendants from orphan cleanup.
+	ProtectTree bool `toml:"protect_tree"`
+	// CommandModes matches argv prefixes after the executable (Agent), skipping
+	// leading Codex config overrides. These entries never inspect joined text.
+	CommandModes [][]string `toml:"command_modes"`
+	// ExecutableMatch optionally restricts a command mode to an installation
+	// path in argv[0] or the resolved executable, never another argument.
+	ExecutableMatch string `toml:"executable_match"`
 }
 
 type compiledSignature struct {
-	signature Signature
-	patterns  []*regexp.Regexp
+	signature  Signature
+	patterns   []*regexp.Regexp
+	executable *regexp.Regexp
 }
 
 // Set holds signatures in precedence order, with their compiled regexes.
@@ -98,6 +107,13 @@ func (s *Set) appendFile(path string, data []byte, agent string) error {
 			continue
 		}
 		entry := compiledSignature{signature: signature}
+		if signature.ExecutableMatch != "" {
+			re, err := regexp.Compile(signature.ExecutableMatch)
+			if err != nil {
+				return fmt.Errorf("signatures %s: signature %q executable: %w", path, signature.Name, err)
+			}
+			entry.executable = re
+		}
 		for _, pattern := range signature.Match {
 			re, err := regexp.Compile(pattern)
 			if err != nil {
@@ -125,13 +141,34 @@ func (s *Set) appendFile(path string, data []byte, agent string) error {
 	return nil
 }
 
-// Match returns the first matching signature, using exe only if cmdline is empty.
-func (s *Set) Match(cmdline, exe string) (Signature, bool) {
-	cmdline, exe = windowsSignatureInput(cmdline, exe)
+// Match returns the first matching signature. argv must come from the platform,
+// never from splitting Cmdline: Unix snapshots join it without shell escaping.
+// Without argv, regex signatures still apply, but command modes cannot match.
+func (s *Set) Match(cmdline, exe string, argv []string) (Signature, bool) {
+	modeExe, modeArgs := commandModeInput(argv, exe)
+	modePath := ""
+	if len(argv) > 0 {
+		modePath = argv[0]
+		if windowsPathShape(modePath) || windowsPathShape(exe) {
+			modePath = windowsSignaturePath(modePath, true)
+		}
+	}
+	cmdline, exe = signatureInput(cmdline, exe, argv)
 	if cmdline == "" {
 		cmdline = exe
 	}
 	for _, entry := range s.entries {
+		if len(entry.signature.CommandModes) != 0 {
+			if entry.executable != nil {
+				if !entry.executable.MatchString(modePath) && !entry.executable.MatchString(exe) {
+					continue
+				}
+			}
+			if matchesCommandMode(entry.signature, modeExe, modeArgs) {
+				return entry.signature, true
+			}
+			continue
+		}
 		for _, pattern := range entry.patterns {
 			if pattern.MatchString(cmdline) {
 				return entry.signature, true
@@ -185,14 +222,15 @@ func versionedName(exe string) (string, string) {
 
 // ProcessName labels an agent by signature and preserves a versioned executable's
 // version. Unclassified bare versions use the nearest meaningful directory.
-func (s *Set) ProcessName(cmdline, exe string) string {
-	cmdline, exe = windowsSignatureInput(cmdline, exe)
+func (s *Set) ProcessName(cmdline, exe string, argv []string) string {
+	sig, ok := s.Match(cmdline, exe, argv)
+	cmdline, exe = signatureInput(cmdline, exe, argv)
 	name, version := versionedName(exe)
 	if exe == "" {
 		token, _, _ := strings.Cut(cmdline, " ")
 		name, version = versionedName(token)
 	}
-	if sig, ok := s.Match(cmdline, exe); ok && sig.Agent != "" {
+	if ok && sig.Agent != "" {
 		name = sig.Agent
 		if sig.HostName != "" {
 			name = sig.HostName

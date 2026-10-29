@@ -36,4 +36,12 @@ describe("FleetTree", () => {
     expect(html).toContain('aria-label="Reply to Session root"');
     expect(html).toContain('aria-label="Open Session root"');
   });
+  it("keeps session IDs and full titles separate, and passes evidence to the badge", () => {
+    const title = "A long session title that must keep its ID visible";
+    const html = render([{ ...session("1028"), title, state: "idle", label: "unknown", inferred: true, evidence: "No agent state was reported" }]);
+    expect(html).toContain(`title="${title}"`);
+    expect(html).toMatch(/<p[^>]*style="[^"]*flex:none;white-space:nowrap[^"]*"[^>]*>#1028<\/p>/);
+    expect(html).toContain('aria-description="No agent state was reported"');
+    expect(html).not.toContain("~unknown");
+  });
 });

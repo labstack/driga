@@ -1,5 +1,5 @@
 # First match wins. Keep specific modes before generic interactive entries.
-# Every pattern starts at the executable token, never at an arbitrary argument.
+# Command modes use platform argv; regex patterns start at the executable token.
 
 [[signature]]
 name = "copilot-headless"
@@ -35,16 +35,30 @@ match = [
 ]
 
 [[signature]]
-name = "desktop-app"
-role = "app"
-app_bundle = true
-match = ['''^["']?(?:/(?:[^/[:space:]"']+/)*|~/)Applications/[^/]+\.app/Contents/MacOS/[^/[:space:]"']+["']?([[:space:]]|$)''']
-
-[[signature]]
 name = "claude-mcp"
 agent = "claude"
 role = "helper"
-match = ['^(?:[^[:space:]]*/)?claude[[:space:]]+mcp[[:space:]]+serve([[:space:]]|$)']
+command_modes = [["mcp", "serve"]]
+
+[[signature]]
+name = "claude-chrome-native-host"
+agent = "claude"
+role = "helper"
+# Chrome owns this native messaging host, even after browser exit/reparenting.
+protect_tree = true
+command_modes = [["--chrome-native-host"]]
+
+[[signature]]
+name = "claude-daemon"
+agent = "claude"
+role = "service"
+command_modes = [["daemon", "run"]]
+
+[[signature]]
+name = "claude-background-helper"
+agent = "claude"
+role = "helper"
+command_modes = [["bg-pty-host"], ["bg-spare"], ["--bg-pty-host"], ["--bg-spare"]]
 
 [[signature]]
 name = "claude-headless"
@@ -56,21 +70,36 @@ match = ['^(?:[^[:space:]]*/)?claude[[:space:]]+(?:[^[:space:]]+[[:space:]]+)*(?
 name = "codex-exec"
 agent = "codex"
 role = "headless"
-match = ['^(?:[^[:space:]]*/)?codex[[:space:]]+exec([[:space:]]|$)']
+command_modes = [["exec"]]
+
+[[signature]]
+name = "codex-sandbox"
+agent = "codex"
+role = "helper"
+command_modes = [["sandbox"]]
+
+[[signature]]
+name = "codex-exec-server"
+agent = "codex"
+role = "helper"
+command_modes = [["exec-server"]]
 
 [[signature]]
 name = "codex-app-server-daemon"
 host_name = "codex app-server"
 agent = "codex"
 role = "service"
-match = ['^[^[:space:]]*/\.codex/packages/app-server-daemon/(?:[^[:space:]]*/)?codex[[:space:]]+app-server([[:space:]]|$)']
+# Only the managed installation is exempt from orphan cleanup.
+executable_match = '^.*/\.codex/packages/app-server-daemon/(?:.*/)?codex$'
+command_modes = [["app-server"]]
 
 [[signature]]
 name = "codex-app-server"
 host_name = "codex app-server"
 agent = "codex"
 role = "host"
-match = ['^(?:[^[:space:]]*/)?codex[[:space:]]+app-server([[:space:]]|$)']
+# Hosts can become orphans. Rollouts supply their conversations independently.
+command_modes = [["app-server"]]
 
 [[signature]]
 name = "codex-app-server-broker"
@@ -80,6 +109,12 @@ match = [
   '^(?:[^[:space:]]*/)?node[[:space:]]+(?:[^[:space:]]*/)?app-server-broker\.mjs([[:space:]]|$)',
   '^(?:[^[:space:]]*/)?app-server-broker\.mjs([[:space:]]|$)',
 ]
+
+[[signature]]
+name = "desktop-app"
+role = "app"
+app_bundle = true
+match = ['''^["']?(?:/(?:[^/[:space:]"']+/)*|~/)Applications/[^/]+\.app/Contents/MacOS/[^/[:space:]"']+["']?([[:space:]]|$)''']
 
 [[signature]]
 name = "generic-mcp-launcher"

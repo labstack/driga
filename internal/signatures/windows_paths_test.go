@@ -35,7 +35,7 @@ func TestWindowsExecutableSignatures(t *testing.T) {
 		{`node.exe C:\Tools\@google\gemini-cli\dist\index.js`, `C:\Tools\node.exe`, "gemini", RoleInteractive},
 		{`C:\Tools\vim.exe C:\Tools\claude.exe`, `C:\Tools\vim.exe`, "", ""},
 	} {
-		got, ok := s.Match(tc.cmd, tc.exe)
+		got, ok := s.Match(tc.cmd, tc.exe, windowsWords(tc.cmd))
 		if ok != (tc.agent != "") || got.Agent != tc.agent || got.Role != tc.role {
 			t.Fatalf("%s: %+v %v", tc.cmd, got, ok)
 		}

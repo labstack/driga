@@ -1,0 +1,25 @@
+[
+  {
+    "pid": 1030,
+    "ppid": 900,
+    "started_at": "2026-10-18T11:00:00Z",
+    "rss_bytes": 100,
+    "cmdline": "/Users/fixture/.local/bin/claude --chrome-native-host",
+    "argv": [
+      "/Users/fixture/.local/bin/claude",
+      "--chrome-native-host"
+    ],
+    "cwd": "/Users/fixture/.claude/chrome"
+  },
+  {
+    "pid": 900,
+    "ppid": 1,
+    "started_at": "2026-10-18T10:59:00Z",
+    "rss_bytes": 500,
+    "cmdline": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    "argv": [
+      "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+    ],
+    "cwd": "/Users/fixture"
+  }
+]

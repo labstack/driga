@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, fn, userEvent } from "storybook/test";
 import { minutes } from "../widgets/TrackerBar-fixtures";
-import { busy } from "./Fleet-fixtures";
+import { busy, oneMachine } from "./Fleet-fixtures";
 import { FleetMachineStrip } from "./FleetMachineStrip";
 import { FleetRelationships } from "./FleetModel";
 
@@ -11,7 +11,7 @@ const meta = {
   title: "Components/Fleet/Machine strip",
   component: FleetMachineStrip,
   args: { groups: new FleetRelationships(busy).groups, selected: null, onSelect: fn() },
-  parameters: { docs: { description: { component: "The machine card as a toggle: selecting one narrows the view below to that machine, selecting it again clears the selection. The strip scrolls sideways when the window is narrower than the fleet. With polls the app has kept, each card carries its strip." } } },
+  parameters: { docs: { description: { component: "The machine card as a toggle: selecting one narrows the view below to that machine, selecting it again clears the selection. Cards fill the row and wrap when another 280px card cannot fit. With polls the app has kept, each card carries its strip." } } },
 } satisfies Meta<typeof FleetMachineStrip>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -43,4 +43,27 @@ export const WithStrips: Story = {
   name: "With polls kept",
   args: { strips: { studio: { cells: minutes(31, { waits: 2 }).slice(-30), from: "30 polls", to: "now", label: "studio, last 30 polls" } } },
   play: async ({ canvas }) => { await expect(canvas.getByRole("img", { name: /studio, last 30 polls/ })).toBeInTheDocument(); },
+};
+import { Box } from "@mantine/core";
+
+export const SingleMachine: Story = {
+  args: { groups: new FleetRelationships(oneMachine).groups },
+  play: async ({ canvas }) => {
+    const list = canvas.getByRole("list", { name: "Machines" }).getBoundingClientRect();
+    const card = canvas.getByRole("button").getBoundingClientRect();
+    expect(card.width).toBeGreaterThan(280);
+    expect(Math.abs(card.width - list.width)).toBeLessThan(2);
+  },
+};
+
+export const WrappedMachines: Story = {
+  render: args => <Box w={600} maw="100%"><FleetMachineStrip {...args} /></Box>,
+  play: async ({ canvas }) => {
+    const list = canvas.getByRole("list", { name: "Machines" });
+    const cards = canvas.getAllByRole("button").map(card => card.getBoundingClientRect());
+    expect(cards[0].width).toBeGreaterThanOrEqual(280);
+    expect(Math.abs(cards[0].width - cards[1].width)).toBeLessThan(1);
+    expect(cards[2].top).toBeGreaterThan(cards[0].bottom);
+    expect(list.scrollWidth).toBeLessThanOrEqual(list.clientWidth);
+  },
 };
