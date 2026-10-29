@@ -131,3 +131,24 @@ describe("dashboard refresh publications", () => {
     expect(onError).not.toHaveBeenCalled();
   });
 });
+
+it("publishes a header edit immediately and discards an older poll", async () => {
+  await mount();
+  const old = deferred<Fragment>(), save = deferred<Fragment>();
+  api.open.mockImplementation((id: string) => id === "header" ? old.promise : Promise.resolve(fragment(id)));
+  await act(async () => { void state.refresh(); });
+  await act(async () => { void state.mutateHeader(() => save.promise); });
+  await act(async () => { save.resolve(fragment("header", 2)); });
+  await act(async () => { old.resolve(fragment("header", 1)); });
+  expect(state.header?.version).toBe(2);
+});
+it("finishes a pending header edit across navigation and loads the new page", async () => {
+  await mount();
+  const save = deferred<Fragment>();
+  await act(async () => { void state.mutateHeader(() => save.promise); });
+  await mount("other");
+  api.open.mockImplementation((id: string) => Promise.resolve(fragment(id, 2)));
+  await act(async () => { save.resolve(fragment("header", 2)); });
+  expect(state.header?.version).toBe(2);
+  expect(state.fragment?.id).toBe("other");
+});

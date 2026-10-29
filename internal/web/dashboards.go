@@ -40,7 +40,7 @@ func (s *Server) appRoutes(mux *http.ServeMux) {
 	host := http.StripPrefix("/app/", http.FileServer(http.FS(files)))
 	mux.HandleFunc("GET /app/{$}", s.appPage)
 	mux.Handle("GET /app/assets/", host)
-	for _, route := range []string{"list", "open", "run", "create", "edit", "versions", "restore", "delete"} {
+	for _, route := range []string{"list", "catalog", "open", "run", "create", "edit", "replace", "reset", "versions", "restore", "delete"} {
 		mux.HandleFunc("POST /app/api/"+route, s.dashboardAPI)
 	}
 }
@@ -98,6 +98,8 @@ func (s *Server) dashboardAPI(w http.ResponseWriter, r *http.Request) {
 	var out any
 	var err error
 	switch strings.TrimPrefix(r.URL.Path, "/app/api/") {
+	case "catalog":
+		out = map[string]any{"widgets": panel.HeaderCatalog()}
 	case "list":
 		var list []dashboard.Summary
 		list, err = store.List()
@@ -118,6 +120,19 @@ func (s *Server) dashboardAPI(w http.ResponseWriter, r *http.Request) {
 		out, err = live.Create(r.Context(), *in.Dashboard, you, in.Message, in.Vars)
 	case "edit":
 		out, err = live.Edit(r.Context(), in.ID, in.Operations, in.BaseVersion, you, in.Message, in.Vars)
+	case "replace":
+		if in.Dashboard == nil {
+			err = errors.New("dashboard is required")
+			break
+		}
+		out, err = live.Replace(r.Context(), in.ID, *in.Dashboard, in.BaseVersion, you, in.Message, in.Vars)
+	case "reset":
+		spec, ok := panel.Builtin(in.ID)
+		if !ok {
+			err = errors.New("dashboard has no builtin default")
+			break
+		}
+		out, err = live.Replace(r.Context(), in.ID, spec, in.BaseVersion, you, "Reset to default", in.Vars)
 	case "delete":
 		err = store.Delete(in.ID)
 		out = map[string]bool{"ok": err == nil}

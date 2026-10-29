@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -134,5 +135,106 @@ func TestDashboardOpenNativeWithoutOrigin(t *testing.T) {
 	var f panel.Fragment
 	if w.Code != http.StatusOK || json.Unmarshal(w.Body.Bytes(), &f) != nil || f.ID != panel.HeaderID || len(f.Results) == 0 {
 		t.Fatalf("native dashboard open: %d %s", w.Code, w.Body)
+	}
+}
+
+func TestDashboardCatalogRoute(t *testing.T) {
+	s, err := New(appSource{}, Options{Dashboards: dashboard.New(t.TempDir())})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := httptest.NewRequest(http.MethodPost, "mygo://localhost/app/api/catalog", strings.NewReader(`{}`))
+	r.RemoteAddr = "mygo:1"
+	r.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	s.ServeHTTP(w, r)
+	var out struct {
+		Widgets []panel.Panel `json:"widgets"`
+	}
+	if w.Code != http.StatusOK || json.Unmarshal(w.Body.Bytes(), &out) != nil || len(out.Widgets) != 18 || !reflect.DeepEqual(out.Widgets, panel.HeaderCatalog()) {
+		t.Fatalf("native catalog: %d %s", w.Code, w.Body)
+	}
+	w = httptest.NewRecorder()
+	r = httptest.NewRequest(http.MethodGet, "mygo://localhost/app/api/catalog", nil)
+	r.RemoteAddr = "mygo:1"
+	s.ServeHTTP(w, r)
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("GET catalog: %d %s", w.Code, w.Body)
+	}
+}
+
+func TestHeaderUndoShippedSpecWithReplace(t *testing.T) {
+	s, err := New(appSource{}, Options{Dashboards: dashboard.New(t.TempDir())})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := postJSON(s, "/app/api/edit", `{"id":"header","base_version":0,"operations":[{"op":"remove","id":"reclaim"}]}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("first edit: %d %s", w.Code, w.Body)
+	}
+	spec := panel.Header()
+	body, _ := json.Marshal(dashboardRequest{ID: "header", BaseVersion: 1, Dashboard: &spec})
+	r := httptest.NewRequest(http.MethodPost, "mygo://localhost/app/api/replace", strings.NewReader(string(body)))
+	r.RemoteAddr = "mygo:1"
+	r.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	s.ServeHTTP(w, r)
+	var f panel.Fragment
+	if w.Code != http.StatusOK || json.Unmarshal(w.Body.Bytes(), &f) != nil || f.Version != 2 || !reflect.DeepEqual(f.Dashboard, panel.Header()) {
+		t.Fatalf("undo shipped header: %d %s", w.Code, w.Body)
+	}
+	if w := postJSON(s, "/app/api/replace", string(body)); w.Code != http.StatusConflict {
+		t.Fatalf("stale undo: %d %s", w.Code, w.Body)
+	}
+	if w := postJSON(s, "/app/api/replace", `{"id":"header","base_version":2}`); w.Code != http.StatusBadRequest {
+		t.Fatalf("missing spec: %d %s", w.Code, w.Body)
+	}
+}
+
+func TestHeaderResetPreservesHistory(t *testing.T) {
+	saved := dashboard.New(t.TempDir())
+	s, err := New(appSource{}, Options{Dashboards: saved})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := postJSON(s, "/app/api/edit", `{"id":"header","base_version":0,"operations":[{"op":"remove","id":"reclaim"}]}`)
+	if w.Code != 200 {
+		t.Fatalf("edit: %d %s", w.Code, w.Body)
+	}
+	previous, err := saved.Get("header")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := httptest.NewRequest(http.MethodPost, "mygo://localhost/app/api/reset", strings.NewReader(`{"id":"header","base_version":1}`))
+	r.RemoteAddr = "mygo:1"
+	r.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	s.ServeHTTP(w, r)
+	var f panel.Fragment
+	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &f) != nil || f.Version != 2 || !reflect.DeepEqual(f.Dashboard, panel.Header()) {
+		t.Fatalf("reset: %d %s", w.Code, w.Body)
+	}
+	versions, err := saved.Versions("header")
+	if err != nil || len(versions) != 2 || versions[0].Message != "Reset to default" || versions[1].Version != 1 {
+		t.Fatalf("history: %+v %v", versions, err)
+	}
+	w = postJSON(s, "/app/api/reset", `{"id":"header","base_version":1}`)
+	if w.Code != 409 {
+		t.Fatalf("stale reset: %d %s", w.Code, w.Body)
+	}
+	w = postJSON(s, "/app/api/restore", `{"id":"header","base_version":2,"version":1}`)
+	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &f) != nil || f.Version != 3 || !reflect.DeepEqual(f.Dashboard, previous.Spec) {
+		t.Fatalf("restore previous: %d %s", w.Code, w.Body)
+	}
+	w = postJSON(s, "/app/api/reset", `{"id":"custom","base_version":0}`)
+	if w.Code != 400 {
+		t.Fatalf("non-builtin: %d %s", w.Code, w.Body)
+	}
+	r = httptest.NewRequest(http.MethodGet, "mygo://localhost/app/api/reset", nil)
+	r.RemoteAddr = "mygo:1"
+	w = httptest.NewRecorder()
+	s.ServeHTTP(w, r)
+	if w.Code != 405 {
+		t.Fatalf("GET reset: %d", w.Code)
 	}
 }

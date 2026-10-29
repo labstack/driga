@@ -3,6 +3,7 @@ import { MantineProvider } from "@mantine/core";
 import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { HostContext } from "../panels/host";
 import type { Fragment, Panel } from "../panels/types";
 import { Dashboard } from "./Dashboard";
 
@@ -93,4 +94,12 @@ describe("Dashboard lifecycle", () => {
     await render(false, true);
     expect(container.querySelector('[role="group"][aria-label="Nothing to show"]')).not.toBeNull();
   });
+});
+
+it("keeps an empty inbox mounted while an attention filter is active", async () => {
+  const f = fragment(true);
+  f.dashboard.panels = [{ id: "inbox", title: "Inbox", viz: "inbox", source: "inbox" }];
+  f.results = [{ id: "inbox", status: "empty" }];
+  await act(async () => root.render(<MantineProvider><HostContext.Provider value={{ inboxFilter: "stuck" }}><Dashboard fragment={f} editing={false} onLayout={() => {}} onRemove={onRemove} /></HostContext.Provider></MantineProvider>));
+  expect(container.querySelector('[data-panel="inbox"]')).not.toBeNull();
 });

@@ -1,4 +1,4 @@
-import { ActionIcon, Box, Card, Group, Paper, ScrollArea, SimpleGrid, Stack, Table, Text, Title, Tooltip, UnstyledButton } from "@mantine/core";
+import { ActionIcon, Box, Card, Group, Paper, Pill, ScrollArea, SimpleGrid, Stack, Table, Text, Title, Tooltip, UnstyledButton } from "@mantine/core";
 import { CaretDown, CaretUp, Info } from "@phosphor-icons/react";
 import { createSortedRowModel, rowSortingFeature, sortFn_alphanumeric, sortFn_basic, tableFeatures, useTable, type ColumnDef, type SortingState } from "@tanstack/react-table";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
@@ -42,7 +42,7 @@ export function PanelView({ panel, result, act: given, fill }: { panel: Panel; r
   if (panel.viz === "text") body = <ScrollArea style={{ flex: 1 }} type="auto" viewportProps={scrollable}><Text component="div" size="sm" className="markdown"><Markdown remarkPlugins={[remarkGfm]} components={{ img: () => null }}>{panel.content ?? ""}</Markdown></Text></ScrollArea>;
   else if (!result) body = <Text size="sm" c="dimmed">Loading…</Text>;
   else if (result.status === "error") body = <EmptyState kind="error" title={result.message ?? "This panel could not run."} />;
-  else if (panel.viz === "inbox" && host.prompts?.length) body = <Inbox frame={result.frame ?? { columns: [], rows: [] }} act={act} prompts={host.prompts} answer={host.answer} filter={host.inboxFilter} />;
+  else if (panel.viz === "inbox" && (host.prompts?.length || host.inboxFilter)) body = <Inbox frame={result.frame ?? { columns: [], rows: [] }} act={act} prompts={host.prompts} answer={host.answer} filter={host.inboxFilter} />;
   else if (!result.frame || result.status === "empty") body = <Empty panel={panel} message={result.message} />;
   else body = <Body panel={panel} result={result} frame={result.frame} act={act} filter={host.inboxFilter} />;
   const said = panel.viz === "bar" && result?.frame ? summary(result.frame, panel) : "";
@@ -51,6 +51,7 @@ export function PanelView({ panel, result, act: given, fill }: { panel: Panel; r
   return <Card component="article" aria-labelledby={`panel-${panel.id}`} h={fill ? "100%" : undefined} style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
     <Group gap={6} wrap="nowrap" mb={6} className="panel-handle">
       <Title order={2} id={`panel-${panel.id}`} fz="md" fw={600} lineClamp={1} style={{ letterSpacing: "-0.01em", flex: "0 1 auto", maxWidth: "75%" }} title={title}>{title}</Title>
+      {panel.viz === "inbox" && host.inboxFilter && <Pill withRemoveButton onRemove={host.clearInboxFilter} removeButtonProps={{ "aria-label": "Clear inbox filter" }}>Showing: {{ waiting: "Need you", review: "To review", stuck: "Stuck" }[host.inboxFilter]}</Pill>}
       {panel.description && <Tooltip label={panel.description} multiline maw={320}>
         <ActionIcon size="xs" aria-label={`About ${panel.title}`}><Info size={14} /></ActionIcon>
       </Tooltip>}
@@ -100,7 +101,7 @@ function chartTable(frame: Frame, panel: Panel): Frame {
 
 function Body({ panel, result, frame, act, filter }: { panel: Panel; result: Result; frame: Frame; act?: Act; filter?: InboxFilter | null }) {
   switch (panel.viz) {
-    case "stat": return <Stat frame={frame} trend={result.trend} title={panel.title} total={result.total} />;
+    case "stat": return <Stat frame={frame} trend={result.trend} title={panel.title} total={result.total} caption={result.caption} />;
     case "gauge": return <Gauge frame={frame} max={panel.max} title={panel.title} />;
     case "bar": return <Bars frame={frame} title={panel.title} />;
     case "inbox": return <Inbox frame={frame} act={act} filter={filter} />;
@@ -111,9 +112,9 @@ function Body({ panel, result, frame, act, filter }: { panel: Panel; result: Res
   }
 }
 
-function Stat({ frame, trend, title, total }: { frame: Frame; trend?: (number | null)[]; title: string; total?: number | null }) {
+function Stat({ frame, trend, title, total, caption }: { frame: Frame; trend?: (number | null)[]; title: string; total?: number | null; caption?: number | null }) {
   return <Stack gap={4} style={{ flex: 1 }}>
-    <Measure n={frame.rows[0]?.[0] ?? null} unit={frame.columns[0]?.unit} total={total} />
+    <Group gap={6} align="baseline"><Measure n={frame.rows[0]?.[0] ?? null} unit={frame.columns[0]?.unit} total={total} />{caption != null && <Text ff="monospace" size="sm" c="dimmed">· {value(caption)}</Text>}</Group>
     {trend && trend.length > 1 && <Box style={{ flex: 1, minHeight: 24 }}><Sparkline trend={trend} title={title} /></Box>}
   </Stack>;
 }
@@ -252,7 +253,9 @@ export function entryOf(r: Row, now: number): InboxEntry {
  * how long, then machine warnings, then completions. Only what needs the
  * person carries color. The header narrows it to one kind. */
 function Inbox({ frame, act, prompts, answer, filter }: { frame: Frame; act?: Act; prompts?: Prompt[]; answer?: (p: Prompt, allow: boolean) => Promise<void>; filter?: InboxFilter | null }) {
+  const { stuck } = useHost();
   const now = Date.now();
+  if (filter === "stuck") return stuck?.rows.length ? <DataTable frame={stuck} source="sessions" act={act} /> : <EmptyState kind="empty" title="No session looks stuck." />;
   const items = rows(frame);
   const waits = items.filter(r => r.kind === "waiting");
   // Machine warnings, such as memory pressure, need the person too; they are

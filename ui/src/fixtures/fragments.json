@@ -3233,7 +3233,7 @@
   },
   "dashboard": {
    "name": "Header",
-   "description": "The numbers shown above Chat in the app. Only stat panels.",
+   "description": "The numbers shown above Chat in the app. Stat or gauge panels, at most 16.",
    "panels": [
     {
      "id": "waiting",
@@ -3259,10 +3259,11 @@
     },
     {
      "id": "leftover",
-     "title": "Leftover memory",
+     "title": "Leftover",
      "viz": "stat",
      "source": "summary",
-     "measure": "sum:leftover_bytes"
+     "measure": "sum:leftover_bytes",
+     "caption": "sum:leftover"
     },
     {
      "id": "reclaim",
@@ -3273,7 +3274,7 @@
     },
     {
      "id": "memory",
-     "title": "Memory used",
+     "title": "Memory",
      "viz": "stat",
      "source": "local_activity",
      "measure": "max:mem_used_bytes",
@@ -3352,7 +3353,8 @@
        2148322508
       ]
      ]
-    }
+    },
+    "caption": 2
    },
    {
     "id": "reclaim",
@@ -3452,6 +3454,1365 @@
      25769803776
     ],
     "total": 34359738368
+   }
+  ],
+  "observed_at": "2026-03-14T15:00:00Z",
+  "local_machine": "studio-id"
+ },
+ "header_catalog": {
+  "leftover_count": 2,
+  "history": {
+   "attention": [
+    {
+     "ts": "2026-03-14T14:01:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:02:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:03:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:04:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:05:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:06:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:07:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:08:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:09:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:10:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:11:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:12:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:13:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:14:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:15:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:16:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:17:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:18:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:19:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:20:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:21:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:22:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:23:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:24:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:25:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:26:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:27:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:28:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:29:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:30:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:31:00Z",
+     "waiting": 1,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:32:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:33:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:34:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:35:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:36:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:37:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:38:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:39:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:40:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:41:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:42:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:43:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:44:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:45:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:46:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:47:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:48:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:49:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:50:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:51:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:52:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:53:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:54:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:55:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:56:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:57:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:58:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T14:59:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    },
+    {
+     "ts": "2026-03-14T15:00:00Z",
+     "waiting": 3,
+     "review": 3,
+     "stuck": 1
+    }
+   ],
+   "polls": [
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:57:35Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:57:40Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:57:45Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:57:50Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:57:55Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:00Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:05Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:10Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:15Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:20Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:25Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:30Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:35Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:40Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:45Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:50Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:58:55Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:00Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:05Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:10Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:15Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:20Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:25Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:30Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:35Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:40Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:45Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:50Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T14:59:55Z",
+     "state": "waiting"
+    },
+    {
+     "machine_id": "studio-id",
+     "ts": "2026-03-14T15:00:00Z",
+     "state": "waiting"
+    }
+   ]
+  },
+  "dashboard": {
+   "name": "Header widget catalog",
+   "panels": [
+    {
+     "id": "waiting",
+     "title": "Need you",
+     "description": "Agents waiting on you and machine warnings in effect.",
+     "viz": "stat",
+     "source": "summary",
+     "measure": "sum:need_you"
+    },
+    {
+     "id": "finished",
+     "title": "To review",
+     "viz": "stat",
+     "source": "summary",
+     "measure": "sum:to_review"
+    },
+    {
+     "id": "stuck",
+     "title": "Stuck",
+     "viz": "stat",
+     "source": "summary",
+     "measure": "sum:attention_stuck"
+    },
+    {
+     "id": "leftover",
+     "title": "Leftover",
+     "viz": "stat",
+     "source": "summary",
+     "measure": "sum:leftover_bytes",
+     "caption": "sum:leftover"
+    },
+    {
+     "id": "reclaim",
+     "title": "Reclaimable",
+     "viz": "stat",
+     "source": "summary",
+     "measure": "sum:reclaim_bytes"
+    },
+    {
+     "id": "memory",
+     "title": "Memory",
+     "viz": "stat",
+     "source": "local_activity",
+     "measure": "max:mem_used_bytes",
+     "total": "max:mem_total_bytes"
+    },
+    {
+     "id": "cpu",
+     "title": "CPU",
+     "viz": "gauge",
+     "source": "local_activity",
+     "measure": "max:cpu_percent",
+     "max": 100
+    },
+    {
+     "id": "disk",
+     "title": "Disk used",
+     "viz": "stat",
+     "source": "local_activity",
+     "measure": "max:disk_used_bytes",
+     "total": "max:disk_total_bytes"
+    },
+    {
+     "id": "load",
+     "title": "Load",
+     "viz": "stat",
+     "source": "local_activity",
+     "measure": "max:load1"
+    },
+    {
+     "id": "swap",
+     "title": "Swap",
+     "viz": "stat",
+     "source": "local_activity",
+     "measure": "max:swap_used_bytes"
+    },
+    {
+     "id": "events",
+     "title": "Events/min",
+     "viz": "stat",
+     "source": "local_activity",
+     "measure": "max:events"
+    },
+    {
+     "id": "agents",
+     "title": "Agents",
+     "viz": "stat",
+     "source": "summary",
+     "measure": "sum:agents"
+    },
+    {
+     "id": "working",
+     "title": "Working",
+     "viz": "stat",
+     "source": "summary",
+     "measure": "sum:working"
+    },
+    {
+     "id": "waiting_now",
+     "title": "Waiting",
+     "viz": "stat",
+     "source": "summary",
+     "measure": "sum:waiting"
+    },
+    {
+     "id": "inbox",
+     "title": "Inbox",
+     "viz": "stat",
+     "source": "summary",
+     "measure": "sum:inbox"
+    },
+    {
+     "id": "orphans",
+     "title": "Leftover trees",
+     "viz": "stat",
+     "source": "summary",
+     "measure": "sum:orphans"
+    },
+    {
+     "id": "machines_up",
+     "title": "Machines up",
+     "viz": "stat",
+     "source": "summary",
+     "measure": "sum:machines_reachable",
+     "total": "sum:machines"
+    },
+    {
+     "id": "agent_memory",
+     "title": "Agent memory",
+     "viz": "stat",
+     "source": "costs",
+     "measure": "sum:mem_bytes"
+    }
+   ]
+  },
+  "results": [
+   {
+    "id": "waiting",
+    "status": "ok",
+    "frame": {
+     "columns": [
+      {
+       "name": "value",
+       "type": "number",
+       "unit": "count"
+      }
+     ],
+     "rows": [
+      [
+       3
+      ]
+     ]
+    }
+   },
+   {
+    "id": "finished",
+    "status": "ok",
+    "frame": {
+     "columns": [
+      {
+       "name": "value",
+       "type": "number",
+       "unit": "count"
+      }
+     ],
+     "rows": [
+      [
+       3
+      ]
+     ]
+    }
+   },
+   {
+    "id": "stuck",
+    "status": "ok",
+    "frame": {
+     "columns": [
+      {
+       "name": "value",
+       "type": "number",
+       "unit": "count"
+      }
+     ],
+     "rows": [
+      [
+       1
+      ]
+     ]
+    }
+   },
+   {
+    "id": "leftover",
+    "status": "ok",
+    "frame": {
+     "columns": [
+      {
+       "name": "value",
+       "type": "number",
+       "unit": "bytes"
+      }
+     ],
+     "rows": [
+      [
+       2148322508
+      ]
+     ]
+    },
+    "caption": 2
+   },
+   {
+    "id": "reclaim",
+    "status": "ok",
+    "frame": {
+     "columns": [
+      {
+       "name": "value",
+       "type": "number",
+       "unit": "bytes"
+      }
+     ],
+     "rows": [
+      [
+       5368709120
+      ]
+     ]
+    }
+   },
+   {
+    "id": "memory",
+    "status": "ok",
+    "frame": {
+     "columns": [
+      {
+       "name": "value",
+       "type": "number",
+       "unit": "bytes"
+      }
+     ],
+     "rows": [
+      [
+       25769803776
+      ]
+     ]
+    },
+    "trend": [
+     27380416512,
+     28454158336,
+     26575110144,
+     27648851968,
+     25769803776,
+     26843545600,
+     27917287424,
+     26038239232,
+     27111981056,
+     28185722880,
+     26306674688,
+     27380416512,
+     28454158336,
+     26575110144,
+     27648851968,
+     25769803776,
+     26843545600,
+     27917287424,
+     26038239232,
+     27111981056,
+     28185722880,
+     26306674688,
+     27380416512,
+     28454158336,
+     26575110144,
+     27648851968,
+     25769803776,
+     26843545600,
+     27917287424,
+     26038239232,
+     27111981056,
+     28185722880,
+     26306674688,
+     27380416512,
+     28454158336,
+     26575110144,
+     27648851968,
+     25769803776,
+     26843545600,
+     27917287424,
+     26038239232,
+     27111981056,
+     28185722880,
+     26306674688,
+     27380416512,
+     28454158336,
+     26575110144,
+     27648851968,
+     25769803776,
+     26843545600,
+     27917287424,
+     26038239232,
+     27111981056,
+     28185722880,
+     26306674688,
+     27380416512,
+     28454158336,
+     26575110144,
+     27648851968,
+     25769803776
+    ],
+    "total": 34359738368
+   },
+   {
+    "id": "cpu",
+    "status": "ok",
+    "frame": {
+     "columns": [
+      {
+       "name": "value",
+       "type": "number",
+       "unit": "percent"
+      }
+     ],
+     "rows": [
+      [
+       24
+      ]
+     ]
+    },
+    "trend": [
+     24,
+     24,
+     24,
+     24,
+     24,
+     24,
+     24,
+     24,
+     24,
+     24,
+     24,
+     24,
+     24,
+     24,
+     24,
+     24,
+     24,
+     24,
+     24,
+     24,
+     24,
+     24,
+     24,
+     24,
+     24,
+     24,
+     24,
+     24,
+     24,
+     24,
+     24,
+     24,
+     24,
+     24,
+     24,
+     24,
+     24,
+     24,
+     24,
+     24,
+     24,
+     24,
+     24,
+     24,
+     24,
+     24,
+     24,
+     24,
+     24,
+     24,
+     24,
+     24,
+     24,
+     24,
+     24,
+     24,
+     24,
+     24,
+     24,
+     24
+    ]
+   },
+   {
+    "id": "disk",
+    "status": "ok",
+    "frame": {
+     "columns": [
+      {
+       "name": "value",
+       "type": "number",
+       "unit": "bytes"
+      }
+     ],
+     "rows": [
+      [
+       408021893120
+      ]
+     ]
+    },
+    "trend": [
+     408021893120,
+     408021893120,
+     408021893120,
+     408021893120,
+     408021893120,
+     408021893120,
+     408021893120,
+     408021893120,
+     408021893120,
+     408021893120,
+     408021893120,
+     408021893120,
+     408021893120,
+     408021893120,
+     408021893120,
+     408021893120,
+     408021893120,
+     408021893120,
+     408021893120,
+     408021893120,
+     408021893120,
+     408021893120,
+     408021893120,
+     408021893120,
+     408021893120,
+     408021893120,
+     408021893120,
+     408021893120,
+     408021893120,
+     408021893120,
+     408021893120,
+     408021893120,
+     408021893120,
+     408021893120,
+     408021893120,
+     408021893120,
+     408021893120,
+     408021893120,
+     408021893120,
+     408021893120,
+     408021893120,
+     408021893120,
+     408021893120,
+     408021893120,
+     408021893120,
+     408021893120,
+     408021893120,
+     408021893120,
+     408021893120,
+     408021893120,
+     408021893120,
+     408021893120,
+     408021893120,
+     408021893120,
+     408021893120,
+     408021893120,
+     408021893120,
+     408021893120,
+     408021893120,
+     408021893120
+    ],
+    "total": 536870912000
+   },
+   {
+    "id": "load",
+    "status": "ok",
+    "frame": {
+     "columns": [
+      {
+       "name": "value",
+       "type": "number"
+      }
+     ],
+     "rows": [
+      [
+       2
+      ]
+     ]
+    },
+    "trend": [
+     5,
+     4,
+     3,
+     2,
+     5,
+     4,
+     3,
+     2,
+     5,
+     4,
+     3,
+     2,
+     5,
+     4,
+     3,
+     2,
+     5,
+     4,
+     3,
+     2,
+     5,
+     4,
+     3,
+     2,
+     5,
+     4,
+     3,
+     2,
+     5,
+     4,
+     3,
+     2,
+     5,
+     4,
+     3,
+     2,
+     5,
+     4,
+     3,
+     2,
+     5,
+     4,
+     3,
+     2,
+     5,
+     4,
+     3,
+     2,
+     5,
+     4,
+     3,
+     2,
+     5,
+     4,
+     3,
+     2,
+     5,
+     4,
+     3,
+     2
+    ]
+   },
+   {
+    "id": "swap",
+    "status": "ok",
+    "frame": {
+     "columns": [
+      {
+       "name": "value",
+       "type": "number",
+       "unit": "bytes"
+      }
+     ],
+     "rows": [
+      [
+       2147483648
+      ]
+     ]
+    },
+    "trend": [
+     6442450944,
+     5368709120,
+     4294967296,
+     3221225472,
+     2147483648,
+     6442450944,
+     5368709120,
+     4294967296,
+     3221225472,
+     2147483648,
+     6442450944,
+     5368709120,
+     4294967296,
+     3221225472,
+     2147483648,
+     6442450944,
+     5368709120,
+     4294967296,
+     3221225472,
+     2147483648,
+     6442450944,
+     5368709120,
+     4294967296,
+     3221225472,
+     2147483648,
+     6442450944,
+     5368709120,
+     4294967296,
+     3221225472,
+     2147483648,
+     6442450944,
+     5368709120,
+     4294967296,
+     3221225472,
+     2147483648,
+     6442450944,
+     5368709120,
+     4294967296,
+     3221225472,
+     2147483648,
+     6442450944,
+     5368709120,
+     4294967296,
+     3221225472,
+     2147483648,
+     6442450944,
+     5368709120,
+     4294967296,
+     3221225472,
+     2147483648,
+     6442450944,
+     5368709120,
+     4294967296,
+     3221225472,
+     2147483648,
+     6442450944,
+     5368709120,
+     4294967296,
+     3221225472,
+     2147483648
+    ]
+   },
+   {
+    "id": "events",
+    "status": "ok",
+    "frame": {
+     "columns": [
+      {
+       "name": "value",
+       "type": "number",
+       "unit": "count"
+      }
+     ],
+     "rows": [
+      [
+       0
+      ]
+     ]
+    },
+    "trend": [
+     7,
+     2,
+     6,
+     1,
+     5,
+     0,
+     4,
+     8,
+     3,
+     7,
+     2,
+     6,
+     1,
+     5,
+     0,
+     4,
+     8,
+     3,
+     7,
+     2,
+     6,
+     1,
+     5,
+     0,
+     4,
+     8,
+     3,
+     7,
+     2,
+     6,
+     1,
+     5,
+     0,
+     4,
+     8,
+     3,
+     7,
+     2,
+     6,
+     1,
+     5,
+     0,
+     4,
+     8,
+     3,
+     7,
+     2,
+     6,
+     1,
+     5,
+     0,
+     4,
+     8,
+     3,
+     7,
+     2,
+     6,
+     1,
+     5,
+     0
+    ]
+   },
+   {
+    "id": "agents",
+    "status": "ok",
+    "frame": {
+     "columns": [
+      {
+       "name": "value",
+       "type": "number",
+       "unit": "count"
+      }
+     ],
+     "rows": [
+      [
+       9
+      ]
+     ]
+    }
+   },
+   {
+    "id": "working",
+    "status": "ok",
+    "frame": {
+     "columns": [
+      {
+       "name": "value",
+       "type": "number",
+       "unit": "count"
+      }
+     ],
+     "rows": [
+      [
+       3
+      ]
+     ]
+    }
+   },
+   {
+    "id": "waiting_now",
+    "status": "ok",
+    "frame": {
+     "columns": [
+      {
+       "name": "value",
+       "type": "number",
+       "unit": "count"
+      }
+     ],
+     "rows": [
+      [
+       2
+      ]
+     ]
+    }
+   },
+   {
+    "id": "inbox",
+    "status": "ok",
+    "frame": {
+     "columns": [
+      {
+       "name": "value",
+       "type": "number",
+       "unit": "count"
+      }
+     ],
+     "rows": [
+      [
+       8
+      ]
+     ]
+    }
+   },
+   {
+    "id": "orphans",
+    "status": "ok",
+    "frame": {
+     "columns": [
+      {
+       "name": "value",
+       "type": "number",
+       "unit": "count"
+      }
+     ],
+     "rows": [
+      [
+       2
+      ]
+     ]
+    }
+   },
+   {
+    "id": "machines_up",
+    "status": "ok",
+    "frame": {
+     "columns": [
+      {
+       "name": "value",
+       "type": "number",
+       "unit": "count"
+      }
+     ],
+     "rows": [
+      [
+       0
+      ]
+     ]
+    },
+    "total": 0
+   },
+   {
+    "id": "agent_memory",
+    "status": "ok",
+    "frame": {
+     "columns": [
+      {
+       "name": "value",
+       "type": "number",
+       "unit": "bytes"
+      }
+     ],
+     "rows": [
+      [
+       3025770905
+      ]
+     ]
+    }
    }
   ],
   "observed_at": "2026-03-14T15:00:00Z",
@@ -3977,7 +5338,7 @@
   },
   "dashboard": {
    "name": "Header",
-   "description": "The numbers shown above Chat in the app. Only stat panels.",
+   "description": "The numbers shown above Chat in the app. Stat or gauge panels, at most 16.",
    "panels": [
     {
      "id": "waiting",
@@ -4003,10 +5364,11 @@
     },
     {
      "id": "leftover",
-     "title": "Leftover memory",
+     "title": "Leftover",
      "viz": "stat",
      "source": "summary",
-     "measure": "sum:leftover_bytes"
+     "measure": "sum:leftover_bytes",
+     "caption": "sum:leftover"
     },
     {
      "id": "reclaim",
@@ -4017,7 +5379,7 @@
     },
     {
      "id": "memory",
-     "title": "Memory used",
+     "title": "Memory",
      "viz": "stat",
      "source": "local_activity",
      "measure": "max:mem_used_bytes",
@@ -4096,7 +5458,8 @@
        0
       ]
      ]
-    }
+    },
+    "caption": 0
    },
    {
     "id": "reclaim",

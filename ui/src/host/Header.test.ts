@@ -2,38 +2,46 @@ import { describe, expect, it } from "vitest";
 import { fleet } from "../fixtures/fleet";
 import { fragments } from "../fixtures/fragments";
 import { fleetOf } from "../fleet/FleetSpec";
-import { changeWords, counts, headerOf, nothingKept, pollOf, stripsOf } from "./Header";
+import { tilesOf, headerOf, nothingKept, pollOf, stripsOf } from "./Header";
 import { historyOf } from "./History";
 
 const GB = 1024 ** 3;
 
 describe("headerOf", () => {
   const data = fleetOf(fleet, fragments.inbox);
-  it("reads the server's reconciled counts", () => {
-    expect(counts(fragments.header)).toEqual({ waiting: 3, review: 3, stuck: 1 });
-    const h = headerOf(fragments.header, data, nothingKept);
-    expect(h.attention.waiting).toEqual({ count: 3, trend: [], delta: 0 });
+  it("reads panels in spec order and attaches behavior by measure", () => {
+    const f = structuredClone(fragments.header);
+    f.dashboard.panels = [{ id: "cpu", title: "CPU", viz: "gauge", source: "local_activity", measure: "max:cpu_percent", max: 100 }, { ...f.dashboard.panels[0], id: "custom_wait" }];
+    const tiles = tilesOf(f);
+    expect(tiles.map(t => t.id)).toEqual(["cpu", "custom_wait"]);
+    expect(tiles[0].viz).toBe("gauge");
+    expect(tiles[1].behavior.attention).toBe("waiting");
+  });
+  it("uses the engine-resolved variable title and falls back to the stored title", () => {
+    const f = structuredClone(fragments.header);
+    f.dashboard.panels = [{ id: "cpu", title: "CPU for $adapter", viz: "gauge", source: "costs", measure: "max:cpu_percent" }];
+    f.results = [{ id: "cpu", status: "ok", title: "CPU for codex" }];
+    expect(tilesOf(f)[0].title).toBe("CPU for codex");
+    f.results[0].title = "";
+    expect(tilesOf(f)[0].title).toBe("CPU for $adapter");
+    f.results = [];
+    expect(tilesOf(f)[0].title).toBe("CPU for $adapter");
+  });
+  it("keeps missing, empty and errored values unknown", () => {
+    const f = structuredClone(fragments.header);
+    f.results = [{ id: "waiting", status: "error", message: "bad measure", frame: { columns: [], rows: [[99]] } }, { id: "finished", status: "empty" }];
+    const tiles = tilesOf(f);
+    expect(tiles.every(t => t.value === null)).toBe(true);
+    expect(tiles[0].error).toBe("bad measure");
+  });
+  it("names the local machine, keeps the fleet and service history", () => {
+    const h = headerOf(fragments.header, data, { ...nothingKept, attention: { waiting: [1, null, 3], review: [], stuck: [] } });
+    expect(h.tiles.find(t => t.id === "memory")?.total).toBe(32 * GB);
+    expect(h.localMachine).toBe("studio");
+    expect(h.tiles[0].trend).toEqual([1, null, 3]);
     expect(h.checkedAt).toBe("2026-03-14T15:00:00Z");
-  });
-  it("names the local machine from the fleet and dots every machine", () => {
-    const h = headerOf(fragments.header, data, nothingKept);
-    expect(h.memory.machine).toBe("studio");
-    expect(h.memory.total).toBe(32 * GB);
     expect(h.machines.map(m => [m.name, m.reachable, m.sessions.waiting])).toEqual([["studio", true, 1], ["build-01", true, 0], ["laptop-02", false, 0]]);
-    expect(h.hygiene.leftover.count).toBe(2);
-  });
-  it("manages without the fleet: the local machine by its id, no dots, no leftover count", () => {
-    const h = headerOf(fragments.header, null, nothingKept);
-    expect(h.machines).toEqual([]);
-    expect(h.memory.machine).toBe("studio-id");
-    expect(h.hygiene.leftover.count).toBe(2);
-  });
-  it("takes the hour's trend and delta from what the app kept", () => {
-    const h = headerOf(fragments.header, data, { ...nothingKept, attention: { waiting: [1, 1, 2, 3], review: [3], stuck: [2, 1] } });
-    expect(h.attention.waiting.delta).toBe(2);
-    expect(changeWords(h.attention.waiting)).toBe("up 2 in the last hour");
-    expect(changeWords(h.attention.stuck)).toBe("down 1 in the last hour");
-    expect(changeWords(h.attention.review)).toBe("not enough history for an hour’s change");
+    expect(headerOf(fragments.header, null, nothingKept).localMachine).toBe("studio-id");
   });
   it("turns kept polls into strips, once there is more than one", () => {
     const h = headerOf(fragments.header, data, nothingKept);
@@ -57,10 +65,4 @@ describe("historyOf", () => {
   f.history = { attention: [{ts: f.observed_at, waiting: 1, review: 2, stuck: null}], polls: [] };
   expect(historyOf(f).attention).toEqual({ waiting: [1], review: [2], stuck: [null] });
  });
-});
-
-it("uses the service leftover count beyond the Fleet table limit",()=>{
- const header={...fragments.header,leftover_count:201};
- expect(headerOf(header,fleetOf(fleet,fragments.inbox),nothingKept).hygiene.leftover.count).toBe(201);
- expect(headerOf(header,null,nothingKept).hygiene.leftover.count).toBe(201);
 });

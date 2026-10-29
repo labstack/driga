@@ -36,7 +36,7 @@ const meta = {
   component: App,
   parameters: {
     layout: "fullscreen",
-    service: fakeService(),
+    makeService: () => fakeService(),
     docs: { story: { inline: false, iframeHeight: 900 }, description: { component: "What needs you, what finished, what is running away and what is in flight, with Chat beside the board. Drag the line between them to resize Chat." } },
   },
   // Spotlight keeps whether it is open in a module store, and the app writes
@@ -54,7 +54,7 @@ export const NeedsYou: Story = {
   },
 };
 export const PermissionPrompt: Story = {
-  parameters: { service: fakeService({ prompts: [prompt] }) },
+  parameters: { makeService: () => fakeService({ prompts: [prompt] }) },
   play: async ({ canvas }) => {
     await expect(await canvas.findByText("Bash(npm run migrate -- --env staging)")).toBeVisible();
     // This approval belongs to session 11, already counted by its inbox wait.
@@ -62,21 +62,26 @@ export const PermissionPrompt: Story = {
   },
 };
 export const AllClear: Story = {
-  parameters: { service: fakeService({ open: { home: fragments.home_quiet, header: fragments.header_quiet }, inbox: fragments.inbox_quiet, fleet: fleetQuiet }) },
+  parameters: { makeService: () => fakeService({ open: { home: fragments.home_quiet, header: fragments.header_quiet }, inbox: fragments.inbox_quiet, fleet: fleetQuiet }) },
   play: async ({ canvas }) => {
     await expect(await canvas.findByText(/^Inbox:/)).toBeVisible();
     await expect(await canvas.findByText("Nothing is waiting on you.")).toBeVisible();
+    await expect(await canvas.findByRole("button", { name: /^Need you\s*0/ })).toBeVisible();
   },
 };
 export const ChatConversation: Story = {
-  parameters: { service: fakeService({ chat: answered }) },
-  play: async ({ canvas }) => { await expect(await canvas.findByText(/uses the most, 1.4 GB/)).toBeVisible(); },
+  parameters: { makeService: () => fakeService({ chat: answered }) },
+  play: async ({ canvas }) => {
+    await expect(await canvas.findByText(/uses the most, 1.4 GB/)).toBeVisible();
+    await expect(await canvas.findByRole("button", { name: /^Need you\s*3/ })).toBeVisible();
+  },
 };
 export const ChatAwaitingApproval: Story = {
-  parameters: { service: fakeService({ chat: awaitingApproval }) },
+  parameters: { makeService: () => fakeService({ chat: awaitingApproval }) },
   play: async ({ canvas }) => {
     await expect(await canvas.findByRole("button", { name: `Allow ${awaitingApproval.actions[0].title}` })).toBeVisible();
     await expect(canvas.getByRole("button", { name: `Deny ${awaitingApproval.actions[0].title}` })).toBeVisible();
+    await expect(await canvas.findByRole("button", { name: /^Need you\s*3/ })).toBeVisible();
   },
 };
 export const ChatHidden: Story = {
@@ -145,7 +150,7 @@ export const LoadingHome: Story = {
   },
 };
 export const ServiceUnreachable: Story = {
-  parameters: { service: fakeService({ down: true }) },
+  parameters: { makeService: () => fakeService({ down: true }) },
   play: async ({ canvas }) => { await expect(await canvas.findByText(/can't reach its service/)).toBeVisible(); },
 };
 
@@ -164,7 +169,7 @@ export const NotificationViews: Story = {
 
 const notificationRequest = fn();
 export const NotificationSession: Story = {
- parameters: { service: fakeService({ onRequest: notificationRequest }) },
+ parameters: { makeService: () => fakeService({ onRequest: notificationRequest }) },
  play: async ({ canvas }) => {
   await expect(await canvas.findByRole("heading", { name: "Home", level: 1 })).toBeVisible();
   desktopCommand("openSession", { session_id: 11, machine_id: "studio-id" });

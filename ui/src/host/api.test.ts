@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { confirm, confirmedAction } from "./api";
+import { confirm, confirmedAction, dashboards } from "./api";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -68,4 +68,17 @@ it("does not replay an action when the approved request fails", async () => {
   vi.stubGlobal("fetch", fetcher);
   await expect(confirmedAction("Stop?", { action: "kill" })).rejects.toThrow("action response lost");
   expect(fetcher).toHaveBeenCalledTimes(2);
+});
+
+it("posts the catalog and a whole-spec replacement at the returned base version", async () => {
+  const dashboard = { name: "Header", panels: [{ id: "cpu", title: "CPU", viz: "gauge" as const, source: "local_activity", measure: "max:cpu_percent" }] };
+  const fragment = { id: "header", version: 2, dashboard, results: [], history: { attention: [], polls: [] }, observed_at: "2026-03-14T15:00:00Z" };
+  const fetcher = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({ widgets: dashboard.panels }))).mockResolvedValueOnce(new Response(JSON.stringify(fragment)));
+  vi.stubGlobal("fetch", fetcher);
+  expect(await dashboards.catalog()).toEqual(dashboard.panels);
+  expect((await dashboards.replace("header", dashboard, 1, undefined, "Undo")).version).toBe(2);
+  expect(fetcher.mock.calls[0][0]).toBe("/app/api/catalog");
+  expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual({});
+  expect(fetcher.mock.calls[1][0]).toBe("/app/api/replace");
+  expect(JSON.parse(fetcher.mock.calls[1][1].body)).toEqual({ id: "header", dashboard, base_version: 1, message: "Undo" });
 });

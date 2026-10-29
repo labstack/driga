@@ -202,15 +202,15 @@ var sources = map[string]schema{
 	},
 	"activity": {
 		description: "One row per machine per minute for the last hour: events, memory, load and disk",
-		columns:     []Column{col("ts", Time), col("machine", String), col("events", Number, "count"), col("mem_used_bytes", Number, "bytes"), col("mem_total_bytes", Number, "bytes"), col("swap_used_bytes", Number, "bytes"), col("load1", Number), col("disk_free_bytes", Number, "bytes"), col("disk_total_bytes", Number, "bytes"), col("cpu_percent", Number, "percent")},
+		columns:     []Column{col("ts", Time), col("machine", String), col("events", Number, "count"), col("mem_used_bytes", Number, "bytes"), col("mem_total_bytes", Number, "bytes"), col("swap_used_bytes", Number, "bytes"), col("load1", Number), col("disk_free_bytes", Number, "bytes"), col("disk_total_bytes", Number, "bytes"), col("cpu_percent", Number, "percent"), col("disk_used_bytes", Number, "bytes")},
 		build: func(s viewer.Snapshot) [][]any {
 			var rows [][]any
 			for _, m := range s.Activity.Machines {
 				for _, b := range m.Buckets {
-					row := []any{stamp(b.TS), m.MachineName, float64(b.Events), nil, nil, nil, nil, nil, nil, nil}
+					row := []any{stamp(b.TS), m.MachineName, float64(b.Events), nil, nil, nil, nil, nil, nil, nil, nil}
 					if b.Sample != nil {
 						row[3], row[4], row[5], row[6], row[7] = float64(b.Sample.MemUsed), float64(b.Sample.MemTotal), float64(b.Sample.SwapUsed), b.Sample.Load1, float64(b.Sample.DiskFree)
-						row[8], row[9] = float64(b.Sample.DiskTotal), cpuValue(b.Sample.CPUPercent)
+						row[8], row[9], row[10] = float64(b.Sample.DiskTotal), cpuValue(b.Sample.CPUPercent), diskUsed(b.Sample.DiskTotal, b.Sample.DiskFree)
 					}
 					rows = append(rows, row)
 				}
@@ -312,13 +312,14 @@ var sources = map[string]schema{
 	},
 	"machines": {
 		description: "Known machines with their agents, inbox and connection state",
-		columns:     []Column{col("machine_id", String), col("machine", String), col("state", String), col("os", String), col("agents", Number, "count"), col("inbox", Number, "count"), col("last_seen", Number, "duration"), col("mem_used_bytes", Number, "bytes"), col("mem_total_bytes", Number, "bytes"), col("disk_free_bytes", Number, "bytes"), col("disk_total_bytes", Number, "bytes"), col("cpu_percent", Number, "percent")},
+		columns:     []Column{col("machine_id", String), col("machine", String), col("state", String), col("os", String), col("agents", Number, "count"), col("inbox", Number, "count"), col("last_seen", Number, "duration"), col("mem_used_bytes", Number, "bytes"), col("mem_total_bytes", Number, "bytes"), col("disk_free_bytes", Number, "bytes"), col("disk_total_bytes", Number, "bytes"), col("cpu_percent", Number, "percent"), col("disk_used_bytes", Number, "bytes")},
 		build: func(s viewer.Snapshot) [][]any {
 			rows := make([][]any, 0, len(s.Machines.Rows))
 			for _, m := range s.Machines.Rows {
-				row := []any{m.MachineID, view.MachineName(m.Machine), view.MachineState(m.Machine, s.LocalMachineID, s.ObservedAt), m.OS, float64(m.Agents), float64(m.Inbox), ms(m.LastSeenAge), nil, nil, nil, nil, nil}
+				row := []any{m.MachineID, view.MachineName(m.Machine), view.MachineState(m.Machine, s.LocalMachineID, s.ObservedAt), m.OS, float64(m.Agents), float64(m.Inbox), ms(m.LastSeenAge), nil, nil, nil, nil, nil, nil}
 				if m.Sample != nil {
 					row[7], row[8], row[9], row[10], row[11] = float64(m.Sample.MemUsed), float64(m.Sample.MemTotal), float64(m.Sample.DiskFree), bytesKnown(m.Sample.DiskTotal), cpuValue(m.Sample.CPUPercent)
+					row[12] = diskUsed(m.Sample.DiskTotal, m.Sample.DiskFree)
 				}
 				rows = append(rows, row)
 			}
@@ -327,11 +328,17 @@ var sources = map[string]schema{
 	},
 	"summary": {
 		description: "One row of totals for the selected machines",
-		columns:     []Column{col("agents", Number, "count"), col("working", Number, "count"), col("waiting", Number, "count"), col("stuck", Number, "count"), col("inbox", Number, "count"), col("orphans", Number, "count"), col("reclaim_bytes", Number, "bytes"), col("mem_used_bytes", Number, "bytes"), col("mem_total_bytes", Number, "bytes"), col("disk_free_bytes", Number, "bytes"), col("load1", Number), col("disk_total_bytes", Number, "bytes"), col("cpu_percent", Number, "percent"), col("need_you", Number, "count"), col("to_review", Number, "count"), col("attention_stuck", Number, "count"), col("leftover", Number, "count"), col("leftover_bytes", Number, "bytes")},
+		columns:     []Column{col("agents", Number, "count"), col("working", Number, "count"), col("waiting", Number, "count"), col("stuck", Number, "count"), col("inbox", Number, "count"), col("orphans", Number, "count"), col("reclaim_bytes", Number, "bytes"), col("mem_used_bytes", Number, "bytes"), col("mem_total_bytes", Number, "bytes"), col("disk_free_bytes", Number, "bytes"), col("load1", Number), col("disk_total_bytes", Number, "bytes"), col("cpu_percent", Number, "percent"), col("need_you", Number, "count"), col("to_review", Number, "count"), col("attention_stuck", Number, "count"), col("leftover", Number, "count"), col("leftover_bytes", Number, "bytes"), col("disk_used_bytes", Number, "bytes"), col("machines", Number, "count"), col("machines_reachable", Number, "count")},
 		build: func(s viewer.Snapshot) [][]any {
 			h := view.ProjectAttention(s.Inbox, s.Agents, s.LocalMachineID, s.LivePrompts).Header(s.Orphans, s.Summary)
 			v := s.Summary
-			return [][]any{{float64(v.Agents), float64(v.Working), float64(v.Waiting), float64(v.Stuck), float64(v.Inbox), float64(v.Orphans), float64(v.Reclaim), float64(v.Sample.MemUsed), float64(v.Sample.MemTotal), float64(v.Sample.DiskFree), v.Sample.Load1, float64(v.Sample.DiskTotal), cpuValue(v.Sample.CPUPercent), float64(h.NeedYou), float64(h.ToReview), float64(h.Stuck), float64(h.Leftover), float64(h.LeftoverBytes)}}
+			reachable := 0
+			for _, m := range s.Machines.Rows {
+				if state := view.MachineState(m.Machine, s.LocalMachineID, s.ObservedAt); state == "local" || state == "live" {
+					reachable++
+				}
+			}
+			return [][]any{{float64(v.Agents), float64(v.Working), float64(v.Waiting), float64(v.Stuck), float64(v.Inbox), float64(v.Orphans), float64(v.Reclaim), float64(v.Sample.MemUsed), float64(v.Sample.MemTotal), float64(v.Sample.DiskFree), v.Sample.Load1, float64(v.Sample.DiskTotal), cpuValue(v.Sample.CPUPercent), float64(h.NeedYou), float64(h.ToReview), float64(h.Stuck), float64(h.Leftover), float64(h.LeftoverBytes), diskUsed(v.Sample.DiskTotal, v.Sample.DiskFree), float64(len(s.Machines.Rows)), float64(reachable)}}
 		},
 	},
 }
@@ -430,6 +437,13 @@ func sessionTitle(title, agent, project, branch string) string {
 func stampAfter(t time.Time, stamp string) bool {
 	at, err := time.Parse(time.RFC3339, stamp)
 	return err != nil || t.After(at)
+}
+
+func diskUsed(total, free uint64) any {
+	if total == 0 || free > total {
+		return nil
+	}
+	return float64(total - free)
 }
 
 // bytesKnown is a memory reading, or none when the session's processes were

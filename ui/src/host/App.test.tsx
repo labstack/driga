@@ -4,6 +4,8 @@ import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Fragment } from "../panels/types";
+import { PanelView } from "../panels/PanelView";
+import { useHost } from "../panels/host";
 import { App } from "./App";
 
 const api = vi.hoisted(() => ({ open: vi.fn(), run: vi.fn(), list: vi.fn(), prompts: vi.fn(), edit: vi.fn() }));
@@ -13,7 +15,7 @@ vi.mock("./api", () => ({
 }));
 vi.mock("./ClustersHeader", () => ({ ClustersHeader: ({ onToggleChat, search, data }: { onToggleChat: () => void; search: ReactNode; data: { checkedAt: string } | null }) => <><button onClick={onToggleChat}>Toggle Chat</button><output data-testid="header">{data?.checkedAt}</output>{search}</> }));
 vi.mock("./Search", () => ({ Search: ({ open }: { open: (id: string) => void }) => <><button onClick={() => open("other")}>Other dashboard</button><button onClick={() => open("home")}>Home dashboard</button></> }));
-vi.mock("./Dashboard", () => ({ Dashboard: ({ fragment, onRemove }: { fragment: Fragment; onRemove: (id: string) => void }) => <><div data-testid="dashboard">{fragment.id}</div><output data-testid="warning">{fragment.results[0]?.message}</output><button onClick={() => onRemove("panel")}>Remove panel</button></> }));
+vi.mock("./Dashboard", () => ({ Dashboard: ({ fragment, onRemove }: { fragment: Fragment; onRemove: (id: string) => void }) => <><PanelView panel={{ id: "inbox", title: "Inbox", viz: "inbox" }} result={{ id: "inbox", status: "ok", frame: { columns: [{ name: "kind", type: "string" }, { name: "title", type: "string" }], rows: [["waiting", "Waiting row"], ["finished", "Review row"]] } }} /><output data-testid="filter">{useHost().inboxFilter}</output><div data-testid="dashboard">{fragment.id}</div><output data-testid="warning">{fragment.results[0]?.message}</output><button onClick={() => onRemove("panel")}>Remove panel</button></> }));
 vi.mock("./Chat", () => ({ Chat: () => <button>Chat control</button> }));
 vi.mock("../fleet/FleetPage", () => ({ FleetPage: () => <div data-testid="fleet">Fleet</div> }));
 vi.mock("react-resizable-panels", async () => {
@@ -129,4 +131,20 @@ describe("App", () => {
     await key("g"); await key("f");
     expect(container.querySelector('[data-testid="fleet"]')).not.toBeNull();
   });
+});
+
+it("Stuck shortcut filters the inbox with no attention widgets and the title chip clears it", async () => {
+  api.run.mockImplementation((dashboard: { name: string }) => Promise.resolve({ ...fragment("run"), results: dashboard.name === "Fleet" ? [{ id: "sessions", status: "ok", frame: { columns: [{ name: "label", type: "string" }, { name: "title", type: "string" }], rows: [["stuck", "Stuck session"], ["working", "Working session"]] } }] : [] }));
+  await mount();
+  await key("3");
+  expect(container.querySelector('[data-testid="filter"]')?.textContent).toBe("stuck");
+  expect(container.querySelector(".panel-handle")?.textContent).toContain("Showing: Stuck");
+  expect(container.textContent).toContain("Stuck session");
+  expect(container.textContent).not.toContain("Working session");
+  expect(container.textContent).not.toContain("Waiting row");
+  expect(container.textContent).not.toContain("Review row");
+  await act(async () => { container.querySelector<HTMLButtonElement>('[aria-label="Clear inbox filter"]')!.click(); });
+  expect(container.querySelector('[data-testid="filter"]')?.textContent).toBe("");
+  expect(container.textContent).toContain("Waiting row");
+  expect(container.textContent).toContain("Review row");
 });

@@ -1,8 +1,10 @@
 // A fictional fleet for the header, observed at the fixtures' clock, which
 // the preview pins Date.now to.
-import { storyNow } from "../fixtures/fragments";
+import { fragments, storyNow } from "../fixtures/fragments";
 import type { LiveState } from "../widgets/types";
-import type { Attention, AttentionKind, HeaderData, Hygiene, LocalMemory, Machine, Poll } from "./Header";
+import { headerOf, type Attention, type AttentionKind, type HeaderData, type Machine, type Poll } from "./Header";
+import type { Fragment } from "../panels/types";
+import { historyOf } from "./History";
 
 const GB = 1024 ** 3;
 const checkedAt = new Date(storyNow - 4000).toISOString();
@@ -64,72 +66,43 @@ export const build01 = machine("build-01", { sessions: { working: 2, waiting: 0,
 export const laptop02 = machine("laptop-02", { sessions: { working: 0, waiting: 0, stuck: 0, idle: 1 }, used: 9, total: 16, strip: "wwwwwwwwwwiiiiiiiiiiiiiiiiiiii", seenAgo: 20 });
 export const build02 = machine("build-02", { reachable: false, used: 12, total: 64, strip: "wwwwwwwwwwwwwwwwwwoooooooooooo", seenAgo: 710 });
 
-const memory: LocalMemory = { machine: "studio", used: 24 * GB, total: 32 * GB, trend: walk(5, 60, 24 * GB, 0.9 * GB, 20 * GB, 29 * GB), delta: -1.8 * GB };
+const memory = { used: 24 * GB, total: 32 * GB, trend: walk(5, 60, 24 * GB, 0.9 * GB, 20 * GB, 29 * GB) };
 
-const hygiene: Hygiene = { leftover: { count: 2, bytes: 1.8 * GB }, reclaimable: 6.1 * GB };
+/** Each preview starts with a header fragment, just as the app does. */
+function fragment(attention: Record<AttentionKind, Attention>, used = memory.used, leftover = 2, reclaim = 6.1 * GB): Fragment {
+  const f = structuredClone(fragments.header);
+  f.observed_at = checkedAt;
+  f.results = f.dashboard.panels.map(p => {
+    const kind = p.id === "finished" ? "review" : p.id as AttentionKind;
+    const value = attention[kind]?.count ?? (p.id === "leftover" ? 1.8 * GB : p.id === "reclaim" ? reclaim : used);
+    return { id: p.id, status: "ok", frame: { columns: [{ name: "value", type: "number", unit: attention[kind] ? "count" : "bytes" }], rows: [[value]] },
+      ...(p.id === "memory" ? { total: memory.total, trend: memory.trend } : {}), ...(p.id === "leftover" ? { caption: leftover } : {}) };
+  });
+  f.history = { attention: attention.waiting.trend.map((_, i) => ({ ts: ago(3600 - i * 60), waiting: attention.waiting.trend[i] ?? 0, review: attention.review.trend[i] ?? 0, stuck: attention.stuck.trend[i] })), polls: [] };
+  return f;
+}
+function data(f: Fragment, machines: Machine[]): HeaderData {
+  return { ...headerOf(f, null, historyOf(f)), localMachine: "studio", machines };
+}
 
-/** busy: three agents wait on the person, ten turns await review, nothing
- * is stuck, two leftover process trees, one machine unreachable. */
-export const busy: HeaderData = {
-  attention: attention(steps([1, 18], [2, 12], [1, 10], [2, 8], [3, 12]), steps([6, 15], [7, 10], [8, 10], [9, 10], [10, 15]), steps([1, 40], [0, 20])),
-  hygiene,
-  memory,
-  machines: [studio, build01, laptop02, build02],
-  checkedAt,
-};
+export const busyFragment = fragment(attention(steps([1, 18], [2, 12], [1, 10], [2, 8], [3, 12]), steps([6, 15], [7, 10], [8, 10], [9, 10], [10, 15]), steps([1, 40], [0, 20])));
+export const busy = data(busyFragment, [studio, build01, laptop02, build02]);
+export const allClearFragment = fragment(quiet, memory.used, 0, 0);
+export const allClear = data(allClearFragment, [{ ...studio, sessions: { ...none, working: 3 } }, { ...build01, sessions: { ...none, working: 1 } }, laptop02]);
+export const oneStuckFragment = fragment({ ...quiet, stuck: count(steps([0, 45], [1, 15])) }, memory.used, 0, 0);
+export const oneStuck = data(oneStuckFragment, [studio, build01, laptop02]);
+export const hotFragment = fragment(attention(steps([3, 60]), steps([10, 60]), steps([0, 60])), 30 * GB);
+export const hot = data(hotFragment, busy.machines);
+export const freshFragment = fragment(attention([3], [3], [1]));
+freshFragment.results = freshFragment.results.map(r => ({ ...r, trend: [] }));
+export const fresh = data(freshFragment, []);
+const lab = (n: number) => machine(`lab-0${n}`, { sessions: { ...none, working: 3 }, used: 10 + n * 3, total: 64, strip: "wwwwwwwwwwwwwwwwwwwwwwwwwwwwww", seenAgo: 10 + n });
+export const manyMachines: HeaderData = { ...busy, machines: [...busy.machines, ...Array.from({ length: 6 }, (_, i) => lab(i + 1))] };
 
-/** allClear: nothing needs the person and nothing to clean up. */
-export const allClear: HeaderData = {
-  attention: quiet,
-  hygiene: { leftover: { count: 0, bytes: 0 }, reclaimable: 0 },
-  memory: { ...memory, delta: 0.2 * GB },
-  machines: [
-    { ...studio, sessions: { working: 3, waiting: 0, stuck: 0, idle: 1 }, polls: polls("wwwwwwwwwwwwwwwwwwwwwwwwwwwwww") },
-    { ...build01, sessions: { working: 1, waiting: 0, stuck: 0, idle: 0 }, polls: polls("wwwwwwwwwwwwwwwwwwwwwwwwwwwwww") },
-    laptop02,
-  ],
-  checkedAt,
-};
-
-/** oneStuck: one session has gone quiet for too long; everything else is zero. */
-export const oneStuck: HeaderData = {
-  attention: { ...quiet, stuck: count(steps([0, 45], [1, 15])) },
-  hygiene: { leftover: { count: 0, bytes: 0 }, reclaimable: 0 },
-  memory: { ...memory, delta: 2.6 * GB },
-  machines: [
-    { ...studio, sessions: { working: 4, waiting: 0, stuck: 0, idle: 1 }, polls: polls("wwwwwwwwwwwwwwwwwwwwwwwwwwwwww") },
-    build01,
-    laptop02,
-  ],
-  checkedAt,
-};
-
-/** hot: the local machine past the danger threshold, so the memory bar turns red. */
-export const hot: HeaderData = { ...busy, memory: { ...memory, used: 30 * GB, delta: 3.1 * GB } };
-
-/** fresh: the first load, before the fleet or any kept reading: no delta,
- * no dots, the leftover count unknown. */
-export const fresh: HeaderData = {
-  attention: { waiting: { count: 3, trend: [3], delta: 0 }, review: { count: 3, trend: [3], delta: 0 }, stuck: { count: 1, trend: [1], delta: 0 } },
-  hygiene: { leftover: { bytes: 2 * GB }, reclaimable: 5 * GB },
-  memory: { ...memory, delta: 0 },
-  machines: [],
-  checkedAt,
-};
-
-const lab = (n: number, strip: string, sessions: Partial<Record<LiveState, number>>) =>
-  machine(`lab-0${n}`, { sessions: { ...none, ...sessions }, used: 10 + n * 3, total: 64, strip, seenAgo: 10 + n });
-
-/** manyMachines: ten machines, more than the fleet pulse shows as dots. */
-export const manyMachines: HeaderData = {
-  ...busy,
-  machines: [
-    studio, build01, laptop02, build02,
-    lab(1, "wwwwwwwwwwwwwwwwwwwwwwwwwwwwww", { working: 3 }),
-    lab(2, "wwwwwwwwwwwwwwwwwwwwwwwwwwwwWW", { working: 1, waiting: 1 }),
-    lab(3, "iiiiiiiiiiiiiiiiiiiiiiiiiiiiii", { idle: 2 }),
-    lab(4, "qqqqqqqqqqqqqqqqqqqqqqqqqqqqqq", {}),
-    lab(5, "wwwwwwwwwwwwwwwwwwwwwwwwwwwwww", { working: 2 }),
-    lab(6, "wwwwwwwwwwwwwwwwwwwwwwwwwwwwww", { working: 4, idle: 1 }),
-  ],
-};
+/** The Go catalog run over the same fictional snapshot; no handwritten specs. */
+export const catalogFragment = fragments.header_catalog;
+export const headerCatalog = catalogFragment.dashboard.panels;
+export const allWidgets = data(catalogFragment, busy.machines);
+export function widgetData(id: string): HeaderData {
+  return data({ ...catalogFragment, dashboard: { ...catalogFragment.dashboard, panels: headerCatalog.filter(p => p.id === id) } }, busy.machines);
+}

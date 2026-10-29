@@ -6,19 +6,20 @@ import { AppShell, Box, Button, Group, Select, Text, Title } from "@mantine/core
 import { notifications } from "@mantine/notifications";
 import { spotlight } from "@mantine/spotlight";
 import { PencilSimple } from "@phosphor-icons/react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Panel as Pane, Group as Split, Separator, useDefaultLayout, usePanelRef } from "react-resizable-panels";
 import { FleetPage } from "../fleet/FleetPage";
 import { fleetOf } from "../fleet/FleetSpec";
 import { HostContext, type Act, type Host, type InboxFilter } from "../panels/host";
-import type { Prompt } from "../panels/types";
+import { rows, type Dashboard as DashboardSpec, type Panel, type Prompt } from "../panels/types";
 import "../panels/panels.css";
 import "./host.css";
-import { action, confirmedAction, chat, confirm, dashboards } from "./api";
+import { action, confirmedAction, chat, confirm, dashboards, type Operation } from "./api";
 import { Chat } from "./Chat";
 import { ClustersHeader } from "./ClustersHeader";
 import { Dashboard } from "./Dashboard";
-import { attentionKinds, headerOf, kinds, type AttentionKind, type HeaderTarget } from "./Header";
+import { attentionKinds, headerOf, type AttentionKind, type HeaderTarget } from "./Header";
+import { HeaderEditor } from "./HeaderEditor";
 import { historyOf } from "./History";
 import { Search } from "./Search";
 import { useDashboardRefresh, refreshMs, headerID, homeID } from "./useDashboardRefresh";
@@ -64,11 +65,12 @@ export function App() {
   const [id, setId] = useState<string>(initial);
   const [page, setPage] = useState<Page>(initialPage);
   const [vars, setVars] = useState<Record<string, string>>({});
+  const [shown, setShown] = useState<string | null>(null);
   const [filter, setFilter] = useState<InboxFilter | null>(null);
   const [chatOpen, setChatOpen] = useState(() => remembered("driga-chat-open") !== "false");
   const [ask, setAsk] = useState<{ text: string; at: number } | null>(null);
   const say = (message: string) => notifications.show({ message, autoClose: 4000, closeButtonProps: { "aria-label": "Dismiss" } });
-  const { fragment, header, inbox, fleet, prompts, list, fresh, editing, setEditing, refresh: load, edit, forgetPrompt } = useDashboardRefresh({ id, vars, onError: say, onMissing: () => setId(homeID) });
+  const { fragment, header, inbox, fleet, prompts, list, fresh, editing, setEditing, refresh: load, edit, mutateHeader, forgetPrompt } = useDashboardRefresh({ id, vars, onError: say, onMissing: () => setId(homeID) });
   useEffect(() => { remember("driga-chat-open", String(chatOpen)); }, [chatOpen]);
   // Chat and the board share the window; dragging the line between them
   // sets Chat's width, which is remembered. Hiding Chat collapses its pane.
@@ -87,16 +89,76 @@ export function App() {
   const kept = useMemo(() => historyOf(header), [header]);
   const headerData = useMemo(() => header ? headerOf(header, fleetData, kept) : null, [header, fleetData, kept]);
 
+  useEffect(() => {
+    if (!shown || id !== homeID || page !== "board" || fragment?.id !== homeID) return;
+    const reveal = () => {
+      if (!document.getElementById(`panel-${shown}`)) return false;
+      showPanel(shown);
+      setShown(null);
+      return true;
+    };
+    if (reveal()) return;
+    const observer = new MutationObserver(() => { if (reveal()) observer.disconnect(); });
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [shown, id, page, fragment]);
+
   const open = (next: string) => { setEditing(false); setVars({}); setId(next); setPage("board"); };
   const openFleet = useCallback(() => { setEditing(false); setPage("fleet"); }, []);
-  const showOnHome = (target: HeaderTarget) => {
+  const showTarget = (target: HeaderTarget) => {
     const away = id !== homeID || page !== "board";
     if (away) open(homeID);
-    window.setTimeout(() => showPanel(targets[target]), away ? 600 : 0);
+    setShown(targets[target]);
   };
-  // A tile narrows the inbox to its kind, or points Home at the stuck sessions, which the inbox does not list.
-  const onFilter = (kind: AttentionKind) => { if (kind === "stuck") showOnHome("stuck"); else setFilter(f => f === kind ? null : kind); };
+  const showOnHome = async (panel: Panel) => {
+    try {
+      const home = fragment?.id === homeID ? fragment : await dashboards.open(homeID);
+      let match = home.dashboard.panels.find(p => p.source === panel.source && (p.measure ?? "count") === (panel.measure ?? "count"));
+      if (!match) {
+        let id = panel.id;
+        for (let n = 2; home.dashboard.panels.some(p => p.id === id); n++) id = `${panel.id}_${n}`;
+        const values = { ...Object.fromEntries((header?.dashboard.variables ?? []).map(v => [v.name, v.default ?? ""])), ...header?.vars };
+        let title = panel.title;
+        // Match the engine's substitution order for names sharing a prefix.
+        for (const name of Object.keys(values).sort((a, b) => b.length - a.length)) title = title.replaceAll(`$${name}`, values[name] || `all ${name}s`);
+        match = { ...panel, id, title, ...(panel.where ? { where: panel.where.flatMap(f => {
+          if (!f.value.startsWith("$")) return [f];
+          const value = values[f.value.slice(1)];
+          // An empty variable selects all values; a literal empty filter does not.
+          return value ? [{ ...f, value }] : [];
+        }) } : {}) };
+        const next = await edit(homeID, home.version ?? 0, [{ op: "add", panel: match }], "Added a header widget to Home");
+        if (!next) return;
+      }
+      const away = id !== homeID || page !== "board";
+      if (away) open(homeID);
+      setShown(match.id);
+    } catch (e) { say((e as Error).message); }
+  };
+  const onFilter = (kind: AttentionKind) => setFilter(f => f === kind ? null : kind);
   const askChat = (text: string) => { setChatOpen(true); setAsk({ text, at: Date.now() }); };
+  const [headerBusy, setHeaderBusy] = useState(false);
+  const savingHeader = useRef(false);
+  const headerChange = async (save: () => ReturnType<typeof dashboards.open>, previous: DashboardSpec, message: string) => {
+    if (savingHeader.current) return;
+    savingHeader.current = true;
+    setHeaderBusy(true);
+    try {
+      const next = await mutateHeader(save);
+      if (!next) return;
+      const toast = notifications.show({ autoClose: 8000, closeButtonProps: { "aria-label": "Dismiss" }, message: <Group gap="sm" wrap="nowrap">{message}<Button size="compact-xs" variant="subtle" onClick={() => {
+        if (savingHeader.current) return;
+        notifications.hide(toast);
+        void headerChange(() => dashboards.replace(headerID, previous, next.version ?? 0, undefined, "Undid a header edit"), structuredClone(next.dashboard), "Header restored");
+      }}>Undo</Button></Group> });
+    } finally { savingHeader.current = false; setHeaderBusy(false); }
+  };
+  const editHeader = (operations: Operation[], message: string) => {
+    if (header) void headerChange(() => dashboards.edit(headerID, operations, header.version ?? 0, undefined, message), structuredClone(header.dashboard), message);
+  };
+  const resetHeader = () => {
+    if (header) void headerChange(() => dashboards.reset(headerID, header.version ?? 0), structuredClone(header.dashboard), "Header reset");
+  };
   const act: Act = async ({ kind, row }) => {
     const machine = row.machine_id;
     const session = Number(row.session_id ?? row.id);
@@ -139,7 +201,10 @@ export function App() {
     if (!await confirm(`Delete the ${name} dashboard and its history?`)) { say("Cancelled"); return; }
     try { await dashboards.delete(fragment.id); if (fragment.id === homeID) void load(); else open(homeID); say(fragment.id === homeID ? "Home is back to the default" : `Deleted ${name}`); } catch (e) { say((e as Error).message); }
   };
-  const host: Host = { act, local: (fragment ?? header)?.local_machine, prompts, answer, inboxFilter: filter, ask: askChat };
+  const sessions = fleet?.results.find(r => r.id === "sessions")?.frame;
+  const sessionRows = rows(sessions);
+  const stuck = sessions ? { ...sessions, rows: sessions.rows.filter((_, i) => sessionRows[i].state === "stuck" || sessionRows[i].label === "stuck") } : undefined;
+  const host: Host = { clearInboxFilter: () => setFilter(null), stuck, act, local: (fragment ?? header)?.local_machine, prompts, answer, inboxFilter: filter, ask: askChat };
 
   // The app's menus drive the page through drigaCommand.
   useEffect(() => {
@@ -149,13 +214,13 @@ export function App() {
       else if (name === "forward") history.forward();
       else if (name === "find") spotlight.open();
       else if (name === "view" && arg === "fleet") openFleet();
-      else if (name === "view" && arg === "inbox") { setFilter(null); showOnHome("inbox"); }
+      else if (name === "view" && arg === "inbox") { setFilter(null); showTarget("inbox"); }
       // A session picked from the tray opens its pane, as clicking its row does.
       else if (name === "openSession" && arg && typeof arg === "object" && "session_id" in arg && typeof arg.session_id === "number") void act({ kind: "jump", row: arg as { session_id: number; machine_id?: string } });
     };
   });
 
-  // The keys beside ⌘K: 1, 2 and 3 focus the attention tiles, g then f
+  // The keys beside ⌘K: 1, 2 and 3 filter the inbox, g then f
   // opens the Fleet. Not while typing, and not under Search or any other
   // modal, which own the keys while they are open.
   useEffect(() => {
@@ -167,7 +232,7 @@ export function App() {
       if (e.key === "g") { g = performance.now(); return; }
       if (e.key === "f" && followsG) { openFleet(); return; }
       const kind = attentionKinds[Number(e.key) - 1];
-      if (kind) document.querySelector<HTMLElement>(`[aria-keyshortcuts="${kinds[kind].key}"]`)?.focus();
+      if (kind) { e.preventDefault(); setFilter(f => f === kind ? null : kind); }
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
@@ -184,7 +249,10 @@ export function App() {
     <AppShell header={{ height: 56 }} padding={0}>
       <AppShell.Header px="md" style={{ background: "color-mix(in srgb, var(--driga-ground) 88%, transparent)", backdropFilter: "blur(10px)", borderColor: "var(--driga-border)" }}>
         <ClustersHeader data={headerData} filter={filter} chatOpen={chatOpen} onFilter={onFilter} onOpenFleet={openFleet} onSearch={spotlight.open} onToggleChat={() => setChatOpen(o => !o)}
-          onShow={showOnHome} onAsk={about => askChat(`Tell me about "${about}" right now.`)}
+          onShow={panel => void showOnHome(panel)} busy={headerBusy} onRemove={pid => editHeader([{ op: "remove", id: pid }], "Removed a header widget")}
+          onMove={(pid, before) => editHeader([{ op: "move", id: pid, ...(before ? { before } : {}) }], "Reordered header widgets")}
+          editor={header && <HeaderEditor panels={header.dashboard.panels} busy={headerBusy} onAdd={panel => editHeader([{ op: "add", panel }], "Added a header widget")} onReset={resetHeader} onAsk={askChat} />}
+          onAsk={about => askChat(`Tell me about "${about}" right now.`)}
           search={<Search list={list} act={act} say={say} open={open} onFleet={openFleet} ask={askChat} />} />
       </AppShell.Header>
       <AppShell.Main style={{ height: "100dvh", display: "flex" }}>

@@ -3,6 +3,7 @@ import { GridLayout, useContainerWidth, type Layout } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import { ActionIcon, Box, Group, Text, Tooltip } from "@mantine/core";
 import { CheckCircle, X } from "@phosphor-icons/react";
+import { useHost } from "../panels/host";
 import { PanelView, type Act } from "../panels/PanelView";
 import { confirm } from "./api";
 import type { Fragment, Panel, Result } from "../panels/types";
@@ -137,6 +138,7 @@ export function Dashboard({ fragment, editing, act, onLayout, onRemove }: {
   onLayout: (grids: Record<string, { x: number; y: number; w: number; h: number }>) => void;
   onRemove: (id: string) => void;
 }) {
+  const { inboxFilter } = useHost();
   const { width, containerRef, mounted } = useContainerWidth();
   const fill = useHeight(editing);
   const results = new Map(fragment.results.map(r => [r.id, r]));
@@ -145,7 +147,7 @@ export function Dashboard({ fragment, editing, act, onLayout, onRemove }: {
   // a drag saves every panel where it now is.
   // Viewed, a panel with nothing to show leaves the grid for the all-clear
   // strip, and the panels with something to show take the space.
-  const clear = editing ? [] : fragment.dashboard.panels.filter(p => results.get(p.id)?.status === "empty");
+  const clear = editing ? [] : fragment.dashboard.panels.filter(p => results.get(p.id)?.status === "empty" && !(p.viz === "inbox" && inboxFilter));
   const gridPanels = editing ? fragment.dashboard.panels : fragment.dashboard.panels.filter(p => !clear.includes(p));
   const available = Math.max(1, Math.floor((fill.height + gap) / unit));
   const items = packed(layoutOf(gridPanels), byId, results, fill.width, available);
@@ -184,7 +186,7 @@ export function Dashboard({ fragment, editing, act, onLayout, onRemove }: {
 function AllClear({ panels, results }: { panels: Panel[]; results: Map<string, Result> }) {
   return <Group role="group" gap="lg" mb={8} px={2} aria-label="Nothing to show">
     {panels.map(p => <Tooltip key={p.id} label={results.get(p.id)?.message ?? p.empty ?? "Nothing matches right now."} multiline maw={300}>
-      <Group gap={6} wrap="nowrap" c="dimmed">
+      <Group id={`panel-${p.id}`} gap={6} wrap="nowrap" c="dimmed">
         <CheckCircle aria-hidden />
         <Text size="sm" id={`panel-${p.id}`}>{p.title}: <Text span c="dimmed" size="sm">none</Text></Text>
       </Group>

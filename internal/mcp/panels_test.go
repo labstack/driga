@@ -86,6 +86,29 @@ func TestPanelToolsRenderAsMCPApp(t *testing.T) {
 	}
 }
 
+func TestHeaderCatalogDescription(t *testing.T) {
+	cs := panelSession(t)
+	list, err := cs.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tool := range list.Tools {
+		if tool.Name != "list_dashboards" {
+			continue
+		}
+		if !strings.Contains(tool.Description, "stat or gauge panels, at most 16") {
+			t.Errorf("header limits missing: %s", tool.Description)
+		}
+		for _, p := range panel.HeaderCatalog() {
+			if !strings.Contains(tool.Description, p.ID+" ("+p.Title+")") {
+				t.Errorf("catalog widget %s (%s) missing: %s", p.ID, p.Title, tool.Description)
+			}
+		}
+		return
+	}
+	t.Fatal("list_dashboards tool missing")
+}
+
 func TestDashboardLifecycleOverMCP(t *testing.T) {
 	cs := panelSession(t)
 	res, out := callPanels(t, cs, "show_panels", map[string]any{"dashboard": map[string]any{"name": "Quick", "panels": []any{map[string]any{"id": "waits", "title": "Waits", "viz": "stat", "source": "inbox"}}}})

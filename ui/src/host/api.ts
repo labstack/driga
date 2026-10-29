@@ -22,10 +22,15 @@ export type Operation =
   | { op: "add"; panel: Panel; before?: string }
   | { op: "update"; id: string; panel?: Partial<Panel>; clear?: string[] }
   | { op: "remove"; id: string }
+  | { op: "move"; id: string; before?: string }
   | { op: "layout"; grids: Record<string, { x: number; y: number; w: number; h: number }> }
   | { op: "rename"; name: string };
 
 export const dashboards = {
+  reset: (id: string, base: number) => post<Fragment>("/app/api/reset", { id, base_version: base }).then(normalize),
+  catalog: () => post<{ widgets: Panel[] }>("/app/api/catalog", {}).then(r => r.widgets),
+  replace: (id: string, dashboard: Dashboard, base: number, vars?: Record<string, string>, message?: string) =>
+    post<Fragment>("/app/api/replace", { id, dashboard, base_version: base, vars, message }).then(normalize),
   list: () => post<{ dashboards: Summary[] }>("/app/api/list", {}).then(r => r.dashboards),
   open: (id: string, vars?: Record<string, string>, signal?: AbortSignal) => post<Fragment>("/app/api/open", { id, vars }, signal).then(normalize),
   run: (dashboard: Dashboard, vars?: Record<string, string>, signal?: AbortSignal) => post<Fragment>("/app/api/run", { dashboard, vars }, signal).then(normalize),

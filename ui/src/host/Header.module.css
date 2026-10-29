@@ -11,3 +11,14 @@
 @media (prefers-reduced-motion: no-preference) {
   .tile { transition: background-color 150ms ease-out; }
 }
+
+.slot { position: relative; flex: none; min-width: 0; width: max-content; }
+.slot > :global(.w-tile-box), .slot :global(.w-tile) { width: 100%; }
+.slot :global(.w-tile) { max-height: 56px; }
+.slot[data-reorderable] :global(.w-tile) { touch-action: none; }
+.drag { position: absolute; top: 2px; right: 22px; opacity: 0; pointer-events: none; touch-action: none; cursor: grab; }
+.drag:focus-visible { opacity: 1; pointer-events: auto; }
+
+/* Intrinsic sizes are independent of the visible prefix; never display:none. */
+.measuring { position: absolute; top: 0; left: 0; display: flex; gap: 8px; width: 0; height: 0; overflow: hidden; visibility: hidden; pointer-events: none; }
+.more { flex: none; white-space: nowrap; width: max-content; min-width: max-content; height: auto; min-height: 28px; padding: 4px 10px; }

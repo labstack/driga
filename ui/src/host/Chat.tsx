@@ -54,7 +54,7 @@ function ActionCard({ conversation, action }: { conversation: string; action: Ch
  * pick something. */
 function Brief({ inbox, act, ask }: { inbox?: { panel: Panel; result?: Result; listed: boolean }; act?: Act; ask: (text: string) => void }) {
   const waits = inbox?.result?.frame?.rows.filter(r => r[inbox.result!.frame!.columns.findIndex(c => c.name === "kind")] === "waiting").length ?? 0;
-  const { prompts = [] } = useHost();
+  const { prompts = [], inboxFilter } = useHost();
   const items = (inbox?.result?.frame?.rows.length ?? 0) + prompts.length;
   const suggestions = [
     waits ? "What needs me first, and why?" : "Is anything stuck?",
@@ -66,7 +66,7 @@ function Brief({ inbox, act, ask }: { inbox?: { panel: Panel; result?: Result; l
     {waits || prompts.length
       ? <Text size="sm" c="dimmed">{prompts.length > 0 && `${prompts.length} permission ${prompts.length === 1 ? "prompt" : "prompts"} to answer. `}{waits ? `${waits} ${waits === 1 ? "session needs" : "sessions need"} you.` : ""}</Text>
       : <EmptyState kind="all-clear" title="Nothing is waiting on you." />}
-    {inbox && !inbox.listed && items > 0 && <PanelView panel={inbox.panel} result={inbox.result} act={act} />}
+    {inbox && !inbox.listed && (items > 0 || inboxFilter) && <PanelView panel={inbox.panel} result={inbox.result} act={act} />}
     <Stack gap={6} align="flex-start">{suggestions.map(s => <Button key={s} variant="default" radius="xl" leftSection={<Sparkle />} onClick={() => ask(s)} styles={{ label: { whiteSpace: "normal", textAlign: "left", lineHeight: 1.35, overflow: "visible" } }} h="auto" py={6}>{s}</Button>)}</Stack>
   </Stack>;
 }
