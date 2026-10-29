@@ -8,11 +8,21 @@ import (
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/platform"
 	"os"
+	"os/user"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
 )
+
+// The Windows reader is a confined broker builtin, with no Unix tool dependency.
+func commandReadName() string {
+	if runtime.GOOS == "windows" {
+		return "type"
+	}
+	return "cat"
+}
 
 func commandTurn(t *testing.T) (*Broker, Approval, string) {
 	t.Helper()
@@ -29,7 +39,7 @@ func commandTurn(t *testing.T) (*Broker, Approval, string) {
 	b.mu.Unlock()
 	in.Tool = "mcp__driga__run_command"
 	in.ToolUseID = "command-1"
-	raw, _ := json.Marshal(command.Request{Argv: []string{"cat", "read.txt"}})
+	raw, _ := json.Marshal(command.Request{Argv: []string{commandReadName(), "read.txt"}})
 	in.Input = raw
 	return b, in, project
 }
@@ -138,6 +148,13 @@ func commandProcessFixture(t *testing.T) (*Broker, Approval, command.Prepared, m
 	b, in, _ := commandTurn(t)
 	self := model.Proc{PID: int32(os.Getpid()), PPID: 1, StartTime: time.Now(), OwnerKnown: true, OwnerUID: uint32(os.Getuid()), Exe: "broker", Cmdline: "broker", Argv: []string{"broker"}}
 	target := model.Proc{PID: 2000000000, PPID: 1, StartTime: time.Now(), OwnerKnown: true, OwnerUID: uint32(os.Getuid()), Exe: "dummy", Cmdline: "dummy unique", Argv: []string{"dummy", "unique"}}
+	if runtime.GOOS == "windows" {
+		u, err := user.Current()
+		if err != nil {
+			t.Fatal(err)
+		}
+		self.OwnerSID, target.OwnerSID = u.Uid, u.Uid
+	}
 	plat := &commandPlatform{rows: []model.Proc{self, target}}
 	b.opts.CommandPlatform = plat
 	in.Input = json.RawMessage(`{"argv":["pkill","-f","dummy unique"]}`)

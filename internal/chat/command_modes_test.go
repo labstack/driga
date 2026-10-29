@@ -7,6 +7,7 @@ import (
 	"github.com/labstack/driga/internal/command"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -16,6 +17,9 @@ func TestOutsideReadsAlwaysRequireCard(t *testing.T) {
 	for _, mode := range []Mode{Confirm, Auto, FullAuto} {
 		for _, operand := range []string{"outside", "symlink", "tilde"} {
 			t.Run(string(mode)+"/"+operand, func(t *testing.T) {
+				if runtime.GOOS == "windows" && operand == "tilde" {
+					t.Skip("tilde expansion requires sandboxed shell execution, unavailable on Windows")
+				}
 				b, in, project := commandTurn(t)
 				outside := filepath.Join(t.TempDir(), "notes.txt")
 				if err := os.WriteFile(outside, []byte("private"), 0600); err != nil {
@@ -28,7 +32,7 @@ func TestOutsideReadsAlwaysRequireCard(t *testing.T) {
 						t.Fatal(err)
 					}
 				}
-				req := command.Request{Argv: []string{"cat", path}}
+				req := command.Request{Argv: []string{commandReadName(), path}}
 				if operand == "tilde" {
 					req = command.Request{Script: "cat ~/notes.txt"}
 				}

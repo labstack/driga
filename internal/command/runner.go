@@ -15,6 +15,7 @@ import (
 	"github.com/labstack/driga/internal/kill"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/platform"
+	"github.com/labstack/driga/internal/scrub"
 )
 
 type Capability struct {
@@ -262,7 +263,8 @@ func Run(ctx context.Context, p Prepared, stdout, stderr io.Writer) (Result, err
 	return result, err
 }
 
-// When no kernel sandbox is available, a deliberately narrow cat form reads
+// When no kernel sandbox is available, deliberately narrow cat (Unix) and
+// type (Windows) forms read
 // through os.Root, without executing any program. Refuse traversal-capable
 // tools, Git helpers, devices, recursive reads and scopes containing secrets.
 func runSafeRead(ctx context.Context, p Prepared, out io.Writer) (Result, error) {
@@ -273,7 +275,7 @@ func runSafeRead(ctx context.Context, p Prepared, out io.Writer) (Result, error)
 		return bad()
 	}
 	e := p.Policy.Commands[0]
-	if filepath.Base(e.Path) != "cat" || len(e.Argv) < 2 {
+	if (filepath.Base(e.Path) != "cat" && !windowsRead(e.Argv)) || len(e.Argv) < 2 {
 		return bad()
 	}
 	for _, a := range e.Argv[1:] {
@@ -316,13 +318,9 @@ func runSafeRead(ctx context.Context, p Prepared, out io.Writer) (Result, error)
 			return bad()
 		}
 		// Reject hard links too: an alias must not expose a protected inode.
-		v := reflect.Indirect(reflect.ValueOf(st.Sys()))
-		if v.IsValid() && v.Kind() == reflect.Struct {
-			n := v.FieldByName("Nlink")
-			if n.IsValid() && n.CanUint() && n.Uint() > 1 {
-				f.Close()
-				return bad()
-			}
+		if !singleReadLink(f, st) {
+			f.Close()
+			return bad()
 		}
 		_, err = io.Copy(out, contextReader{ctx: ctx, r: f})
 		f.Close()
@@ -369,8 +367,30 @@ func probeBackend(ctx context.Context, c Capability) Capability {
 	defer cleanup()
 	cmd.Dir = dir
 	cmd.Env = safeEnvironment(s)
-	if err = platform.RunChild(cmd); err != nil {
+	return probeCommand(c, cmd)
+}
+
+// Capture only a bounded prefix; probes must never retain unbounded backend
+// output. Scrub before truncating the displayed excerpt so tokens stay whole.
+type probeStderr struct{ data []byte }
+
+func (w *probeStderr) Write(p []byte) (int, error) {
+	n := len(p)
+	remaining := 16*1024 - len(w.data)
+	if remaining > 0 {
+		w.data = append(w.data, p[:min(n, remaining)]...)
+	}
+	return n, nil
+}
+
+func probeCommand(c Capability, cmd *exec.Cmd) Capability {
+	var stderr probeStderr
+	cmd.Stderr = &stderr
+	if err := platform.RunChild(cmd); err != nil {
 		c.Reason = "Sandbox backend is unusable: " + err.Error()
+		if detail := scrub.Snippet(string(stderr.data)); detail != "" {
+			c.Reason += ": " + detail
+		}
 		return c
 	}
 	c.Available = true

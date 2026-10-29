@@ -20,6 +20,7 @@ import (
 	"github.com/labstack/driga/internal/config"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/platform"
+	"github.com/labstack/driga/internal/secfile"
 	"github.com/labstack/driga/internal/spool"
 	"github.com/labstack/driga/internal/store"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -231,7 +232,7 @@ func TestAgentsKillAndChatShareIdentityAndIdleChecks(t *testing.T) {
 func TestRunCommandBrokerDispatch(t *testing.T) {
 	readEnv(t)
 	dir := t.TempDir()
-	if err := os.Chmod(dir, 0700); err != nil {
+	if err := secfile.Protect(dir); err != nil {
 		t.Fatal(err)
 	}
 	path := filepath.Join(dir, "broker.sock")

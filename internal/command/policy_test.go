@@ -67,8 +67,9 @@ func TestCommandReadPolicy(t *testing.T) {
 
 func TestCommandPolicyPrecedence(t *testing.T) {
 	s := Scope{Project: t.TempDir(), Scratch: t.TempDir()}
-	cases := map[string]Class{"kill 23": Process, "pkill -f dummy": Process, "killall dummy": Process, "taskkill /PID 23": Process, "Stop-Process -Id 23": Process, "rm " + s.Scratch + "/x": Other, "rm file": Destructive, "git push": Destructive, "git reset --hard": Destructive, "git clean -f": Destructive, "git branch -D x": Destructive, "git checkout -- .": Destructive, "docker rm x": Destructive, "docker rmi x": Destructive, "docker volume rm x": Destructive, "sudo ls": Never, "su user": Never, "doas ls": Never, "pkexec ls": Never, "systemctl restart x": Never, "launchctl unload x": Never, "chmod 777 /denied/x": Never, "chown user /denied/x": Never, "git branch --list": Read, "go test ./...": Other}
-	s.Denied = []string{"/denied"}
+	denied := t.TempDir()
+	cases := map[string]Class{"kill 23": Process, "pkill -f dummy": Process, "killall dummy": Process, "taskkill /PID 23": Process, "Stop-Process -Id 23": Process, "rm " + quotePolicyTest(filepath.Join(s.Scratch, "x")): Other, "rm file": Destructive, "git push": Destructive, "git reset --hard": Destructive, "git clean -f": Destructive, "git branch -D x": Destructive, "git checkout -- .": Destructive, "docker rm x": Destructive, "docker rmi x": Destructive, "docker volume rm x": Destructive, "sudo ls": Never, "su user": Never, "doas ls": Never, "pkexec ls": Never, "systemctl restart x": Never, "launchctl unload x": Never, "chmod 777 " + quotePolicyTest(filepath.Join(denied, "x")): Never, "chown user " + quotePolicyTest(filepath.Join(denied, "x")): Never, "git branch --list": Read, "go test ./...": Other}
+	s.Denied = []string{denied}
 	for script, want := range cases {
 		if got := policyFor(t, script, s); got.Class != want {
 			if want == Read && len(got.Commands) > 0 && got.Commands[0].SHA256 == ([32]byte{}) {
@@ -104,7 +105,8 @@ func TestCommandExecutableAndPaths(t *testing.T) {
 	if got := policyFor(t, quotePolicyTest(protectedExe), s); got.Class != Never {
 		t.Fatalf("protected executable: %s", got.Class)
 	}
-	for _, script := range []string{"touch /outside/file", "cp source /outside/file", "chmod 600 /outside/file", "eval 'rm file'", "sh -c 'rm file'", "env rm file"} {
+	outside := quotePolicyTest(filepath.Join(t.TempDir(), "file"))
+	for _, script := range []string{"touch " + outside, "cp source " + outside, "chmod 600 " + outside, "eval 'rm file'", "sh -c 'rm file'", "env rm file"} {
 		if got := policyFor(t, script, s); got.Class != Destructive {
 			t.Errorf("hidden/outside effect %s: %s", script, got.Class)
 		}
@@ -114,7 +116,7 @@ func TestCommandExecutableAndPaths(t *testing.T) {
 			t.Fatal("alias gained Read")
 		}
 	}
-	for _, script := range []string{"env ls", "sh -c ls", "command ls", "git -c alias.x='!evil' x", "cat " + s.Denied[0] + "/secret"} {
+	for _, script := range []string{"env ls", "sh -c ls", "command ls", "git -c alias.x='!evil' x", "cat " + quotePolicyTest(filepath.Join(s.Denied[0], "secret"))} {
 		if got := policyFor(t, script, s); got.Class == Read {
 			t.Errorf("unsafe Read %s", script)
 		}
@@ -282,9 +284,10 @@ func TestCommandRunnersFailClosed(t *testing.T) {
 
 func TestPolicyEscapeAudit(t *testing.T) {
 	s := Scope{Project: t.TempDir(), Scratch: t.TempDir()}
+	outside := quotePolicyTest(filepath.Join(t.TempDir(), "victim"))
 	for _, script := range []string{
 		"rm -- -victim", "./rm victim", "/bin/rm victim",
-		"mv file /outside/victim", "cp file /outside/victim",
+		"mv file " + outside, "cp file " + outside,
 		"eval 'rm victim'", "source script.sh", ". script.sh", "exec rm victim", "builtin eval 'rm victim'",
 		"busybox rm victim", "toybox rm victim", "setsid rm victim", "stdbuf -oL rm victim", "time rm victim",
 		"git custom-alias", "git --no-pager status", "git diff --ext-diff", "git show --textconv",
@@ -310,9 +313,10 @@ func TestPolicyEscapeAudit(t *testing.T) {
 
 func TestAdditionalPolicyOptionEscapes(t *testing.T) {
 	s := Scope{Project: t.TempDir(), Scratch: t.TempDir()}
+	outside := quotePolicyTest(t.TempDir())
 	for _, script := range []string{
 		"rg --pre evil needle", "rg --pre=evil needle", "rg --hostname-bin=evil needle",
-		"cp --target-directory=/outside file", "mv -t/outside file",
+		"cp --target-directory=" + outside + " file", "mv -t" + outside + " file",
 		"RM.EXE victim", "ENV.EXE rm victim",
 	} {
 		t.Run(script, func(t *testing.T) {

@@ -122,6 +122,8 @@ jobs:
             sysctl kernel.unprivileged_userns_clone kernel.apparmor_restrict_unprivileged_userns || true
           fi
           go version
+      - name: Explain native sandbox probe
+        run: scripts/isolated.sh go test ./internal/command -run '^TestProbeDiagnostics$' -v -count=1
       - name: Require real sandbox denials and doctor diagnostics
         run: scripts/isolated.sh go test ./internal/cli ./internal/command -run 'Test(DoctorSandbox|CommandSandboxIntegration)' -v -count=1
       - name: Chat commands through the built binary

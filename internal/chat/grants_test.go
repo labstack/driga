@@ -7,6 +7,7 @@ import (
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/store"
 	"net/http/httptest"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -135,7 +136,11 @@ func TestGrantSessionLifecycle(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	first := start("first", root, "Bash", `{"command":"cat read.txt"}`)
+	readTool, readInput := "Bash", `{"command":"cat read.txt"}`
+	if runtime.GOOS == "windows" {
+		readTool, readInput = "run_command", `{"argv":["type","read.txt"]}`
+	}
+	first := start("first", root, readTool, readInput)
 	waitPrompt(t, b, "first")
 	ps, _ := b.Prompts(ctx)
 	if !ps[0].GrantEligible {
@@ -147,7 +152,7 @@ func TestGrantSessionLifecycle(t *testing.T) {
 	if (<-first).Behavior != "allow" {
 		t.Fatal("first denied")
 	}
-	next := start("next", root, "Bash", `{"command":"cat read.txt"}`)
+	next := start("next", root, readTool, readInput)
 	select {
 	case d := <-next:
 		if d.Behavior != "allow" {
@@ -168,12 +173,12 @@ func TestGrantSessionLifecycle(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	reused := start("reused-lifetime", root, "Bash", `{"command":"cat read.txt"}`)
+	reused := start("reused-lifetime", root, readTool, readInput)
 	waitPrompt(t, b, "reused-lifetime")
 	_ = b.AnswerPrompt(ctx, "reused-lifetime", false)
 	<-reused
 	b.EndPrompts("hook-session", root)
-	third := start("third", root, "Bash", `{"command":"cat read.txt"}`)
+	third := start("third", root, readTool, readInput)
 	waitPrompt(t, b, "third")
 	if err := b.AnswerPrompt(ctx, "third", false); err != nil {
 		t.Fatal(err)
@@ -261,6 +266,19 @@ func TestGitReadHasNoExternalGrant(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if runtime.GOOS == "windows" {
+		// The Windows broker has no trusted Git read backend. It must refuse this
+		// sandboxed command instead of granting it automatic execution.
+		if prepared.Policy.Class != command.Destructive || commandAutomatic(Auto, prepared) {
+			t.Fatal(prepared.Policy)
+		}
+		_, err := b.RunCommand(ctx, in)
+		const want = "command denied: Running commands needs a sandbox, which Windows does not have yet."
+		if err == nil || err.Error() != want {
+			t.Fatal(err)
+		}
+		return
+	}
 	if prepared.Policy.Class != command.Read || !commandAutomatic(Auto, prepared) {
 		t.Fatalf("broker-hardened Git read lost automatic authorization: %#v", prepared.Policy)
 	}
@@ -272,6 +290,7 @@ func TestExternalGrantsOnlyAllowValidatedReadAllowlist(t *testing.T) {
 		argv []string
 		want bool
 	}{
+		{[]string{"type", "read.txt"}, false},
 		{[]string{"ls", "-la", "."}, true},
 		{[]string{"cat", "read.txt"}, true},
 		{[]string{"head", "-n", "1", "read.txt"}, true},
@@ -304,9 +323,13 @@ func TestExternalGrantsOnlyAllowValidatedReadAllowlist(t *testing.T) {
 				} else {
 					input, _ = json.Marshal(command.Request{Argv: tc.argv})
 				}
+				want := tc.want
+				if runtime.GOOS == "windows" {
+					want = tool == "run_command" && tc.argv[0] == "type"
+				}
 				p := Prompt{SessionID: 1, Cwd: root, Tool: tool, Input: input}
-				if got := b.preparePromptGrant(context.Background(), p); (got != nil) != tc.want {
-					t.Fatalf("external grant eligible = %t, want %t", got != nil, tc.want)
+				if got := b.preparePromptGrant(context.Background(), p); (got != nil) != want {
+					t.Fatalf("external grant eligible = %t, want %t", got != nil, want)
 				}
 			})
 		}

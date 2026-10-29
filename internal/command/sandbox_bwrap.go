@@ -12,7 +12,9 @@ func bubbleArgs(p Prepared) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	a := []string{"--unshare-all", "--disable-userns", "--new-session", "--die-with-parent", "--cap-drop", "ALL"}
+	// bubblewrap 0.9 validates --disable-userns before promoting the
+	// --unshare-user-try implied by --unshare-all. Require it explicitly.
+	a := []string{"--unshare-all", "--unshare-user", "--disable-userns", "--new-session", "--die-with-parent", "--cap-drop", "ALL"}
 	if p.Parsed.Request.Network {
 		a = append(a, "--share-net")
 	}

@@ -47,3 +47,17 @@ func TestBubblewrapProtectsExecutionHooks(t *testing.T) {
 		t.Error("scratch has no persistence protection")
 	}
 }
+
+func TestBubblewrapRequiresUserNamespace(t *testing.T) {
+	args, err := bubbleArgs(Prepared{Scope: Scope{Scratch: t.TempDir()}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// In 0.9, --unshare-all only enables --unshare-user-try. The parser
+	// rejects --disable-userns unless --unshare-user is explicitly present.
+	for _, flag := range []string{"--unshare-all", "--unshare-user", "--disable-userns", "--new-session", "--die-with-parent", "--cap-drop", "ALL"} {
+		if !slices.Contains(args, flag) {
+			t.Errorf("missing %s: %v", flag, args)
+		}
+	}
+}

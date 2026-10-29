@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 
@@ -300,7 +301,8 @@ func classify(p Parsed, scope Scope, depth int) (Policy, error) {
 		if lower == "docker" && len(args) > 1 && (slices.Contains([]string{"rm", "rmi"}, args[1]) || args[1] == "volume" && len(args) > 2 && args[2] == "rm") {
 			destructive = true
 		}
-		if !trusted(exe, args[0]) || !readArgs(lower, args[1:]) {
+		nativeRead := !p.Complex && !p.Pipeline && len(p.Commands) == 1 && windowsRead(args)
+		if !nativeRead && (!trusted(exe, args[0]) || !readArgs(lower, args[1:])) {
 			allRead = false
 		} else {
 			for _, path := range readPaths(lower, args[1:], p.Request.Cwd) {
@@ -347,6 +349,9 @@ func scopedReadPath(path, cwd string, s Scope) bool {
 // Called only after readArgs validates the grammar. Option values and search
 // patterns are not file operands. Git revisions before -- are not paths.
 func readPaths(name string, args []string, cwd string) []string {
+	if name == "type" && runtime.GOOS == "windows" {
+		return args
+	}
 	var paths []string
 	var operands string
 	long := map[string]bool{}
@@ -747,4 +752,19 @@ func readArgs(name string, a []string) bool {
 		return false
 	}
 	return false
+}
+
+// Windows type reads literal files through os.Root in runSafeRead. It is a
+// broker builtin, never cmd.exe execution or a PATH-resolved program. Options,
+// devices, wildcards, pipelines and shell expansion gain no read authority.
+func windowsRead(args []string) bool {
+	if runtime.GOOS != "windows" || len(args) < 2 || args[0] != "type" {
+		return false
+	}
+	for _, path := range args[1:] {
+		if path == "" || strings.HasPrefix(path, "-") || strings.HasPrefix(path, "/") || strings.ContainsAny(path, "*?%") || strings.Contains(strings.TrimPrefix(path, filepath.VolumeName(path)), ":") {
+			return false
+		}
+	}
+	return true
 }

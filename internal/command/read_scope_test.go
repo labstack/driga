@@ -3,6 +3,7 @@ package command
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -22,6 +23,11 @@ func TestReadRequiresCanonicalScopedPaths(t *testing.T) {
 		cwd  string
 		want Class
 	}{
+		{[]string{"type", "README.md"}, s.Project, Other},
+		{[]string{"type", filepath.Join(s.Scratch, "notes.txt")}, s.Project, Other},
+		{[]string{"type", filepath.Join(outside, "notes.txt")}, s.Project, Other},
+		{[]string{"type", "escape/notes.txt"}, s.Project, Other},
+		{[]string{"type", "missing"}, s.Project, Other},
 		{[]string{"cat", "README.md"}, s.Project, Read},
 		{[]string{"cat", filepath.Join(s.Scratch, "notes.txt")}, s.Project, Read},
 		{[]string{"cat", filepath.Join(outside, "notes.txt")}, s.Project, Other},
@@ -49,8 +55,17 @@ func TestReadRequiresCanonicalScopedPaths(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if pol.Class != tc.want {
-				t.Fatalf("got %s, want %s", pol.Class, tc.want)
+			want := tc.want
+			if runtime.GOOS == "windows" {
+				if tc.want == Read {
+					want = Other
+				} // Unix executable identities are unavailable.
+				if tc.argv[0] == "type" && (tc.argv[1] == "README.md" || tc.argv[1] == filepath.Join(s.Scratch, "notes.txt")) {
+					want = Read
+				}
+			}
+			if pol.Class != want {
+				t.Fatalf("got %s, want %s", pol.Class, want)
 			}
 		})
 	}

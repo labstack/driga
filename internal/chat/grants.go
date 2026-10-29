@@ -10,6 +10,7 @@ import (
 	"github.com/labstack/driga/internal/command"
 	"github.com/labstack/driga/internal/model"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"time"
 )
@@ -230,7 +231,8 @@ func (b *Broker) preparePromptGrant(ctx context.Context, p Prompt) *command.Prep
 	// and configuration. Only these reads are eligible, and only after the
 	// classifier validates their executable and flag grammar. Other reads (e.g.
 	// Git and ripgrep) can execute helpers through external configuration.
-	if prepared.Policy.Class != command.Read || len(req.Argv) == 0 || !slices.Contains([]string{"ls", "cat", "head", "tail", "wc", "stat", "du", "df", "pwd"}, req.Argv[0]) {
+	nativeRead := runtime.GOOS == "windows" && p.Tool == "run_command" && len(req.Argv) > 0 && req.Argv[0] == "type"
+	if prepared.Policy.Class != command.Read || len(req.Argv) == 0 || !nativeRead && !slices.Contains([]string{"ls", "cat", "head", "tail", "wc", "stat", "du", "df", "pwd"}, req.Argv[0]) {
 		return nil
 	}
 	if len(prepared.Policy.Commands) != 1 || !slices.Equal(prepared.Policy.Commands[0].Argv, req.Argv) {
