@@ -205,7 +205,7 @@ assert i["CFBundleVersion"] == "2026.10.23"
 assert i["DrigaReleaseVersion"] == "2026.10.23-alpha"
 assert (h/"Resources"/i["CFBundleIconFile"]).read_bytes() == (app/"Resources/Driga.icns").read_bytes()
 assert (h/"MacOS/drigad").read_bytes() == (app/"MacOS/driga").read_bytes()
-assert (h/"MacOS/drigad").stat().st_mode & 0o111
+assert sys.platform == "win32" or (h/"MacOS/drigad").stat().st_mode & 0o111  # Windows has no execute bits
 assert not (app/"MacOS/drigad").exists()
 `
 	cmd = exec.CommandContext(t.Context(), "python3", "-c", check, app)
