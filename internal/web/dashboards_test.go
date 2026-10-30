@@ -223,6 +223,8 @@ func TestHeaderResetPreservesHistory(t *testing.T) {
 		t.Fatalf("stale reset: %d %s", w.Code, w.Body)
 	}
 	w = postJSON(s, "/app/api/restore", `{"id":"header","base_version":2,"version":1}`)
+	// Decode a fresh response: omitted fields must not retain the reset spec's filters.
+	f = panel.Fragment{}
 	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &f) != nil || f.Version != 3 || !reflect.DeepEqual(f.Dashboard, previous.Spec) {
 		t.Fatalf("restore previous: %d %s", w.Code, w.Body)
 	}

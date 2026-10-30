@@ -142,6 +142,10 @@ type macNotificationCenter struct {
 	dispatchAsync    func(uintptr, objc.Block)
 }
 
+// NSApplicationActivationPolicyProhibited: process-local LSBackgroundOnly behavior.
+// UserNotifications uses the bundle identity and system UI, not app windows.
+const serviceActivationPolicy int64 = 2
+
 func startMacNotifications(exe string) (objc.ID, *macNotificationCenter, error) {
 	for _, framework := range []string{"AppKit", "UserNotifications"} {
 		if _, err := purego.Dlopen("/System/Library/Frameworks/"+framework+".framework/"+framework, purego.RTLD_GLOBAL|purego.RTLD_NOW); err != nil {
@@ -152,9 +156,6 @@ func startMacNotifications(exe string) (objc.ID, *macNotificationCenter, error) 
 	if err := macBundleIdentity(); err != nil {
 		return 0, nil, err
 	}
-	app := nsClass("NSApplication").Send(objc.RegisterName("sharedApplication"))
-	// Accessory app: no Dock icon or window, while retaining Driga's bundle identity.
-	app.Send(objc.RegisterName("setActivationPolicy:"), int64(1))
 	c := &macNotificationCenter{center: nsClass("UNUserNotificationCenter").Send(objc.RegisterName("currentNotificationCenter"))}
 	var err error
 	c.queue, err = purego.Dlsym(purego.RTLD_DEFAULT, "_dispatch_main_q")
@@ -162,6 +163,19 @@ func startMacNotifications(exe string) (objc.ID, *macNotificationCenter, error) 
 		return 0, nil, err
 	}
 	purego.RegisterLibFunc(&c.dispatchAsync, purego.RTLD_DEFAULT, "dispatch_async")
+	var app objc.ID
+	c.onMainSync(func() {
+		app = nsClass("NSApplication").Send(objc.RegisterName("sharedApplication"))
+		// Accessory still permits activation and can swallow open -a Driga.
+		// Do not set LSBackgroundOnly in the shared bundle: the GUI needs windows.
+		if !objc.Send[bool](app, objc.RegisterName("setActivationPolicy:"), serviceActivationPolicy) {
+			err = fmt.Errorf("cannot make notification service background-only")
+		}
+	})
+	if err != nil {
+		return 0, nil, err
+	}
+
 	delegate, err := objc.RegisterClass("DrigaNotificationDelegate", objc.GetClass("NSObject"),
 		[]*objc.Protocol{objc.GetProtocol("UNUserNotificationCenterDelegate")}, nil, []objc.MethodDef{
 			{Cmd: objc.RegisterName("userNotificationCenter:didReceiveNotificationResponse:withCompletionHandler:"),
@@ -203,6 +217,25 @@ func (c *macNotificationCenter) onMain(fn func()) {
 	})
 	c.dispatchAsync(c.queue, block) // dispatch copies the block until execution.
 	block.Release()
+}
+
+// onMainSync runs inline during locked-main startup, before the run loop exists.
+// A worker caller requires the main run loop to be running and waits for it.
+func (c *macNotificationCenter) onMainSync(fn func()) {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	main := objc.Send[bool](nsClass("NSThread"), objc.RegisterName("isMainThread"))
+	dispatchMainAndWait(main, c.onMain, fn)
+}
+
+func dispatchMainAndWait(main bool, enqueue func(func()), fn func()) {
+	if main {
+		fn()
+		return
+	}
+	done := make(chan struct{})
+	enqueue(func() { defer close(done); fn() })
+	<-done
 }
 
 func nativeNotificationError(err objc.ID) error {

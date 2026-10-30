@@ -334,7 +334,7 @@ type SummaryView struct {
 	Inbox     int                 `json:"inbox"`
 	Sample    model.MachineSample `json:"sample"`
 	Orphans   int                 `json:"orphans"`
-	Reclaim   uint64              `json:"reclaim_bytes"`
+	Reclaim   uint64              `json:"reclaim_bytes"` // Legacy field: orphan process RSS, not disk cleanup.
 }
 
 func nonNil[T any](s []T) []T {

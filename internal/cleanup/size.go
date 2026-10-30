@@ -92,6 +92,7 @@ func Measure(ctx context.Context, c Candidate, now time.Time) (Candidate, error)
 	} else {
 		c.Size, c.SizeCapped, err = WalkSize(ctx, c.Path)
 	}
+	c.SizeKnown = err == nil
 	for i := range c.Ignored {
 		var capped bool
 		var ignoredErr error

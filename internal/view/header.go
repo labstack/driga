@@ -14,13 +14,13 @@ import (
 // HeaderStats is the shared attention and hygiene contract for the app and TUI.
 // Review counts one unread completion per session, with unbound items separate.
 type HeaderStats struct {
-	NeedYou, ToReview, Stuck, Leftover                  int
-	LeftoverBytes, Reclaimable, MemoryUsed, MemoryTotal uint64
+	NeedYou, ToReview, Stuck, Leftover     int
+	LeftoverBytes, MemoryUsed, MemoryTotal uint64
 }
 
 func (a AttentionProjection) Header(orphans OrphansView, summary SummaryView) HeaderStats {
 	inbox, agents := a.inbox, a.agents
-	h := HeaderStats{Leftover: len(orphans.Rows), Reclaimable: summary.Reclaim, MemoryUsed: summary.Sample.MemUsed, MemoryTotal: summary.Sample.MemTotal}
+	h := HeaderStats{Leftover: len(orphans.Rows), MemoryUsed: summary.Sample.MemUsed, MemoryTotal: summary.Sample.MemTotal}
 	h.NeedYou = len(a.needs) + a.unbound
 	reviewed := map[headerSession]bool{}
 	for _, row := range inbox.Rows {

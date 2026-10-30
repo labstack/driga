@@ -3,6 +3,8 @@ package panel
 import (
 	"reflect"
 	"testing"
+
+	"github.com/labstack/driga/internal/cleanup"
 )
 
 func TestCatalogValid(t *testing.T) {
@@ -70,7 +72,7 @@ func TestCatalogMatchesSpec(t *testing.T) {
 		{"finished", "To review", "stat", "summary", "sum:to_review", "", ""},
 		{"stuck", "Stuck", "stat", "summary", "sum:attention_stuck", "", ""},
 		{"leftover", "Leftover", "stat", "summary", "sum:leftover_bytes", "", "sum:leftover"},
-		{"reclaim", "Reclaimable", "stat", "summary", "sum:reclaim_bytes", "", ""},
+		{"reclaim", "Reclaimable", "stat", "cleanup", "sum:size_bytes", "", ""},
 		{"memory", "Memory", "stat", "local_activity", "max:mem_used_bytes", "max:mem_total_bytes", ""},
 		{"cpu", "CPU", "gauge", "local_activity", "max:cpu_percent", "", ""},
 		{"disk", "Disk used", "stat", "local_activity", "max:disk_used_bytes", "max:disk_total_bytes", ""},
@@ -91,8 +93,15 @@ func TestCatalogMatchesSpec(t *testing.T) {
 	}
 	for i, w := range want {
 		p := catalog[i]
-		if p.ID != w.id || p.Title != w.title || p.Viz != w.viz || p.Source != w.source || p.Measure != w.measure || p.Total != w.total || p.Caption != w.caption || len(p.Where) != 0 {
+		if p.ID != w.id || p.Title != w.title || p.Viz != w.viz || p.Source != w.source || p.Measure != w.measure || p.Total != w.total || p.Caption != w.caption {
 			t.Errorf("catalog[%d] = %+v, want %+v", i, p, w)
+		}
+		var where []Filter
+		if p.ID == "reclaim" {
+			where = []Filter{{Column: "status", Value: "ready"}}
+		}
+		if !reflect.DeepEqual(p.Where, where) {
+			t.Errorf("%s filters = %v, want %v", p.ID, p.Where, where)
 		}
 		if p.ID == "cpu" {
 			if p.Max == nil || *p.Max != 100 {
@@ -101,5 +110,58 @@ func TestCatalogMatchesSpec(t *testing.T) {
 		} else if p.Max != nil {
 			t.Errorf("%s has unexpected max %v", p.ID, p.Max)
 		}
+	}
+}
+
+func TestReclaimCountsOnlyReadyDiskCleanup(t *testing.T) {
+	s := storySnapshot()
+	s.Summary.Reclaim = 999999
+	s.Cleanup = []cleanup.Candidate{
+		{Status: "ready", SizeKnown: true, Size: 2048}, {Status: "ready", SizeKnown: true, Size: 4096},
+		{Status: "needs_review", SizeKnown: true, Size: 8192}, {Status: "report_only", SizeKnown: true, Size: 16384},
+		{Status: "refused", SizeKnown: true, Size: 32768}, {Status: "unknown", SizeKnown: true, Size: 65536},
+	}
+	for _, candidates := range [][]cleanup.Candidate{s.Cleanup, s.Cleanup[2:], nil} {
+		s.Cleanup = candidates
+		want := float64(0)
+		if len(candidates) == 6 {
+			want = 6144
+		}
+		f, err := Run(s, RunRequest{Dashboard: Header()})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, r := range f.Results {
+			if r.ID == "reclaim" {
+				if r.Status != StatusOK || r.Frame.Rows[0][0] != want || r.Frame.Columns[0].Unit != "bytes" {
+					t.Fatalf("reclaim = %+v, want %v bytes", r, want)
+				}
+			}
+		}
+	}
+}
+
+func TestReclaimUnknownAndCapped(t *testing.T) {
+	s := storySnapshot()
+	s.Cleanup = []cleanup.Candidate{{Status: "ready", SizeKnown: true, Size: 7, SizeCapped: true}, {Status: "ready"}}
+	read := func() Result {
+		f, err := Run(s, RunRequest{Dashboard: Header()})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, r := range f.Results {
+			if r.ID == "reclaim" {
+				return r
+			}
+		}
+		t.Fatal("missing reclaim")
+		return Result{}
+	}
+	if r := read(); r.Frame.Rows[0][0] != nil {
+		t.Fatalf("partial total should be unknown: %+v", r)
+	}
+	s.Cleanup[1].SizeKnown = true
+	if r := read(); r.Frame.Rows[0][0] != float64(7) || r.Title != "Reclaimable (at least)" {
+		t.Fatalf("lost lower bound: %+v", r)
 	}
 }

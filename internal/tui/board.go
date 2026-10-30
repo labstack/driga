@@ -283,7 +283,13 @@ func (m *app) boardLayout() (string, []flowHit) {
 	add("Flow  [m Map] [t Timeline] [s Sessions] · " + mode + " · last 60m")
 	hcounts := view.ProjectAttention(m.snap.Inbox, m.snap.Agents, m.localMachine(), m.attentionPrompts()).Header(m.snap.Orphans, m.snap.Summary)
 	add(fmt.Sprintf("Need you %d · To review %d · Stuck %d", hcounts.NeedYou, hcounts.ToReview, hcounts.Stuck))
-	add(fmt.Sprintf("Leftover %d · Reclaimable %s · Memory %s/%s", hcounts.Leftover, view.HumanBytes(hcounts.Reclaimable), view.HumanBytes(hcounts.MemoryUsed), view.HumanBytes(hcounts.MemoryTotal)))
+	var reclaimable int64
+	for _, c := range m.snap.Cleanup {
+		if c.Status == "ready" {
+			reclaimable += c.Size
+		}
+	}
+	add(fmt.Sprintf("Leftover %d · Reclaimable %s · Memory %s/%s", hcounts.Leftover, view.HumanBytes(uint64(reclaimable)), view.HumanBytes(hcounts.MemoryUsed), view.HumanBytes(hcounts.MemoryTotal)))
 	add(view.BoardSpark(b.Spark) + " events/min · updated " + duration(max(time.Duration(0), m.opts.Now().Sub(b.ObservedAt))) + " ago")
 	add(fmt.Sprintf("NEEDS YOU · %d · oldest first", len(b.Needs)))
 	idx := 0

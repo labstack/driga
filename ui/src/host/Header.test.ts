@@ -1,3 +1,4 @@
+import { Broom } from "@phosphor-icons/react";
 import { describe, expect, it } from "vitest";
 import { fleet } from "../fixtures/fleet";
 import { fragments } from "../fixtures/fragments";
@@ -65,4 +66,18 @@ describe("historyOf", () => {
   f.history = { attention: [{ts: f.observed_at, waiting: 1, review: 2, stuck: null}], polls: [] };
   expect(historyOf(f).attention).toEqual({ waiting: [1], review: [2], stuck: [null] });
  });
+});
+
+it("shows cleanup disk bytes with reclaim behavior even under a custom id", () => {
+ const f = structuredClone(fragments.header);
+ const panel = f.dashboard.panels.find(p => p.id === "reclaim")!;
+ expect(panel.source).toBe("cleanup");
+ expect(panel.measure).toBe("sum:size_bytes");
+ expect(panel.where).toEqual([{ column: "status", value: "ready" }]);
+ const result = f.results.find(r => r.id === "reclaim")!;
+ panel.id = result.id = "custom_disk";
+ const tile = tilesOf(f).find(t => t.id === "custom_disk")!;
+ expect(tile.value).toBe(Math.floor(1.8 * GB) + Math.floor(3.2 * GB));
+ expect(tile.unit).toBe("bytes");
+ expect(tile.behavior).toMatchObject({ icon: Broom, target: "reclaim", direction: "down-good" });
 });

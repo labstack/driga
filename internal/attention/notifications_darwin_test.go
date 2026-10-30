@@ -4,6 +4,7 @@ package attention
 
 import (
 	"testing"
+	"time"
 
 	"github.com/ebitengine/purego/objc"
 )
@@ -25,4 +26,49 @@ func TestNativeCompletionBlockABI(t *testing.T) {
 	if options != 26 {
 		t.Fatal(options)
 	}
+}
+
+func TestServiceActivationPolicy(t *testing.T) {
+	if serviceActivationPolicy != 2 {
+		t.Fatal("service must be background-only (Prohibited)")
+	}
+}
+
+func TestDispatchMainAndWait(t *testing.T) {
+	t.Run("main thread runs inline", func(t *testing.T) {
+		ran := false
+		dispatchMainAndWait(true, func(func()) { t.Fatal("dispatching on main would deadlock before run loop starts") }, func() { ran = true })
+		if !ran {
+			t.Fatal("not run synchronously")
+		}
+	})
+	t.Run("worker waits for main queue", func(t *testing.T) {
+		queued := make(chan func(), 1)
+		done := make(chan struct{})
+		ran := false
+		go func() {
+			dispatchMainAndWait(false, func(fn func()) { queued <- fn }, func() { ran = true })
+			close(done)
+		}()
+		var fn func()
+		select {
+		case fn = <-queued:
+		case <-time.After(time.Second):
+			t.Fatal("not queued")
+		}
+		select {
+		case <-done:
+			t.Fatal("returned before main queue executed")
+		default:
+		}
+		fn()
+		select {
+		case <-done:
+		case <-time.After(time.Second):
+			t.Fatal("did not return")
+		}
+		if !ran {
+			t.Fatal("callback not run")
+		}
+	})
 }

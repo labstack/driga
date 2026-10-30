@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/labstack/driga/internal/cleanup"
 	"github.com/labstack/driga/internal/view"
 	"github.com/labstack/driga/internal/viewer"
 )
@@ -93,7 +94,16 @@ func Run(snap viewer.Snapshot, req RunRequest) (Fragment, error) {
 		if len(req.Panels) > 0 && !slices.Contains(req.Panels, p.ID) {
 			continue
 		}
-		f.Results = append(f.Results, runPanel(p, vars, rows))
+		result := runPanel(p, vars, rows)
+		if p.Source == "cleanup" && p.Measure == "sum:size_bytes" && (p.Viz == "stat" || p.Viz == "gauge") && result.Frame != nil && result.Frame.Rows[0][0] != nil {
+			for _, c := range snap.Cleanup {
+				if c.SizeCapped && len(filter(sources[p.Source], sources[p.Source].build(viewer.Snapshot{Cleanup: []cleanup.Candidate{c}, LocalMachineID: snap.LocalMachineID}), p.Where, vars)) > 0 {
+					result.Title = cmp.Or(result.Title, p.Title) + " (at least)"
+					break
+				}
+			}
+		}
+		f.Results = append(f.Results, result)
 	}
 	return f, nil
 }
@@ -284,6 +294,9 @@ func aggregate(s schema, rows [][]any, measure string) (any, string) {
 		}
 	}
 	unit := s.columns[i].Unit
+	if column == "size_bytes" && fn == "sum" && len(values) != len(rows) {
+		return nil, unit
+	}
 	// Nothing to add up is zero; rows without readings are no reading.
 	if len(rows) == 0 && fn == "sum" {
 		return 0.0, unit

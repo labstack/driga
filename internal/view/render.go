@@ -99,7 +99,7 @@ func Render(w io.Writer, v any, opts RenderOpts) error {
 			fmt.Fprintln(tw, cell(x.Warning))
 		}
 	case SummaryView:
-		fmt.Fprintf(tw, "%d agents (%d working, %d waiting, %d stuck) · inbox %d · %s · orphans %d ~%s · %s\n", x.Agents, x.Working, x.Waiting, x.Stuck, x.Inbox, HealthText(x.Sample, "%.0f"), x.Orphans, HumanBytes(x.Reclaim), opts.Envelope.Mode)
+		fmt.Fprintf(tw, "%d agents (%d working, %d waiting, %d stuck) · inbox %d · %s · orphans %d ~%s RSS · %s\n", x.Agents, x.Working, x.Waiting, x.Stuck, x.Inbox, HealthText(x.Sample, "%.0f"), x.Orphans, HumanBytes(x.Reclaim), opts.Envelope.Mode)
 	case AgentsView:
 		renderAgents(tw, x, label)
 	case AgentView:

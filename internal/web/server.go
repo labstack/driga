@@ -62,6 +62,7 @@ type confirmation struct {
 }
 
 type Server struct {
+	cleanupSizes  cleanup.SizeCache
 	confirmations map[string]confirmation
 	livePrompts   []chat.Prompt // last good live hooks; memory only
 	routes        *http.ServeMux

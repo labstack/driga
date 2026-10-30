@@ -47,6 +47,7 @@ type Candidate struct {
 	Evidence                                  []string      `json:"evidence"`
 	Status                                    string        `json:"status"`
 	Size                                      int64         `json:"size_bytes"`
+	SizeKnown                                 bool          `json:"size_known"`
 	SizeCapped                                bool          `json:"size_capped"`
 	Ignored                                   []IgnoredPath `json:"ignored"`
 	head, defaultHead, upstream, upstreamHead string
