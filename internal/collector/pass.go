@@ -373,10 +373,12 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 			return err
 		}
 		// Inbox grouping needs parent IDs before labels consume the unseen items.
-		parents := derive.LinkParents(ss, idx)
-		if err := explicitParents(tx, ss, parents); err != nil {
+		resolveParents, err := explicitParentResolver(tx, ss)
+		if err != nil {
 			return err
 		}
+		parents := linkPassParents(ss, idx, now)
+		resolveParents(parents)
 		if err := syncInbox(tx, d, ss, parents, hooks, baseline); err != nil {
 			return err
 		}
@@ -415,10 +417,8 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 				return err
 			}
 		}
-		parents = derive.LinkParents(ss, idx)
-		if err := explicitParents(tx, ss, parents); err != nil {
-			return err
-		}
+		parents = linkPassParents(ss, idx, now)
+		resolveParents(parents)
 		for i := range ss {
 			ss[i].ParentID = nil
 			if id, ok := parents[ss[i].ID]; ok {
@@ -500,11 +500,10 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 			}
 			work.procs = slices.Clone(procs)
 		}
-		for _, s := range ss {
+		for i, s := range ss {
 			before := original[s.ID]
-			current := s
-			current.Completions, current.FilesTouched, current.Events = nil, nil, nil
-			if reflect.DeepEqual(before, current) {
+			if sameSessionRow(before, s) {
+				ss[i] = before
 				continue
 			}
 			if _, err := tx.UpsertSession(s); err != nil {
@@ -534,6 +533,12 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 				return err
 			}
 		}
+		work.sessions = make([]model.Session, len(ss))
+		for i, s := range ss {
+			// Keep only row data. Transcript batches must not accumulate in run state.
+			s.Events, s.Completions, s.FilesTouched = nil, nil, nil
+			work.sessions[i] = s
+		}
 		r.Sessions, r.Procs = len(ss), len(procs)
 		return tx.SetMeta("last_pass_at", now.Format(time.RFC3339Nano))
 	})
@@ -546,9 +551,18 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 		state.procs = work.procs
 		state.logs = work.logs
 		state.panelSeen = work.panelSeen
+		state.sessions, state.sessionStore, state.sessionVersion = work.sessions, work.sessionStore, work.sessionVersion
+		state.sessionRevision = st.Revision()
 	}
 	if err == nil {
+		revision := st.Revision()
 		err = alertInbox(ctx, d, st)
+		// Alert planning commits one session-neutral metadata transaction. Do not
+		// invalidate our row index for that transaction, but keep invalidation if
+		// another writer (including a notifier callback) committed as well.
+		if err == nil && d.Notifier != nil && !d.snapshot && state.sessionRevision == revision && st.Revision() == revision+1 {
+			state.sessionRevision = revision + 1
+		}
 	}
 	return r, err
 }
@@ -558,52 +572,53 @@ func sessionKey(a, id string) string { return a + "\x00" + id }
 // Keep unresolved adapter references in transactional metadata so a parent
 // first seen after a collector restart can still be linked. Session row IDs
 // are resolved only through the local machine's store view.
-func explicitParents(tx *store.Tx, ss []model.Session, parents map[int64]int64) error {
-	stored, err := tx.Sessions(store.SessionFilter{IncludeEnded: true})
+func explicitParentResolver(tx *store.Tx, ss []model.Session) (func(map[int64]int64), error) {
+	refs, err := tx.MetaPrefix("session-parent:")
 	if err != nil {
-		return err
+		return nil, err
 	}
-	ids := make(map[string]int64, len(stored))
-	for _, s := range stored {
+	ids := make(map[string]int64, len(ss))
+	for _, s := range ss {
 		ids[sessionKey(s.Adapter, s.ExternalID)] = s.ID
 	}
+	type edge struct{ child, parent int64 }
+	var edges []edge
 	for _, s := range ss {
-		key := "session-parent:" + sessionKey(s.Adapter, s.ExternalID)
+		key := sessionKey(s.Adapter, s.ExternalID)
 		ref := s.ParentExternalID
-		if ref != "" {
-			if err := tx.SetMeta(key, ref); err != nil {
-				return err
-			}
-		} else {
-			ref, err = tx.Meta(key)
-			if err != nil && !errors.Is(err, store.ErrNotFound) {
-				return err
-			}
-		}
 		if ref == "" {
-			continue
-		}
-		// Explicit evidence also suppresses an unrelated inferred parent while
-		// the referenced row is still missing.
-		delete(parents, s.ID)
-		id := ids[sessionKey(s.Adapter, ref)]
-		if id == 0 || id == s.ID {
-			continue
-		}
-		seen := map[int64]bool{s.ID: true}
-		cycle := false
-		for p := id; p != 0; p = parents[p] {
-			if seen[p] {
-				cycle = true
-				break
+			ref = refs[key]
+		} else if refs[key] != ref {
+			if err := tx.SetMeta("session-parent:"+key, ref); err != nil {
+				return nil, err
 			}
-			seen[p] = true
 		}
-		if !cycle {
-			parents[s.ID] = id
+		if ref != "" {
+			edges = append(edges, edge{s.ID, ids[sessionKey(s.Adapter, ref)]})
 		}
 	}
-	return nil
+	// Only children with explicit evidence need resolution; both label phases
+	// reuse this index. Pending historical references still resolve on arrival.
+	return func(parents map[int64]int64) {
+		for _, e := range edges {
+			delete(parents, e.child)
+			if e.parent == 0 || e.parent == e.child {
+				continue
+			}
+			seen := map[int64]bool{e.child: true}
+			cycle := false
+			for p := e.parent; p != 0; p = parents[p] {
+				if seen[p] {
+					cycle = true
+					break
+				}
+				seen[p] = true
+			}
+			if !cycle {
+				parents[e.child] = e.parent
+			}
+		}
+	}, nil
 }
 
 func collectFeedEnabled(d Deps, dir string) (bool, error) {
@@ -1187,4 +1202,47 @@ func spoolOffsetPrefix(d Deps) string {
 		return "spool/state/"
 	}
 	return "spool/"
+}
+
+// Reconsider live and recently ended children. Historical links remain stable;
+// explicit references are resolved against the complete local identity index.
+func linkPassParents(ss []model.Session, idx derive.ProcIndex, now time.Time) map[int64]int64 {
+	candidates := make([]model.Session, 0, 32)
+	historical := make(map[int64]int64)
+	for _, s := range ss {
+		if s.EndedAt == nil || !s.EndedAt.Before(now.Add(-5*time.Minute)) {
+			candidates = append(candidates, s)
+		} else if s.ParentID != nil {
+			historical[s.ID] = *s.ParentID
+		}
+	}
+	for child, parent := range derive.LinkParents(candidates, idx) {
+		historical[child] = parent
+	}
+	return historical
+}
+
+// Compare persisted facts, excluding adapter-only batches and clock-derived
+// mixer presentation. A changed verdict, support, input or CPU sample still
+// writes immediately; elapsed time alone does not create a new observation.
+func sameSessionRow(a, b model.Session) bool {
+	normalize := func(s model.Session) model.Session {
+		s.MachineID = ""
+		s.ParentExternalID = ""
+		s.Events, s.Completions, s.FilesTouched = nil, nil, nil
+		s.Evidence = evidenceDuration.ReplaceAllString(s.Evidence, "<age>")
+		if s.Mixer != nil {
+			m := *s.Mixer
+			m.ObservedAt = time.Time{}
+			m.Evidence = evidenceDuration.ReplaceAllString(m.Evidence, "<age>")
+			m.Rows = slices.Clone(m.Rows)
+			for i := range m.Rows {
+				m.Rows[i].Age = 0
+				m.Rows[i].Strength = 0
+			}
+			s.Mixer = &m
+		}
+		return s
+	}
+	return reflect.DeepEqual(normalize(a), normalize(b))
 }

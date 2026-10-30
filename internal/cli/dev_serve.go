@@ -19,10 +19,20 @@ import (
 // dev). It is the app without its window: the same page, data, Chat and
 // actions, but no native dialogs, menus, tray or notifications.
 type DevServeCmd struct {
-	Addr string `default:"127.0.0.1:47801" help:"Loopback address to listen on."`
+	CPUProfile string        `name:"cpu-profile" type:"path" help:"Write a CPU profile of the app to this file."`
+	ProfileFor time.Duration `name:"profile-for" default:"2m" help:"How long --cpu-profile records before it stops."`
+	Addr       string        `default:"127.0.0.1:47801" help:"Loopback address to listen on."`
 }
 
 func (c DevServeCmd) Run(g *Globals) error {
+	if c.CPUProfile != "" {
+		stopProfile, err := startCPUProfile(c.CPUProfile, c.ProfileFor)
+		if err != nil {
+			return err
+		}
+		defer stopProfile()
+	}
+
 	host, _, err := net.SplitHostPort(c.Addr)
 	if err != nil {
 		return invalidUsage("--addr must be host:port")

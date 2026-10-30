@@ -33,6 +33,12 @@ func TestCPUProfileStopsAfterDuration(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
+	stop()
+	for _, suffix := range []string{".heap", ".mem.jsonl"} {
+		if fi, err := os.Stat(path + suffix); err != nil || fi.Size() == 0 {
+			t.Fatalf("missing %s: %v", suffix, err)
+		}
+	}
 	// A second profile can start, so the first one released the profiler.
 	again, err := startCPUProfile(filepath.Join(t.TempDir(), "again.pprof"), time.Hour)
 	if err != nil {

@@ -37,6 +37,8 @@ func TestAppLaunch(t *testing.T) {
 		{"command", "1", false, []string{"top"}, false},
 		{"command at login", "", true, []string{"top"}, false},
 		{"app", "", false, []string{"app"}, true},
+		{"profile equals", "", false, []string{"app", "--cpu-profile=/tmp/app.pprof"}, true},
+		{"profile", "", false, []string{"app", "--cpu-profile", "/tmp/app.pprof"}, true},
 		{"app help", "", false, []string{"app", "--help"}, false},
 		{"notification", "", false, []string{"app", "--notification", `{}`}, true},
 		{"other value", "0", false, nil, false},

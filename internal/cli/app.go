@@ -7,6 +7,8 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"strings"
+	"time"
 
 	"github.com/labstack/driga/internal/cleanup"
 	"github.com/labstack/driga/internal/config"
@@ -21,8 +23,10 @@ import (
 
 // AppCmd opens the desktop app, or focuses the running one.
 type AppCmd struct {
-	NotificationStdin bool   `hidden:"" help:"Read a notification target from standard input."`
-	Notification      string `hidden:"" help:"Desktop notification event target."`
+	CPUProfile        string        `name:"cpu-profile" type:"path" help:"Write a CPU profile of the app to this file."`
+	ProfileFor        time.Duration `name:"profile-for" default:"2m" help:"How long --cpu-profile records before it stops."`
+	NotificationStdin bool          `hidden:"" help:"Read a notification target from standard input."`
+	Notification      string        `hidden:"" help:"Desktop notification event target."`
 }
 
 var (
@@ -47,16 +51,24 @@ var (
 func AppLaunch(args []string) bool {
 	login := len(args) == 0 && os.Getenv("DRIGA_APP") != "1" && openedAtLogin()
 	app := appLaunch(os.Getenv, login, args)
-	systemLaunch = app && (len(args) == 0 || len(args) > 1 && (args[1] == "--notification" || args[1] == "--notification-stdin") && os.Getenv("DRIGA_APP") == "1")
+	systemLaunch = app && (len(args) == 0 || os.Getenv("DRIGA_APP") == "1")
 	_ = os.Unsetenv("DRIGA_APP")
 	return app
 }
 
 // appLaunch decides app mode: `driga app`, or a bare launch by the system.
 func appLaunch(env func(string) string, openedAtLogin bool, args []string) bool {
-	if len(args) >= 1 && args[0] == "app" && (len(args) == 1 || (args[1] == "--notification" || args[1] == "--notification-stdin")) {
-		return true
+	if len(args) > 0 && args[0] == "app" {
+		if len(args) == 1 {
+			return true
+		}
+		flag, _, _ := strings.Cut(args[1], "=")
+		switch flag {
+		case "--notification", "--notification-stdin", "--cpu-profile", "--profile-for":
+			return true
+		}
 	}
+
 	return len(args) == 0 && (env("DRIGA_APP") == "1" || openedAtLogin)
 }
 
@@ -104,9 +116,23 @@ func (c AppCmd) Run(g *Globals) error {
 		}
 		args = []string{"app", "--notification", c.Notification}
 	}
+	if c.CPUProfile != "" {
+		if len(args) == 0 {
+			args = []string{"app"}
+		}
+		args = append(args, "--cpu-profile", c.CPUProfile, "--profile-for", c.ProfileFor.String())
+	}
 	if handed, err := handOffApp(systemLaunch || c.NotificationStdin, args...); handed || err != nil {
 		return err
 	}
+	if c.CPUProfile != "" {
+		stopProfile, err := startCPUProfile(c.CPUProfile, c.ProfileFor)
+		if err != nil {
+			return err
+		}
+		defer stopProfile()
+	}
+
 	restore := appLogging()
 	defer restore()
 	// Opened from Finder or at login, an error here would reach no one: the

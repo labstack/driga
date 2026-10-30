@@ -128,12 +128,20 @@ func (tx *Tx) ObserveMCP(at time.Time, samples []model.MCPObservation) error {
 // Endpoints are chronological within each group; groups can interleave.
 func (q *querier) ScanMCPHistory(since, until time.Time, visit func(model.MCPObservation) error) error {
 	since = maxTime(since, until.Add(-30*24*time.Hour)).Truncate(time.Minute)
-	rows, err := q.conn.QueryContext(q.ctx, `SELECT `+mcpStateColumns+`,
- CASE WHEN s.resolution=60 THEN (SELECT MIN(at) FROM mcp_clock c WHERE c.machine_id=s.machine_id AND c.at>=MAX(s.first_at,?) AND c.at<=MIN(s.last_at,?)) ELSE s.last_at END,
- CASE WHEN s.resolution=60 THEN (SELECT MAX(at) FROM mcp_clock c WHERE c.machine_id=s.machine_id AND c.at>=MAX(s.first_at,?) AND c.at<=MIN(s.last_at,?)) ELSE s.last_at END
+	// Resolve run endpoints against one bounded shared clock in memory. Two
+	// correlated MIN/MAX subqueries per state repeatedly reread the same pages.
+	clock, err := readMany(q, `SELECT at FROM mcp_clock WHERE machine_id=? AND at>=? AND at<=? ORDER BY at`, []any{q.machineID, unix(since), unix(until)}, func(s scanner) (int64, error) {
+		var at int64
+		err := s.Scan(&at)
+		return at, err
+	})
+	if err != nil {
+		return err
+	}
+	rows, err := q.conn.QueryContext(q.ctx, `SELECT `+mcpStateColumns+`
  FROM mcp_states s JOIN mcp_groups g ON g.id=s.group_id JOIN mcp_labels l ON l.id=s.labels_id
  WHERE s.machine_id=? AND s.first_at>=? AND s.first_at<=? AND s.last_at>=?
- ORDER BY s.first_at,s.group_id`, unix(since), unix(until), unix(since), unix(until), q.machineID, unix(since.Truncate(time.Hour)), unix(until), unix(since))
+ ORDER BY s.first_at,s.group_id`, q.machineID, unix(since.Truncate(time.Hour)), unix(until), unix(since))
 	if err != nil {
 		return err
 	}
@@ -141,24 +149,33 @@ func (q *querier) ScanMCPHistory(since, until time.Time, visit func(model.MCPObs
 	for rows.Next() {
 		var r mcpState
 		var start int64
-		var first, last *int64
-		err := rows.Scan(&r.id, &r.first, &r.last, &r.sample.Host.PID, &start, &r.sample.Key, &r.sample.Host.Name, &r.sample.Host.Exe, &r.sample.Host.Cwd, &r.sample.Name, &r.sample.Count, &r.sample.Footprint, &r.members, &r.sample.ResolutionSeconds, &first, &last)
+		var first, last int64
+		err := rows.Scan(&r.id, &r.first, &r.last, &r.sample.Host.PID, &start, &r.sample.Key, &r.sample.Host.Name, &r.sample.Host.Exe, &r.sample.Host.Cwd, &r.sample.Name, &r.sample.Count, &r.sample.Footprint, &r.members, &r.sample.ResolutionSeconds)
 		if err != nil {
 			return err
 		}
-		if first == nil || last == nil || *last > unix(until) {
+		first, last = r.last, r.last
+		if r.sample.ResolutionSeconds == 60 {
+			lo := sort.Search(len(clock), func(i int) bool { return clock[i] >= r.first })
+			hi := sort.Search(len(clock), func(i int) bool { return clock[i] > r.last })
+			if lo >= hi {
+				continue
+			}
+			first, last = clock[lo], clock[hi-1]
+		}
+		if last > unix(until) {
 			continue
 		}
 		r.sample.Host.StartedAt = fromUnix(start)
 		if err := json.Unmarshal([]byte(r.members), &r.sample.Members); err != nil {
 			return err
 		}
-		r.sample.At = fromUnix(*first)
+		r.sample.At = fromUnix(first)
 		if err := visit(r.sample); err != nil {
 			return err
 		}
-		if *last != *first {
-			r.sample.At = fromUnix(*last)
+		if last != first {
+			r.sample.At = fromUnix(last)
 			if err := visit(r.sample); err != nil {
 				return err
 			}

@@ -75,6 +75,13 @@ func (s *Server) cachedLoad(ctx context.Context, scope store.Scope, all bool) (v
 		s.cacheMu.Lock()
 		delete(s.snapshotLoads, key)
 		if load.err == nil {
+			// A new store version invalidates every old overview. Keeping those
+			// snapshots until the size cap retained entire process/event histories.
+			for old, cached := range s.cache {
+				if old.version != version || time.Since(cached.at) >= 15*time.Second {
+					delete(s.cache, old)
+				}
+			}
 			if s.cache == nil || len(s.cache) >= 32 {
 				s.cache = map[snapshotKey]cachedSnapshot{}
 			}

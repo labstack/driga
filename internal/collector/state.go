@@ -6,20 +6,25 @@ import (
 	"time"
 
 	"github.com/labstack/driga/internal/model"
+	"github.com/labstack/driga/internal/store"
 )
 
 // State retains sampling and process ownership evidence between passes. It is
 // private to a collector run and is never written to disk.
 type State struct {
-	mu          sync.Mutex
-	prev        map[int32]model.Proc
-	prevAt      time.Time
-	prevMachine model.MachineSample
-	cwds        map[int32]cwdResult
-	cwdsAt      time.Time
-	cwdNext     int
-	spawn       map[string]int64
-	gitFullAt   time.Time
+	mu              sync.Mutex
+	sessions        []model.Session
+	sessionStore    *store.Store
+	sessionVersion  int64
+	sessionRevision uint64
+	prev            map[int32]model.Proc
+	prevAt          time.Time
+	prevMachine     model.MachineSample
+	cwds            map[int32]cwdResult
+	cwdsAt          time.Time
+	cwdNext         int
+	spawn           map[string]int64
+	gitFullAt       time.Time
 	// procs is the process table this run last wrote, or nil before the first
 	// successful scan, when the stored rows are the only source.
 	procs     []model.Proc
@@ -42,7 +47,7 @@ func NewState() *State {
 // replaces prev, spawn, procs and logs wholesale and never writes into them, so
 // they are shared; only the cwd cache is updated in place and is copied.
 func (s *State) copy() *State {
-	n := &State{prev: s.prev, spawn: s.spawn, procs: s.procs, logs: s.logs, cwds: make(map[int32]cwdResult, len(s.cwds))}
+	n := &State{sessions: s.sessions, sessionStore: s.sessionStore, sessionVersion: s.sessionVersion, sessionRevision: s.sessionRevision, prev: s.prev, spawn: s.spawn, procs: s.procs, logs: s.logs, cwds: make(map[int32]cwdResult, len(s.cwds))}
 	n.prevAt, n.cwdsAt, n.gitFullAt = s.prevAt, s.cwdsAt, s.gitFullAt
 	n.cwdNext = s.cwdNext
 	n.prevMachine = s.prevMachine

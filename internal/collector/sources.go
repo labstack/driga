@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -101,7 +102,17 @@ func collectSources(ctx context.Context, d Deps, st *store.Store, p Plan, state 
 	if err != nil {
 		return r, err
 	}
-	ss, err := st.Sessions(store.SessionFilter{IncludeEnded: true})
+	version, err := st.DataVersion(ctx)
+	if err != nil {
+		return r, err
+	}
+	var ss []model.Session
+	if state.sessions != nil && state.sessionStore == st && state.sessionVersion == version && state.sessionRevision == st.Revision() {
+		ss = slices.Clone(state.sessions)
+	} else {
+		ss, err = st.Sessions(store.SessionFilter{IncludeEnded: true})
+	}
+	state.sessionStore, state.sessionVersion = st, version
 	if err != nil {
 		return r, err
 	}
