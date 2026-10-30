@@ -12,6 +12,8 @@ import (
 	"github.com/labstack/driga/internal/view"
 )
 
+var panelCleanupSizes cleanup.SizeCache
+
 // runPanels runs a dashboard over one snapshot of every machine, the same
 // read the app's views use. Disk candidates are inspected only when a panel
 // shows them, since that walks the local worktrees.
@@ -38,7 +40,7 @@ func runPanels(ctx context.Context, g *Globals, req panel.RunRequest) (panel.Fra
 		local.Machine = "local"
 		if envelope, err := cleanupRead(ctx, &local, "", false, true); err == nil {
 			if candidates, ok := envelope.Data.([]cleanup.Candidate); ok {
-				snap.Cleanup = candidates
+				snap.Cleanup = panelCleanupSizes.Snapshot(candidates)
 			}
 		}
 	}

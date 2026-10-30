@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/labstack/driga/internal/cleanup"
 	"github.com/labstack/driga/internal/view"
 	"github.com/labstack/driga/internal/viewer"
 )
@@ -195,7 +196,7 @@ var sources = map[string]schema{
 		build: func(s viewer.Snapshot) [][]any {
 			rows := make([][]any, 0, len(s.Cleanup))
 			for _, c := range s.Cleanup {
-				rows = append(rows, []any{c.ID, string(c.Kind), c.Path, c.Repo, c.Branch, c.Status, float64(c.Size), s.LocalMachineID})
+				rows = append(rows, []any{c.ID, string(c.Kind), c.Path, c.Repo, c.Branch, c.Status, cleanupSize(c), s.LocalMachineID})
 			}
 			return rows
 		},
@@ -494,4 +495,11 @@ func filesFor(s viewer.Snapshot, machine string, id int64) string {
 type sessionKey struct {
 	machine string
 	id      int64
+}
+
+func cleanupSize(c cleanup.Candidate) any {
+	if !c.SizeKnown {
+		return nil
+	}
+	return float64(c.Size)
 }

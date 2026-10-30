@@ -11,7 +11,7 @@ const behaviors: Record<string, TileBehavior> = {
   "summary:sum:to_review": { icon: Eye, attention: "review", target: "inbox", direction: "neutral" },
   "summary:sum:attention_stuck": { icon: Hourglass, attention: "stuck", target: "stuck", direction: "down-good" },
   "summary:sum:leftover_bytes": { icon: TreeStructure, target: "leftover", direction: "down-good", countNouns: { leftover: ["tree", "trees"] } },
-  "summary:sum:reclaim_bytes": { icon: Broom, target: "reclaim", direction: "down-good" },
+  "cleanup:sum:size_bytes": { icon: Broom, target: "reclaim", direction: "down-good" },
   "local_activity:max:mem_used_bytes": { icon: Memory, target: "memory", direction: "down-good", sublabel: "local-machine" },
   "local_activity:max:cpu_percent": { icon: Cpu, direction: "down-good", sublabel: "local-machine" },
   "local_activity:max:disk_used_bytes": { icon: HardDrives, direction: "down-good", sublabel: "local-machine" },

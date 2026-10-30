@@ -28,7 +28,7 @@ func snapshot() viewer.Snapshot {
 		{InboxItem: model.InboxItem{ID: "long", Kind: "waiting", SessionID: 1}, Project: "core", MachineFresh: local, Waited: time.Hour},
 		{InboxItem: model.InboxItem{ID: "old", Kind: "waiting"}, Historical: true},
 	}
-	s.Cleanup = []cleanup.Candidate{{ID: "wt", Kind: "worktree", Path: "/src/core-wt", Status: "ready", Size: 2048}}
+	s.Cleanup = []cleanup.Candidate{{ID: "wt", Kind: "worktree", Path: "/src/core-wt", Status: "ready", SizeKnown: true, Size: 2048}}
 	s.Activity.Machines = []view.ActivityMachine{{MachineFresh: local, Buckets: []view.ActivityBucket{
 		{TS: now.Add(-time.Minute), Events: 4, Sample: &model.MachineSample{MemUsed: 10}},
 		{TS: now, Events: 2},

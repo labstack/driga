@@ -3,6 +3,8 @@ package web
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -239,5 +241,52 @@ func TestCancelledSnapshotLeaderDoesNotPoisonWaiter(t *testing.T) {
 	}
 	if calls.Load() != 2 {
 		t.Fatalf("loads %d", calls.Load())
+	}
+}
+
+func TestCleanupSizesReachHeaderWithoutRelisting(t *testing.T) {
+	s, _, _, _ := fixture(t)
+	var candidates []cleanup.Candidate
+	for i, contents := range []string{"abc", "12345"} {
+		path := filepath.Join(t.TempDir(), "data")
+		if err := os.WriteFile(path, []byte(contents), 0600); err != nil {
+			t.Fatal(err)
+		}
+		candidates = append(candidates, cleanup.Candidate{ID: string(rune('a' + i)), Path: path, Status: "ready"})
+	}
+	candidates = append(candidates, cleanup.Candidate{Status: "refused", Size: 1000}, cleanup.Candidate{Status: "report_only", Size: 1000})
+	calls := 0
+	s.opts.CleanupList = func(context.Context) ([]cleanup.Candidate, error) { calls++; return candidates, nil }
+	read := func() any {
+		t.Helper()
+		f, err := s.runPanels(context.Background(), panel.RunRequest{Dashboard: panel.Header()})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, r := range f.Results {
+			if r.ID == "reclaim" {
+				return r.Frame.Rows[0][0]
+			}
+		}
+		t.Fatal("missing reclaim")
+		return nil
+	}
+	if v := read(); v != nil {
+		t.Fatalf("first load = %v, want unknown", v)
+	}
+	deadline := time.Now().Add(3 * time.Second)
+	for read() != float64(8) {
+		if time.Now().After(deadline) {
+			t.Fatal("header never received measured sum")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if calls != 1 {
+		t.Fatalf("relisted %d times", calls)
+	}
+	candidates = candidates[1:]
+	s.cleanupAt = time.Time{}
+	if v := read(); v != float64(5) {
+		t.Fatalf("removed candidate still counted: %v", v)
 	}
 }

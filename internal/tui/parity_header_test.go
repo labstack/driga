@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/labstack/driga/internal/chat"
+	"github.com/labstack/driga/internal/cleanup"
 	"github.com/labstack/driga/internal/model"
 	panels "github.com/labstack/driga/internal/panel"
 	"github.com/labstack/driga/internal/store"
@@ -138,7 +139,8 @@ func TestFlowPulseUsesSharedAttentionAndHygiene(t *testing.T) {
 	m.prompts = []chat.Prompt{{SessionID: 1}, {SessionID: 3}}
 	m.snap.Agents.Rows = []view.AgentRow{{Label: "~stuck"}}
 	m.snap.Orphans.Rows = []view.OrphanRow{{}}
-	m.snap.Summary.Reclaim = 70
+	m.snap.Summary.Reclaim = 99999
+	m.snap.Cleanup = []cleanup.Candidate{{Status: "ready", Size: 70}, {Status: "needs_review", Size: 1000}, {Status: "report_only", Size: 2000}, {Status: "refused", Size: 4000}}
 	m.snap.Summary.Sample.MemUsed = 50
 	m.snap.Summary.Sample.MemTotal = 100
 	got, _ := m.boardLayout()

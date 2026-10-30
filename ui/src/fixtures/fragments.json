@@ -3269,8 +3269,14 @@
      "id": "reclaim",
      "title": "Reclaimable",
      "viz": "stat",
-     "source": "summary",
-     "measure": "sum:reclaim_bytes"
+     "source": "cleanup",
+     "where": [
+      {
+       "column": "status",
+       "value": "ready"
+      }
+     ],
+     "measure": "sum:size_bytes"
     },
     {
      "id": "memory",
@@ -3369,7 +3375,7 @@
      ],
      "rows": [
       [
-       5368709120
+       5368709119
       ]
      ]
     }
@@ -4014,8 +4020,14 @@
      "id": "reclaim",
      "title": "Reclaimable",
      "viz": "stat",
-     "source": "summary",
-     "measure": "sum:reclaim_bytes"
+     "source": "cleanup",
+     "where": [
+      {
+       "column": "status",
+       "value": "ready"
+      }
+     ],
+     "measure": "sum:size_bytes"
     },
     {
      "id": "memory",
@@ -4201,7 +4213,7 @@
      ],
      "rows": [
       [
-       5368709120
+       5368709119
       ]
      ]
     }
@@ -5374,8 +5386,14 @@
      "id": "reclaim",
      "title": "Reclaimable",
      "viz": "stat",
-     "source": "summary",
-     "measure": "sum:reclaim_bytes"
+     "source": "cleanup",
+     "where": [
+      {
+       "column": "status",
+       "value": "ready"
+      }
+     ],
+     "measure": "sum:size_bytes"
     },
     {
      "id": "memory",

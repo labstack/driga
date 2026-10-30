@@ -64,9 +64,9 @@ func storySnapshot() viewer.Snapshot {
 		{MachineID: "studio-id", MachineFresh: studio, Orphan: model.Orphan{ID: "5150:1", RootPID: 5150, Signature: "jest --watch", ProcCount: 6, RSSTotal: gb(1.2), Cwd: "/home/dev/src/harbor"}, Age: 40 * time.Minute},
 	}
 	s.Cleanup = []cleanup.Candidate{
-		{ID: "wt-1", Kind: "worktree", Path: "/home/dev/src/harbor-wt/fix-cart", Repo: "harbor", Branch: "fix/cart", Status: "ready", Size: int64(gb(1.8))},
-		{ID: "wt-2", Kind: "worktree", Path: "/home/dev/src/atlas-wt/spike", Repo: "atlas", Branch: "spike/cache", Status: "dirty", Size: int64(mb(640))},
-		{ID: "tmp-1", Kind: "scratch", Path: "/tmp/agent-scratch-7", Status: "ready", Size: int64(gb(3.2))},
+		{ID: "wt-1", Kind: "worktree", Path: "/home/dev/src/harbor-wt/fix-cart", Repo: "harbor", Branch: "fix/cart", Status: "ready", SizeKnown: true, Size: int64(gb(1.8))},
+		{ID: "wt-2", Kind: "worktree", Path: "/home/dev/src/atlas-wt/spike", Repo: "atlas", Branch: "spike/cache", Status: "dirty", SizeKnown: true, Size: int64(mb(640))},
+		{ID: "tmp-1", Kind: "scratch", Path: "/tmp/agent-scratch-7", Status: "ready", SizeKnown: true, Size: int64(gb(3.2))},
 	}
 	s.Summary = view.SummaryView{MachineID: "studio-id", Agents: 9, Working: 3, Waiting: 2, Stuck: 1, Inbox: 8, Orphans: 2, Reclaim: gb(5.0)}
 	s.Machine.SessionCosts = []view.SessionCost{

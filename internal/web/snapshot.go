@@ -95,7 +95,7 @@ func (s *Server) cachedCleanup(ctx context.Context) ([]cleanup.Candidate, error)
 		if !s.cleanupAt.IsZero() && time.Since(s.cleanupAt) < time.Minute {
 			rows := s.cleanupRows
 			s.cacheMu.Unlock()
-			return rows, nil
+			return s.cleanupSizes.Snapshot(rows), nil
 		}
 		if load := s.cleanupLoad; load != nil {
 			s.cacheMu.Unlock()
@@ -106,7 +106,10 @@ func (s *Server) cachedCleanup(ctx context.Context) ([]cleanup.Candidate, error)
 				if cancelledLoad(load.err) && ctx.Err() == nil {
 					continue
 				}
-				return load.rows, load.err
+				if load.err != nil {
+					return nil, load.err
+				}
+				return s.cleanupSizes.Snapshot(load.rows), nil
 			}
 		}
 		load := &cleanupLoad{done: make(chan struct{})}
@@ -121,7 +124,10 @@ func (s *Server) cachedCleanup(ctx context.Context) ([]cleanup.Candidate, error)
 		}
 		close(load.done)
 		s.cacheMu.Unlock()
-		return load.rows, load.err
+		if load.err != nil {
+			return nil, load.err
+		}
+		return s.cleanupSizes.Snapshot(load.rows), nil
 	}
 }
 

@@ -14,7 +14,7 @@ func TestHeaderCountsSharesAttentionAndHygiene(t *testing.T) {
 	agents := AgentsView{Rows: []AgentRow{{Label: "~stuck", Children: []AgentRow{{Label: "stuck"}}}}}
 	orphans := OrphansView{Rows: []OrphanRow{{Orphan: model.Orphan{RSSTotal: 30}}, {Orphan: model.Orphan{RSSTotal: 40}}}}
 	h := ProjectAttention(inbox, agents, "", nil).Header(orphans, SummaryView{Reclaim: 70, Sample: model.MachineSample{MemUsed: 50, MemTotal: 100}})
-	if h.NeedYou != 2 || h.ToReview != 4 || h.Stuck != 2 || h.Leftover != 2 || h.LeftoverBytes != 70 || h.Reclaimable != 70 || h.MemoryUsed != 50 || h.MemoryTotal != 100 {
+	if h.NeedYou != 2 || h.ToReview != 4 || h.Stuck != 2 || h.Leftover != 2 || h.LeftoverBytes != 70 || h.MemoryUsed != 50 || h.MemoryTotal != 100 {
 		t.Fatal(h)
 	}
 }
