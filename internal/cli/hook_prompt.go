@@ -20,7 +20,7 @@ type permissionPayload struct {
 func promptBroker() (*chat.Remote, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
-	return chat.Dial(ctx, config.DataDir())
+	return chat.DialHook(ctx, config.DataDir())
 }
 func endPromptSession(session, cwd string) {
 	c, err := promptBroker()

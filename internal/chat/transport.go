@@ -273,23 +273,39 @@ type Remote struct {
 }
 
 func Dial(ctx context.Context, dataDir string) (*Remote, error) {
-	path := SocketPath(dataDir)
-	c, err := dialPath(ctx, path)
+	c, err := DialHook(ctx, dataDir)
 	if err != nil {
 		return nil, err
 	}
-	c.keyPath = filepath.Join(dataDir, "chat.key")
-	key, err := os.ReadFile(c.keyPath)
-	if err == nil {
-		c.token = string(key)
-		err = c.call(ctx, "GET", "/health", nil, nil)
-	}
-	if err != nil {
+	if err := c.call(ctx, "GET", "/health", nil, nil); err != nil {
 		c.Close()
 		return nil, err
 	}
 	return c, nil
 }
+
+// DialHook prepares an authenticated hook client without a health preflight.
+// Registration must be the first request: a slow health response must not
+// consume the hook's short connection budget and silently lose the prompt.
+// The request itself verifies the token and bounds the actual socket dial.
+func DialHook(ctx context.Context, dataDir string) (*Remote, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	c, err := dialPath(ctx, SocketPath(dataDir))
+	if err != nil {
+		return nil, err
+	}
+	c.keyPath = filepath.Join(dataDir, "chat.key")
+	key, err := os.ReadFile(c.keyPath)
+	if err != nil {
+		c.Close()
+		return nil, err
+	}
+	c.token = string(key)
+	return c, nil
+}
+
 func dialPath(ctx context.Context, path string) (*Remote, error) {
 	if err := fleet.CheckSocketDir(path); err != nil {
 		return nil, err
