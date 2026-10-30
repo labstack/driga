@@ -40,3 +40,17 @@ func TestResolvedReexecKeepsInvocationIdentity(t *testing.T) {
 		})
 	}
 }
+
+func TestDoctorUsesServiceIdentity(t *testing.T) {
+	const app = "/Applications/Driga.app/Contents/"
+	helper := app + "Helpers/Driga Service.app/Contents/MacOS/drigad"
+	if got := doctorExecutable(app + "MacOS/driga"); got != helper {
+		t.Fatal(got)
+	}
+	if got := doctorExecutable(helper); got != helper {
+		t.Fatal("doctor reexec loop:", got)
+	}
+	if got := doctorExecutable("/tmp/driga"); got != "/tmp/driga" {
+		t.Fatal(got)
+	}
+}

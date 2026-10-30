@@ -2,12 +2,15 @@ package scripts_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+
+	"go.yaml.in/yaml/v3"
 )
 
 func TestMacOSAppBuildHook(t *testing.T) {
@@ -81,6 +84,11 @@ esac
 				calls := string(trace)
 				if !strings.Contains(calls, "--options runtime --timestamp") || !strings.Contains(calls, "notarytool submit") || !strings.Contains(calls, "--key-id KEYID") || strings.Contains(calls, "keychain-profile") {
 					t.Fatal(calls)
+				}
+				helperSign := strings.Index(calls, "--options runtime --timestamp "+filepath.Join(root, "target", "Driga.app", "Contents", "Helpers", "Driga Service.app")+"\n")
+				outerSign := strings.Index(calls, "--options runtime --timestamp "+filepath.Join(root, "target", "Driga.app")+"\n")
+				if helperSign < 0 || outerSign <= helperSign {
+					t.Fatal("helper must be signed with hardened runtime before outer app:", calls)
 				}
 				staple := strings.Contains(calls, "stapler staple")
 				if staple != test.succeeds {
@@ -167,5 +175,105 @@ func TestMacOSAppPlistLaunchesInAppMode(t *testing.T) {
 	}
 	if info["NSHighResolutionCapable"] != true {
 		t.Errorf("NSHighResolutionCapable = %v, want true", info["NSHighResolutionCapable"])
+	}
+}
+
+func TestMacOSHelperPlist(t *testing.T) {
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 unavailable")
+	}
+	app := filepath.Join(t.TempDir(), "Driga.app")
+	bin := filepath.Join(app, "Contents", "MacOS", "driga")
+	if err := os.MkdirAll(filepath.Dir(bin), 0700); err != nil {
+		t.Fatal(err)
+	}
+	writeFixtureFile(t, bin, "fixture", 0700)
+	cmd := exec.CommandContext(t.Context(), "python3", "macos-app.py", app, "2026.10.23-alpha")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("%v: %s", err, out)
+	}
+	check := `import pathlib,plistlib,sys
+app=pathlib.Path(sys.argv[1])/"Contents"
+h=app/"Helpers/Driga Service.app/Contents"
+i=plistlib.loads((h/"Info.plist").read_bytes())
+assert i["CFBundleIdentifier"] == "run.driga.service"
+assert i["CFBundleExecutable"] == "drigad"
+assert i["CFBundlePackageType"] == "APPL"
+assert i["LSBackgroundOnly"] is True
+assert "LSEnvironment" not in i
+assert i["CFBundleVersion"] == "2026.10.23"
+assert i["DrigaReleaseVersion"] == "2026.10.23-alpha"
+assert (h/"Resources"/i["CFBundleIconFile"]).read_bytes() == (app/"Resources/Driga.icns").read_bytes()
+assert (h/"MacOS/drigad").read_bytes() == (app/"MacOS/driga").read_bytes()
+assert sys.platform == "win32" or (h/"MacOS/drigad").stat().st_mode & 0o111  # Windows has no execute bits
+assert not (app/"MacOS/drigad").exists()
+`
+	cmd = exec.CommandContext(t.Context(), "python3", "-c", check, app)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("%v: %s", err, out)
+	}
+}
+
+func TestMacOSReleaseVerificationOrder(t *testing.T) {
+	data, err := os.ReadFile("verify-release-dist.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(data)
+	helper := strings.Index(s, `codesign --verify --strict --verbose=2 "$app_temp/Driga.app/Contents/Helpers/Driga Service.app"`)
+	outer := strings.Index(s, `codesign --verify --deep --strict --verbose=2 "$app_temp/Driga.app"`)
+	if helper < 0 || outer <= helper {
+		t.Fatal("verify nested bundle before outer seal")
+	}
+}
+
+// Execute the generated Ruby block with a fake cask DSL. No installation or
+// launchctl is reachable; only an existing service should trigger migration.
+func TestMacOSCaskRepairsExistingServiceOnly(t *testing.T) {
+	if _, err := exec.LookPath("ruby"); err != nil {
+		t.Skip("ruby unavailable")
+	}
+	var config struct {
+		Casks []struct {
+			Block string `yaml:"custom_block"`
+		} `yaml:"homebrew_casks"`
+	}
+	if err := yaml.Unmarshal([]byte(readRepositoryFile(t, "../.goreleaser.yaml")), &config); err != nil {
+		t.Fatal(err)
+	}
+	if len(config.Casks) != 1 {
+		t.Fatal("expected one cask")
+	}
+	for _, existing := range []bool{false, true} {
+		setup := `
+$calls = []
+def app(name); end
+def appdir; "/Applications"; end
+def postflight; yield; end
+def system_command(name, **opts)
+ $calls << [name, opts]
+ Struct.new(:stdout).new('{"EnvironmentVariables":{"DRIGA_DATA_DIR":"/custom/data","PATH":"/custom/bin:/usr/bin"}}')
+end
+class File
+ def self.exist?(path)
+  raise "wrong migration guard" unless path.end_with?("/Library/LaunchAgents/run.driga.service.plist")
+  ENV["EXISTING_SERVICE"] == "true"
+ end
+end
+`
+		check := `
+if ENV["EXISTING_SERVICE"] == "true"
+ raise "plist not read" unless $calls.length == 2 && $calls[0] == ["/usr/bin/plutil", {args: ["-convert", "json", "-o", "-", File.expand_path("~/Library/LaunchAgents/run.driga.service.plist")], must_succeed: true}]
+ expected = ["/Applications/Driga.app/Contents/MacOS/driga", {args: ["service", "install"], env: {"DRIGA_DATA_DIR" => "/custom/data", "PATH" => "/custom/bin:/usr/bin"}, must_succeed: true}]
+ raise "environment or command changed: #{$calls}" unless $calls[1] == expected
+else
+ raise "fresh install started service" unless $calls.empty?
+end
+`
+		cmd := exec.CommandContext(t.Context(), "ruby", "-e", setup+config.Casks[0].Block+check)
+		cmd.Env = append(releaseTestEnv(t), "EXISTING_SERVICE="+fmt.Sprint(existing))
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("existing=%v: %v: %s", existing, err, out)
+		}
 	}
 }

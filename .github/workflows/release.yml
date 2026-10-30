@@ -115,7 +115,7 @@ jobs:
 
       # The published artifacts, not a snapshot of them. Until this ran here,
       # nothing checked what a user actually downloads.
-      - name: Verify published artifacts
+      - name: Verify published artifacts and nested service signatures
         env:
           DRIGA_VERIFY_SIGNATURES: "true"
         run: scripts/verify-release-dist.sh dist

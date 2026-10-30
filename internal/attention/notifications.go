@@ -6,11 +6,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/labstack/driga/internal/model"
 	"log/slog"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
+
+	"github.com/labstack/driga/internal/model"
+	"github.com/labstack/driga/internal/self"
 )
 
 // ErrNotificationsDenied means macOS has Driga's notifications turned off.
@@ -19,7 +22,7 @@ var ErrNotificationsDenied = errors.New("Driga is not allowed to send notificati
 // MacNotificationSettings opens Driga's page in System Settings > Notifications.
 // macOS asks only once, so after a refusal or a prompt withdrawn by a restart
 // this is the only way to turn notifications on.
-const MacNotificationSettings = `open "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=run.driga"`
+const MacNotificationSettings = `open "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=run.driga.service"`
 
 // NativeNotificationRequest is the value-only boundary to UserNotifications.
 // No Objective-C objects escape the Darwin implementation.
@@ -163,9 +166,19 @@ func notificationResponse(ctx context.Context, r Runner, path, action, itemID, m
 	if action != notificationDefaultAction || path == "" || r == nil {
 		return nil
 	}
-	if filepath.Base(path) == "drigad" {
-		path = filepath.Join(filepath.Dir(path), "driga")
+	cli := self.CLI(path)
+	if cli != path && strings.Contains(path, "Driga Service.app") {
+		// Activate the GUI identity first. The CLI below delivers the private
+		// target to its single-instance IPC without putting it in open's argv.
+		if _, err := r.Run(ctx, "open", "-b", "run.driga"); err != nil {
+			return err
+		}
+		// If the stdin launcher wins the GUI's single-instance lock during
+		// startup, it becomes the app. A notification callback's deadline
+		// must never kill that app fifteen seconds later.
+		ctx = context.WithoutCancel(ctx)
 	}
+	path = cli
 	target, _ := json.Marshal(model.NotificationTarget{ItemID: itemID, MachineID: machineID, Kind: kind})
 	input, ok := r.(interface {
 		RunInput(context.Context, []byte, string, ...string) ([]byte, error)
@@ -177,15 +190,12 @@ func notificationResponse(ctx context.Context, r Runner, path, action, itemID, m
 	return err
 }
 
-// drigaAppExecutable reports whether path is one of Driga.app's executables:
-// driga, the app and CLI, or drigad, the Driga service.
+// drigaAppExecutable permits native notifications only in the service helper.
 func drigaAppExecutable(path string) bool {
 	resolved, err := filepath.EvalSymlinks(path)
 	if err != nil {
 		return false
 	}
-	base := filepath.Base(resolved)
-	return (base == "driga" || base == "drigad") && filepath.Base(filepath.Dir(resolved)) == "MacOS" &&
-		filepath.Base(filepath.Dir(filepath.Dir(resolved))) == "Contents" &&
-		filepath.Base(filepath.Dir(filepath.Dir(filepath.Dir(resolved)))) == "Driga.app"
+	return filepath.Base(resolved) == "drigad" && self.CLI(resolved) != resolved &&
+		strings.Contains(resolved, string(filepath.Separator)+filepath.Join("Contents", "Helpers", "Driga Service.app")+string(filepath.Separator))
 }

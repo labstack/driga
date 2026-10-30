@@ -27,10 +27,11 @@ func TestLaunchdInstallRepairsAndIsIdempotent(t *testing.T) {
 	root := t.TempDir()
 	bin := filepath.Join(root, "Driga.app", "Contents", "MacOS", "driga")
 	path := filepath.Join(root, "collector.plist")
-	old, err := renderLaunchd(configForOS("/opt/homebrew/bin/driga", "darwin"))
+	old, err := renderLaunchd(configForOS(bin, "darwin"))
 	if err != nil {
 		t.Fatal(err)
 	}
+	old = []byte(strings.ReplaceAll(strings.ReplaceAll(string(old), "Contents/Helpers/Driga Service.app/Contents/MacOS/drigad", "Contents/MacOS/drigad"), "<string>run.driga.service</string>", "<string>run.driga</string>"))
 	if err := os.WriteFile(path, old, 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -38,7 +39,7 @@ func TestLaunchdInstallRepairsAndIsIdempotent(t *testing.T) {
 	registrations := 0
 	s := &launchdController{Controller: controller, binPath: bin, plistPath: path,
 		register: func(app string) error {
-			if app != filepath.Join(root, "Driga.app") {
+			if app != filepath.Join(root, "Driga.app") && app != filepath.Join(root, "Driga.app", "Contents", "Helpers", "Driga Service.app") {
 				t.Fatal(app)
 			}
 			registrations++
@@ -75,11 +76,11 @@ func TestLaunchdInstallRepairsAndIsIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(before) != string(after) || controller.stops != 1 || registrations != 2 {
+	if string(before) != string(after) || controller.stops != 1 || registrations != 4 {
 		t.Fatal("reinstallation changed a current service")
 	}
 	// Missing association is repairable even when ProgramArguments is current.
-	withoutAssociation := strings.Replace(string(after), "<key>AssociatedBundleIdentifiers</key><array><string>run.driga</string></array>", "", 1)
+	withoutAssociation := strings.Replace(string(after), "<key>AssociatedBundleIdentifiers</key><array><string>run.driga.service</string></array>", "", 1)
 	if err := os.WriteFile(path, []byte(withoutAssociation), 0o600); err != nil {
 		t.Fatal(err)
 	}

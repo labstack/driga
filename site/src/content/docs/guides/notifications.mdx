@@ -30,11 +30,13 @@ provides:
 brew install --cask labstack/tap/driga
 ```
 
-They use Driga's name and icon through the native notification API; no helper
-is needed. Builds run from a checkout or `go run` cannot send macOS
+They use Driga's name and icon through the native notification API from the
+bundled Driga Service helper (`run.driga.service`). Builds run from a checkout or `go run` cannot send macOS
 notifications, and `driga doctor` explains how to install the app.
 
-macOS asks once whether Driga may send notifications. If the prompt was
+macOS asks once whether Driga may send notifications. After upgrading from
+the service that shared the GUI identity, macOS asks once more for the new
+service identity; the old permission cannot transfer. If the prompt was
 declined, turn on **Allow notifications** in **System Settings → Notifications
 → Driga**.
 `driga doctor` warns when notifications are off and prints the command that

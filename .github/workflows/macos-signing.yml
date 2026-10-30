@@ -10,6 +10,9 @@ on:
       - .github/workflows/macos-signing.yml
       - scripts/build-macos-app.sh
       - scripts/macos-app.py
+      - scripts/verify-macos-app.py
+      - scripts/verify-release-dist.sh
+      - .goreleaser.yaml
       - scripts/macos-signing-keychain.sh
 
 permissions:
@@ -57,6 +60,8 @@ jobs:
           mkdir -p "$app/Contents/MacOS"
           go build -trimpath -ldflags "-s -w" -o "$app/Contents/MacOS/driga" ./cmd/driga
           bash scripts/build-macos-app.sh "$app/Contents/MacOS/driga" darwin 0.0.0-signing-check false
+          codesign --verify --strict --verbose=2 "$app/Contents/Helpers/Driga Service.app"
+          codesign -dv --verbose=2 "$app/Contents/Helpers/Driga Service.app" 2>&1 | grep -E '^(Authority|TeamIdentifier|Identifier)='
           codesign -dv --verbose=2 "$app" 2>&1 | grep -E '^(Authority|TeamIdentifier|Identifier)='
 
       - name: Delete temporary signing keychain

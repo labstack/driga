@@ -37,8 +37,18 @@ func executable(exe string) (string, error) {
 	return cli, nil
 }
 
-// CLI maps a drigad path to the driga beside it; other paths are unchanged.
+// CLI maps drigad to the CLI, in the outer Driga.app or beside an unbundled
+// service executable. Other paths are unchanged.
 func CLI(exe string) string {
+	// The nested service has its own bundle identity. CLI clients must return
+	// to the outer bundle rather than looking beside the helper executable.
+	suffix := filepath.Join("Contents", "Helpers", "Driga Service.app", "Contents", "MacOS", "drigad")
+	if strings.HasSuffix(exe, string(filepath.Separator)+suffix) {
+		app := strings.TrimSuffix(exe, string(filepath.Separator)+suffix)
+		if filepath.Base(app) == "Driga.app" {
+			return filepath.Join(app, "Contents", "MacOS", "driga")
+		}
+	}
 	dir, base := filepath.Split(exe)
 	ext := filepath.Ext(base)
 	if rest, ok := strings.CutPrefix(strings.TrimSuffix(base, ext), "drigad"); ok && (rest == "" || strings.HasPrefix(rest, "-")) {

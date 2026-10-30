@@ -41,7 +41,7 @@ builds:
           output: true
 
   # drigad, the Driga service: the same program under the name it runs as the
-  # service by. On macOS the bundle script copies it into the app before
+  # service by. On macOS the bundle script copies it into Driga Service.app before
   # signing; here it is built for Linux and Windows, beside driga.
   - id: drigad
     main: ./cmd/driga
@@ -90,7 +90,7 @@ archives:
     ids:
       - driga
       - drigad
-    # macOS ships drigad inside Driga.app, so its archive has one binary
+    # macOS ships drigad in the nested helper app, so its archive has one build binary
     # where Linux has two.
     allow_different_binary_count: true
     name_template: "driga_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
@@ -158,7 +158,8 @@ archives:
       - goos: windows
         formats: [none]
     # Preserve the binary's bundle path. The hook stages all other app files
-    # separately so the archive includes the executable exactly once.
+    # separately, including Helpers/Driga Service.app and its signature, so
+    # the archive includes the GUI executable exactly once.
     strip_binary_directory: false
     files:
       - src: '{{ dir (dir (dir (dir .ArtifactPath))) }}/bundle-resources'
@@ -228,12 +229,26 @@ homebrew_casks:
     # `app` (DMG) integration.
     custom_block: |
       app "Driga.app"
+      require "json"
+      postflight do
+        # Migrate before open -a can activate an old same-bundle drigad.
+        # Fresh installs still wait for the app's first launch.
+        if File.exist?(File.expand_path("~/Library/LaunchAgents/run.driga.service.plist"))
+          previous = system_command "/usr/bin/plutil",
+                                    args: ["-convert", "json", "-o", "-", File.expand_path("~/Library/LaunchAgents/run.driga.service.plist")],
+                                    must_succeed: true
+          system_command "#{appdir}/Driga.app/Contents/MacOS/driga",
+                         args: ["service", "install"],
+                         env: JSON.parse(previous.stdout).fetch("EnvironmentVariables", {}),
+                         must_succeed: true
+        end
+      end
     caveats: |
       Driga.app is in /Applications, and driga links to the CLI inside it.
       Open Driga from Finder, Spotlight or with driga app. Its first launch
       installs the Driga service (drigad), which collects at login whether or
-      not the app is open. After upgrading from an earlier release, open Driga
-      once: it replaces the old collector.
+      not the app is open. Upgrades migrate an existing service automatically.
+      Open Driga once to finish first-launch setup.
     url:
       template: "https://github.com/labstack/driga/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
     commit_msg_template: "chore: update driga to {{ .Tag }}"

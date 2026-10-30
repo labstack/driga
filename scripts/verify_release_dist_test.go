@@ -150,6 +150,18 @@ func releaseDistFixture(t *testing.T, version, tag string) (string, string) {
   end
 
   app "Driga.app"
+  require "json"
+  postflight do
+    if File.exist?(File.expand_path("~/Library/LaunchAgents/run.driga.service.plist"))
+      previous = system_command "/usr/bin/plutil",
+                                args: ["-convert", "json", "-o", "-", File.expand_path("~/Library/LaunchAgents/run.driga.service.plist")],
+                                must_succeed: true
+      system_command "#{appdir}/Driga.app/Contents/MacOS/driga",
+                     args: ["service", "install"],
+                     env: JSON.parse(previous.stdout).fetch("EnvironmentVariables", {}),
+                     must_succeed: true
+    end
+  end
   binary "#{appdir}/Driga.app/Contents/MacOS/driga"
 end
 `, version, hashes[fmt.Sprintf("driga_%s_darwin_amd64.tar.gz", version)], hashes[fmt.Sprintf("driga_%s_darwin_arm64.tar.gz", version)])
@@ -235,13 +247,13 @@ func writeTarGzipFixture(t *testing.T, path, version string) {
 				bundled = append(bundled, entry)
 			}
 		}
-		for _, name := range []string{"Info.plist", "Resources/Driga.icns", "MacOS/driga", "MacOS/drigad"} {
+		for _, name := range []string{"Info.plist", "Resources/Driga.icns", "MacOS/driga", "Helpers/Driga Service.app/Contents/MacOS/drigad", "Helpers/Driga Service.app/Contents/Info.plist", "Helpers/Driga Service.app/Contents/Resources/Driga.icns"} {
 			body, err := os.ReadFile(filepath.Join(app, "Contents", filepath.FromSlash(name)))
 			if err != nil {
 				t.Fatal(err)
 			}
 			mode := int64(0o644)
-			if strings.HasPrefix(name, "MacOS/") {
+			if strings.Contains(name, "MacOS/") {
 				mode = 0o755
 			}
 			bundled = append(bundled, struct {

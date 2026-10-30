@@ -53,8 +53,10 @@ func (s *launchdController) Start() error {
 
 func (s *launchdController) Install() error {
 	if app := BundlePath(s.binPath); app != "" {
-		if err := s.register(app); err != nil {
-			return err
+		for _, bundle := range []string{filepath.Join(app, "Contents", "Helpers", "Driga Service.app"), app} {
+			if err := s.register(bundle); err != nil {
+				return err
+			}
 		}
 	}
 	_, err := os.Stat(s.plistPath)

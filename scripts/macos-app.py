@@ -10,9 +10,8 @@ from pathlib import Path
 
 def assemble(app, version):
     contents = app / "Contents"
-    for name in ("driga", "drigad"):
-        if not (contents / "MacOS" / name).is_file():
-            raise ValueError(f"bundle executable {name} is missing")
+    if not (contents / "MacOS" / "driga").is_file():
+        raise ValueError("bundle executable driga is missing")
     # CFBundleVersion is numeric; the user-facing version retains the alpha or
     # snapshot suffix. CalVer's three numeric components come from the tag.
     match = re.fullmatch(r"(\d+\.\d+\.\d+)(?:-[A-Za-z0-9.-]+)?", version)
@@ -39,6 +38,21 @@ def assemble(app, version):
         "LSEnvironment": {"DRIGA_APP": "1"},
         "NSHighResolutionCapable": True,
     }
+    # A launchd agent belongs in Helpers; LoginItems is for SMAppService.
+    # Never leave a service executable in the GUI bundle's MacOS directory.
+    helper = contents / "Helpers" / "Driga Service.app" / "Contents"
+    (helper / "MacOS").mkdir(parents=True, exist_ok=True)
+    (helper / "Resources").mkdir(parents=True, exist_ok=True)
+    shutil.copy2(contents / "MacOS" / "driga", helper / "MacOS" / "drigad")
+    (contents / "MacOS" / "drigad").unlink(missing_ok=True)
+    shutil.copyfile(icon, helper / "Resources" / icon.name)
+    helper_info = dict(info)
+    helper_info.update(CFBundleIdentifier="run.driga.service",
+                       CFBundleName="Driga Service", CFBundleDisplayName="Driga",
+                       CFBundleExecutable="drigad", LSBackgroundOnly=True)
+    del helper_info["LSEnvironment"]
+    with (helper / "Info.plist").open("wb") as output:
+        plistlib.dump(helper_info, output, sort_keys=True)
     with (contents / "Info.plist").open("wb") as output:
         plistlib.dump(info, output, sort_keys=True)
 
