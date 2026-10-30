@@ -284,6 +284,10 @@ func (s *Scanner) git(ctx context.Context, dir string, args ...string) ([]byte, 
 		return nil, ctx.Err()
 	}
 	if err != nil {
+		var exit *exec.ExitError
+		if errors.As(err, &exit) && len(exit.Stderr) != 0 {
+			return nil, fmt.Errorf("git %s in %s: %w: %s", strings.Join(args, " "), dir, err, strings.TrimSpace(string(exit.Stderr)))
+		}
 		return nil, fmt.Errorf("git %s in %s: %w", strings.Join(args, " "), dir, err)
 	}
 	return out, nil
@@ -328,7 +332,9 @@ const (
 )
 
 // Scan reads the repository's non-bare worktrees. A full scan bypasses metadata
-// caching; its caller schedules one at least every five minutes.
+// caching; its caller schedules one at least every five minutes. Missing checkouts
+// are omitted; status/log failures remain in inventory with ScanError populated.
+// Repository inventory failures and cancellation are returned as errors.
 func (s *Scanner) Scan(ctx context.Context, repoPath string, mode ScanMode) ([]model.Worktree, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -391,12 +397,13 @@ func (s *Scanner) Scan(ctx context.Context, repoPath string, mode ScanMode) ([]m
 		if entry.Bare {
 			continue
 		}
-		// A linked worktree whose directory was deleted stays listed until
-		// `git worktree prune`; it has nothing to scan.
-		if _, err := os.Stat(entry.Path); errors.Is(err, fs.ErrNotExist) {
+		// Git retains registrations after directories or their markers disappear.
+		// Lstat distinguishes an absent marker from a damaged gitdir/symlink.
+		if goneWorktree(entry.Path) {
+			s.mu.Lock()
+			delete(s.cache, entry.Path)
+			s.mu.Unlock()
 			continue
-		} else if err != nil {
-			return nil, err
 		}
 		entries = append(entries, entry)
 	}
@@ -431,14 +438,40 @@ func (s *Scanner) Scan(ctx context.Context, repoPath string, mode ScanMode) ([]m
 	}
 	close(jobs)
 	wg.Wait()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	var worktrees []model.Worktree
 	for i, w := range results {
-		if errs[i] == nil {
-			worktrees = append(worktrees, w)
+		if errs[i] != nil {
+			// A checkout may disappear between inventory and status.
+			if goneWorktree(entries[i].Path) {
+				continue
+			}
+			s.mu.Lock()
+			w = s.cache[entries[i].Path].Worktree
+			// Retry failures even when metadata timestamps have not changed.
+			delete(s.cache, entries[i].Path)
+			s.mu.Unlock()
+			w.Path = entries[i].Path
+			w.ScanError = errs[i].Error()
 		}
+		worktrees = append(worktrees, w)
 	}
 	sort.Slice(worktrees, func(i, j int) bool { return worktrees[i].Path < worktrees[j].Path })
-	return worktrees, errors.Join(errs...)
+	return worktrees, nil
+}
+
+func goneWorktree(path string) bool {
+	info, err := os.Stat(path)
+	if errors.Is(err, fs.ErrNotExist) || (err == nil && !info.IsDir()) {
+		return true
+	}
+	if err != nil {
+		return false
+	}
+	_, err = os.Lstat(filepath.Join(path, ".git"))
+	return errors.Is(err, fs.ErrNotExist)
 }
 
 func (s *Scanner) scanWorktree(ctx context.Context, entry WorktreeEntry, full bool) (model.Worktree, error) {

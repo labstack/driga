@@ -32,7 +32,7 @@ func TestFreshBaseline(t *testing.T) {
 		t.Fatal(err)
 	}
 	rows.Close()
-	if !reflect.DeepEqual(versions, []int{0, 1, 2, 3, 4, 5, 6, 7}) {
+	if !reflect.DeepEqual(versions, []int{0, 1, 2, 3, 4, 5, 6, 7, 8}) {
 		t.Fatal(versions)
 	}
 	for pragma, want := range map[string]int{"user_version": 1, "auto_vacuum": 2, "foreign_keys": 1} {
@@ -214,7 +214,7 @@ func TestForwardMigrationFromBaseline(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Rewind to a baseline-only database, as created by the previous release.
-	for _, stmt := range []string{"DROP TABLE chat_command_output", "ALTER TABLE sessions DROP COLUMN conversation_claimed", "DROP INDEX sessions_active_activity", "ALTER TABLE messages DROP COLUMN decided_by", "ALTER TABLE messages DROP COLUMN tool", "ALTER TABLE procs DROP COLUMN argv", "DROP TABLE panel_events", "DROP TABLE panel_polls", "DROP TABLE prompt_intervals", "ALTER TABLE machine_samples DROP COLUMN disk_total", "ALTER TABLE machine_samples DROP COLUMN cpu_percent", "DELETE FROM goose_db_version WHERE version_id > 1"} {
+	for _, stmt := range []string{"ALTER TABLE worktrees DROP COLUMN scan_error", "DELETE FROM goose_db_version WHERE version_id=8", "DROP TABLE chat_command_output", "ALTER TABLE sessions DROP COLUMN conversation_claimed", "DROP INDEX sessions_active_activity", "ALTER TABLE messages DROP COLUMN decided_by", "ALTER TABLE messages DROP COLUMN tool", "ALTER TABLE procs DROP COLUMN argv", "DROP TABLE panel_events", "DROP TABLE panel_polls", "DROP TABLE prompt_intervals", "ALTER TABLE machine_samples DROP COLUMN disk_total", "ALTER TABLE machine_samples DROP COLUMN cpu_percent", "DELETE FROM goose_db_version WHERE version_id > 1"} {
 		if _, err := db.Exec(stmt); err != nil {
 			t.Fatal(err)
 		}

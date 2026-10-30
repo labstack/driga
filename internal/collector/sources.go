@@ -2,8 +2,10 @@ package collector
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
+	"log/slog"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -17,6 +19,7 @@ import (
 	"github.com/labstack/driga/internal/gitscan"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/platform"
+	"github.com/labstack/driga/internal/scrub"
 	"github.com/labstack/driga/internal/store"
 )
 
@@ -477,14 +480,38 @@ func writeGit(tx *store.Tx, repos []repoResult, scanErr error, source func(strin
 			return err
 		}
 		report.Repos++
+		previous, err := tx.Worktrees(id)
+		if err != nil {
+			return err
+		}
+		byPath := make(map[string]model.Worktree, len(previous))
+		for _, w := range previous {
+			byPath[w.Path] = w
+		}
 		for _, w := range repo.worktrees {
+			if w.ScanError != "" {
+				message := scrub.Scrub(w.ScanError)
+				if old, ok := byPath[w.Path]; ok {
+					w = old
+				}
+				w.ScanError = message
+				key := fmt.Sprintf("git_worktree_error:%x", sha256.Sum256([]byte(w.Path+"\x00"+message)))
+				if _, err := tx.Meta(key); errors.Is(err, store.ErrNotFound) {
+					if err := tx.SetMeta(key, "1"); err != nil {
+						return err
+					}
+					slog.Warn("git worktree scan failed", "event", "git_worktree_failed", "path", w.Path, "err", message)
+				} else if err != nil {
+					return err
+				}
+			}
 			w.RepoID = id
 			if _, err := tx.UpsertWorktree(w); err != nil {
 				return err
 			}
 		}
-		// Only a complete scan can prove absence. A failed status/log read
-		// returns a partial list and must retain the last known inventory.
+		// Checkout failures remain in inventory with their diagnostics. Only
+		// a repository-level inventory failure prevents reconciliation.
 		if repo.err == nil {
 			previous, err := tx.Worktrees(id)
 			if err != nil {
