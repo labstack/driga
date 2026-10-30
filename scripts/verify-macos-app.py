@@ -50,6 +50,7 @@ def verify_icns(data):
 
 
 def verify_archive(path, version):
+    helper = "Driga.app/Contents/Helpers/Driga Service.app/Contents"
     with tarfile.open(path, "r:gz") as archive:
         members = archive.getmembers()
         names = [entry.name for entry in members if not entry.isdir()]
@@ -57,9 +58,9 @@ def verify_archive(path, version):
         require(all(entry.isfile() or entry.isdir() for entry in members), "unexpected archive link or special file")
         required = {"LICENSE", "NOTICE", "README.md", "third-party/fonts-LICENSE.txt",
                     "third-party/app-THIRD-PARTY.txt", "third-party/panels-THIRD-PARTY.txt", "Driga.app/Contents/Info.plist",
-                    "Driga.app/Contents/MacOS/driga", "Driga.app/Contents/MacOS/drigad", "Driga.app/Contents/Resources/Driga.icns"}
+                    "Driga.app/Contents/MacOS/driga", f"{helper}/MacOS/drigad", f"{helper}/Info.plist", f"{helper}/Resources/Driga.icns", "Driga.app/Contents/Resources/Driga.icns"}
         # CodeResources is Apple's app staple; the resource seal is separate.
-        allowed = required | {"Driga.app/Contents/_CodeSignature/CodeResources", "Driga.app/Contents/CodeResources"}
+        allowed = required | {"Driga.app/Contents/_CodeSignature/CodeResources", "Driga.app/Contents/CodeResources", f"{helper}/_CodeSignature/CodeResources", f"{helper}/CodeResources"}
         require(required <= set(names) <= allowed, "unexpected contents in Darwin archive")
         directories = {str(parent) for name in allowed for parent in Path(name).parents if str(parent) != "."}
         require(all(entry.name.rstrip("/") in directories for entry in members if entry.isdir()), "unexpected archive directory")
@@ -76,10 +77,19 @@ def verify_archive(path, version):
                            "NSHighResolutionCapable": True}.items():
             require(info.get(key) == value, f"incorrect {key} in Info.plist")
         require("LSUIElement" not in info, "Info.plist must not set LSUIElement")
-        for name in ("driga", "drigad"):
-            binary = archive.getmember(f"Driga.app/Contents/MacOS/{name}")
+        helper_info = plistlib.loads(read(f"{helper}/Info.plist"))
+        expected = dict(info)
+        expected.update(CFBundleIdentifier="run.driga.service", CFBundleName="Driga Service",
+                        CFBundleDisplayName="Driga", CFBundleExecutable="drigad", LSBackgroundOnly=True)
+        del expected["LSEnvironment"]
+        require(helper_info == expected, "incorrect helper Info.plist")
+        require("LSBackgroundOnly" not in info, "GUI must allow windows")
+        for name in ("Driga.app/Contents/MacOS/driga", f"{helper}/MacOS/drigad"):
+            binary = archive.getmember(name)
             require(binary.mode & 0o111 and binary.size > 0, f"bundle executable {name} is empty or not executable")
-        verify_icns(read("Driga.app/Contents/Resources/Driga.icns"))
+        icon = read("Driga.app/Contents/Resources/Driga.icns")
+        verify_icns(icon)
+        require(read(f"{helper}/Resources/Driga.icns") == icon, "helper branding differs from GUI")
 
 
 if __name__ == "__main__":

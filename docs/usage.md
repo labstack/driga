@@ -368,6 +368,14 @@ driga service uninstall
 - **Windows:** Task Scheduler lists **Driga service** under
   `\Driga\<user SID>`. Task Manager shows **Driga** with the Murmur icon.
 
+On macOS, the bundled service runs from
+`Driga.app/Contents/Helpers/Driga Service.app` as `run.driga.service`, with
+Driga's notification name and icon. Upgrading from the service that shared
+`run.driga` asks for notification permission once more. Open Driga once after
+upgrading, or run `driga service install`, to migrate the launch agent and stop
+the old `Contents/MacOS/drigad` process. Notification clicks activate the main
+`run.driga` app and pass the target through its existing private hand-off.
+
 On macOS logs are at `~/Library/Logs/driga/service.log`; Linux uses
 `journalctl --user -u driga` (`driga service logs -f` wraps it).
 On a Linux VM, allow the user service to run after logout:

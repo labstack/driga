@@ -186,7 +186,7 @@ func TestNativeNotificationClickKeepsIdentifiersOutOfArgv(t *testing.T) {
 
 func TestDrigaAppExecutable(t *testing.T) {
 	root := t.TempDir()
-	for _, rel := range []string{"Driga.app/Contents/MacOS/driga", "Driga.app/Contents/MacOS/drigad", "bin/driga", "Other.app/Contents/MacOS/driga", "Driga.app/Contents/MacOS/other"} {
+	for _, rel := range []string{"Driga.app/Contents/Helpers/Driga Service.app/Contents/MacOS/drigad", "Driga.app/Contents/MacOS/driga", "Driga.app/Contents/MacOS/drigad", "bin/driga", "Other.app/Contents/MacOS/driga", "Driga.app/Contents/MacOS/other"} {
 		path := filepath.Join(root, filepath.FromSlash(rel))
 		if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 			t.Fatal(err)
@@ -194,7 +194,7 @@ func TestDrigaAppExecutable(t *testing.T) {
 		if err := os.WriteFile(path, nil, 0600); err != nil {
 			t.Fatal(err)
 		}
-		if drigaAppExecutable(path) != (rel == "Driga.app/Contents/MacOS/driga" || rel == "Driga.app/Contents/MacOS/drigad") {
+		if drigaAppExecutable(path) != (rel == "Driga.app/Contents/Helpers/Driga Service.app/Contents/MacOS/drigad") {
 			t.Fatal(rel)
 		}
 	}
@@ -279,10 +279,10 @@ func TestServiceNotificationClickRunsTheCLI(t *testing.T) {
 		calls = append(calls, append([]string{name}, args...))
 		return nil, nil
 	})
-	if err := notificationResponse(t.Context(), r, filepath.FromSlash("/Applications/Driga.app/Contents/MacOS/drigad"), notificationDefaultAction, "w1", "local", ""); err != nil {
+	if err := notificationResponse(t.Context(), r, filepath.FromSlash("/Applications/Driga.app/Contents/Helpers/Driga Service.app/Contents/MacOS/drigad"), notificationDefaultAction, "w1", "local", ""); err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(calls, [][]string{{filepath.FromSlash("/Applications/Driga.app/Contents/MacOS/driga"), "app", "--notification-stdin"}}) {
+	if !reflect.DeepEqual(calls, [][]string{{"open", "-b", "run.driga"}, {filepath.FromSlash("/Applications/Driga.app/Contents/MacOS/driga"), "app", "--notification-stdin"}}) {
 		t.Fatal(calls)
 	}
 }

@@ -72,6 +72,8 @@ for arch in amd64 arm64; do
     app_temp=$(mktemp -d)
     trap 'rm -rf "$app_temp"' EXIT
     tar -xzf "$archive" -C "$app_temp" Driga.app
+    # Verify the nested service before the outer resource seal.
+    codesign --verify --strict --verbose=2 "$app_temp/Driga.app/Contents/Helpers/Driga Service.app"
     codesign --verify --deep --strict --verbose=2 "$app_temp/Driga.app"
     xcrun stapler validate "$app_temp/Driga.app"
     spctl --assess --type execute --verbose=2 "$app_temp/Driga.app"
@@ -162,8 +164,15 @@ if ! grep -Fqx "  version \"${release_version}\"" "$cask"; then
   echo "Homebrew Cask version does not match ${release_version}." >&2
   exit 1
 fi
-if grep -Eq 'service install|caskroom_path' "$cask"; then
-  echo "Homebrew Cask still references Caskroom paths or driga service install." >&2
+if grep -Fq 'caskroom_path' "$cask"; then
+  echo "Homebrew Cask still references Caskroom paths." >&2
+  exit 1
+fi
+if ! grep -Fq 'if File.exist?(File.expand_path("~/Library/LaunchAgents/run.driga.service.plist"))' "$cask" ||
+   ! grep -Fq 'system_command "#{appdir}/Driga.app/Contents/MacOS/driga",' "$cask" ||
+   ! grep -Fq 'args: ["service", "install"],' "$cask" ||
+   ! grep -Fq 'env: JSON.parse(previous.stdout).fetch("EnvironmentVariables", {}),' "$cask"; then
+  echo "Homebrew Cask is missing the existing-service upgrade repair." >&2
   exit 1
 fi
 if grep -Eq '^[[:space:]]+verified:' "$cask"; then

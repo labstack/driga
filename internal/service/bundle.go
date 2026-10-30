@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/labstack/driga/internal/self"
 )
 
 // BundlePath identifies our CLI's app layout, including when invoked via a
@@ -15,6 +17,7 @@ func BundlePath(binPath string) string {
 	if resolved, err := filepath.EvalSymlinks(binPath); err == nil {
 		binPath = resolved
 	}
+	binPath = self.CLI(binPath)
 	if base := filepath.Base(binPath); base != "driga" && base != "drigad" || filepath.Base(filepath.Dir(binPath)) != "MacOS" {
 		return ""
 	}
@@ -35,10 +38,13 @@ func ExecutablePath(binPath string) string {
 	return binPath
 }
 
-// DaemonPath is the drigad executable that sits beside a driga executable:
-// drigad for driga, drigad-dev for driga-dev, drigad.exe for driga.exe. It
-// is the same program; started under that name it runs the Driga service.
+// DaemonPath selects the nested helper for Driga.app. Outside the bundle,
+// drigad sits beside driga (including development variants and Windows).
+// Started under that name, the same program runs the Driga service.
 func DaemonPath(binPath string) string {
+	if app := BundlePath(binPath); app != "" {
+		return filepath.Join(app, "Contents", "Helpers", "Driga Service.app", "Contents", "MacOS", "drigad")
+	}
 	dir, base := filepath.Split(binPath)
 	ext := filepath.Ext(base)
 	name := strings.TrimSuffix(base, ext)
@@ -109,7 +115,7 @@ func PlistStale(path, binPath string) (bool, error) {
 			}
 			if key == "AssociatedBundleIdentifiers" {
 				for _, id := range array.Strings {
-					if id == "run.driga" {
+					if id == "run.driga.service" {
 						associated = true
 					}
 				}

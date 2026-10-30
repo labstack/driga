@@ -86,8 +86,8 @@ func macBundleIdentity() error {
 	}
 	defer autoreleasePool()()
 	bundle := nsClass("NSBundle").Send(objc.RegisterName("mainBundle"))
-	if goString(bundle.Send(objc.RegisterName("bundleIdentifier"))) != "run.driga" {
-		return fmt.Errorf("Driga.app must have the run.driga bundle identity; reinstall the app")
+	if goString(bundle.Send(objc.RegisterName("bundleIdentifier"))) != "run.driga.service" {
+		return fmt.Errorf("Driga Service.app must have the run.driga.service bundle identity; reinstall the app")
 	}
 	return nil
 }
@@ -166,10 +166,13 @@ func startMacNotifications(exe string) (objc.ID, *macNotificationCenter, error) 
 	var app objc.ID
 	c.onMainSync(func() {
 		app = nsClass("NSApplication").Send(objc.RegisterName("sharedApplication"))
-		// Accessory still permits activation and can swallow open -a Driga.
-		// Do not set LSBackgroundOnly in the shared bundle: the GUI needs windows.
-		if !objc.Send[bool](app, objc.RegisterName("setActivationPolicy:"), serviceActivationPolicy) {
-			err = fmt.Errorf("cannot make notification service background-only")
+		// Keep the helper prohibited as defense in depth alongside its
+		// LSBackgroundOnly plist, including after launchd restarts it.
+		// An LSBackgroundOnly bundle is already prohibited, and AppKit answers
+		// NO to setting the policy it has; only the resulting policy matters.
+		objc.Send[bool](app, objc.RegisterName("setActivationPolicy:"), serviceActivationPolicy)
+		if policy := objc.Send[int64](app, objc.RegisterName("activationPolicy")); policy != serviceActivationPolicy {
+			err = fmt.Errorf("cannot make notification service background-only (activation policy %d)", policy)
 		}
 	})
 	if err != nil {

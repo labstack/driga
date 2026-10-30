@@ -80,7 +80,7 @@ func configForOS(binPath, goos string) *ks.Config {
 	if goos == "darwin" {
 		binPath = ExecutablePath(binPath)
 		if BundlePath(binPath) != "" {
-			association = "<key>AssociatedBundleIdentifiers</key><array><string>run.driga</string></array>"
+			association = "<key>AssociatedBundleIdentifiers</key><array><string>run.driga.service</string></array>"
 		}
 	}
 	template = strings.ReplaceAll(template, "BUNDLE_ASSOCIATION", association)

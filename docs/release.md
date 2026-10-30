@@ -169,20 +169,39 @@ Linux CI consumes the committed ICNS and validates every representation.
 [Apple's helper documentation](https://developer.apple.com/documentation/servicemanagement/updating-helper-executables-from-earlier-versions-of-macos)
 explains the organization-name fallback and `AssociatedBundleIdentifiers`.
 `service install`, which the app runs on launch, points the launch agent at
-the bundle's `drigad`, associates `run.driga`, registers the app with Launch
-Services, and atomically repairs an existing stale plist. It stops a running
-service before replacing its stale definition, then starts it. Reinstalling a
-current definition is harmless. It first removes the `run.driga.collector`
+`Contents/Helpers/Driga Service.app/Contents/MacOS/drigad`, associates
+`run.driga.service`, registers both bundles with Launch Services, and atomically
+repairs an existing stale plist. It unloads the running service before replacing
+its stale definition, then starts it. This migrates the former
+`Contents/MacOS/drigad` path even when the version has not changed. Reinstalling
+a current definition is harmless. It also removes the `run.driga.collector`
 agent earlier releases installed. Development binaries outside the app keep
 their ordinary path and have no association; a `driga-dev` build installs as
-`run.driga.service.dev`, so it never takes over the release's service. `drigad`
-is a copy of the main executable that the bundle script places in
-`Contents/MacOS` and signs before the bundle, so both share the app's team. Registration matters: Apple requires Launch Services to know
-the associated app.
+`run.driga.service.dev`, so it never takes over the release's service.
+
+The service has its own nested app, `Contents/Helpers/Driga Service.app`, with
+bundle identifier `run.driga.service`, `LSBackgroundOnly=true`, matching version
+metadata, and Driga's icon and display name. `Contents/Helpers` is for this
+launchd-managed helper; `Contents/Library/LoginItems` would imply a Service
+Management login item, which this service does not use. The GUI retains
+`run.driga`, its existing executable, and the Homebrew `bin/driga` symlink.
+The cask postflight runs `service install` when a service plist already exists,
+so an upgrade stops the old same-bundle process before the first `open -a`.
+It passes the saved launch agent environment through to preserve custom data
+paths, configuration, and PATH during that repair.
+Fresh cask installs still wait for the first GUI launch to install the service.
+The helper can never register as the GUI's running instance. It also keeps
+Prohibited activation policy on the main thread as defense in depth.
+
+Notifications now belong to `run.driga.service`. macOS will ask once more for
+permission after upgrading because the identity changed. Clicks activate the
+main app with `open -b run.driga`, then deliver the target through the main
+CLI's existing private stdin and single-instance IPC hand-off.
 
 The entire release job runs on GitHub-hosted `macos-15`. An OSS per-build post
 hook assembles the app, then `codesign --options runtime --timestamp` signs the
-whole bundle with a Developer ID Application identity and seals its resources.
+helper bundle first and the outer GUI bundle second with a Developer ID Application identity and seals its resources.
+Neither executable needs sandbox, JIT, or library-validation exception entitlements.
 Apple documents the [hardened-runtime and timestamp requirements](https://developer.apple.com/documentation/security/resolving-common-notarization-issues).
 It submits a temporary ZIP through `notarytool`, requires Accepted, retrieves
 the log, staples and validates the app, and verifies its signature and Gatekeeper

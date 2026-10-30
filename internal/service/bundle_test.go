@@ -33,8 +33,9 @@ func TestLaunchdPlistBundleAndDevelopment(t *testing.T) {
 		bundle                 bool
 	}{
 		{"development", "/opt/dev & tools/driga", "/opt/dev & tools/drigad", false},
-		{"bundle", bundled, DaemonPath(bundled), true},
-		{"Homebrew symlink", link, DaemonPath(bundled), true},
+		{"bundle", bundled, filepath.Join(root, "Driga.app", "Contents", "Helpers", "Driga Service.app", "Contents", "MacOS", "drigad"), true},
+		{"Homebrew symlink", link, filepath.Join(root, "Driga.app", "Contents", "Helpers", "Driga Service.app", "Contents", "MacOS", "drigad"), true},
+		{"helper executable", filepath.Join(root, "Driga.app", "Contents", "Helpers", "Driga Service.app", "Contents", "MacOS", "drigad"), filepath.Join(root, "Driga.app", "Contents", "Helpers", "Driga Service.app", "Contents", "MacOS", "drigad"), true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			c := configForOS(tc.path, "darwin")
@@ -65,7 +66,7 @@ func TestLaunchdPlistBundleAndDevelopment(t *testing.T) {
 			if associated != tc.bundle {
 				t.Fatalf("association: %s", body)
 			}
-			if tc.bundle && (len(arrays[0].Strings) != 1 || arrays[0].Strings[0] != "run.driga") {
+			if tc.bundle && (len(arrays[0].Strings) != 1 || arrays[0].Strings[0] != "run.driga.service") {
 				t.Fatalf("association: %s", body)
 			}
 			plistPath := filepath.Join(t.TempDir(), "collector.plist")
