@@ -104,6 +104,7 @@ type Repo struct {
 
 // Worktree is one checkout of a repo.
 type Worktree struct {
+	ScanError         string    `json:"scan_error,omitempty"`
 	MachineID         string    `json:"machine_id"`
 	ID                int64     `json:"id"`
 	RepoID            int64     `json:"repo_id"`

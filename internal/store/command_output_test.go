@@ -90,7 +90,7 @@ func TestCommandOutputMigrationFromSix(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, statement := range []string{"DROP TABLE chat_command_output", "DELETE FROM goose_db_version WHERE version_id=7"} {
+	for _, statement := range []string{"ALTER TABLE worktrees DROP COLUMN scan_error", "DELETE FROM goose_db_version WHERE version_id=8", "DROP TABLE chat_command_output", "DELETE FROM goose_db_version WHERE version_id=7"} {
 		if _, err = db.Exec(statement); err != nil {
 			t.Fatal(err)
 		}

@@ -24,7 +24,10 @@ func TestScannerPrunesRemovedRepositoriesAndWorktrees(t *testing.T) {
 	var paths []string
 	for i := 0; i < 32; i++ {
 		p := filepath.Join(base, fmt.Sprint(i))
-		if err := os.MkdirAll(filepath.Join(p, "linked"), 0700); err != nil {
+		if err := os.MkdirAll(filepath.Join(p, "linked", ".git"), 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(filepath.Join(p, ".git"), 0700); err != nil {
 			t.Fatal(err)
 		}
 		paths = append(paths, p)

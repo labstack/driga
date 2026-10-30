@@ -256,11 +256,11 @@ func (q *querier) ReposScoped(scope Scope) ([]model.Repo, error) {
 	})
 }
 
-const worktreeColumns = "repo_id,path,branch,head,ahead,behind,dirty,untracked,oldest_dirty_mtime,last_commit_at,last_commit_subject,updated_at"
+const worktreeColumns = "repo_id,path,branch,head,ahead,behind,dirty,untracked,oldest_dirty_mtime,last_commit_at,last_commit_subject,updated_at,scan_error"
 
 // UpsertWorktree creates or updates a checkout identified by path.
 func (tx *Tx) UpsertWorktree(w model.Worktree) (int64, error) {
-	return tx.upsertID("worktrees", "machine_id,"+worktreeColumns, "machine_id,path", tx.machineID, w.RepoID, w.Path, w.Branch, w.Head, w.Ahead, w.Behind, w.Dirty, w.Untracked, unix(w.OldestDirtyMtime), unix(w.LastCommitAt), w.LastCommitSubject, unix(w.UpdatedAt))
+	return tx.upsertID("worktrees", "machine_id,"+worktreeColumns, "machine_id,path", tx.machineID, w.RepoID, w.Path, w.Branch, w.Head, w.Ahead, w.Behind, w.Dirty, w.Untracked, unix(w.OldestDirtyMtime), unix(w.LastCommitAt), w.LastCommitSubject, unix(w.UpdatedAt), w.ScanError)
 }
 
 // DeleteWorktree removes a checkout while retaining its sessions as history.
@@ -277,7 +277,7 @@ func (q *querier) Worktrees(repoID int64) ([]model.Worktree, error) {
 	return readMany(q, "SELECT machine_id,id,"+worktreeColumns+" FROM worktrees WHERE machine_id=? AND (?=0 OR repo_id=?) ORDER BY path", []any{q.machineID, repoID, repoID}, func(s scanner) (model.Worktree, error) {
 		var w model.Worktree
 		var dirty, commit, updated int64
-		err := s.Scan(&w.MachineID, &w.ID, &w.RepoID, &w.Path, &w.Branch, &w.Head, &w.Ahead, &w.Behind, &w.Dirty, &w.Untracked, &dirty, &commit, &w.LastCommitSubject, &updated)
+		err := s.Scan(&w.MachineID, &w.ID, &w.RepoID, &w.Path, &w.Branch, &w.Head, &w.Ahead, &w.Behind, &w.Dirty, &w.Untracked, &dirty, &commit, &w.LastCommitSubject, &updated, &w.ScanError)
 		w.OldestDirtyMtime, w.LastCommitAt, w.UpdatedAt = fromUnix(dirty), fromUnix(commit), fromUnix(updated)
 		return w, err
 	})

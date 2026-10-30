@@ -95,7 +95,7 @@ func TestConversationPanelTurnHookClaimBackfill(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, query := range []string{"DROP TABLE chat_command_output", "DELETE FROM goose_db_version WHERE version_id=7", "ALTER TABLE sessions DROP COLUMN conversation_claimed", "DELETE FROM goose_db_version WHERE version_id=6"} {
+	for _, query := range []string{"ALTER TABLE worktrees DROP COLUMN scan_error", "DELETE FROM goose_db_version WHERE version_id=8", "DROP TABLE chat_command_output", "DELETE FROM goose_db_version WHERE version_id=7", "ALTER TABLE sessions DROP COLUMN conversation_claimed", "DELETE FROM goose_db_version WHERE version_id=6"} {
 		if _, err := db.Exec(query); err != nil {
 			db.Close()
 			t.Fatal(err)

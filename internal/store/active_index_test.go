@@ -81,7 +81,7 @@ func BenchmarkActiveSessions(b *testing.B) {
 func TestForwardMigrationAddsActivityIndex(t *testing.T) {
 	st := openTest(t, "", Memory)
 	// Rewind to the baseline, then run goose forward.
-	for _, sql := range []string{"DROP TABLE chat_command_output", "ALTER TABLE sessions DROP COLUMN conversation_claimed", "DROP INDEX sessions_active_activity", "ALTER TABLE messages DROP COLUMN decided_by", "ALTER TABLE messages DROP COLUMN tool", "ALTER TABLE procs DROP COLUMN argv", "DROP TABLE panel_events", "DROP TABLE panel_polls", "DROP TABLE prompt_intervals", "ALTER TABLE machine_samples DROP COLUMN disk_total", "ALTER TABLE machine_samples DROP COLUMN cpu_percent", "DELETE FROM goose_db_version WHERE version_id>1"} {
+	for _, sql := range []string{"ALTER TABLE worktrees DROP COLUMN scan_error", "DELETE FROM goose_db_version WHERE version_id=8", "DROP TABLE chat_command_output", "ALTER TABLE sessions DROP COLUMN conversation_claimed", "DROP INDEX sessions_active_activity", "ALTER TABLE messages DROP COLUMN decided_by", "ALTER TABLE messages DROP COLUMN tool", "ALTER TABLE procs DROP COLUMN argv", "DROP TABLE panel_events", "DROP TABLE panel_polls", "DROP TABLE prompt_intervals", "ALTER TABLE machine_samples DROP COLUMN disk_total", "ALTER TABLE machine_samples DROP COLUMN cpu_percent", "DELETE FROM goose_db_version WHERE version_id>1"} {
 		if _, err := st.db.Exec(sql); err != nil {
 			t.Fatal(err)
 		}
