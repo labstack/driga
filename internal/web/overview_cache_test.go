@@ -290,3 +290,48 @@ func TestCleanupSizesReachHeaderWithoutRelisting(t *testing.T) {
 		t.Fatalf("removed candidate still counted: %v", v)
 	}
 }
+
+func TestSnapshotCacheDropsSupersededVersions(t *testing.T) {
+	version := int64(1)
+	s := &Server{source: cacheSource{version: func(context.Context) (int64, error) { return version, nil }, load: func(context.Context, store.Scope) (viewer.Snapshot, error) { return viewer.Snapshot{}, nil }}}
+	for range 40 {
+		if _, err := s.cachedLoad(context.Background(), store.Scope{}, false); err != nil {
+			t.Fatal(err)
+		}
+		if len(s.cache) != 1 {
+			t.Fatalf("retained %d snapshot versions", len(s.cache))
+		}
+		version++
+	}
+}
+
+func TestDashboardPollSharesSnapshotAndInvalidatesOnCommit(t *testing.T) {
+	base, st, _, _ := fixture(t)
+	source := &countingSource{Source: base.source}
+	s, err := New(source, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	poll := func() {
+		t.Helper()
+		for _, spec := range []panel.Dashboard{panel.Header(), panel.Home(),
+			{Name: "Inbox", Panels: []panel.Panel{{ID: "inbox", Title: "Inbox", Viz: "inbox", Source: "inbox"}}},
+			{Name: "Fleet", Panels: []panel.Panel{{ID: "machines", Title: "Machines", Viz: "table", Source: "machines"}, {ID: "sessions", Title: "Sessions", Viz: "table", Source: "sessions"}, {ID: "flow", Title: "Flow", Viz: "table", Source: "flow"}}},
+		} {
+			if _, err := s.runPanels(context.Background(), panel.RunRequest{Dashboard: spec}); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	poll()
+	if source.loads != 1 {
+		t.Fatalf("poll built %d snapshots", source.loads)
+	}
+	if err := st.Tx(context.Background(), func(tx *store.Tx) error { return tx.SetMeta("cache-test", "changed") }); err != nil {
+		t.Fatal(err)
+	}
+	poll()
+	if source.loads != 2 || len(s.cache) != 1 {
+		t.Fatalf("commit: loads=%d retained=%d", source.loads, len(s.cache))
+	}
+}

@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -58,7 +59,8 @@ type querier struct {
 // there would wait for the connection held by the transaction and deadlock.
 type Store struct {
 	querier
-	db *sql.DB
+	db       *sql.DB
+	revision *atomic.Uint64
 }
 
 // Tx provides writes and the same reads as Store, on the active transaction.
@@ -204,7 +206,7 @@ func Open(path string, mode Mode) (_ *Store, retErr error) {
 	if err := ValidateMachineID(id); err != nil {
 		return nil, err
 	}
-	return &Store{querier: querier{conn: db, ctx: ctx, machineID: id, localID: id, dataDir: dataDir}, db: db}, nil
+	return &Store{revision: new(atomic.Uint64), querier: querier{conn: db, ctx: ctx, machineID: id, localID: id, dataDir: dataDir}, db: db}, nil
 }
 
 func randomID() (string, error) {
@@ -252,7 +254,11 @@ func (s *Store) Tx(ctx context.Context, fn func(*Tx) error) error {
 	if err := fn(&Tx{querier{conn: tx, ctx: ctx, machineID: s.machineID, localID: s.localID, dataDir: s.dataDir}}); err != nil {
 		return err
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	s.revision.Add(1)
+	return nil
 }
 
 // DataVersion changes when another connection commits a write. Compare values
@@ -428,3 +434,7 @@ func checkSchema(ctx context.Context, db *sql.DB, path string) (have, want int64
 	}
 	return have, want, nil
 }
+
+// Revision counts successful transactions on this connection, including local writes
+// which SQLite data_version deliberately excludes.
+func (s *Store) Revision() uint64 { return s.revision.Load() }
