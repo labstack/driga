@@ -480,8 +480,13 @@ driga top [flags]
 Open the Driga desktop app, or focus it.
 
 ```sh
-driga app
+driga app [flags]
 ```
+
+| Flag | Default | Description |
+|---|---|---|
+| `--cpu-profile=<cpu-profile>` |  | Write a CPU profile of the app to this file. |
+| `--profile-for=<profile-for>` | `2m` | How long --cpu-profile records before it stops. |
 
 ## driga ask
 
