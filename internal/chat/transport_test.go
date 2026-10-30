@@ -2,13 +2,17 @@ package chat
 
 import (
 	"context"
+	"fmt"
 	"github.com/labstack/driga/internal/fleet"
 	"github.com/labstack/driga/internal/secfile"
+	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestSocketAndFallback(t *testing.T) {
@@ -154,5 +158,84 @@ func TestChatRefusesUnsafeFallbackDirectory(t *testing.T) {
 				t.Fatal("unsafe fallback accepted by client")
 			}
 		})
+	}
+}
+
+// A loaded collector can take longer than the hook's old 200 ms health
+// budget even though it is listening and able to register the permission.
+func TestHookRegistersWithSlowBroker(t *testing.T) {
+	b, _, _ := fixture(t, true)
+	dir := t.TempDir()
+	if err := secfile.MkdirPrivate(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := secfile.Protect(dir); err != nil {
+		t.Fatal(err)
+	}
+	path := SocketPath(dir)
+	if err := fleet.EnsureSocketDir(path); err != nil {
+		t.Fatal(err)
+	}
+	l, err := net.Listen("unix", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(path)
+	if runtime.GOOS != "windows" {
+		if err := os.Chmod(path, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	b.clientToken = "test-hook-token"
+	if err := os.WriteFile(filepath.Join(dir, "chat.key"), []byte(b.clientToken), 0600); err != nil {
+		t.Fatal(err)
+	}
+	release := make(chan struct{})
+	defer close(release)
+	h := handler(b)
+	server := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/health" {
+			// Never finish a preflight before its deadline. No timing race or
+			// platform-specific scheduling is needed to reproduce the lost prompt.
+			select {
+			case <-release:
+			case <-r.Context().Done():
+			}
+			return
+		}
+		if r.URL.Path == "/hook-prompt" {
+			select {
+			case <-time.After(300 * time.Millisecond):
+			case <-r.Context().Done():
+				return
+			}
+		}
+		h.ServeHTTP(w, r)
+	})}
+	defer server.Close()
+	go server.Serve(l)
+	dialCtx, cancelDial := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	c, err := DialHook(dialCtx, dir)
+	cancelDial()
+	if err != nil {
+		t.Fatalf("hook did not register prompt: %v", err)
+	}
+	defer c.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		out, err := c.WaitPrompt(ctx, testPrompt("slow"))
+		if err == nil && out.Behavior != "allow" {
+			err = fmt.Errorf("decision: %+v", out)
+		}
+		done <- err
+	}()
+	waitPrompt(t, b, "slow")
+	if err := b.AnswerPrompt(ctx, "slow", true); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-done; err != nil {
+		t.Fatal(err)
 	}
 }
