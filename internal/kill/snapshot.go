@@ -67,12 +67,23 @@ func ProtectedReason(p model.Proc, live, protected []model.Proc) string {
 			blocked[r.PID] = true
 		}
 	}
+	// A parent PID names the parent only if that process started first:
+	// Windows keeps the PID of an exited parent, and a newer process can
+	// reuse it.
+	started := map[int32]time.Time{}
+	for _, r := range live {
+		started[r.PID] = r.StartTime
+	}
+	parentOf := func(r model.Proc) bool {
+		at, ok := started[r.PPID]
+		return !ok || at.IsZero() || r.StartTime.IsZero() || !at.After(r.StartTime)
+	}
 	// Ancestors are protected, but their unrelated descendants are not. Only
 	// explicit Chat/Driga roots propagate protection downwards.
 	for changed := true; changed; {
 		changed = false
 		for _, r := range live {
-			if roots[r.PPID] && !roots[r.PID] {
+			if roots[r.PPID] && !roots[r.PID] && parentOf(r) {
 				roots[r.PID] = true
 				blocked[r.PID] = true
 				changed = true
@@ -82,7 +93,7 @@ func ProtectedReason(p model.Proc, live, protected []model.Proc) string {
 	for changed := true; changed; {
 		changed = false
 		for _, r := range live {
-			if blocked[r.PID] && r.PPID > 0 && !blocked[r.PPID] {
+			if blocked[r.PID] && r.PPID > 0 && !blocked[r.PPID] && parentOf(r) {
 				blocked[r.PPID] = true
 				changed = true
 			}
