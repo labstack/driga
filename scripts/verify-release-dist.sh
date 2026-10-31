@@ -169,9 +169,10 @@ if grep -Fq 'caskroom_path' "$cask"; then
   exit 1
 fi
 if ! grep -Fq 'if File.exist?(File.expand_path("~/Library/LaunchAgents/run.driga.service.plist"))' "$cask" ||
-   ! grep -Fq 'system_command "#{appdir}/Driga.app/Contents/MacOS/driga",' "$cask" ||
-   ! grep -Fq 'args: ["service", "install"],' "$cask" ||
-   ! grep -Fq 'env: JSON.parse(previous.stdout).fetch("EnvironmentVariables", {}),' "$cask"; then
+   ! grep -Fq 'environment = JSON.parse(previous.stdout).fetch("EnvironmentVariables", {}).map { |name, value| "#{name}=#{value}" }' "$cask" ||
+   ! grep -Fq 'system_command "/usr/bin/env",' "$cask" ||
+   ! grep -Fq 'args: [*environment, "#{appdir}/Driga.app/Contents/MacOS/driga", "service", "install"],' "$cask" ||
+   grep -Fq 'env: JSON.parse' "$cask"; then
   echo "Homebrew Cask is missing the existing-service upgrade repair." >&2
   exit 1
 fi
