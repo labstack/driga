@@ -49,8 +49,12 @@ func TestCommandOutputCapture(t *testing.T) {
 			if err = st.ReadCommandOutput(context.Background(), "a", &full); err != nil {
 				t.Fatal(err)
 			}
+			// The agent gets the scrubbed head and tail under every policy.
+			if strings.Contains(summary, "ghp_") || !strings.Contains(summary, "HEAD") || !strings.Contains(summary, "[redacted]") || !strings.Contains(summary, "TAIL") || len(summary) > 5000 {
+				t.Fatal("agent summary", summary)
+			}
 			if !snippets {
-				if full.Len() != 0 || summary != "" {
+				if full.Len() != 0 {
 					t.Fatal("titles retained output")
 				}
 				return

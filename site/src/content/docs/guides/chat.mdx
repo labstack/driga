@@ -180,15 +180,17 @@ interrupted work is marked interrupted after a restart and never replayed to
 the agent.
 
 Your question is scrubbed and sent to Claude. Context and tool results pass the
-capture policy first. Under the default `capture_text = "titles"` Driga keeps
+capture policy first, except the output of commands you approve, described
+below. Under the default `capture_text = "titles"` Driga keeps
 no chat message bodies; `snippets` keeps scrubbed 200-character snippets.
 Claude's own session history is managed by Claude and is not controlled by
 Driga's capture policy.
 
 Command results join that action log under the same capture policy and
-30-day retention. Long command output keeps its head and tail in the
-conversation; retained full output is scrubbed and follows the capture
-policy (`titles` does not retain command output). Process result counts and
+30-day retention. Claude gets the scrubbed head and tail of each command you
+approve, up to 2 KB of each, under every capture policy, since reading that
+output is why it asked to run the command. Retained full output is scrubbed
+and follows the capture policy (`titles` does not retain command output). Process result counts and
 per-target outcomes appear on the card. External `driga mcp` clients and
 `driga ask` have no command actions.
 
