@@ -35,35 +35,46 @@ func TestProtectionReusedParentPID(t *testing.T) {
 	driga := ownedProc(t, fakePID+1, fakePID+2, "/opt/driga", now.Add(-time.Hour))
 	newer := ownedProc(t, fakePID+2, fakePID+3, "/bin/sleep", now)
 	shell := ownedProc(t, fakePID+3, 1, "/bin/sh", now.Add(-2*time.Hour))
-	reason := NewProtection([]model.Proc{driga, newer, shell}, nil).Reason(newer)
-	if runtime.GOOS == "windows" && reason != "" {
-		t.Fatalf("process with a reused PID protected: %s", reason)
+	live := []model.Proc{driga, newer, shell}
+	if reason := newProtection(live, nil, true).Reason(newer); reason != "" {
+		t.Fatalf("Windows: process with a reused PID protected: %s", reason)
 	}
-	if runtime.GOOS != "windows" && reason == "" {
-		t.Fatal("Driga's parent not protected")
+	if newProtection(live, nil, true).Reason(shell) != "" {
+		t.Fatal("Windows: the reused PID's parent protected")
 	}
-	// A real parent, started before Driga, stays protected everywhere.
+	if newProtection(live, nil, false).Reason(newer) == "" {
+		t.Fatal("Unix: Driga's parent not protected")
+	}
+	// A real parent, started before Driga, and Driga's children stay
+	// protected everywhere, as does a child older than its root.
 	older := ownedProc(t, fakePID+2, fakePID+3, "/bin/sleep", now.Add(-2*time.Hour))
-	if NewProtection([]model.Proc{driga, older, shell}, nil).Reason(older) == "" {
-		t.Fatal("Driga's parent not protected")
-	}
-	child := ownedProc(t, fakePID+4, fakePID+1, "/bin/sleep", now)
-	if NewProtection([]model.Proc{driga, child}, nil).Reason(child) == "" {
-		t.Fatal("Driga's child not protected")
+	child := ownedProc(t, fakePID+4, fakePID+1, "/bin/sleep", now.Add(-3*time.Hour))
+	for _, windows := range []bool{false, true} {
+		pr := newProtection([]model.Proc{driga, older, shell, child}, nil, windows)
+		if pr.Reason(older) == "" || pr.Reason(shell) == "" || pr.Reason(child) == "" {
+			t.Fatalf("windows=%v: Driga's family not protected", windows)
+		}
 	}
 }
 
-// A broker root that exited and whose PID a newer process reused no longer
-// protects that process.
-func TestProtectionExitedBrokerRoot(t *testing.T) {
+// A broker root protects its children even after it exited, and stops
+// protecting a PID only when a clearly newer process holds it.
+func TestProtectionBrokerRoots(t *testing.T) {
 	now := time.Now()
-	reused := ownedProc(t, fakePID+5, 1, "/bin/sleep", now)
-	exited := reused
-	exited.StartTime = now.Add(-time.Hour)
-	if reason := NewProtection([]model.Proc{reused}, []model.Proc{exited}).Reason(reused); reason != "" {
-		t.Fatalf("reused root PID protected: %s", reason)
+	root := ownedProc(t, fakePID+5, 1, "/bin/agent", now.Add(-time.Hour))
+	child := ownedProc(t, fakePID+6, fakePID+5, "/bin/sleep", now)
+	for _, windows := range []bool{false, true} {
+		if newProtection([]model.Proc{child}, []model.Proc{root}, windows).Reason(child) == "" {
+			t.Fatalf("windows=%v: exited root's child not protected", windows)
+		}
 	}
-	if NewProtection([]model.Proc{reused}, []model.Proc{reused}).Reason(reused) == "" {
-		t.Fatal("live broker root not protected")
+	rounded := root
+	rounded.StartTime = root.StartTime.Add(500 * time.Millisecond)
+	if newProtection([]model.Proc{rounded}, []model.Proc{root}, true).Reason(rounded) == "" {
+		t.Fatal("root with a slightly different start time not protected")
+	}
+	reused := ownedProc(t, fakePID+5, 1, "/bin/sleep", now)
+	if reason := newProtection([]model.Proc{reused}, []model.Proc{root}, true).Reason(reused); reason != "" {
+		t.Fatalf("newer process with a root's PID protected: %s", reason)
 	}
 }

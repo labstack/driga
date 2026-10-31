@@ -13,7 +13,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/labstack/driga/internal/derive"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/platform"
 )
@@ -43,47 +42,86 @@ func Owned(p model.Proc) bool {
 	return p.OwnerUID == uint32(os.Getuid()) && p.OwnerSID == ""
 }
 
-// ProtectedReason uses live graph membership on each call, including new Chat
-// descendants and ancestors. The broker supplies its complete protected roots.
+// ProtectedReason is why p may not be signalled given one live snapshot and
+// the broker's protected roots, or "" when it may.
 func ProtectedReason(p model.Proc, live, protected []model.Proc) string {
+	if reason := identityReason(p); reason != "" {
+		return reason
+	}
 	return NewProtection(live, protected).Reason(p)
 }
 
-// Protection is the set of processes one live snapshot protects: Driga and
-// Chat processes, their descendants, and the ancestors of all of them.
-// Parent links follow derive.ProcIndex, which on Windows ignores a parent PID
-// that a newer process reused after the parent exited.
+// Protection is the set of processes one live snapshot protects: Driga, Chat
+// and the broker's protected roots, all their descendants, and the ancestors
+// of all of them. It errs toward protecting: descendants follow every parent
+// link, and an ancestor walk stops only at a parent that provably reused an
+// exited parent's PID on Windows, where a process keeps its creator's PID.
 type Protection struct{ blocked map[int32]bool }
 
 // NewProtection computes the protected set once, so callers checking many
 // targets against one snapshot do not rebuild it per target.
 func NewProtection(live, protected []model.Proc) Protection {
-	idx := derive.NewProcIndex(live)
+	return newProtection(live, protected, runtime.GOOS == "windows")
+}
+
+func newProtection(live, protected []model.Proc, windows bool) Protection {
+	byPID := make(map[int32]model.Proc, len(live))
+	children := map[int32][]int32{}
+	for _, r := range live {
+		byPID[r.PID] = r
+		children[r.PPID] = append(children[r.PPID], r.PID)
+	}
 	blocked := map[int32]bool{}
 	ancestors := func(pid int32) {
-		for _, a := range idx.Ancestors(pid) {
-			blocked[a] = true
+		for seen := map[int32]bool{pid: true}; ; {
+			cur, ok := byPID[pid]
+			if !ok || cur.PPID <= 0 || seen[cur.PPID] {
+				return
+			}
+			parent, ok := byPID[cur.PPID]
+			if ok && windows && !parent.StartTime.IsZero() && !cur.StartTime.IsZero() && parent.StartTime.After(cur.StartTime) {
+				return
+			}
+			pid = cur.PPID
+			seen[pid] = true
+			blocked[pid] = true
+		}
+	}
+	rooted := map[int32]bool{}
+	root := func(pid int32) {
+		if rooted[pid] {
+			return
+		}
+		blocked[pid] = true
+		ancestors(pid)
+		for pending := []int32{pid}; len(pending) > 0; {
+			parent := pending[len(pending)-1]
+			pending = pending[:len(pending)-1]
+			rooted[parent] = true
+			for _, child := range children[parent] {
+				if !rooted[child] {
+					blocked[child] = true
+					pending = append(pending, child)
+				}
+			}
 		}
 	}
 	self := int32(os.Getpid())
 	blocked[self] = true
-	if _, ok := idx.Get(self); ok {
+	if _, ok := byPID[self]; ok {
 		ancestors(self)
 	} else {
-		blocked[int32(os.Getppid())] = true
-	}
-	root := func(pid int32) {
-		blocked[pid] = true
-		ancestors(pid)
-		// Only explicit Chat/Driga roots propagate protection downwards.
-		for _, d := range idx.Descendants(pid) {
-			blocked[d.PID] = true
-		}
+		// Without itself in the snapshot, Driga still protects its parent and
+		// whatever of the parent's ancestry the snapshot has.
+		parent := int32(os.Getppid())
+		blocked[parent] = true
+		ancestors(parent)
 	}
 	for _, r := range protected {
-		// A broker root that exited and whose PID a newer process reused no
-		// longer protects that process or its family.
-		if now, ok := idx.Get(r.PID); ok && !r.StartTime.IsZero() && !now.StartTime.IsZero() && !now.StartTime.Equal(r.StartTime) {
+		// A newer process holding the PID of a broker root that exited is
+		// not that root. Only a clearly later start proves it; any other
+		// mismatch keeps the protection.
+		if now, ok := byPID[r.PID]; ok && !r.StartTime.IsZero() && !now.StartTime.IsZero() && now.StartTime.After(r.StartTime.Add(time.Second)) {
 			continue
 		}
 		root(r.PID)
@@ -99,6 +137,18 @@ func NewProtection(live, protected []model.Proc) Protection {
 
 // Reason is why p may not be signalled, or "" when it may.
 func (pr Protection) Reason(p model.Proc) string {
+	if reason := identityReason(p); reason != "" {
+		return reason
+	}
+	if pr.blocked[p.PID] {
+		return "Driga, Chat, or an ancestor/descendant is protected"
+	}
+	return ""
+}
+
+// identityReason refuses a target whose own identity rules out a signal,
+// before any process graph is built.
+func identityReason(p model.Proc) string {
 	if p.PID <= 1 {
 		return "system PID or process group is refused"
 	}
@@ -107,9 +157,6 @@ func (pr Protection) Reason(p model.Proc) string {
 	}
 	if p.Partial || p.StartTime.IsZero() || p.Exe == "" || p.Cmdline == "" || len(p.Argv) == 0 {
 		return "process identity is incomplete"
-	}
-	if pr.blocked[p.PID] {
-		return "Driga, Chat, or an ancestor/descendant is protected"
 	}
 	return ""
 }
