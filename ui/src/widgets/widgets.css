@@ -6,7 +6,9 @@
    off under reduced motion. */
 
 /* A KPI tile: bordered on a board; in the header it is a bare cluster on
-   the shell with the same tint and rule. */
+   the shell. A board tile in need of attention takes the tint and rule; a
+   header tile keeps only its colored icon, dot and line, so it does not read
+   as selected beside its neighbours. */
 .w-tile { position: relative; display: block; width: 100%; text-align: left; border: 1px solid var(--driga-border); border-radius: var(--mantine-radius-md); background: var(--driga-raised); transition: background-color 150ms ease-out, box-shadow 150ms ease-out; }
 .w-tile[data-size="header"] { width: auto; border: none; background: transparent; }
 .w-tile[data-clickable] { cursor: pointer; }
@@ -21,6 +23,8 @@
 .w-tile[data-attention="warning"][data-selected="true"] { box-shadow: inset 2px 0 0 var(--mantine-color-warning-filled), inset 0 0 0 1px var(--mantine-color-brand-filled); }
 .w-tile[data-attention="info"][data-selected="true"] { box-shadow: inset 2px 0 0 var(--mantine-color-info-filled), inset 0 0 0 1px var(--mantine-color-brand-filled); }
 .w-tile[data-attention="danger"][data-selected="true"] { box-shadow: inset 2px 0 0 var(--mantine-color-danger-filled), inset 0 0 0 1px var(--mantine-color-brand-filled); }
+.w-tile[data-size="header"][data-attention] { background: transparent; box-shadow: none; }
+.w-tile[data-size="header"][data-attention][data-selected="true"] { box-shadow: inset 0 0 0 1px var(--mantine-color-brand-filled); }
 
 /* A tile's menu button waits in its corner until the tile is hovered,
    focused or its menu is open; always on touch. */

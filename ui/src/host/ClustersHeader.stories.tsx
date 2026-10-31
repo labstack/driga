@@ -144,6 +144,11 @@ export const OneStuck: Story = {
     const stuck = await tile(canvasElement, "stuck");
     await expect(stuck).toHaveTextContent(/Stuck\s*1/);
     await expect(stuck).toHaveAttribute("data-attention", "danger");
+    // In the header, attention is the colored icon and dot alone: a tint or
+    // rule would read as the selected tile.
+    const look = getComputedStyle(stuck);
+    await expect(look.backgroundColor).toBe("rgba(0, 0, 0, 0)");
+    await expect(look.boxShadow).toBe("none");
     await userEvent.click(stuck); await expect(args.onFilter).toHaveBeenCalledWith("stuck");
     await expect(await tile(canvasElement, "waiting")).toHaveTextContent(/Need you\s*0/);
     await rest(canvasElement);
