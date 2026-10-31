@@ -780,3 +780,29 @@ func TestWhyOmitsMainWorktree(t *testing.T) {
 		}
 	}
 }
+
+// A trash name taken between the free-name check and the rename is retried
+// with the next name instead of failing the removal.
+func TestTrashNameTakenRetries(t *testing.T) {
+	e, _, _, _ := fixture(t)
+	path := scratch(t, e, "taken")
+	c := listed(t, e, path)
+	var tried []string
+	e.Rename = func(from, to string) error {
+		tried = append(tried, to)
+		if len(tried) == 1 {
+			return syscall.EEXIST
+		}
+		return os.Rename(from, to)
+	}
+	r, err := Apply(context.Background(), e, c, ApplyOpts{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tried) != 2 || tried[0] == tried[1] || r.TrashPath != tried[1] {
+		t.Fatal(tried, r.TrashPath)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatal("scratch still in place", err)
+	}
+}

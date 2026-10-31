@@ -37,26 +37,34 @@ func trash(ctx context.Context, e Env, c Candidate, opts ApplyOpts, r Result) (R
 		return r, err
 	}
 	name := filepath.Base(c.Path)
-	for i := 0; ; i++ {
-		candidate := name
-		if i > 0 {
-			candidate = fmt.Sprintf("%s.%d.%d", name, e.now().UnixNano(), i)
-		}
-		r.TrashPath = filepath.Join(files, candidate)
-		_, err := os.Lstat(r.TrashPath)
-		if os.IsNotExist(err) {
-			if infoDir != "" {
-				if _, err := os.Lstat(filepath.Join(infoDir, candidate+".trashinfo")); err == nil {
-					continue
-				} else if !os.IsNotExist(err) {
-					return r, err
-				}
+	// pick sets r.TrashPath to the first free trash name at index i or later
+	// and returns its index.
+	pick := func(i int) (int, error) {
+		for ; ; i++ {
+			candidate := name
+			if i > 0 {
+				candidate = fmt.Sprintf("%s.%d.%d", name, e.now().UnixNano(), i)
 			}
-			break
+			r.TrashPath = filepath.Join(files, candidate)
+			_, err := os.Lstat(r.TrashPath)
+			if os.IsNotExist(err) {
+				if infoDir != "" {
+					if _, err := os.Lstat(filepath.Join(infoDir, candidate+".trashinfo")); err == nil {
+						continue
+					} else if !os.IsNotExist(err) {
+						return i, err
+					}
+				}
+				return i, nil
+			}
+			if err != nil {
+				return i, err
+			}
 		}
-		if err != nil {
-			return r, err
-		}
+	}
+	index, err := pick(0)
+	if err != nil {
+		return r, err
 	}
 	r.Commands = [][]string{{"rename", c.Path, r.TrashPath}}
 	if opts.DryRun {
@@ -83,25 +91,35 @@ func trash(ctx context.Context, e Env, c Candidate, opts ApplyOpts, r Result) (R
 	if infoDir != "" {
 		canonicalInfo = filepath.Join(canonicalHome, mustRelative(e.Home, infoDir))
 	}
-	finish, err := trashInfo(canonicalInfo, filepath.Base(r.TrashPath), c.Path, e.now())
-	if err != nil {
-		return r, err
-	}
-	var moveErr error
-	if e.Rename != nil {
-		moveErr = e.Rename(c.Path, r.TrashPath)
-	} else {
-		moveErr = renameScratch(c, filepath.Join(canonicalFiles, filepath.Base(r.TrashPath)))
-	}
-	if err := moveErr; err != nil {
-		finish(false)
-		if errors.Is(err, syscall.EXDEV) {
-			return r, fmt.Errorf("trash rename (same filesystem required): %w", err)
+	// The rename never replaces an item; a name taken since pick is retried
+	// with the next one.
+	for attempt := 0; ; attempt++ {
+		finish, err := trashInfo(canonicalInfo, filepath.Base(r.TrashPath), c.Path, e.now())
+		if err != nil {
+			return r, err
 		}
-		return r, fmt.Errorf("trash rename: %w", err)
+		var moveErr error
+		if e.Rename != nil {
+			moveErr = e.Rename(c.Path, r.TrashPath)
+		} else {
+			moveErr = renameScratch(c, filepath.Join(canonicalFiles, filepath.Base(r.TrashPath)))
+		}
+		if moveErr == nil {
+			finish(true)
+			return r, nil
+		}
+		finish(false)
+		if errors.Is(moveErr, syscall.EEXIST) && attempt < 8 {
+			if index, err = pick(index + 1); err != nil {
+				return r, err
+			}
+			continue
+		}
+		if errors.Is(moveErr, syscall.EXDEV) {
+			return r, fmt.Errorf("trash rename (same filesystem required): %w", moveErr)
+		}
+		return r, fmt.Errorf("trash rename: %w", moveErr)
 	}
-	finish(true)
-	return r, nil
 }
 
 // Both arguments were already validated as known HOME-relative OS paths.

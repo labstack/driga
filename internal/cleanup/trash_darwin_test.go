@@ -40,3 +40,28 @@ func TestScratchTrashUnreadable(t *testing.T) {
 		t.Fatal("existing trash item replaced", err)
 	}
 }
+
+// A .Trash swapped for a symlink after the checks is refused by the rename
+// itself, so scratch never lands in the symlink's target.
+func TestRenameIntoTrashRefusesSymlink(t *testing.T) {
+	home := t.TempDir()
+	elsewhere := t.TempDir()
+	if err := os.Symlink(elsewhere, filepath.Join(home, ".Trash")); err != nil {
+		t.Fatal(err)
+	}
+	src := t.TempDir()
+	if err := os.Mkdir(filepath.Join(src, "item"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	source, err := openDir(resolved(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer source.Close()
+	if err := renameIntoTrash(source, "item", nil, filepath.Join(resolved(home), ".Trash", "item")); err == nil {
+		t.Fatal("rename followed a .Trash symlink")
+	}
+	if _, err := os.Stat(filepath.Join(elsewhere, "item")); !os.IsNotExist(err) {
+		t.Fatal("scratch moved through the symlink", err)
+	}
+}
