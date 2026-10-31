@@ -190,49 +190,64 @@ const (
 	lsofAllDeadline   = 10 * time.Second
 )
 
+var (
+	_ SocketProber = darwinPlatform{}
+	_ PeerResolver = darwinPlatform{}
+)
+
 // ExternalPeers checks the tree's own Unix and Internet sockets through the
 // proc_info syscall, falling back to lsof if the kernel's socket layout
-// changed.
+// changed. A tree pid that cannot be read counts as connected.
 func (darwinPlatform) ExternalPeers(ctx context.Context, pids []int32) (map[int32]model.PeerState, error) {
-	sockets, err := treeSockets(ctx, pids)
-	if err == nil {
-		return classifySockets(sockets, pids, nil, false), nil
-	}
-	if !errors.Is(err, errSocketLayout) {
-		return nil, err
-	}
-	warnSocketLayout(err)
-	return lsofExternalPeers(ctx, pids)
-}
-
-// ResolvedPeers takes the tree's Unix sockets from one proc_info scan of all
-// of this user's processes, so a listener's clients and the owners of outside
-// peers come from the same snapshot as the tree. If any of this user's
-// processes cannot be read, every pid reports PeerConnected.
-func (darwinPlatform) ResolvedPeers(ctx context.Context, pids []int32) (map[int32]model.PeerState, error) {
-	tree, err := treeSockets(ctx, pids)
-	var all []lsofSocket
-	complete := false
-	if err == nil {
-		all, complete, err = allUnixSockets(ctx)
-	}
+	scan, err := scanSockets(ctx, pids, false)
 	if errors.Is(err, errSocketLayout) {
 		warnSocketLayout(err)
-		return lsofResolvedPeers(ctx, pids)
+		return lsofExternalPeers(ctx, pids)
+	}
+	if errors.Is(err, errScanDeadline) {
+		return nil, fmt.Errorf("socket check: %w", context.DeadlineExceeded)
 	}
 	if err != nil {
 		return nil, err
 	}
-	if !complete {
+	return scan.classify(pids, false), nil
+}
+
+// ResolvedPeers takes the tree's and every other process's sockets from one
+// proc_info scan, so a listener's clients and the owners of outside peers come
+// from one snapshot. If any of this user's processes cannot be read, or the
+// scan runs out of time, every pid reports PeerConnected.
+func (darwinPlatform) ResolvedPeers(ctx context.Context, pids []int32) (map[int32]model.PeerState, error) {
+	scan, err := scanSockets(ctx, pids, true)
+	if errors.Is(err, errSocketLayout) {
+		warnSocketLayout(err)
+		return lsofResolvedPeers(ctx, pids)
+	}
+	if errors.Is(err, errScanDeadline) || (err == nil && !scan.complete) {
 		return allConnected(pids), nil
 	}
-	sockets := all
-	for _, s := range tree {
-		if s.kind != "unix" {
-			sockets = append(sockets, s)
+	if err != nil {
+		return nil, err
+	}
+	return scan.classify(pids, true), nil
+}
+
+// classify turns a scan into peer states; with resolved set, its Unix
+// sockets are every visible process's.
+func (scan socketScan) classify(pids []int32, resolved bool) map[int32]model.PeerState {
+	var all []lsofSocket
+	if resolved {
+		for _, s := range scan.sockets {
+			if s.kind == "unix" {
+				all = append(all, s)
+			}
 		}
 	}
-	return classifySockets(sockets, pids, all, true), nil
+	result := classifySockets(scan.sockets, pids, all, resolved)
+	for _, pid := range scan.unreadable {
+		result[pid] = model.PeerConnected
+	}
+	return result
 }
 
 var socketLayoutWarned sync.Once

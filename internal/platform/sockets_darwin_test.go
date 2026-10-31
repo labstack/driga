@@ -75,7 +75,7 @@ func TestProcSocketsLiveListener(t *testing.T) {
 		}
 	}()
 	self := int32(os.Getpid())
-	before, err := procSockets(self)
+	before, err := new(socketReader).sockets(self, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,12 +106,12 @@ func TestProcSocketsLiveListener(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = conn.Close() })
 	clientPID := int32(client.Process.Pid)
-	clientSockets, err := procSockets(clientPID)
+	clientSockets, err := new(socketReader).sockets(clientPID, nil)
 	if err != nil || len(clientSockets) == 0 {
 		t.Fatalf("client sockets = %+v, %v", clientSockets, err)
 	}
 	clientAddr := clientSockets[0].device
-	after, err := procSockets(self)
+	after, err := new(socketReader).sockets(self, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -155,7 +155,7 @@ func TestProcSocketsMatchLsof(t *testing.T) {
 		_, peer, _ := strings.Cut(s.name, "->")
 		fromLsof[socketEndpoint(s.device)] = socketEndpoint(peer)
 	}
-	sockets, err := procSockets(self)
+	sockets, err := new(socketReader).sockets(self, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -197,17 +197,60 @@ func TestTreeSocketsSkipsExited(t *testing.T) {
 	}
 }
 
-// Another user's processes are unreadable without root; they must not make
-// the scan incomplete.
-func TestAllUnixSocketsSkipsOtherUsers(t *testing.T) {
+// Another user's processes are never read, so they cannot make the scan
+// incomplete; this process's sockets are read once, with every kind kept only
+// for tree pids.
+func TestScanSocketsAllProcesses(t *testing.T) {
 	if os.Getuid() == 0 {
 		t.Skip("root reads every process")
 	}
-	sockets, complete, err := allUnixSockets(context.Background())
-	if err != nil || !complete {
-		t.Fatalf("scan: %d sockets, complete=%v, %v", len(sockets), complete, err)
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
 	}
-	if !sameUser(int32(os.Getpid()), uint32(os.Getuid())) || sameUser(1, uint32(os.Getuid())) {
-		t.Fatal("process owner lookup")
+	t.Cleanup(func() { _ = listener.Close() })
+	a, b, err := socketPair()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = unix.Close(a); _ = unix.Close(b) })
+	self := int32(os.Getpid())
+	scan, err := scanSockets(context.Background(), []int32{self}, true)
+	if err != nil || !scan.complete || len(scan.unreadable) != 0 {
+		t.Fatalf("scan: %d sockets, complete=%v, unreadable=%v, %v", len(scan.sockets), scan.complete, scan.unreadable, err)
+	}
+	if !slices.ContainsFunc(scan.sockets, func(s lsofSocket) bool { return s.pid == self && s.kind == "IPv4" && s.state == "LISTEN" }) {
+		t.Fatal("tree pid's TCP listener missing")
+	}
+	if slices.ContainsFunc(scan.sockets, func(s lsofSocket) bool { return s.pid != self && s.kind != "unix" }) {
+		t.Fatal("kept a non-Unix socket of another process")
+	}
+	if slices.ContainsFunc(scan.sockets, func(s lsofSocket) bool { return s.pid == 1 }) {
+		t.Fatal("read launchd, another user's process")
+	}
+}
+
+// A tree pid that cannot be read keeps its tree in use without failing the
+// check for every other tree.
+func TestUnreadableTreePIDCountsConnected(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("root reads every process")
+	}
+	self := int32(os.Getpid())
+	got, err := (darwinPlatform{}).ExternalPeers(context.Background(), []int32{1, self})
+	if err != nil || got[1] != model.PeerConnected {
+		t.Fatalf("unreadable pid 1 = %v, %v", got, err)
+	}
+	if _, ok := got[self]; !ok {
+		t.Fatalf("readable pid missing: %v", got)
+	}
+}
+
+func TestScanDeadline(t *testing.T) {
+	if got := scanDeadline(make([]int32, 401), true); got != 3*lsofBatchDeadline+lsofAllDeadline {
+		t.Fatalf("deadline = %s", got)
+	}
+	if got := scanDeadline(nil, false); got != lsofBatchDeadline {
+		t.Fatalf("deadline = %s", got)
 	}
 }

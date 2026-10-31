@@ -8,6 +8,7 @@ import (
 	"net/netip"
 	"os"
 	"syscall"
+	"time"
 	"unsafe"
 
 	"golang.org/x/sys/unix"
@@ -18,11 +19,9 @@ import (
 // SDK's sys/proc_info.h. Offsets match for arm64 and x86_64.
 // https://github.com/apple-oss-distributions/xnu/blob/main/bsd/sys/proc_info.h
 const (
-	procInfoListPids  = 1 // PROC_INFO_CALL_LISTPIDS
 	procInfoPidInfo   = 2 // PROC_INFO_CALL_PIDINFO
 	procInfoPidFdInfo = 3 // PROC_INFO_CALL_PIDFDINFO
 
-	procAllPids         = 1 // PROC_ALL_PIDS
 	procPidListFds      = 1 // PROC_PIDLISTFDS
 	procPidFdSocketInfo = 3 // PROC_PIDFDSOCKETINFO
 	proxFdTypeSocket    = 2 // PROX_FDTYPE_SOCKET
@@ -53,82 +52,81 @@ var errSocketLayout = errors.New("socket_fdinfo layout changed")
 
 var tcpStateNames = [...]string{"CLOSED", "LISTEN", "SYN_SENT", "SYN_RECEIVED", "ESTABLISHED", "CLOSE_WAIT", "FIN_WAIT_1", "CLOSING", "LAST_ACK", "FIN_WAIT_2", "TIME_WAIT"}
 
+// procInfo calls proc_info with buf as its buffer.
 func procInfo(call, pid, flavor int, arg uint64, buf []byte) (int, error) {
 	var p unsafe.Pointer
 	if len(buf) > 0 {
 		p = unsafe.Pointer(&buf[0])
 	}
-	n, _, errno := syscall.Syscall6(unix.SYS_PROC_INFO, uintptr(call), uintptr(pid), uintptr(flavor), uintptr(arg), uintptr(p), uintptr(len(buf)))
+	return procInfoAt(call, pid, flavor, arg, p, len(buf))
+}
+
+// procInfoAt is the raw proc_info syscall.
+func procInfoAt(call, pid, flavor int, arg uint64, buf unsafe.Pointer, size int) (int, error) {
+	n, _, errno := syscall.Syscall6(unix.SYS_PROC_INFO, uintptr(call), uintptr(pid), uintptr(flavor), uintptr(arg), uintptr(buf), uintptr(size))
 	if errno != 0 {
 		return 0, errno
 	}
 	return int(n), nil
 }
 
-// procAllPIDs is proc_listallpids.
-func procAllPIDs() ([]int32, error) {
-	n, err := procInfo(procInfoListPids, procAllPids, 0, 0, nil)
-	if err != nil {
-		return nil, err
-	}
-	// Leave room for processes started between the two calls.
-	buf := make([]byte, n+256*4)
-	n, err = procInfo(procInfoListPids, procAllPids, 0, 0, buf)
-	if err != nil {
-		return nil, err
-	}
-	var pids []int32
-	for i := 0; i+4 <= n; i += 4 {
-		if pid := int32(binary.LittleEndian.Uint32(buf[i:])); pid > 0 {
-			pids = append(pids, pid)
-		}
-	}
-	return pids, nil
-}
+// socketReader reads processes' sockets, reusing its buffers across them.
+type socketReader struct{ fds, info []byte }
 
-// procSockets returns pid's sockets as lsof-equivalent records. ESRCH means
-// the process exited and EPERM that it belongs to another user; both are
-// returned for the caller to classify.
-func procSockets(pid int32) ([]lsofSocket, error) {
+// sockets appends pid's sockets as lsof-equivalent records to out. ESRCH means
+// the process exited and EPERM that it cannot be read; both are returned for
+// the caller to classify.
+func (r *socketReader) sockets(pid int32, out []lsofSocket) ([]lsofSocket, error) {
+	// With no buffer, PROC_PIDLISTFDS returns the size it needs; leave room
+	// for descriptors opened before the second call.
+	need, err := procInfo(procInfoPidInfo, int(pid), procPidListFds, 0, nil)
+	if err != nil {
+		return out, err
+	}
 	var fds []byte
-	for size := 64 * sizeofProcFdInfo; ; size *= 2 {
+	for size := need + 32*sizeofProcFdInfo; ; size *= 2 {
 		if size > maxProcFds*sizeofProcFdInfo {
-			return nil, fmt.Errorf("pid %d: too many open files", pid)
+			return out, fmt.Errorf("pid %d: too many open files", pid)
 		}
-		fds = make([]byte, size)
-		n, err := procInfo(procInfoPidInfo, int(pid), procPidListFds, 0, fds)
+		if cap(r.fds) < size {
+			r.fds = make([]byte, size)
+		}
+		n, err := procInfo(procInfoPidInfo, int(pid), procPidListFds, 0, r.fds[:size])
 		if err != nil {
-			return nil, err
+			return out, err
 		}
 		// A full buffer may have been truncated.
 		if n < size {
-			fds = fds[:n]
+			fds = r.fds[:n]
 			break
 		}
 	}
-	var sockets []lsofSocket
-	info := make([]byte, sizeofSocketFdInfo)
+	if r.info == nil {
+		r.info = make([]byte, sizeofSocketFdInfo)
+	}
 	for i := 0; i+sizeofProcFdInfo <= len(fds); i += sizeofProcFdInfo {
 		if binary.LittleEndian.Uint32(fds[i+4:]) != proxFdTypeSocket {
 			continue
 		}
 		fd := binary.LittleEndian.Uint32(fds[i:])
-		n, err := procInfo(procInfoPidFdInfo, int(pid), procPidFdSocketInfo, uint64(fd), info)
-		if errors.Is(err, syscall.EBADF) {
-			// Closed between listing and reading.
+		n, err := procInfo(procInfoPidFdInfo, int(pid), procPidFdSocketInfo, uint64(fd), r.info)
+		switch {
+		case errors.Is(err, syscall.EBADF), errors.Is(err, syscall.ENOTSOCK), errors.Is(err, syscall.EOPNOTSUPP):
+			// Closed, or reused for something else, between listing and reading.
 			continue
+		case errors.Is(err, syscall.ENOMEM):
+			// The kernel's struct outgrew the buffer.
+			return out, fmt.Errorf("pid %d fd %d: %w", pid, fd, errSocketLayout)
+		case err != nil:
+			return out, err
+		case n != sizeofSocketFdInfo:
+			return out, fmt.Errorf("pid %d fd %d: %d bytes: %w", pid, fd, n, errSocketLayout)
 		}
-		if err != nil {
-			return nil, err
-		}
-		if n != sizeofSocketFdInfo {
-			return nil, fmt.Errorf("pid %d fd %d: %d bytes: %w", pid, fd, n, errSocketLayout)
-		}
-		if s, ok := decodeSocketFdInfo(pid, info); ok {
-			sockets = append(sockets, s)
+		if s, ok := decodeSocketFdInfo(pid, r.info); ok {
+			out = append(out, s)
 		}
 	}
-	return sockets, nil
+	return out, nil
 }
 
 // decodeSocketFdInfo converts one struct socket_fdinfo into the record lsof
@@ -192,68 +190,94 @@ func inAddr(b []byte, v4 bool) netip.Addr {
 	return netip.AddrFrom16([16]byte(b[:16])).Unmap()
 }
 
-// treeSockets reads the sockets of pids. A pid that exited reports nothing;
-// any other failure is returned.
-func treeSockets(ctx context.Context, pids []int32) ([]lsofSocket, error) {
-	var sockets []lsofSocket
-	for _, pid := range pids {
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-		if pid <= 0 {
-			continue
-		}
-		s, err := procSockets(pid)
-		if errors.Is(err, syscall.ESRCH) {
-			continue
-		}
-		if err != nil {
-			return nil, fmt.Errorf("socket check pid %d: %w", pid, err)
-		}
-		sockets = append(sockets, s...)
+// errScanDeadline means a socket scan ran out of its own time, not the
+// caller's.
+var errScanDeadline = errors.New("socket scan deadline exceeded")
+
+// scanDeadline bounds a scan: five seconds per 200 tree pids, plus ten for
+// the scan of every process.
+func scanDeadline(pids []int32, all bool) time.Duration {
+	d := time.Duration(max(1, (len(pids)+lsofBatch-1)/lsofBatch)) * lsofBatchDeadline
+	if all {
+		d += lsofAllDeadline
 	}
-	return sockets, nil
+	return d
 }
 
-// allUnixSockets reads every visible process's Unix sockets. complete is
-// false when a process of this user could not be read, so a client may be
-// missing; another user's processes are expected to be unreadable.
-func allUnixSockets(ctx context.Context) (sockets []lsofSocket, complete bool, err error) {
-	pids, err := procAllPIDs()
-	if err != nil {
-		return nil, false, nil
-	}
-	uid := uint32(os.Getuid())
-	complete = true
+// socketScan is the result of scanSockets. unreadable lists tree pids whose
+// sockets could not be read; complete is false when another process of this
+// user could not be read, so a client may be missing.
+type socketScan struct {
+	sockets    []lsofSocket
+	unreadable []int32
+	complete   bool
+}
+
+// scanSockets reads every socket of the tree pids and, with all set, the Unix
+// sockets of every other process this user owns, each process once. A process
+// that exited reports nothing.
+func scanSockets(ctx context.Context, pids []int32, all bool) (socketScan, error) {
+	parent := ctx
+	ctx, cancel := context.WithTimeout(ctx, scanDeadline(pids, all))
+	defer cancel()
+	tree := make(map[int32]bool, len(pids))
+	targets := make([]int32, 0, len(pids))
 	for _, pid := range pids {
-		if err := ctx.Err(); err != nil {
-			return nil, false, err
+		if pid > 0 && !tree[pid] {
+			tree[pid] = true
+			targets = append(targets, pid)
 		}
-		s, err := procSockets(pid)
+	}
+	scan := socketScan{complete: true}
+	if all {
+		// One snapshot names every process and its owner, so other users'
+		// processes, unreadable without root, are never asked.
+		kprocs, err := unix.SysctlKinfoProcSlice("kern.proc.all")
+		if err != nil {
+			scan.complete = false
+		}
+		uid := uint32(os.Getuid())
+		for _, k := range kprocs {
+			if pid := k.Proc.P_pid; pid > 0 && !tree[pid] && k.Eproc.Ucred.Uid == uid {
+				targets = append(targets, pid)
+			}
+		}
+	}
+	var r socketReader
+	for _, pid := range targets {
+		if err := ctx.Err(); err != nil {
+			if parent.Err() != nil {
+				return socketScan{}, parent.Err()
+			}
+			return socketScan{}, errScanDeadline
+		}
+		start := len(scan.sockets)
+		var err error
+		scan.sockets, err = r.sockets(pid, scan.sockets)
 		switch {
 		case err == nil:
-			for _, socket := range s {
-				if socket.kind == "unix" {
-					sockets = append(sockets, socket)
+		case errors.Is(err, syscall.ESRCH):
+		case errors.Is(err, errSocketLayout):
+			return socketScan{}, err
+		case tree[pid]:
+			scan.unreadable = append(scan.unreadable, pid)
+		default:
+			scan.complete = false
+		}
+		if err != nil {
+			scan.sockets = scan.sockets[:start]
+			continue
+		}
+		if !tree[pid] {
+			// Other processes matter only as Unix peers.
+			kept := scan.sockets[:start]
+			for _, s := range scan.sockets[start:] {
+				if s.kind == "unix" {
+					kept = append(kept, s)
 				}
 			}
-		case errors.Is(err, syscall.ESRCH):
-		case errors.Is(err, syscall.EPERM) && !sameUser(pid, uid):
-		case errors.Is(err, errSocketLayout):
-			return nil, false, err
-		default:
-			complete = false
+			scan.sockets = kept
 		}
 	}
-	return sockets, complete, nil
-}
-
-// sameUser reports whether pid runs as uid; an unknown owner counts as the
-// same user, so it cannot hide a client.
-func sameUser(pid int32, uid uint32) bool {
-	info, err := unix.SysctlKinfoProc("kern.proc.pid", int(pid))
-	if err != nil {
-		return !errors.Is(err, syscall.ESRCH)
-	}
-	return info.Eproc.Ucred.Uid == uid
+	return scan, nil
 }

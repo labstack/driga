@@ -1,10 +1,7 @@
 package platform
 
 import (
-	"syscall"
 	"unsafe"
-
-	"golang.org/x/sys/unix"
 )
 
 // proc_pid_rusage's documented libproc wrapper invokes __proc_info with
@@ -14,9 +11,9 @@ import (
 // are requested; denied/exited processes fall back to the sampled RSS.
 func physicalFootprint(pid int32) (uint64, error) {
 	var b [176]byte
-	_, _, errno := syscall.Syscall6(unix.SYS_PROC_INFO, 9, uintptr(pid), 2, 0, uintptr(unsafe.Pointer(&b[0])), 0)
-	if errno != 0 {
-		return 0, errno
+	// The buffer size argument stays 0: rusage takes its size from the flavor.
+	if _, err := procInfoAt(9, int(pid), 2, 0, unsafe.Pointer(&b[0]), 0); err != nil {
+		return 0, err
 	}
 	return parseFootprint(b[:])
 }
