@@ -378,7 +378,7 @@ No inputs.
 
 ### run_command
 
-Run one local bounded command through broker preparation and approval. Use literal argv or an explicit shell script; 120 second default, 600 maximum. Process and destructive commands always need a person.
+Run one local bounded command through broker preparation and approval. Use literal argv or an explicit shell script; 120 second default, 600 maximum. Process and destructive commands always need a person. Commands run with HOME and TMPDIR in a private, initially empty scratch directory, so tools that default to the home directory see no user caches, config or credentials and act on scratch instead, and with PATH=/usr/bin:/bin:/usr/sbin:/sbin. To run other programs, set PATH in a script, such as PATH=/opt/homebrew/bin:$PATH npm test, since many of them start their interpreter through /usr/bin/env. Writes outside the project and scratch are refused.
 
 | Input | Type | Required | Description |
 |---|---|---|---|
