@@ -156,7 +156,14 @@ func (l *Lifecycle) Control(ctx context.Context, action string) error {
 		if err := c.Start(); err != nil {
 			return fmt.Errorf("installed the Driga service; start it with driga service start: %w", err)
 		}
-		return nil
+		// Start leaves a running service alone. After an upgrade that service
+		// still runs the replaced executable's version until it restarts.
+		owner, held, err := l.host.owner()
+		if err != nil || !held || owner.Version == "" || l.opts.Version == "" || owner.Version == l.opts.Version {
+			return nil
+		}
+		slog.Info("the Driga service runs another version; restarting it", "event", "service_restart", "running", owner.Version, "installed", l.opts.Version)
+		return c.Restart()
 	case "uninstall":
 		return c.Uninstall()
 	case "start":

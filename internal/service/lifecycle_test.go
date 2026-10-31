@@ -252,3 +252,26 @@ func TestLifecycleStatusDiagnostics(t *testing.T) {
 		t.Fatal("app restart did not take precedence")
 	}
 }
+
+// An install over a running service of another version, as after a Homebrew
+// upgrade, restarts it onto the installed version; a current one is left
+// running.
+func TestLifecycleInstallRestartsOutdatedService(t *testing.T) {
+	for _, running := range []string{"v1", "v2"} {
+		t.Run(running, func(t *testing.T) {
+			l, h := testLifecycle("darwin")
+			h.installed, h.live, h.held = true, true, true
+			h.process = collector.Owner{PID: 7, Version: running, Kind: "service"}
+			if err := l.Control(context.Background(), "install"); err != nil {
+				t.Fatal(err)
+			}
+			want := collector.Owner{PID: 42, Version: "v2", Kind: "service"}
+			if running == "v2" {
+				want = collector.Owner{PID: 7, Version: "v2", Kind: "service"}
+			}
+			if h.process != want || !h.live {
+				t.Fatalf("process = %+v", h.process)
+			}
+		})
+	}
+}

@@ -93,7 +93,7 @@ func (c serviceControl) Run(g *Globals) error {
 	if runtime.GOOS == "darwin" {
 		serviceBin = service.ExecutablePath(serviceBin)
 	}
-	lifecycle := service.NewLifecycle(service.LifecycleOptions{Executable: serviceBin, DataDir: config.DataDir(), Output: commandOutput(g)})
+	lifecycle := service.NewLifecycle(service.LifecycleOptions{Executable: serviceBin, DataDir: config.DataDir(), Version: g.Version, Output: commandOutput(g)})
 	if c.Action == "status" {
 		st := lifecycle.Observe()
 		if st.Err != nil {
