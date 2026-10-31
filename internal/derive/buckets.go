@@ -78,7 +78,7 @@ func PlaceProcesses(procs []model.Proc, sessions []model.Session, sigs *signatur
 		}
 		placement := ProcPlacement{PID: p.PID, Bucket: BucketOther}
 		placement.Memory, placement.Measure = ProcessMemory(p)
-		agent, likely, appBoundary := false, false, false
+		agent, likely, appBoundary, hostPending := false, false, false, false
 		var shared int32
 		bundle := ""
 		for cur := range processChain(byPID, p.PID) {
@@ -97,13 +97,13 @@ func PlaceProcesses(procs []model.Proc, sessions []model.Session, sigs *signatur
 			if !appBoundary {
 				// MCP evidence wins over the bundle: editors may run MCP servers
 				// with their own bundled runtime.
-				if mcp[cur.PID] && shared == 0 {
-					// A sampled process that reused the exited parent's PID is
-					// not the host.
-					if parent, ok := byPID[cur.PPID]; !ok || !reusedParent(parent, cur) {
-						shared = cur.PPID
-					}
-					likely = true
+				if hostPending {
+					// The host is the next process the chain walked, so it is
+					// a sampled, valid parent and never a reused or dead PID.
+					shared, likely, hostPending = cur.PID, true, false
+				}
+				if mcp[cur.PID] && shared == 0 && !likely {
+					hostPending = true
 				} else if AppBundle(cur.Exe) != "" && !proven[cur.PID] {
 					appBoundary = true
 				}

@@ -68,18 +68,30 @@ func TestBucketsEditorExtensionHostMCP(t *testing.T) {
 	}
 }
 
-// A process that reused the PID of an MCP server's exited parent started after
-// the server, so it is not the server's shared host.
-func TestBucketsReusedParentPIDIsNotSharedHost(t *testing.T) {
-	ps := editorBucketFixture()
+// An MCP server's shared host is the parent its chain walked: never a process
+// that reused the PID of its exited parent, and never a parent missing from
+// the sample. Without a host the server is not shared with an editor.
+func TestBucketsMCPHostIsAWalkedParent(t *testing.T) {
 	now := time.Now()
-	ps[0].StartTime, ps[1].StartTime = now, now.Add(-time.Minute)
-	if got := PlaceProcesses(ps, nil, nil)[2]; got.Bucket != BucketLikely || got.SharedHost != 0 || got.Bundle != "" {
-		t.Fatal(got)
-	}
-	ps[0].StartTime = now.Add(-time.Hour)
-	if got := PlaceProcesses(ps, nil, nil)[2]; got.SharedHost != 1 {
-		t.Fatal(got)
+	for _, tc := range []struct {
+		name   string
+		mutate func([]model.Proc) []model.Proc
+		host   int32
+		bucket Bucket
+	}{
+		{"live parent", func(ps []model.Proc) []model.Proc { return ps }, 1, BucketLikely},
+		{"reused parent PID", func(ps []model.Proc) []model.Proc {
+			ps[0].StartTime, ps[1].StartTime = now, now.Add(-time.Minute)
+			return ps
+		}, 0, BucketOther},
+		{"parent not sampled", func(ps []model.Proc) []model.Proc { return ps[1:] }, 0, BucketOther},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := PlaceProcesses(tc.mutate(editorBucketFixture()), nil, nil)[2]
+			if got.Bucket != tc.bucket || got.SharedHost != tc.host {
+				t.Fatal(got)
+			}
+		})
 	}
 }
 func TestBucketsEditorWorkerIsOther(t *testing.T) {
