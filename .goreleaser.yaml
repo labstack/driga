@@ -237,9 +237,12 @@ homebrew_casks:
           previous = system_command "/usr/bin/plutil",
                                     args: ["-convert", "json", "-o", "-", File.expand_path("~/Library/LaunchAgents/run.driga.service.plist")],
                                     must_succeed: true
-          system_command "#{appdir}/Driga.app/Contents/MacOS/driga",
-                         args: ["service", "install"],
-                         env: JSON.parse(previous.stdout).fetch("EnvironmentVariables", {}),
+          # system_command shell-escapes env: values yet runs no shell, so a
+          # value with a space would gain a literal backslash. /usr/bin/env
+          # takes these assignments verbatim.
+          environment = JSON.parse(previous.stdout).fetch("EnvironmentVariables", {}).map { |name, value| "#{name}=#{value}" }
+          system_command "/usr/bin/env",
+                         args: [*environment, "#{appdir}/Driga.app/Contents/MacOS/driga", "service", "install"],
                          must_succeed: true
         end
       end

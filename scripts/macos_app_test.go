@@ -252,7 +252,7 @@ def appdir; "/Applications"; end
 def postflight; yield; end
 def system_command(name, **opts)
  $calls << [name, opts]
- Struct.new(:stdout).new('{"EnvironmentVariables":{"DRIGA_DATA_DIR":"/custom/data","PATH":"/custom/bin:/usr/bin"}}')
+ Struct.new(:stdout).new('{"EnvironmentVariables":{"DRIGA_DATA_DIR":"/Users/me/Library/Application Support/driga","PATH":"/custom/bin:/usr/bin"}}')
 end
 class File
  def self.exist?(path)
@@ -264,7 +264,8 @@ end
 		check := `
 if ENV["EXISTING_SERVICE"] == "true"
  raise "plist not read" unless $calls.length == 2 && $calls[0] == ["/usr/bin/plutil", {args: ["-convert", "json", "-o", "-", File.expand_path("~/Library/LaunchAgents/run.driga.service.plist")], must_succeed: true}]
- expected = ["/Applications/Driga.app/Contents/MacOS/driga", {args: ["service", "install"], env: {"DRIGA_DATA_DIR" => "/custom/data", "PATH" => "/custom/bin:/usr/bin"}, must_succeed: true}]
+ # env: would reach the service as "Application\\ Support"; /usr/bin/env args do not.
+ expected = ["/usr/bin/env", {args: ["DRIGA_DATA_DIR=/Users/me/Library/Application Support/driga", "PATH=/custom/bin:/usr/bin", "/Applications/Driga.app/Contents/MacOS/driga", "service", "install"], must_succeed: true}]
  raise "environment or command changed: #{$calls}" unless $calls[1] == expected
 else
  raise "fresh install started service" unless $calls.empty?

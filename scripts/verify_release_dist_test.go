@@ -156,9 +156,9 @@ func releaseDistFixture(t *testing.T, version, tag string) (string, string) {
       previous = system_command "/usr/bin/plutil",
                                 args: ["-convert", "json", "-o", "-", File.expand_path("~/Library/LaunchAgents/run.driga.service.plist")],
                                 must_succeed: true
-      system_command "#{appdir}/Driga.app/Contents/MacOS/driga",
-                     args: ["service", "install"],
-                     env: JSON.parse(previous.stdout).fetch("EnvironmentVariables", {}),
+      environment = JSON.parse(previous.stdout).fetch("EnvironmentVariables", {}).map { |name, value| "#{name}=#{value}" }
+      system_command "/usr/bin/env",
+                     args: [*environment, "#{appdir}/Driga.app/Contents/MacOS/driga", "service", "install"],
                      must_succeed: true
     end
   end
