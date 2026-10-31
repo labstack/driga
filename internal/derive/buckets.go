@@ -98,7 +98,11 @@ func PlaceProcesses(procs []model.Proc, sessions []model.Session, sigs *signatur
 				// MCP evidence wins over the bundle: editors may run MCP servers
 				// with their own bundled runtime.
 				if mcp[cur.PID] && shared == 0 {
-					shared = cur.PPID
+					// A sampled process that reused the exited parent's PID is
+					// not the host.
+					if parent, ok := byPID[cur.PPID]; !ok || !reusedParent(parent, cur) {
+						shared = cur.PPID
+					}
 					likely = true
 				} else if AppBundle(cur.Exe) != "" && !proven[cur.PID] {
 					appBoundary = true

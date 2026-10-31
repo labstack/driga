@@ -20,12 +20,18 @@ func processChain(byPID map[int32]model.Proc, pid int32) iter.Seq[model.Proc] {
 				return
 			}
 			parent, found := byPID[cur.PPID]
-			if !found || (!cur.StartTime.IsZero() && !parent.StartTime.IsZero() && parent.StartTime.After(cur.StartTime)) {
+			if !found || reusedParent(parent, cur) {
 				return
 			}
 			cur = parent
 		}
 	}
+}
+
+// reusedParent reports that parent, the sampled process with child's PPID,
+// started after child, so it reused the PID of child's exited parent.
+func reusedParent(parent, child model.Proc) bool {
+	return !child.StartTime.IsZero() && !parent.StartTime.IsZero() && parent.StartTime.After(child.StartTime)
 }
 
 // LaunchSurface names the nearest app bundle in a sampled process's ancestry.

@@ -67,6 +67,21 @@ func TestBucketsEditorExtensionHostMCP(t *testing.T) {
 		t.Fatal(got)
 	}
 }
+
+// A process that reused the PID of an MCP server's exited parent started after
+// the server, so it is not the server's shared host.
+func TestBucketsReusedParentPIDIsNotSharedHost(t *testing.T) {
+	ps := editorBucketFixture()
+	now := time.Now()
+	ps[0].StartTime, ps[1].StartTime = now, now.Add(-time.Minute)
+	if got := PlaceProcesses(ps, nil, nil)[2]; got.Bucket != BucketLikely || got.SharedHost != 0 || got.Bundle != "" {
+		t.Fatal(got)
+	}
+	ps[0].StartTime = now.Add(-time.Hour)
+	if got := PlaceProcesses(ps, nil, nil)[2]; got.SharedHost != 1 {
+		t.Fatal(got)
+	}
+}
 func TestBucketsEditorWorkerIsOther(t *testing.T) {
 	ps := editorBucketFixture()
 	ps[1].Cmdline = "node /x/tsserver.js"
