@@ -160,6 +160,7 @@ func ResolveProcessTargets(ctx context.Context, plat platform.Platform, p Parsed
 	}
 	var targets []model.Proc
 	seen := map[int32]bool{}
+	protection := kill.NewProtection(ps, protected)
 	for _, proc := range ps {
 		name := processName(proc.Exe)
 		match := slices.Contains(s.pids, proc.PID)
@@ -186,7 +187,7 @@ func ResolveProcessTargets(ctx context.Context, plat platform.Platform, p Parsed
 		if !match || seen[proc.PID] {
 			continue
 		}
-		if reason := kill.ProtectedReason(proc, ps, protected); reason != "" {
+		if reason := protection.Reason(proc); reason != "" {
 			return nil, fmt.Errorf("PID %d: %s", proc.PID, reason)
 		}
 		if proc.Zombie {

@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/labstack/driga/internal/derive"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/platform"
 )
@@ -45,6 +46,59 @@ func Owned(p model.Proc) bool {
 // ProtectedReason uses live graph membership on each call, including new Chat
 // descendants and ancestors. The broker supplies its complete protected roots.
 func ProtectedReason(p model.Proc, live, protected []model.Proc) string {
+	return NewProtection(live, protected).Reason(p)
+}
+
+// Protection is the set of processes one live snapshot protects: Driga and
+// Chat processes, their descendants, and the ancestors of all of them.
+// Parent links follow derive.ProcIndex, which on Windows ignores a parent PID
+// that a newer process reused after the parent exited.
+type Protection struct{ blocked map[int32]bool }
+
+// NewProtection computes the protected set once, so callers checking many
+// targets against one snapshot do not rebuild it per target.
+func NewProtection(live, protected []model.Proc) Protection {
+	idx := derive.NewProcIndex(live)
+	blocked := map[int32]bool{}
+	ancestors := func(pid int32) {
+		for _, a := range idx.Ancestors(pid) {
+			blocked[a] = true
+		}
+	}
+	self := int32(os.Getpid())
+	blocked[self] = true
+	if _, ok := idx.Get(self); ok {
+		ancestors(self)
+	} else {
+		blocked[int32(os.Getppid())] = true
+	}
+	root := func(pid int32) {
+		blocked[pid] = true
+		ancestors(pid)
+		// Only explicit Chat/Driga roots propagate protection downwards.
+		for _, d := range idx.Descendants(pid) {
+			blocked[d.PID] = true
+		}
+	}
+	for _, r := range protected {
+		// A broker root that exited and whose PID a newer process reused no
+		// longer protects that process or its family.
+		if now, ok := idx.Get(r.PID); ok && !r.StartTime.IsZero() && !now.StartTime.IsZero() && !now.StartTime.Equal(r.StartTime) {
+			continue
+		}
+		root(r.PID)
+	}
+	for _, r := range live {
+		name := strings.ToLower(filepath.Base(strings.ReplaceAll(r.Exe, "\\", "/")))
+		if name == "driga" || name == "driga.exe" || strings.HasPrefix(name, "driga-") || r.Role == "chat" || strings.Contains(r.Cmdline, model.ChatPreamble) {
+			root(r.PID)
+		}
+	}
+	return Protection{blocked: blocked}
+}
+
+// Reason is why p may not be signalled, or "" when it may.
+func (pr Protection) Reason(p model.Proc) string {
 	if p.PID <= 1 {
 		return "system PID or process group is refused"
 	}
@@ -54,52 +108,7 @@ func ProtectedReason(p model.Proc, live, protected []model.Proc) string {
 	if p.Partial || p.StartTime.IsZero() || p.Exe == "" || p.Cmdline == "" || len(p.Argv) == 0 {
 		return "process identity is incomplete"
 	}
-	roots := map[int32]bool{}
-	blocked := map[int32]bool{int32(os.Getpid()): true, int32(os.Getppid()): true}
-	for _, r := range protected {
-		roots[r.PID] = true
-		blocked[r.PID] = true
-	}
-	for _, r := range live {
-		name := strings.ToLower(filepath.Base(strings.ReplaceAll(r.Exe, "\\", "/")))
-		if name == "driga" || name == "driga.exe" || strings.HasPrefix(name, "driga-") || r.Role == "chat" || strings.Contains(r.Cmdline, model.ChatPreamble) {
-			roots[r.PID] = true
-			blocked[r.PID] = true
-		}
-	}
-	// A parent PID names the parent only if that process started first:
-	// Windows keeps the PID of an exited parent, and a newer process can
-	// reuse it.
-	started := map[int32]time.Time{}
-	for _, r := range live {
-		started[r.PID] = r.StartTime
-	}
-	parentOf := func(r model.Proc) bool {
-		at, ok := started[r.PPID]
-		return !ok || at.IsZero() || r.StartTime.IsZero() || !at.After(r.StartTime)
-	}
-	// Ancestors are protected, but their unrelated descendants are not. Only
-	// explicit Chat/Driga roots propagate protection downwards.
-	for changed := true; changed; {
-		changed = false
-		for _, r := range live {
-			if roots[r.PPID] && !roots[r.PID] && parentOf(r) {
-				roots[r.PID] = true
-				blocked[r.PID] = true
-				changed = true
-			}
-		}
-	}
-	for changed := true; changed; {
-		changed = false
-		for _, r := range live {
-			if blocked[r.PID] && r.PPID > 0 && !blocked[r.PPID] && parentOf(r) {
-				blocked[r.PPID] = true
-				changed = true
-			}
-		}
-	}
-	if blocked[p.PID] {
+	if pr.blocked[p.PID] {
 		return "Driga, Chat, or an ancestor/descendant is protected"
 	}
 	return ""
