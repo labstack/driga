@@ -75,7 +75,13 @@ for arch in amd64 arm64; do
     # Verify the nested service before the outer resource seal.
     codesign --verify --strict --verbose=2 "$app_temp/Driga.app/Contents/Helpers/Driga Service.app"
     codesign --verify --deep --strict --verbose=2 "$app_temp/Driga.app"
-    xcrun stapler validate "$app_temp/Driga.app"
+    # Validation fetches the ticket from Apple, which a runner's network can
+    # drop briefly, as build-macos-app.sh allows for when stapling.
+    for attempt in 1 2 3 4 5; do
+      xcrun stapler validate "$app_temp/Driga.app" && break
+      [ "$attempt" = 5 ] && exit 1
+      sleep 30
+    done
     spctl --assess --type execute --verbose=2 "$app_temp/Driga.app"
     rm -rf "$app_temp"
     trap - EXIT
