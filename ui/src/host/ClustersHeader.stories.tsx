@@ -238,10 +238,10 @@ function widget(id: string): Story {
     const reading = allWidgets.tiles.find(t => t.id === id)!;
     expect(reading.value).not.toBeNull();
     const number = format(reading.value!, reading.unit).split(" ")[0];
-    // A gauge shows its share inside the ring and names the full reading for assistive tech.
-    if (panel.viz === "gauge") await expect(within(rendered).getByRole("img")).toHaveAccessibleName(new RegExp(number));
-    else await expect(rendered).toHaveTextContent(number);
-    if (reading.total != null) await expect(rendered).toHaveTextContent(`/ ${format(reading.total, reading.unit).split(" ")[0]}`);
+    await expect(rendered).toHaveTextContent(number);
+    // A gauge is a stat with a bar here, not a ring beside its label.
+    if (panel.viz === "gauge") await expect(within(rendered).getByRole("progressbar")).toBeInTheDocument();
+    if (reading.total != null && panel.viz !== "gauge") await expect(rendered).toHaveTextContent(`/ ${format(reading.total, reading.unit).split(" ")[0]}`);
     if (reading.caption != null) await expect(rendered).toHaveTextContent(`· ${reading.caption} trees`);
     geometry(canvasElement);
   } };

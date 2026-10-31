@@ -171,5 +171,5 @@ it("shows a gauge's value once, without an out-of total", async () => {
   await render(f);
   const tile = container.querySelector('[data-header-tile="cpu"]')!;
   expect(tile.textContent).not.toMatch(/\/\s*100/);
-  expect(tile.textContent).toBe("42CPU · studio-id");
+  expect(tile.textContent).toBe("CPU · studio-id42%");
 });
