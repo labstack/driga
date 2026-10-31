@@ -71,6 +71,13 @@ function geometry(root: HTMLElement) {
     expect(rect.right).toBeLessThanOrEqual(slot.parentElement!.parentElement!.getBoundingClientRect().right + 1);
     expect(rect.right).toBeLessThanOrEqual(within(root).getByRole("button", { name: /^Fleet:/ }).getBoundingClientRect().left);
   }
+  // Labels and values share one line across the row, whether or not a tile
+  // has a bar under its value.
+  const stacks = slots.map(slot => slot.querySelector<HTMLElement>(".w-tile > .mantine-Stack-root")).filter(stack => stack?.checkVisibility()) as HTMLElement[];
+  for (const [i, part] of [[0, "label"], [1, "value"]] as const) {
+    const tops = stacks.map(stack => (stack.children[i] as HTMLElement).getBoundingClientRect().top);
+    expect(Math.max(...tops) - Math.min(...tops), `${part} tops ${tops}`).toBeLessThanOrEqual(1);
+  }
 }
 
 export const Busy: Story = {
@@ -250,6 +257,17 @@ export const Memory: Story = {
     expect(memory.querySelector('[role="img"]')).toBeNull();
     expect(memory.textContent).not.toContain("1h");
     geometry(context.canvasElement);
+  },
+};
+/** Tiles with and without a bar under the value, side by side as in the
+ * screenshot that found them misaligned: labels and values share one line. */
+export const MixedAlignment: Story = {
+  args: { data: { ...allWidgets, tiles: ["finished", "leftover", "reclaim", "memory", "cpu", "disk"].map(id => allWidgets.tiles.find(t => t.id === id)!) } },
+  globals: { viewport: { value: "headerWide", isRotated: false } },
+  play: async ({ canvasElement }) => {
+    await ready(canvasElement);
+    for (const id of ["memory", "disk", "leftover"]) await expect(await tile(canvasElement, id)).toBeVisible();
+    geometry(canvasElement);
   },
 };
 export const CPU = widget("cpu");

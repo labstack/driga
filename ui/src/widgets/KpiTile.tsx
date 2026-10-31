@@ -104,7 +104,9 @@ export function KpiTile({ label, sublabel, icon: Glyph, value, unit, total, capt
         {chip ?? <span />}
         {line && <Box h={24} style={{ flex: "1 1 48px", minWidth: 40, maxWidth: 96 }}>{line}</Box>}
       </Group>}
-      {children}
+      {/* Every header tile keeps the same strip below its value, so a bar under
+          memory adds no height and labels and values line up across the row. */}
+      {header ? <Box h={4} aria-hidden={children ? undefined : true}>{children}</Box> : children}
     </Stack>}
   </Root>;
   return <Box className="w-tile-box" visibleFrom={visibleFrom} hiddenFrom={hiddenFrom} style={header ? { display: "inline-block" } : undefined}>
