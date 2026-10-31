@@ -76,15 +76,113 @@ p19
 cclient
 f3
 n127.0.0.1:4001->127.0.0.1:5001 (ESTABLISHED)
+p20
+cstdio
+f0
+tunix
+D0x7a825c5d47b4858d
+n->(none)
+p21
+cbroker
+f12
+tunix
+D0x00f1
+n->0x00f2
+f17
+tunix
+D0x00f3
+n/private/tmp/cxc/broker.sock
+p22
+capp-server
+f0
+tunix
+D0x00f2
+n->0x00f1
 `)
-	pids := []int32{10, 11, 12, 13, 14, 15, 16, 17, 18, 19}
-	want := map[int32]bool{10: true, 11: false, 12: false, 13: false, 14: true, 15: true, 16: true, 17: true, 18: false, 19: true}
+	none, listening, connected := model.PeerNone, model.PeerListening, model.PeerConnected
+	pids := []int32{10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22}
+	want := map[int32]model.PeerState{10: connected, 11: none, 12: none, 13: none, 14: connected, 15: listening, 16: listening, 17: connected, 18: none, 19: connected,
+		// A peer that closed shows as (none); a broker whose only client is its
+		// own child just listens.
+		20: none, 21: listening, 22: none}
 	if got := platform.ParseLsofPeers(out, pids); !reflect.DeepEqual(got, want) {
 		t.Fatalf("peers = %v; want %v", got, want)
 	}
 	// A peer whose record is present but is outside the target set is external.
-	if got := platform.ParseLsofPeers(out, []int32{11}); !got[11] || len(got) != 1 {
+	if got := platform.ParseLsofPeers(out, []int32{11}); got[11] != connected || len(got) != 1 {
 		t.Fatalf("peer outside pid set: %v", got)
+	}
+	// The broker's child connection leaves the tree when the child is not in it.
+	if got := platform.ParseLsofPeers(out, []int32{21}); got[21] != connected {
+		t.Fatalf("broker client outside pid set: %v", got)
+	}
+}
+
+// Records in the shape macOS lsof -FpcdnDtT prints, taken from a live Codex
+// plugin broker: d carries each Unix socket's own address, and a connection the
+// broker accepted shows only the bound path, so only the client's side names it.
+func TestParseLsofPeersAllMacOSBroker(t *testing.T) {
+	tree := []byte(`p98021
+cnode
+f12
+tunix
+d0xe0d058e2c7c8edfd
+n->0x46e036a0d862d8ac
+f17
+tunix
+d0x98e16ac011dfaa79
+n/private/tmp/cxc/broker.sock
+f18
+tunix
+d0xa2e57851b5fd884c
+n/private/tmp/cxc/broker.sock
+p98025
+ccodex
+f0
+tunix
+d0x46e036a0d862d8ac
+n->0xe0d058e2c7c8edfd
+f34
+tunix
+d0x7a4edd3e6fd350f
+n->0x4abc21701ce138cc
+`)
+	client := []byte(`p99984
+cnc
+f3
+tunix
+d0x7633b400310f9ee
+n->0xa2e57851b5fd884c
+`)
+	pids := []int32{98021, 98025}
+	// Without the unrestricted pass, an outside peer of unknown owner counts.
+	strict := platform.ParseLsofPeers(tree, pids)
+	if want := map[int32]model.PeerState{98021: model.PeerListening, 98025: model.PeerConnected}; !reflect.DeepEqual(strict, want) {
+		t.Fatalf("strict = %v; want %v", strict, want)
+	}
+	// No other process names 0x4abc...: it belongs to another user's service.
+	idle := platform.ParseLsofPeersAll(tree, pids, tree)
+	if want := map[int32]model.PeerState{98021: model.PeerListening, 98025: model.PeerSystem}; !reflect.DeepEqual(idle, want) {
+		t.Fatalf("no client = %v; want %v", idle, want)
+	}
+	busy := platform.ParseLsofPeersAll(tree, pids, append(append([]byte(nil), tree...), client...))
+	if busy[98021] != model.PeerConnected {
+		t.Fatalf("accepted client missed: %v", busy)
+	}
+	// The unrestricted pass covers Unix sockets only; network peers it cannot
+	// list stay connected, whatever their TCP state.
+	network := []byte(`p98025
+ccodex
+f40
+tIPv4
+n10.0.0.2:5353->1.1.1.1:53
+f41
+tIPv4
+n10.0.0.2:50000->140.82.112.3:443
+TST=CLOSE_WAIT
+`)
+	if got := platform.ParseLsofPeersAll(network, []int32{98025}, tree); got[98025] != model.PeerConnected {
+		t.Fatalf("network peer downgraded: %v", got)
 	}
 }
 
@@ -108,11 +206,11 @@ func TestFakeExternalPeers(t *testing.T) {
 	}
 	var prober platform.SocketProber = f
 	got, err := prober.ExternalPeers(context.Background(), []int32{10, 11})
-	if err != nil || !got[10] || got[11] {
+	if err != nil || got[10] != model.PeerConnected || got[11] != model.PeerNone {
 		t.Fatalf("peers = %v, %v", got, err)
 	}
 	got, err = prober.ExternalPeers(context.Background(), []int32{11})
-	if err != nil || !got[11] {
+	if err != nil || got[11] != model.PeerConnected {
 		t.Fatalf("outside peer = %v, %v", got, err)
 	}
 }

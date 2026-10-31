@@ -11,11 +11,57 @@ import (
 	"github.com/labstack/driga/internal/signatures"
 )
 
+// BackgroundCPUPercent is the per-process share of one core below which an
+// orphan tree member counts as idle, and BackgroundTreeCPUPercent bounds the
+// whole tree. Dead helpers still tick timers and GC far below these; real work
+// runs far above them. External peers stay the liveness proof for work that
+// waits on the network.
+const (
+	BackgroundCPUPercent     = 5.0
+	BackgroundTreeCPUPercent = 25.0
+)
+
+// IdleWithoutClients reports whether p's signature sets IdleWithoutClients.
+func IdleWithoutClients(c *Classifier, p model.Proc) bool {
+	if c == nil {
+		return false
+	}
+	sig, ok := c.Match(p)
+	return ok && sig.IdleWithoutClients
+}
+
+// NeedsResolvedPeers reports whether InUse may waive a socket in tree, so its
+// probe must tell a listener's clients and system services apart
+// (platform.PeerResolver).
+func NeedsResolvedPeers(c *Classifier, tree []model.Proc) bool {
+	for _, p := range tree {
+		if IdleWithoutClients(c, p) {
+			return true
+		}
+	}
+	return false
+}
+
+// InUse reports whether member p's socket state shows its tree still serves
+// someone. A listener counts unless p's own signature sets IdleWithoutClients;
+// a system-service socket counts unless the tree root's does.
+func InUse(c *Classifier, root, p model.Proc, state model.PeerState) bool {
+	switch state {
+	case model.PeerConnected:
+		return true
+	case model.PeerListening:
+		return !IdleWithoutClients(c, p)
+	case model.PeerSystem:
+		return !IdleWithoutClients(c, root)
+	}
+	return false
+}
+
 // OrphanOption supplies remembered observations from earlier process passes.
 type OrphanOption func(*orphanOptions)
 type orphanOptions struct {
 	spawnMemory   map[string]int64
-	externalPeers map[int32]bool
+	externalPeers map[int32]model.PeerState
 	subreaper     int32
 	classifier    *Classifier
 }
@@ -38,7 +84,7 @@ func WithSubreaper(pid int32) OrphanOption {
 // Collectors must probe every tree pid each process pass, pass only successful
 // results here, and use the immediately preceding pass as prev. Missing results
 // leave candidates unverified. Verified also needs persistence in stored views.
-func WithExternalPeers(peers map[int32]bool) OrphanOption {
+func WithExternalPeers(peers map[int32]model.PeerState) OrphanOption {
 	return func(o *orphanOptions) { o.externalPeers = peers }
 }
 
@@ -147,13 +193,15 @@ func FindOrphans(idx ProcIndex, sessions []model.Session, sigs *signatures.Set, 
 		idle := true
 		probed := true
 		var matched string
+		var treeCPU float64
 		// visit applies the idle checks to one tree member; false stops the walk.
 		visit := func(p model.Proc) bool {
 			if protected[p.PID] {
 				idle = false
 				return false
 			}
-			if p.CPUPercent != 0 || options.externalPeers[p.PID] {
+			treeCPU += p.CPUPercent
+			if p.CPUPercent >= BackgroundCPUPercent || treeCPU >= BackgroundTreeCPUPercent || InUse(classifier, r, p, options.externalPeers[p.PID]) {
 				idle = false
 				return false
 			}
@@ -164,7 +212,9 @@ func FindOrphans(idx ProcIndex, sessions []model.Session, sigs *signatures.Set, 
 				idle = false
 				return false
 			}
-			if bundle := orphanBundle(p); bundle != "" && apps[bundle] {
+			// A process from a running app's bundle belongs to that app, unless an
+			// agent helper started it to borrow the bundle's runtime.
+			if bundle := orphanBundle(p); bundle != "" && apps[bundle] && (p.PID == pid || !agentHelper(classifier, idx, p.PPID)) {
 				idle = false
 				return false
 			}
@@ -236,7 +286,7 @@ func FindOrphans(idx ProcIndex, sessions []model.Session, sigs *signatures.Set, 
 		}
 		o.ProcCount = len(o.PIDs)
 		if probed {
-			const idleEvidence = "no CPU or external peers"
+			const idleEvidence = "background CPU only, no external peers"
 			o.Evidence = append(o.Evidence, idleEvidence)
 			o.Verified = existed && old.StartTime.Equal(o.StartTime) &&
 				slices.Equal(old.PIDs, o.PIDs) && slices.Contains(old.Evidence, idleEvidence)
@@ -278,6 +328,16 @@ func FindOrphans(idx ProcIndex, sessions []model.Session, sigs *signatures.Set, 
 		}
 	}
 	return result
+}
+
+// agentHelper reports whether pid is a known agent helper, host or headless run.
+func agentHelper(c *Classifier, idx ProcIndex, pid int32) bool {
+	parent, ok := idx.Get(pid)
+	if !ok || c == nil {
+		return false
+	}
+	sig, ok := c.Match(parent)
+	return ok && (sig.Role == signatures.RoleHelper || sig.Role == signatures.RoleHost || sig.Role == signatures.RoleHeadless)
 }
 
 func orphanBundle(p model.Proc) string {

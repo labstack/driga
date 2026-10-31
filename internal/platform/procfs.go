@@ -15,6 +15,8 @@ import (
 	"strings"
 
 	"github.com/shirou/gopsutil/v4/common"
+
+	"github.com/labstack/driga/internal/model"
 )
 
 // ParsePSI extracts memory "some avg10"; an absent some line returns nil.
@@ -225,15 +227,15 @@ func (p procFS) Cwds(ctx context.Context, pids []int32) (map[int32]string, error
 	return result, ctx.Err()
 }
 
-func (p procFS) ExternalPeers(ctx context.Context, pids []int32) (map[int32]bool, error) {
-	result := make(map[int32]bool, len(pids))
+func (p procFS) ExternalPeers(ctx context.Context, pids []int32) (map[int32]model.PeerState, error) {
+	result := make(map[int32]model.PeerState, len(pids))
 	owned := make(map[uint64]bool)
 	inodes := make(map[int32][]uint64, len(pids))
 	for _, pid := range pids {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		result[pid] = false
+		result[pid] = model.PeerNone
 		inodes[pid] = SocketInodes(p.root, pid)
 		for _, inode := range inodes[pid] {
 			owned[inode] = true
@@ -273,14 +275,18 @@ func (p procFS) ExternalPeers(ctx context.Context, pids []int32) (map[int32]bool
 				if !ok {
 					continue
 				}
-				if s.Listen {
-					result[pid] = true
+				if s.Listen && strings.HasPrefix(kind, "udp") {
+					// A bound UDP endpoint can exchange datagrams with anyone,
+					// as on Windows, so it counts as connected.
+					result[pid] = model.PeerConnected
+				} else if s.Listen {
+					result[pid] = max(result[pid], model.PeerListening)
 				} else if kind == "unix" {
 					if s.State == "03" && !owned[peers[inode]] {
-						result[pid] = true
+						result[pid] = model.PeerConnected
 					}
 				} else if s.State == "01" && !internal[endpointPair{s.Remote, s.Local}] {
-					result[pid] = true
+					result[pid] = model.PeerConnected
 				}
 			}
 		}

@@ -481,7 +481,7 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 				orphanOpts = append(orphanOpts, derive.WithSubreaper(collected.subreaper))
 			}
 			orphans := derive.FindOrphans(idx, ss, d.Sigs, now, d.Cfg.OrphanMinAge, prev, orphanOpts...)
-			var peers map[int32]bool
+			var peers map[int32]model.PeerState
 			if _, ok := d.Plat.(platform.SocketProber); ok && p.Sockets && len(orphans) > 0 {
 				peers = collected.peers
 				if e := source("sockets", collected.socketErr); e != nil {

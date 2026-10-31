@@ -39,6 +39,8 @@ name = "claude-mcp"
 agent = "claude"
 role = "helper"
 command_modes = [["mcp", "serve"]]
+# Clients use stdio; the /tmp/cc-socks listener is Claude Code's own.
+idle_without_clients = true
 
 [[signature]]
 name = "claude-chrome-native-host"
@@ -105,6 +107,9 @@ command_modes = [["app-server"]]
 name = "codex-app-server-broker"
 agent = "codex"
 role = "helper"
+# The Codex plugin reuses a workspace's broker while broker.sock answers and
+# starts a new one when it does not, so a broker without clients is idle.
+idle_without_clients = true
 match = [
   '^(?:[^[:space:]]*/)?node[[:space:]]+(?:[^[:space:]]*/)?app-server-broker\.mjs([[:space:]]|$)',
   '^(?:[^[:space:]]*/)?app-server-broker\.mjs([[:space:]]|$)',

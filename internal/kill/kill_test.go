@@ -29,9 +29,11 @@ type socketPlatform struct {
 	probed []int32
 }
 
-func (p *socketPlatform) ExternalPeers(_ context.Context, pids []int32) (map[int32]bool, error) {
+var _ platform.SocketProber = (*socketPlatform)(nil)
+
+func (p *socketPlatform) ExternalPeers(_ context.Context, pids []int32) (map[int32]model.PeerState, error) {
 	p.probed = append([]int32(nil), pids...)
-	return p.peers, p.err
+	return platform.FixturePeers(p.peers), p.err
 }
 
 func TestKillAbortsOnExternalPeer(t *testing.T) {
@@ -47,7 +49,7 @@ func TestKillAbortsOnExternalPeer(t *testing.T) {
 			}, peers: map[int32]bool{100: active == 100, 200: active == 200}}
 			r, err := Tree(context.Background(), p, model.Orphan{RootPID: 100, StartTime: now, Verified: true}, []int32{200}, true, time.Millisecond)
 			slices.Sort(p.probed)
-			if err != nil || !r.Aborted || !strings.Contains(r.Reason, "external peer") || len(r.Signaled) != 0 || aliveCalls != 0 || !slices.Equal(p.probed, []int32{100, 200}) {
+			if err != nil || !r.Aborted || !strings.Contains(r.Reason, "connection outside the tree") || len(r.Signaled) != 0 || aliveCalls != 0 || !slices.Equal(p.probed, []int32{100, 200}) {
 				t.Fatalf("%+v %v probed=%v alive=%d", r, err, p.probed, aliveCalls)
 			}
 		})

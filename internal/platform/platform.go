@@ -35,9 +35,25 @@ func ProcessOS(p Platform) string {
 }
 
 // SocketProber optionally checks socket activity for a candidate process tree.
-// Results include every requested pid; true means an external peer or listener.
+// Results include every requested pid, with the strongest state seen for it.
 type SocketProber interface {
-	ExternalPeers(ctx context.Context, pids []int32) (map[int32]bool, error)
+	ExternalPeers(ctx context.Context, pids []int32) (map[int32]model.PeerState, error)
+}
+
+// PeerResolver is a SocketProber that also tells a listener's clients and
+// system services apart: it finds outside processes connected to a tree's
+// listeners, and reports peers no process of this user owns as PeerSystem.
+// It scans every process, so use it only when the answer can change.
+type PeerResolver interface {
+	ResolvedPeers(ctx context.Context, pids []int32) (map[int32]model.PeerState, error)
+}
+
+// ProbePeers uses ResolvedPeers when resolve is set and p offers it.
+func ProbePeers(ctx context.Context, p SocketProber, pids []int32, resolve bool) (map[int32]model.PeerState, error) {
+	if r, ok := p.(PeerResolver); ok && resolve {
+		return r.ResolvedPeers(ctx, pids)
+	}
+	return p.ExternalPeers(ctx, pids)
 }
 
 // FileProber fails closed if open file descriptors cannot be inspected.

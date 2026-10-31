@@ -53,9 +53,11 @@ func (p *cliSeqPlatform) Machine(context.Context) (model.MachineSample, error) {
 }
 func (p *cliSeqPlatform) Cwds(context.Context, []int32) (map[int32]string, error) { return nil, nil }
 func (p *cliSeqPlatform) Alive(int32, time.Time) bool                             { return false }
-func (p *cliSeqPlatform) ExternalPeers(context.Context, []int32) (map[int32]bool, error) {
-	return p.peers, nil
+func (p *cliSeqPlatform) ExternalPeers(context.Context, []int32) (map[int32]model.PeerState, error) {
+	return platform.FixturePeers(p.peers), nil
 }
+
+var _ platform.SocketProber = (*cliSeqPlatform)(nil)
 
 // Snapshot mode never accumulates two passes, so an unverified candidate is
 // verified on demand instead of being refused outright.
@@ -74,7 +76,7 @@ func TestKillVerifiesUnverifiedOnDemand(t *testing.T) {
 		prompt bool
 		want   string
 	}{
-		{"busy", &cliSeqPlatform{snaps: [][]model.Proc{tree(1), tree(2)}}, false, "not idle: used 1.00s CPU"},
+		{"busy", &cliSeqPlatform{snaps: [][]model.Proc{tree(1), tree(2)}}, false, "not idle: pid 4242 used 1.00s CPU"},
 		{"connected", &cliSeqPlatform{snaps: [][]model.Proc{tree(1)}, peers: map[int32]bool{4242: true}}, false, "not idle: pid 4242 has a connection outside the tree"},
 		{"quiet", &cliSeqPlatform{snaps: [][]model.Proc{tree(1)}}, true, "verified idle"},
 	} {

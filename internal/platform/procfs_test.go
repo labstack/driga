@@ -9,6 +9,8 @@ import (
 	"reflect"
 	"runtime"
 	"testing"
+
+	"github.com/labstack/driga/internal/model"
 )
 
 func procFixture(t *testing.T) string {
@@ -105,17 +107,17 @@ func TestLinuxExternalPeers(t *testing.T) {
 		return map[uint64]uint64{201: 202, 202: 201}
 	}}
 	got, err := fs.ExternalPeers(context.Background(), []int32{10, 11, 99})
-	want := map[int32]bool{10: false, 11: true, 99: false}
+	want := map[int32]model.PeerState{10: model.PeerNone, 11: model.PeerConnected, 99: model.PeerNone}
 	if err != nil || !reflect.DeepEqual(got, want) {
 		t.Fatalf("peers = %v, %v; want %v", got, err, want)
 	}
 	got, err = fs.ExternalPeers(context.Background(), []int32{10})
-	if err != nil || !got[10] {
+	if err != nil || got[10] != model.PeerConnected {
 		t.Fatalf("peer outside tree = %v, %v", got, err)
 	}
 	fs.unixPeers = nil
 	got, err = fs.ExternalPeers(context.Background(), []int32{10, 11})
-	if err != nil || !got[10] {
+	if err != nil || got[10] != model.PeerConnected {
 		t.Fatalf("unresolved Unix peer = %v, %v", got, err)
 	}
 	// Opposite TCP endpoints owned by the tree are internal; listeners always serve.
@@ -128,15 +130,23 @@ func TestLinuxExternalPeers(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, err = fs.ExternalPeers(context.Background(), []int32{10, 11})
-	if err != nil || got[10] {
+	if err != nil || got[10] != model.PeerNone {
 		t.Fatalf("internal TCP = %v, %v", got, err)
 	}
 	if err := os.Symlink("socket:[100]", filepath.Join(root, "10/fd/8")); err != nil {
 		t.Fatal(err)
 	}
 	got, err = fs.ExternalPeers(context.Background(), []int32{10, 11})
-	if err != nil || !got[10] {
+	if err != nil || got[10] != model.PeerListening {
 		t.Fatalf("listener = %v, %v", got, err)
+	}
+	// A bound UDP socket exchanges datagrams with anyone, as on Windows.
+	if err := os.Symlink("socket:[105]", filepath.Join(root, "10/fd/9")); err != nil {
+		t.Fatal(err)
+	}
+	got, err = fs.ExternalPeers(context.Background(), []int32{10, 11})
+	if err != nil || got[10] != model.PeerConnected {
+		t.Fatalf("bound UDP = %v, %v", got, err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

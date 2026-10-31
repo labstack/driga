@@ -12,12 +12,18 @@ import (
 	"github.com/labstack/driga/internal/derive"
 	"github.com/labstack/driga/internal/kill"
 	"github.com/labstack/driga/internal/model"
+	"github.com/labstack/driga/internal/signatures"
 )
 
 type KillOptions struct{ All, Force bool }
 
 func (c KillOptions) Kill(ctx context.Context, g Environment, cfg config.Config, procs []model.Proc, candidates []model.Orphan) error {
 	idx := derive.NewProcIndex(procs)
+	sigs, err := signatures.Load(cfg.ExtraSignatures)
+	if err != nil {
+		return err
+	}
+	classified := kill.WithClassifier(derive.NewClassifier(sigs, len(procs)))
 	var errs []error
 	for _, o := range candidates {
 		if o.Young {
@@ -50,7 +56,7 @@ func (c KillOptions) Kill(ctx context.Context, g Environment, cfg config.Config,
 			if _, err := fmt.Fprintf(g.Stdout, "%s: checking it stays idle for %s…\n", o.ID, g.VerifyWindow); err != nil {
 				return err
 			}
-			ok, reason, err := kill.VerifyIdle(ctx, g.Platform(), o, expect, g.VerifyWindow)
+			ok, reason, err := kill.VerifyIdle(ctx, g.Platform(), o, expect, g.VerifyWindow, classified)
 			if err == nil && !ok {
 				err = errors.New("not idle: " + reason)
 			}
@@ -106,7 +112,7 @@ func (c KillOptions) Kill(ctx context.Context, g Environment, cfg config.Config,
 				return err
 			}
 		}
-		result, killErr := kill.Tree(ctx, g.Platform(), o, expect, c.Force, 5*time.Second)
+		result, killErr := kill.Tree(ctx, g.Platform(), o, expect, c.Force, 5*time.Second, classified)
 		if result.Aborted {
 			killErr = fmt.Errorf("kill %s aborted: %s", o.ID, result.Reason)
 		}

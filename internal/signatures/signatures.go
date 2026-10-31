@@ -36,6 +36,11 @@ type Signature struct {
 	HostName  string   `toml:"host_name"`
 	// ProtectTree excludes this helper and its descendants from orphan cleanup.
 	ProtectTree bool `toml:"protect_tree"`
+	// IdleWithoutClients applies when this helper roots an orphan tree: only a
+	// connection to another of the user's processes, or the network, shows the
+	// tree is in use. Listeners and system-service sockets do not. Set it only
+	// when clients start a replacement once the helper is gone.
+	IdleWithoutClients bool `toml:"idle_without_clients"`
 	// CommandModes matches argv prefixes after the executable (Agent), skipping
 	// leading Codex config overrides. These entries never inspect joined text.
 	CommandModes [][]string `toml:"command_modes"`

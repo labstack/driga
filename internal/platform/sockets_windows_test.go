@@ -5,6 +5,8 @@ import (
 	"net"
 	"os"
 	"testing"
+
+	"github.com/labstack/driga/internal/model"
 )
 
 func TestWindowsSocketOwnerTables(t *testing.T) {
@@ -29,7 +31,7 @@ func TestWindowsSocketOwnerTables(t *testing.T) {
 			}
 			pid := int32(os.Getpid())
 			peers, err := New().(SocketProber).ExternalPeers(context.Background(), []int32{pid})
-			if err != nil || !peers[pid] || len(peers) != 1 {
+			if err != nil || peers[pid] == model.PeerNone || len(peers) != 1 {
 				t.Fatalf("listener ownership: %v %v", peers, err)
 			}
 		})

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/labstack/driga/internal/model"
+	"github.com/labstack/driga/internal/platform"
 	"github.com/labstack/driga/internal/spool"
 )
 
@@ -16,9 +17,11 @@ type socketPlatform struct {
 	requested []int32
 }
 
-func (p *socketPlatform) ExternalPeers(_ context.Context, pids []int32) (map[int32]bool, error) {
+var _ platform.SocketProber = (*socketPlatform)(nil)
+
+func (p *socketPlatform) ExternalPeers(_ context.Context, pids []int32) (map[int32]model.PeerState, error) {
 	p.requested = append([]int32(nil), pids...)
-	return p.peers, nil
+	return platform.FixturePeers(p.peers), nil
 }
 
 func TestPassVerifiesOrphansViaSocketProber(t *testing.T) {

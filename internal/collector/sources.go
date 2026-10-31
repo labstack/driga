@@ -72,7 +72,7 @@ type sourceResults struct {
 	gitErr         error
 	feedEnabled    bool
 	spool          spoolResult
-	peers          map[int32]bool
+	peers          map[int32]model.PeerState
 	socketErr      error
 	subreaper      int32
 	paths          map[string]string
@@ -622,7 +622,7 @@ func spoolHooks(d Deps, events []model.HookEvent) []model.HookEvent {
 	return hooks
 }
 
-func collectSocketPeers(ctx context.Context, d Deps, st *store.Store, state *State, procs []model.Proc, ss []model.Session, procAt, now time.Time, subreaper int32, hooks []model.HookEvent, aliases map[int64]int) (map[int32]bool, error) {
+func collectSocketPeers(ctx context.Context, d Deps, st *store.Store, state *State, procs []model.Proc, ss []model.Session, procAt, now time.Time, subreaper int32, hooks []model.HookEvent, aliases map[int64]int) (map[int32]model.PeerState, error) {
 	probe, ok := d.Plat.(platform.SocketProber)
 	if !ok {
 		return nil, nil
@@ -695,16 +695,29 @@ func collectSocketPeers(ctx context.Context, d Deps, st *store.Store, state *Sta
 			memory[key] = id
 		}
 	}
-	candidates := derive.FindOrphans(idx, sessions, d.Sigs, now, d.Cfg.OrphanMinAge, prev, derive.WithSpawnMemory(memory), derive.WithSubreaper(subreaper), derive.WithClassifier(d.classifier))
+	// FindOrphans waives listeners by signature, so the probe must resolve
+	// clients with the same classifier.
+	classifier := d.classifier
+	if classifier == nil && d.Sigs != nil {
+		classifier = derive.NewClassifier(d.Sigs, len(procs))
+	}
+	candidates := derive.FindOrphans(idx, sessions, d.Sigs, now, d.Cfg.OrphanMinAge, prev, derive.WithSpawnMemory(memory), derive.WithSubreaper(subreaper), derive.WithClassifier(classifier))
 	var pids []int32
+	var members []model.Proc
 	for _, o := range candidates {
 		pids = append(pids, o.PIDs...)
+		for _, pid := range o.PIDs {
+			if p, ok := idx.Get(pid); ok {
+				members = append(members, p)
+			}
+		}
 	}
+	resolve := derive.NeedsResolvedPeers(classifier, members)
 	if len(pids) == 0 {
 		return nil, nil
 	}
 	sort.Slice(pids, func(i, j int) bool { return pids[i] < pids[j] })
-	peers, err := probe.ExternalPeers(ctx, pids)
+	peers, err := platform.ProbePeers(ctx, probe, pids, resolve)
 	if err != nil {
 		return nil, err
 	}

@@ -6,6 +6,8 @@ import (
 	"unsafe"
 
 	"golang.org/x/sys/windows"
+
+	"github.com/labstack/driga/internal/model"
 )
 
 var ipHelper = windows.NewLazySystemDLL("iphlpapi.dll")
@@ -14,11 +16,11 @@ var extendedUDP = ipHelper.NewProc("GetExtendedUdpTable")
 
 var _ SocketProber = winPlatform{}
 
-func (p winPlatform) ExternalPeers(ctx context.Context, pids []int32) (map[int32]bool, error) {
-	result := make(map[int32]bool, len(pids))
+func (p winPlatform) ExternalPeers(ctx context.Context, pids []int32) (map[int32]model.PeerState, error) {
+	result := make(map[int32]model.PeerState, len(pids))
 	for _, pid := range pids {
 		if pid > 0 {
-			result[pid] = false
+			result[pid] = model.PeerNone
 		}
 	}
 	for _, family := range []int{2, 23} {
@@ -34,8 +36,8 @@ func (p winPlatform) ExternalPeers(ctx context.Context, pids []int32) (map[int32
 			if err != nil {
 				return nil, err
 			}
-			for pid, active := range peers {
-				result[pid] = result[pid] || active
+			for pid, state := range peers {
+				result[pid] = max(result[pid], state)
 			}
 		}
 	}

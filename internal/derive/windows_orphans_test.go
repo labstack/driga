@@ -29,7 +29,7 @@ func TestWindowsParentIdentity(t *testing.T) {
 				ps = append(ps, parent, model.Proc{PID: 600, PPID: 600, StartTime: now.Add(-2 * time.Hour)})
 			}
 			idx := newProcIndex(ps, true)
-			got := FindOrphans(idx, nil, signatures.Builtin(), now, 0, nil, WithExternalPeers(map[int32]bool{701: false}), WithSubreaper(700))
+			got := FindOrphans(idx, nil, signatures.Builtin(), now, 0, nil, WithExternalPeers(map[int32]model.PeerState{701: model.PeerNone}), WithSubreaper(700))
 			if (len(got) == 1) != tc.orphan {
 				t.Fatalf("orphans: %+v", got)
 			}
@@ -46,7 +46,7 @@ func TestWindowsParentIdentity(t *testing.T) {
 func TestWindowsOrphanPinsEveryMember(t *testing.T) {
 	now := time.Now()
 	ps := []model.Proc{{PID: 701, PPID: 700, StartTime: now.Add(-time.Hour), Cmdline: `"C:\Tools\claude.exe" mcp serve`, Argv: []string{"C:\\Tools\\claude.exe", "mcp", "serve"}}, {PID: 702, PPID: 701, StartTime: now.Add(-time.Minute)}}
-	peers := WithExternalPeers(map[int32]bool{701: false, 702: false})
+	peers := WithExternalPeers(map[int32]model.PeerState{701: model.PeerNone, 702: model.PeerNone})
 	first := FindOrphans(newProcIndex(ps, true), nil, signatures.Builtin(), now, 0, nil, peers)
 	if len(first) != 1 || len(first[0].ProcessStarts) != 2 || first[0].Verified {
 		t.Fatalf("first: %+v", first)
