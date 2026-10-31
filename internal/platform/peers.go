@@ -21,6 +21,13 @@ func ParseLsofPeers(out []byte, pids []int32) map[int32]model.PeerState {
 // listed process owns belongs to another user, such as a system service, and
 // reports PeerSystem. Without all, every unresolved peer stays connected.
 func ParseLsofPeersAll(out []byte, pids []int32, all []byte) map[int32]model.PeerState {
+	return classifySockets(parseLsofSockets(out), pids, parseLsofSockets(all), all != nil)
+}
+
+// classifySockets is ParseLsofPeersAll over parsed records, from lsof or
+// libproc. sockets holds the tree's records and may hold other processes';
+// with resolved set, all holds every visible process's Unix sockets.
+func classifySockets(sockets []lsofSocket, pids []int32, all []lsofSocket, resolved bool) map[int32]model.PeerState {
 	wanted := make(map[int32]bool, len(pids))
 	result := make(map[int32]model.PeerState, len(pids))
 	for _, pid := range pids {
@@ -28,7 +35,6 @@ func ParseLsofPeersAll(out []byte, pids []int32, all []byte) map[int32]model.Pee
 			wanted[pid], result[pid] = true, model.PeerNone
 		}
 	}
-	sockets := parseLsofSockets(out)
 	// Collect endpoint ownership before resolving peers: the peer's process
 	// record may occur after the connecting process in lsof's output.
 	owners := make(map[string][]int32)
@@ -38,9 +44,9 @@ func ParseLsofPeersAll(out []byte, pids []int32, all []byte) map[int32]model.Pee
 		}
 	}
 	var visible map[string]bool
-	if all != nil {
+	if resolved {
 		visible = make(map[string]bool)
-		for _, s := range parseLsofSockets(all) {
+		for _, s := range all {
 			for _, endpoint := range s.endpoints() {
 				visible[endpoint] = true
 			}
@@ -109,6 +115,9 @@ func socketEndpoint(name string) string {
 	return name
 }
 
+// lsofSocket is one socket as lsof -FpcdnDtT describes it: device is a Unix
+// socket's kernel address, and name its bound path and "->" peer, or an
+// Internet socket's endpoints.
 type lsofSocket struct {
 	pid                       int32
 	device, kind, name, state string

@@ -118,9 +118,13 @@ A connection to another of your processes, any network connection, and any
 other process's listener, such as a dev server a child started, still keep the
 tree. The Codex plugin's `app-server-broker.mjs` and `claude mcp serve` set it,
 because their clients start a replacement or use stdio. A peer that has already
-closed does not count. On macOS, telling a listener's clients from system
-services takes one extra `lsof` pass over all your processes, run only for
-trees with such a helper; if it fails, every socket counts as in use. A process
+closed does not count. On macOS, Driga reads sockets through the kernel's
+`proc_info` interface, the one `lsof` uses, without starting `lsof`. Telling a
+listener's clients from system services takes one extra scan of all your
+processes, run only for trees with such a helper; if any of your processes
+cannot be read, every socket counts as in use. If a macOS update changes the
+kernel's socket record, Driga logs `socket_layout_fallback` and uses `lsof`
+instead. A process
 that runs from a running app's bundle protects its tree, unless an agent helper
 started it to borrow the bundle's runtime.
 

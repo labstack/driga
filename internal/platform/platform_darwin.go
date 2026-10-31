@@ -5,10 +5,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/labstack/driga/internal/model"
@@ -188,10 +190,74 @@ const (
 	lsofAllDeadline   = 10 * time.Second
 )
 
-// ExternalPeers checks the tree's own Unix and Internet sockets within five
-// seconds per batch of 200 pids, so large trees are not cut off on a loaded
-// machine.
+// ExternalPeers checks the tree's own Unix and Internet sockets through the
+// proc_info syscall, falling back to lsof if the kernel's socket layout
+// changed.
 func (darwinPlatform) ExternalPeers(ctx context.Context, pids []int32) (map[int32]model.PeerState, error) {
+	sockets, err := treeSockets(ctx, pids)
+	if err == nil {
+		return classifySockets(sockets, pids, nil, false), nil
+	}
+	if !errors.Is(err, errSocketLayout) {
+		return nil, err
+	}
+	warnSocketLayout(err)
+	return lsofExternalPeers(ctx, pids)
+}
+
+// ResolvedPeers takes the tree's Unix sockets from one proc_info scan of all
+// of this user's processes, so a listener's clients and the owners of outside
+// peers come from the same snapshot as the tree. If any of this user's
+// processes cannot be read, every pid reports PeerConnected.
+func (darwinPlatform) ResolvedPeers(ctx context.Context, pids []int32) (map[int32]model.PeerState, error) {
+	tree, err := treeSockets(ctx, pids)
+	var all []lsofSocket
+	complete := false
+	if err == nil {
+		all, complete, err = allUnixSockets(ctx)
+	}
+	if errors.Is(err, errSocketLayout) {
+		warnSocketLayout(err)
+		return lsofResolvedPeers(ctx, pids)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if !complete {
+		return allConnected(pids), nil
+	}
+	sockets := all
+	for _, s := range tree {
+		if s.kind != "unix" {
+			sockets = append(sockets, s)
+		}
+	}
+	return classifySockets(sockets, pids, all, true), nil
+}
+
+var socketLayoutWarned sync.Once
+
+func warnSocketLayout(err error) {
+	socketLayoutWarned.Do(func() {
+		slog.Warn("socket check falls back to lsof", "event", "socket_layout_fallback", "err", err.Error())
+	})
+}
+
+// allConnected fails a socket check closed: every pid counts as in use.
+func allConnected(pids []int32) map[int32]model.PeerState {
+	result := make(map[int32]model.PeerState, len(pids))
+	for _, pid := range pids {
+		if pid > 0 {
+			result[pid] = model.PeerConnected
+		}
+	}
+	return result
+}
+
+// lsofExternalPeers checks the tree's own Unix and Internet sockets within
+// five seconds per batch of 200 pids, so large trees are not cut off on a
+// loaded machine.
+func lsofExternalPeers(ctx context.Context, pids []int32) (map[int32]model.PeerState, error) {
 	ctx, cancel := lsofTreeDeadline(ctx, pids)
 	defer cancel()
 	records, err := lsofTree(ctx, pids, "-U", "-i")
@@ -201,11 +267,10 @@ func (darwinPlatform) ExternalPeers(ctx context.Context, pids []int32) (map[int3
 	return ParseLsofPeers(records, pids), nil
 }
 
-// ResolvedPeers takes the tree's Unix sockets from one lsof pass over all of
-// this user's processes, so a listener's clients and the owners of outside
-// peers come from the same snapshot as the tree. If that pass fails or is
-// incomplete, every pid reports PeerConnected.
-func (darwinPlatform) ResolvedPeers(ctx context.Context, pids []int32) (map[int32]model.PeerState, error) {
+// lsofResolvedPeers is ResolvedPeers through one lsof pass over all of this
+// user's processes. If that pass fails or is incomplete, every pid reports
+// PeerConnected.
+func lsofResolvedPeers(ctx context.Context, pids []int32) (map[int32]model.PeerState, error) {
 	treeCtx, cancel := lsofTreeDeadline(ctx, pids)
 	defer cancel()
 	inet, err := lsofTree(treeCtx, pids, "-i")
@@ -221,13 +286,7 @@ func (darwinPlatform) ResolvedPeers(ctx context.Context, pids []int32) (map[int3
 	if err != nil || allCtx.Err() != nil {
 		// Exit 1 means lsof skipped something; a missing client must not
 		// read as idle.
-		result := make(map[int32]model.PeerState, len(pids))
-		for _, pid := range pids {
-			if pid > 0 {
-				result[pid] = model.PeerConnected
-			}
-		}
-		return result, nil
+		return allConnected(pids), nil
 	}
 	return ParseLsofPeersAll(append(inet, all...), pids, all), nil
 }
