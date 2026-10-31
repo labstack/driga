@@ -176,10 +176,19 @@ func DataDir(c Controller) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	return resolveDataDir(dir), nil
+}
+
+// resolveDataDir is the directory a service definition's DRIGA_DATA_DIR
+// names, or the default when it records none.
+func resolveDataDir(dir string) string {
 	if dir == "" {
-		return config.DefaultDataDir(), nil
+		return config.DefaultDataDir()
 	}
-	return filepath.Abs(config.ExpandHome(dir))
+	if abs, err := filepath.Abs(config.ExpandHome(dir)); err == nil {
+		return abs
+	}
+	return filepath.Clean(config.ExpandHome(dir))
 }
 
 type controlOnly struct{}
