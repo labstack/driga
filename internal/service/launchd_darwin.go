@@ -3,6 +3,7 @@ package service
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -67,6 +68,9 @@ func (s *launchdController) Install() error {
 		}
 		if !stale {
 			return nil
+		}
+		if dir, err := s.recordedDataDir(); err == nil && resolveDataDir(dir) != config.DataDir() {
+			slog.Info("the Driga service collected into another data directory; moving it to this one", "event", "service_data_dir_moved", "from", resolveDataDir(dir), "to", config.DataDir())
 		}
 		status, err := s.Status()
 		if err != nil && !errors.Is(err, ks.ErrNotInstalled) {

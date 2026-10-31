@@ -425,7 +425,7 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 			if err != nil {
 				add("service_definition", "warn", err.Error(), "check the service plist; driga service install")
 			} else if stale {
-				add("service_definition", "warn", "the service plist points at a stale binary", "driga service install")
+				add("service_definition", "warn", "the service plist runs another binary or collects into another data directory", "driga service install")
 			}
 		}
 		status := d.NotificationStatus

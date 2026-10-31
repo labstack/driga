@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/labstack/driga/internal/config"
 	"github.com/labstack/driga/internal/self"
 )
 
@@ -60,8 +61,11 @@ func IsDaemon(binPath string) bool {
 	return name == "drigad" || strings.HasPrefix(name, "drigad-")
 }
 
-// PlistStale is a read-only diagnostic. Compare path strings, not inode identity:
-// an old bare PATH symlink can still resolve to the new bundle executable.
+// PlistStale is a read-only diagnostic: the plist runs another executable, lacks
+// the bundle association, or collects into another data directory than this
+// process uses, so its clients would find no service. Compare path strings,
+// not inode identity: an old bare PATH symlink can still resolve to the new
+// bundle executable.
 func PlistStale(path, binPath string) (bool, error) {
 	data, err := os.Open(path)
 	if errors.Is(err, os.ErrNotExist) {
@@ -126,7 +130,14 @@ func PlistStale(path, binPath string) (bool, error) {
 	if executable == "" {
 		return false, errors.New("service plist has no ProgramArguments executable")
 	}
-	return executable != DaemonPath(ExecutablePath(binPath)) || (BundlePath(binPath) != "" && !associated), nil
+	if executable != DaemonPath(ExecutablePath(binPath)) || (BundlePath(binPath) != "" && !associated) {
+		return true, nil
+	}
+	dir, err := plistEnv(path, "DRIGA_DATA_DIR")
+	if err != nil {
+		return false, err
+	}
+	return resolveDataDir(dir) != config.DataDir(), nil
 }
 
 // plistEnv is the value the collector plist at path sets for the environment

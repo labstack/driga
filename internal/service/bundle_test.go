@@ -123,3 +123,44 @@ func TestPlistEnv(t *testing.T) {
 		t.Fatal("missing plist read")
 	}
 }
+
+// A plist that collects into another data directory than this process uses is
+// stale, so install rewrites it and doctor reports it: its clients would
+// otherwise find no service and fall back to snapshot mode.
+func TestPlistStaleDataDir(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("launchd plist")
+	}
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "driga")
+	plistPath := filepath.Join(dir, "collector.plist")
+	write := func(dataDir string) {
+		t.Helper()
+		t.Setenv("DRIGA_DATA_DIR", dataDir)
+		body, err := renderLaunchd(configForOS(bin, "darwin"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(plistPath, body, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	data := filepath.Join(dir, "Application Support", "driga")
+	for _, tc := range []struct {
+		name, recorded, current string
+		stale                   bool
+	}{
+		{"same", data, data, false},
+		{"escaped space", filepath.Join(dir, `Application\ Support`, "driga"), data, true},
+		{"other", filepath.Join(dir, "other"), data, true},
+		{"unset matches default", "", "", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			write(tc.recorded)
+			t.Setenv("DRIGA_DATA_DIR", tc.current)
+			if stale, err := PlistStale(plistPath, bin); err != nil || stale != tc.stale {
+				t.Fatalf("stale = %t, %v; want %t", stale, err, tc.stale)
+			}
+		})
+	}
+}
