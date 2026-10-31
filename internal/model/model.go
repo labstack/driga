@@ -247,6 +247,16 @@ type InboxJump struct {
 	Server  string `json:"server,omitempty"`
 }
 
+// PeerState is what a socket probe saw for one process, weakest first.
+type PeerState uint8
+
+const (
+	PeerNone      PeerState = iota // No listener and no peer outside the tree.
+	PeerListening                  // Listening sockets only: reachable, not connected.
+	PeerSystem                     // Connected only to peers no process of this user owns.
+	PeerConnected                  // Connected to one of this user's processes, or the network.
+)
+
 // Orphan is a process tree left behind by a dead agent session.
 type Orphan struct {
 	MachineID string    `json:"machine_id"`

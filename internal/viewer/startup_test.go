@@ -17,6 +17,7 @@ import (
 	"github.com/labstack/driga/internal/config"
 	"github.com/labstack/driga/internal/gitscan"
 	"github.com/labstack/driga/internal/model"
+	"github.com/labstack/driga/internal/platform"
 	"github.com/labstack/driga/internal/signatures"
 	"github.com/labstack/driga/internal/store"
 	"github.com/labstack/driga/internal/view"
@@ -218,11 +219,14 @@ type startupSocketPlatform struct{ startupPlatform }
 func (*startupSocketPlatform) Procs(context.Context) ([]model.Proc, error) {
 	return []model.Proc{{PID: 200, PPID: 1, StartTime: time.Now().Add(-time.Hour), Cmdline: "claude mcp serve", Argv: []string{"claude", "mcp", "serve"}}}, nil
 }
-func (p *startupSocketPlatform) ExternalPeers(ctx context.Context, _ []int32) (map[int32]bool, error) {
+
+var _ platform.SocketProber = (*startupSocketPlatform)(nil)
+
+func (p *startupSocketPlatform) ExternalPeers(ctx context.Context, _ []int32) (map[int32]model.PeerState, error) {
 	close(p.started)
 	select {
 	case <-p.release:
-		return map[int32]bool{200: false}, nil
+		return map[int32]model.PeerState{200: model.PeerNone}, nil
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}

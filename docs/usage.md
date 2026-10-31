@@ -107,6 +107,23 @@ reported at the top level. A single-host response omits `machines`. Consumers
 should read the top-level primary report plus any additional `machines` entries.
 Summary reads only the latest health sample and does not build machine trends.
 
+An orphan tree counts as idle when every process stays below 5% of one core,
+the whole tree stays below 25%, and no process has a socket peer outside the
+tree. Dead helpers still tick timers and garbage collection, so exact-zero CPU
+is not required. Listening sockets and connections to other users' processes,
+such as system services, also keep a tree. A helper whose signature sets
+`idle_without_clients` is the exception: its own listeners do not count, and
+when it is the tree root, neither do system-service connections in the tree.
+A connection to another of your processes, any network connection, and any
+other process's listener, such as a dev server a child started, still keep the
+tree. The Codex plugin's `app-server-broker.mjs` and `claude mcp serve` set it,
+because their clients start a replacement or use stdio. A peer that has already
+closed does not count. On macOS, telling a listener's clients from system
+services takes one extra `lsof` pass over all your processes, run only for
+trees with such a helper; if it fails, every socket counts as in use. A process
+that runs from a running app's bundle protects its tree, unless an agent helper
+started it to borrow the bundle's runtime.
+
 Remote orphans cannot be killed here; run the kill command on their machine.
 Remote inbox acknowledgments require the peer's `--allow-ack` grant; unreachable peers
 show `ack pending` and retry on reconnect.
@@ -922,6 +939,8 @@ name = "example-helper"
 agent = "codex"
 role = "helper"
 match = ['^example-agent-helper([[:space:]]|$)']
+# Optional: when this helper roots a tree, only real clients keep the tree.
+# idle_without_clients = true
 ```
 
 Extra files are read in configuration order before built-in signatures; first

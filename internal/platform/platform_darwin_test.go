@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/platform"
 	"github.com/shirou/gopsutil/v4/process"
 )
@@ -126,7 +127,7 @@ func TestCwdsCanceled(t *testing.T) {
 }
 
 func TestExternalPeers(t *testing.T) {
-	fakeCommand(t, "lsof", `[ "$#" -eq 8 ] && [ "$1" = -a ] && [ "$3" = -n ] && [ "$4" = -P ] && [ "$5" = -F ] && [ "$6" = pcnDtT ] && [ "$7" = -p ] && [ "$8" = 10,11 ] || exit 2
+	fakeCommand(t, "lsof", `[ "$#" -eq 8 ] && [ "$1" = -a ] && [ "$3" = -n ] && [ "$4" = -P ] && [ "$5" = -F ] && [ "$6" = pcdnDtT ] && [ "$7" = -p ] && [ "$8" = 10,11 ] || exit 2
 [ "$2" = -i ] && exit 1
 [ "$2" = -U ] || exit 2
 printf 'p10\nf3\ntunix\nD0xa\nn->0xb\np11\nf3\ntunix\nD0xb\nn->0xa\n'
@@ -137,7 +138,7 @@ exit 1
 		t.Fatal("Darwin platform does not implement SocketProber")
 	}
 	got, err := prober.ExternalPeers(context.Background(), []int32{10, 11})
-	if err != nil || len(got) != 2 || got[10] || got[11] {
+	if err != nil || len(got) != 2 || got[10] != model.PeerNone || got[11] != model.PeerNone {
 		t.Fatalf("peers = %v, %v", got, err)
 	}
 }
@@ -164,7 +165,7 @@ func TestExternalPeersListenerSelf(t *testing.T) {
 	pid := int32(os.Getpid())
 	prober := platform.New().(platform.SocketProber)
 	peers, err := prober.ExternalPeers(context.Background(), []int32{pid})
-	if err != nil || !peers[pid] {
+	if err != nil || peers[pid] != model.PeerListening {
 		t.Fatalf("own listener missing: %v, %v", peers, err)
 	}
 }
@@ -289,5 +290,22 @@ func TestCwdsAllOwnProcessesQuickly(t *testing.T) {
 	}
 	if wd, _ := os.Getwd(); cwds[int32(os.Getpid())] != wd {
 		t.Fatalf("own cwd = %q, want %q", cwds[int32(os.Getpid())], wd)
+	}
+}
+
+// If the unrestricted pass is incomplete, a client may be missing, so every
+// pid reports connected rather than idle.
+func TestResolvedPeersFailsClosed(t *testing.T) {
+	fakeCommand(t, "lsof", `[ "$2" = -i ] && exit 1
+[ "$1" = -U ] && { printf 'p10\nf3\ntunix\nd0xa\nn/private/tmp/broker.sock\n'; exit 1; }
+exit 2
+`)
+	resolver, ok := platform.New().(platform.PeerResolver)
+	if !ok {
+		t.Fatal("Darwin platform does not implement PeerResolver")
+	}
+	got, err := resolver.ResolvedPeers(context.Background(), []int32{10, 11})
+	if err != nil || got[10] != model.PeerConnected || got[11] != model.PeerConnected {
+		t.Fatalf("peers = %v, %v", got, err)
 	}
 }

@@ -55,7 +55,7 @@ func TestWindowsTreeAbortsBeforeSignalAndDuringGrace(t *testing.T) {
 				forced++
 			}
 			return nil
-		}, true)
+		}, true, options{})
 		want := 0
 		if duringGrace {
 			want = 2

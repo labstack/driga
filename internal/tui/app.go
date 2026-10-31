@@ -27,6 +27,7 @@ import (
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/pathx"
 	"github.com/labstack/driga/internal/platform"
+	"github.com/labstack/driga/internal/signatures"
 	"github.com/labstack/driga/internal/spool"
 	"github.com/labstack/driga/internal/store"
 	"github.com/labstack/driga/internal/view"
@@ -51,12 +52,15 @@ type Options struct {
 	Now           func() time.Time
 	Exec          func([]string) error
 	Kill          func(context.Context, model.Orphan, []int32, bool) (kill.Result, error)
-	Spool         func(model.HookEvent) error
-	Summarize     func(context.Context, string) error
-	CleanupList   func(context.Context) ([]cleanup.Candidate, error)
-	CleanupApply  func(context.Context, cleanup.Candidate) (cleanup.Result, error)
-	DataDir       string
-	Context       context.Context
+	// Signatures classifies orphan trees for the default Kill; nil means the
+	// built-in set.
+	Signatures   *signatures.Set
+	Spool        func(model.HookEvent) error
+	Summarize    func(context.Context, string) error
+	CleanupList  func(context.Context) ([]cleanup.Candidate, error)
+	CleanupApply func(context.Context, cleanup.Candidate) (cleanup.Result, error)
+	DataDir      string
+	Context      context.Context
 	// LookupTmux resolves an ancestor pane PID to its tmux session.
 	LookupTmux func(context.Context, []int32) (string, error)
 }
@@ -198,8 +202,12 @@ func New(src Source, opts Options) tea.Model {
 		opts.Spool = func(e model.HookEvent) error { return spool.Append(config.SpoolDir(), e) }
 	}
 	if opts.Kill == nil {
+		sigs := opts.Signatures
+		if sigs == nil {
+			sigs = signatures.Builtin()
+		}
 		opts.Kill = func(ctx context.Context, o model.Orphan, p []int32, force bool) (kill.Result, error) {
-			return kill.Tree(ctx, platform.New(), o, p, force, 5*time.Second)
+			return kill.Tree(ctx, platform.New(), o, p, force, 5*time.Second, kill.WithClassifier(derive.NewClassifier(sigs, len(p)+1)))
 		}
 	}
 	if opts.LookupTmux == nil {

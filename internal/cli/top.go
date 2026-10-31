@@ -11,6 +11,7 @@ import (
 	"github.com/labstack/driga/internal/chat"
 	"github.com/labstack/driga/internal/cleanup"
 	"github.com/labstack/driga/internal/config"
+	"github.com/labstack/driga/internal/signatures"
 	"github.com/labstack/driga/internal/tui"
 	"github.com/labstack/driga/internal/view"
 )
@@ -66,6 +67,9 @@ func (c TopCmd) Run(g *Globals) error {
 	opts.Tmux = os.Getenv("TMUX")
 	opts.JumpTerminal = cfg.Inbox.JumpTerminal
 	opts.MotionOff = cfg.Motion == "off"
+	if opts.Signatures, err = signatures.Load(cfg.ExtraSignatures); err != nil {
+		return err
+	}
 	opts.CleanupList = func(ctx context.Context) ([]cleanup.Candidate, error) {
 		envelope, err := cleanupRead(ctx, g, "", false, true)
 		if err != nil {

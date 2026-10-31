@@ -180,10 +180,67 @@ func (darwinPlatform) Cwds(ctx context.Context, pids []int32) (map[int32]string,
 	return cwds, nil
 }
 
-// ExternalPeers checks Unix and Internet sockets within a five-second deadline.
-func (darwinPlatform) ExternalPeers(ctx context.Context, pids []int32) (map[int32]bool, error) {
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+// lsofBatch bounds one lsof argument list; each batch gets lsofBatchDeadline.
+// lsofAllDeadline bounds the unrestricted pass that ResolvedPeers adds.
+const (
+	lsofBatch         = 200
+	lsofBatchDeadline = 5 * time.Second
+	lsofAllDeadline   = 10 * time.Second
+)
+
+// ExternalPeers checks the tree's own Unix and Internet sockets within five
+// seconds per batch of 200 pids, so large trees are not cut off on a loaded
+// machine.
+func (darwinPlatform) ExternalPeers(ctx context.Context, pids []int32) (map[int32]model.PeerState, error) {
+	ctx, cancel := lsofTreeDeadline(ctx, pids)
 	defer cancel()
+	records, err := lsofTree(ctx, pids, "-U", "-i")
+	if err != nil {
+		return nil, err
+	}
+	return ParseLsofPeers(records, pids), nil
+}
+
+// ResolvedPeers takes the tree's Unix sockets from one lsof pass over all of
+// this user's processes, so a listener's clients and the owners of outside
+// peers come from the same snapshot as the tree. If that pass fails or is
+// incomplete, every pid reports PeerConnected.
+func (darwinPlatform) ResolvedPeers(ctx context.Context, pids []int32) (map[int32]model.PeerState, error) {
+	treeCtx, cancel := lsofTreeDeadline(ctx, pids)
+	defer cancel()
+	inet, err := lsofTree(treeCtx, pids, "-i")
+	if err != nil {
+		return nil, err
+	}
+	allCtx, cancelAll := context.WithTimeout(ctx, lsofAllDeadline)
+	defer cancelAll()
+	all, err := exec.CommandContext(allCtx, "lsof", "-U", "-n", "-P", "-F", "pcdnDtT").Output()
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+	if err != nil || allCtx.Err() != nil {
+		// Exit 1 means lsof skipped something; a missing client must not
+		// read as idle.
+		result := make(map[int32]model.PeerState, len(pids))
+		for _, pid := range pids {
+			if pid > 0 {
+				result[pid] = model.PeerConnected
+			}
+		}
+		return result, nil
+	}
+	return ParseLsofPeersAll(append(inet, all...), pids, all), nil
+}
+
+func lsofTreeDeadline(ctx context.Context, pids []int32) (context.Context, context.CancelFunc) {
+	batches := max(1, (len(pids)+lsofBatch-1)/lsofBatch)
+	return context.WithTimeout(ctx, time.Duration(batches)*lsofBatchDeadline)
+}
+
+// lsofTree lists the given socket classes of pids. With -a, -U and -i
+// intersect instead of forming a union, so each class runs separately while
+// keeping the pid restriction.
+func lsofTree(ctx context.Context, pids []int32, classes ...string) ([]byte, error) {
 	ids := make([]string, 0, len(pids))
 	for _, pid := range pids {
 		if pid > 0 {
@@ -191,16 +248,15 @@ func (darwinPlatform) ExternalPeers(ctx context.Context, pids []int32) (map[int3
 		}
 	}
 	var records bytes.Buffer
-	for offset := 0; offset < len(ids); offset += 200 {
-		// With -a, -U and -i intersect instead of forming a union. Query
-		// each socket class separately while retaining the pid restriction.
-		for _, class := range []string{"-U", "-i"} {
+	for offset := 0; offset < len(ids); offset += lsofBatch {
+		for _, class := range classes {
 			if err := ctx.Err(); err != nil {
 				return nil, err
 			}
-			// D identifies each Unix socket's local address; t and T identify
-			// socket type and TCP state, which -Fpcn alone does not expose.
-			out, err := exec.CommandContext(ctx, "lsof", "-a", class, "-n", "-P", "-F", "pcnDtT", "-p", strings.Join(ids[offset:min(offset+200, len(ids))], ",")).Output()
+			// macOS lsof reports a Unix socket's own kernel address in d (some
+			// builds use D); t and T identify socket type and TCP state, which
+			// -Fpcn alone does not expose.
+			out, err := exec.CommandContext(ctx, "lsof", "-a", class, "-n", "-P", "-F", "pcdnDtT", "-p", strings.Join(ids[offset:min(offset+lsofBatch, len(ids))], ",")).Output()
 			records.Write(out)
 			if ctx.Err() != nil {
 				return nil, ctx.Err()
@@ -214,7 +270,7 @@ func (darwinPlatform) ExternalPeers(ctx context.Context, pids []int32) (map[int3
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	return ParseLsofPeers(records.Bytes(), pids), nil
+	return records.Bytes(), nil
 }
 
 func (darwinPlatform) Alive(pid int32, start time.Time) bool {

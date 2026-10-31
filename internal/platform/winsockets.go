@@ -3,6 +3,8 @@ package platform
 import (
 	"encoding/binary"
 	"fmt"
+
+	"github.com/labstack/driga/internal/model"
 )
 
 // parseWindowsSocketTable reads the fixed DWORD layouts from IP Helper, never
@@ -10,7 +12,7 @@ import (
 // evidence (even a loopback connection); every bound UDP endpoint is a listener.
 // UDP owner tables have no peer information, so treating a binding as active
 // is deliberately conservative.
-func parseWindowsSocketTable(b []byte, family int, udp bool, pids []int32) (map[int32]bool, error) {
+func parseWindowsSocketTable(b []byte, family int, udp bool, pids []int32) (map[int32]model.PeerState, error) {
 	row, pidOffset, stateOffset := 24, 20, 0
 	switch {
 	case family == 2 && udp:
@@ -29,10 +31,10 @@ func parseWindowsSocketTable(b []byte, family int, udp bool, pids []int32) (map[
 	if n > uint64((len(b)-4)/row) {
 		return nil, fmt.Errorf("truncated socket table rows")
 	}
-	result := make(map[int32]bool, len(pids))
+	result := make(map[int32]model.PeerState, len(pids))
 	for _, pid := range pids {
 		if pid > 0 {
-			result[pid] = false
+			result[pid] = model.PeerNone
 		}
 	}
 	for i := 0; i < int(n); i++ {
@@ -41,14 +43,21 @@ func parseWindowsSocketTable(b []byte, family int, udp bool, pids []int32) (map[
 		if _, wanted := result[pid]; !wanted {
 			continue
 		}
-		active := udp
+		// A bound UDP endpoint can exchange datagrams with anyone, so it
+		// counts as connected.
+		seen := model.PeerConnected
 		if !udp {
-			state := binary.LittleEndian.Uint32(r[stateOffset:])
-			// CLOSED, TIME_WAIT and DELETE_TCB hold no live connection. All
-			// other (including unrecognized future) states fail toward active.
-			active = state != 1 && state != 11 && state != 12
+			// CLOSED, TIME_WAIT and DELETE_TCB hold no live connection; LISTEN
+			// waits for one. All other (including unrecognized future) states
+			// fail toward connected.
+			switch binary.LittleEndian.Uint32(r[stateOffset:]) {
+			case 1, 11, 12:
+				seen = model.PeerNone
+			case 2:
+				seen = model.PeerListening
+			}
 		}
-		result[pid] = result[pid] || active
+		result[pid] = max(result[pid], seen)
 	}
 	return result, nil
 }

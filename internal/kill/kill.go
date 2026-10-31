@@ -24,17 +24,38 @@ type Result struct {
 	Reason              string
 }
 
+// Option adjusts how a tree is revalidated.
+type Option func(*options)
+
+type options struct{ classifier *derive.Classifier }
+
+// WithClassifier lets the root's signature set IdleWithoutClients. Without it,
+// any listener or system-service socket keeps the tree.
+func WithClassifier(c *derive.Classifier) Option {
+	return func(o *options) { o.classifier = c }
+}
+
+func collectOptions(opts []Option) options {
+	var o options
+	for _, opt := range opts {
+		if opt != nil {
+			opt(&o)
+		}
+	}
+	return o
+}
+
 // Tree checks identities and expected descendants, then attempts graceful
 // shutdown deepest first. A nonpositive wait uses the five-second default.
-func Tree(ctx context.Context, plat platform.Platform, o model.Orphan, expect []int32, force bool, wait time.Duration) (Result, error) {
-	return runTree(ctx, plat, o, expect, force, wait, signalIdentity, runtime.GOOS == "windows")
+func Tree(ctx context.Context, plat platform.Platform, o model.Orphan, expect []int32, force bool, wait time.Duration, opts ...Option) (Result, error) {
+	return runTree(ctx, plat, o, expect, force, wait, signalIdentity, runtime.GOOS == "windows", collectOptions(opts))
 }
 
-func tree(ctx context.Context, plat platform.Platform, o model.Orphan, expect []int32, force bool, wait time.Duration, signal func(int, syscall.Signal) error) (Result, error) {
-	return runTree(ctx, plat, o, expect, force, wait, func(p model.Proc, sig syscall.Signal) error { return signal(int(p.PID), sig) }, false)
+func tree(ctx context.Context, plat platform.Platform, o model.Orphan, expect []int32, force bool, wait time.Duration, signal func(int, syscall.Signal) error, opts ...Option) (Result, error) {
+	return runTree(ctx, plat, o, expect, force, wait, func(p model.Proc, sig syscall.Signal) error { return signal(int(p.PID), sig) }, false, collectOptions(opts))
 }
 
-func runTree(ctx context.Context, plat platform.Platform, o model.Orphan, expect []int32, force bool, wait time.Duration, signal func(model.Proc, syscall.Signal) error, windows bool) (Result, error) {
+func runTree(ctx context.Context, plat platform.Platform, o model.Orphan, expect []int32, force bool, wait time.Duration, signal func(model.Proc, syscall.Signal) error, windows bool, opt options) (Result, error) {
 	abort := func(reason string) (Result, error) { return Result{Aborted: true, Reason: reason}, nil }
 	if err := ctx.Err(); err != nil {
 		return Result{}, err
@@ -105,15 +126,15 @@ func runTree(ctx context.Context, plat platform.Platform, o model.Orphan, expect
 		for _, p := range targets {
 			pids = append(pids, p.PID)
 		}
-		peers, err := prober.ExternalPeers(ctx, pids)
+		peers, err := platform.ProbePeers(ctx, prober, pids, derive.NeedsResolvedPeers(opt.classifier, targets))
 		if err != nil {
 			return Result{Aborted: true, Reason: "socket peer check failed"}, fmt.Errorf("check socket peers: %w", err)
 		}
-		for _, pid := range pids {
-			if active, present := peers[pid]; !present {
-				return abort(fmt.Sprintf("socket peer check missing PID %d", pid))
-			} else if active {
-				return abort(fmt.Sprintf("PID %d has an external peer or listening socket", pid))
+		for _, p := range targets {
+			if state, present := peers[p.PID]; !present {
+				return abort(fmt.Sprintf("socket peer check missing PID %d", p.PID))
+			} else if derive.InUse(opt.classifier, root, p, state) {
+				return abort(peerReason(p.PID, state))
 			}
 		}
 	}

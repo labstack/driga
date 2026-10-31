@@ -111,8 +111,26 @@ func (f *Fake) OpenFiles(ctx context.Context, path string) (bool, error) {
 	return false, ctx.Err()
 }
 
+// FixturePeers converts a readable test map, where true is a connected outside
+// peer, into probe states. A nil map stays nil.
+func FixturePeers(peers map[int32]bool) map[int32]model.PeerState {
+	if peers == nil {
+		return nil
+	}
+	states := make(map[int32]model.PeerState, len(peers))
+	for pid, connected := range peers {
+		if connected {
+			states[pid] = model.PeerConnected
+		} else {
+			states[pid] = model.PeerNone
+		}
+	}
+	return states
+}
+
 // ExternalPeers returns optional fixture sockets/listeners and peer pid links.
-func (f *Fake) ExternalPeers(ctx context.Context, pids []int32) (map[int32]bool, error) {
+// Fixture sockets are unclassified, so they report connected.
+func (f *Fake) ExternalPeers(ctx context.Context, pids []int32) (map[int32]model.PeerState, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -120,12 +138,15 @@ func (f *Fake) ExternalPeers(ctx context.Context, pids []int32) (map[int32]bool,
 	for _, pid := range pids {
 		wanted[pid] = true
 	}
-	result := make(map[int32]bool, len(pids))
+	result := make(map[int32]model.PeerState, len(pids))
 	for _, pid := range pids {
-		result[pid] = f.sockets[pid]
+		result[pid] = model.PeerNone
+		if f.sockets[pid] {
+			result[pid] = model.PeerConnected
+		}
 		for _, peer := range f.peers[pid] {
 			if !wanted[peer] {
-				result[pid] = true
+				result[pid] = model.PeerConnected
 			}
 		}
 	}
