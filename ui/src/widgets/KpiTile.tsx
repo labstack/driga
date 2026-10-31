@@ -87,14 +87,14 @@ export function KpiTile({ label, sublabel, icon: Glyph, value, unit, total, capt
     {visual ?? <Stack gap={header ? 2 : 4}>
       <Group gap={6} wrap="nowrap" c={tone ? tone : "var(--driga-faint)"}>
         {Glyph && <Glyph size={14} aria-hidden style={{ flex: "none" }} />}
-        <Text size="xs" fw={500} tt="uppercase" lts="0.04em" c={tone ? "var(--driga-text)" : "dimmed"} lh={header ? 1.4 : 1.2} truncate title={sublabel ? `${label} · ${sublabel}` : label} style={{ whiteSpace: "nowrap" }}>
+        <Text size="xs" fw={500} tt="uppercase" lts="0.04em" c={tone ? "var(--driga-text)" : "dimmed"} lh={header ? 1.25 : 1.2} truncate title={sublabel ? `${label} · ${sublabel}` : label} style={{ whiteSpace: "nowrap" }}>
           {label}{sublabel && <> · <Text span fz="xs" fw={500} ff="monospace" tt="none" lts={0} lh="inherit" c="dimmed">{sublabel}</Text></>}
         </Text>
       </Group>
       <Group gap={header ? 6 : 6} wrap="nowrap" align="center">
         {tone && <ColorSwatch size={6} color={`var(--mantine-color-${tone}-filled)`} withShadow={false} aria-hidden className={attention === "waiting" ? "w-pulse" : undefined} style={{ flex: "none" }} />}
-        {/* Plex Mono has taller text bounds on Linux; leave room above the value without growing the 56 px header. */}
-        <Box c={zero ? "dimmed" : undefined} style={{ whiteSpace: "nowrap" }}><Measure n={value} unit={unit} total={total} size={header ? 20 : 22} lineHeight={header ? 1.4 : 1.1} /></Box>
+        {/* Header tiles stay about 48 px so they sit inside the 55 px row with equal room above and below. */}
+        <Box c={zero ? "dimmed" : undefined} style={{ whiteSpace: "nowrap" }}><Measure n={value} unit={unit} total={total} size={header ? 20 : 22} lineHeight={header ? 1.2 : 1.1} /></Box>
         {caption && <Text fz={12} ff="monospace" c="dimmed" lh={1.2} style={{ whiteSpace: "nowrap" }}>· {caption}</Text>}
         {detail && <VisuallyHidden> {detail}</VisuallyHidden>}
         {header && line && <Box w={72} h={20} aria-hidden style={{ flex: "none" }}>{line}</Box>}
@@ -106,7 +106,7 @@ export function KpiTile({ label, sublabel, icon: Glyph, value, unit, total, capt
       </Group>}
       {/* Every header tile keeps the same strip below its value, so a bar under
           memory adds no height and labels and values line up across the row. */}
-      {header ? <Box h={4} aria-hidden={children ? undefined : true}>{children}</Box> : children}
+      {header ? <Box h={3} aria-hidden={children ? undefined : true}>{children}</Box> : children}
     </Stack>}
   </Root>;
   return <Box className="w-tile-box" visibleFrom={visibleFrom} hiddenFrom={hiddenFrom} style={header ? { display: "inline-block" } : undefined}>

@@ -71,6 +71,13 @@ function geometry(root: HTMLElement) {
     expect(rect.right).toBeLessThanOrEqual(slot.parentElement!.parentElement!.getBoundingClientRect().right + 1);
     expect(rect.right).toBeLessThanOrEqual(within(root).getByRole("button", { name: /^Fleet:/ }).getBoundingClientRect().left);
   }
+  // Each tile sits inside the row with equal room above and below.
+  for (const slot of slots) {
+    const tile = slot.querySelector<HTMLElement>(".w-tile")!.getBoundingClientRect();
+    const above = tile.top - bounds.top, below = bounds.bottom - tile.bottom;
+    expect(above, `${slot.dataset.headerTile} room above`).toBeGreaterThanOrEqual(2);
+    expect(Math.abs(above - below), `${slot.dataset.headerTile} room ${above} above, ${below} below`).toBeLessThanOrEqual(1);
+  }
   // Labels and values share one line across the row, whether or not a tile
   // has a bar under its value.
   const stacks = slots.map(slot => slot.querySelector<HTMLElement>(".w-tile > .mantine-Stack-root")).filter(stack => stack?.checkVisibility()) as HTMLElement[];

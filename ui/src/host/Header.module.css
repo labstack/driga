@@ -14,6 +14,9 @@
 
 .slot { position: relative; flex: none; min-width: 0; width: max-content; }
 .slot > :global(.w-tile-box), .slot :global(.w-tile) { width: 100%; }
+/* The tile box is inline-block; aligned to the top it adds no descender
+   space below, so the slot is exactly the tile and centres like it. */
+.slot > :global(.w-tile-box) { vertical-align: top; }
 .slot :global(.w-tile) { max-height: 56px; }
 .slot[data-reorderable] :global(.w-tile) { touch-action: none; }
 .drag { position: absolute; top: 2px; right: 22px; opacity: 0; pointer-events: none; touch-action: none; cursor: grab; }
