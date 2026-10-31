@@ -8,7 +8,11 @@
 /* A KPI tile: bordered on a board; in the header it is a bare cluster on
    the shell with the same tint and rule. */
 .w-tile { position: relative; display: block; width: 100%; text-align: left; border: 1px solid var(--driga-border); border-radius: var(--mantine-radius-md); background: var(--driga-raised); transition: background-color 150ms ease-out, box-shadow 150ms ease-out; }
-.w-tile[data-size="header"] { width: auto; border: none; background: transparent; }
+/* Every header tile is the same 56 px high with its content centred, so
+   labels and values line up across the row whatever a tile adds; a bar
+   under the value sits on the tile's bottom edge instead of adding height. */
+.w-tile[data-size="header"] { width: auto; height: 56px; display: flex; flex-direction: column; justify-content: center; border: none; background: transparent; }
+.w-tile-foot { position: absolute; left: 8px; right: 8px; bottom: 3px; }
 .w-tile[data-clickable] { cursor: pointer; }
 .w-tile[data-clickable]:hover { background: var(--driga-hover); }
 .w-tile[data-clickable]:active { transform: scale(0.98); }

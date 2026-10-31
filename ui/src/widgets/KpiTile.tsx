@@ -104,7 +104,7 @@ export function KpiTile({ label, sublabel, icon: Glyph, value, unit, total, capt
         {chip ?? <span />}
         {line && <Box h={24} style={{ flex: "1 1 48px", minWidth: 40, maxWidth: 96 }}>{line}</Box>}
       </Group>}
-      {children}
+      {header && children ? <Box className="w-tile-foot">{children}</Box> : children}
     </Stack>}
   </Root>;
   return <Box className="w-tile-box" visibleFrom={visibleFrom} hiddenFrom={hiddenFrom} style={header ? { display: "inline-block" } : undefined}>
