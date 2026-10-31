@@ -66,12 +66,21 @@ func writePromptTranscript(t *testing.T, path, text string) {
 	}
 }
 func TestPermissionHookBuiltBinary(t *testing.T) {
+	// readEnv moves HOME to a temporary directory. Build with the real Go
+	// caches: with GOPATH unset, go would otherwise fill a module cache under
+	// that HOME with read-only files the test cannot remove.
+	caches, err := exec.Command("go", "env", "GOMODCACHE", "GOCACHE").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	modCache, buildCache, _ := strings.Cut(strings.TrimSpace(string(caches)), "\n")
 	readEnv(t)
 	bin := filepath.Join(t.TempDir(), "driga")
 	if runtime.GOOS == "windows" {
 		bin += ".exe"
 	}
 	build := exec.Command("go", "build", "-o", bin, "../../cmd/driga")
+	build.Env = append(os.Environ(), "GOMODCACHE="+strings.TrimSpace(modCache), "GOCACHE="+strings.TrimSpace(buildCache))
 	if out, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("build: %v: %s", err, out)
 	}
