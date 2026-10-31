@@ -12,7 +12,9 @@ import (
 
 // Each stream holds at most one bounded lexical token. Tokens spanning writes
 // are scrubbed together; PEM bodies and oversized secret tokens are discarded before
-// reaching storage. No raw output is spooled to disk.
+// reaching storage or the agent. No raw output is spooled to disk. The agent
+// always gets the scrubbed head and tail of the command it asked to run; only
+// snippets capture stores the full scrubbed output.
 type outputStream struct {
 	parent             *commandOutput
 	name, token        string
@@ -50,10 +52,12 @@ func (o *commandOutput) emit(ctx context.Context, stream, data string) {
 	if data == "" || o.err != nil {
 		return
 	}
-	if o.err = o.st.AppendCommandOutput(ctx, o.action, stream, o.seq, []byte(data)); o.err != nil {
-		return
+	if o.snippets {
+		if o.err = o.st.AppendCommandOutput(ctx, o.action, stream, o.seq, []byte(data)); o.err != nil {
+			return
+		}
+		o.seq++
 	}
-	o.seq++
 	o.total += len(data)
 	if len(o.head) < 2048 {
 		n := min(2048-len(o.head), len(data))
@@ -97,9 +101,6 @@ func (s *outputStream) Write(p []byte) (int, error) {
 	if o.finished {
 		return 0, errors.New("command output closed")
 	}
-	if !o.snippets {
-		return len(p), nil
-	}
 	var safe strings.Builder
 	for _, b := range p {
 		if b == ' ' || b == '\n' || b == '\r' || b == '\t' {
@@ -140,9 +141,7 @@ func (o *commandOutput) Finish(ctx context.Context) (string, error) {
 	defer o.mu.Unlock()
 	if !o.finished {
 		for _, s := range o.streams {
-			if o.snippets {
-				o.emit(ctx, s.name, s.flush())
-			}
+			o.emit(ctx, s.name, s.flush())
 		}
 		o.finished = true
 	}
