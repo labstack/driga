@@ -4,10 +4,12 @@ package cleanup
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/labstack/driga/internal/secfile"
 	"os"
 	"path/filepath"
+	"syscall"
 )
 
 func trash(ctx context.Context, e Env, c Candidate, opts ApplyOpts, r Result) (Result, error) {
@@ -93,7 +95,10 @@ func trash(ctx context.Context, e Env, c Candidate, opts ApplyOpts, r Result) (R
 	}
 	if err := moveErr; err != nil {
 		finish(false)
-		return r, fmt.Errorf("trash rename (same filesystem required): %w", err)
+		if errors.Is(err, syscall.EXDEV) {
+			return r, fmt.Errorf("trash rename (same filesystem required): %w", err)
+		}
+		return r, fmt.Errorf("trash rename: %w", err)
 	}
 	finish(true)
 	return r, nil

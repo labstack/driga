@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 
 	"golang.org/x/sys/unix"
 )
@@ -62,17 +61,5 @@ func renameScratch(c Candidate, destination string) error {
 	if !os.SameFile(info, c.identity.info) {
 		return fmt.Errorf("scratch identity changed")
 	}
-	target, err := openDir(filepath.Dir(destination))
-	if err != nil {
-		return err
-	}
-	defer target.Close()
-	targetInfo, err := target.Stat()
-	if err != nil {
-		return err
-	}
-	if !sameDevice(rootInfo.Sys().(*syscall.Stat_t), targetInfo.Sys().(*syscall.Stat_t)) {
-		return syscall.EXDEV
-	}
-	return unix.Renameat(int(source.Fd()), name, int(target.Fd()), filepath.Base(destination))
+	return renameIntoTrash(source, name, rootInfo, destination)
 }
