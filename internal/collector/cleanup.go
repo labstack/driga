@@ -48,7 +48,7 @@ func lowDiskInbox(tx *store.Tx, cfg config.MachineConfig, s model.MachineSample,
 	for _, w := range worktrees[:min(3, len(worktrees))] {
 		names = append(names, w.Path)
 	}
-	summary := fmt.Sprintf("%s free, below %s. Inspect known cleanup candidates with driga cleanup list --sizes; driga top --tab machines shows the largest apps.", attention.DecimalBytesFloor(s.DiskFree), attention.DecimalBytes(threshold))
+	summary := fmt.Sprintf("%s free, below %s. Reclaim build output and tool caches with driga cleanup list --kind build --sizes and driga cleanup list --kind cache --sizes.", attention.DecimalBytesFloor(s.DiskFree), attention.DecimalBytes(threshold))
 	if len(names) > 0 {
 		summary += " Oldest stored worktrees to inspect: " + strings.Join(names, ", ")
 	}

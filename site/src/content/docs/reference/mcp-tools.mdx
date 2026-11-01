@@ -121,11 +121,11 @@ Read agent sessions and their families.
 
 ### list_cleanup_candidates
 
-Inspect local disk cleanup candidates read-only. Optional kind is worktree, scratch, or history (omit for all); sizes=true opts into bounded directory sizing. This tool never removes anything.
+Inspect local disk cleanup candidates read-only. Optional kind is worktree, scratch, build, cache, history (omit for all); sizes=true opts into bounded directory sizing. This tool never removes anything.
 
 | Input | Type | Required | Description |
 |---|---|---|---|
-| `kind` | string |  | One of `worktree`, `scratch`, `history`. |
+| `kind` | string |  | One of `worktree`, `scratch`, `build`, `cache`, `history`. |
 | `limit` | integer |  | Maximum total array entries, including nested collections; 1–500, default 100. |
 | `sizes` | boolean |  |  |
 

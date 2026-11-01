@@ -58,3 +58,45 @@ func (linuxPlatform) OpenFiles(ctx context.Context, path string) (bool, error) {
 	}
 	return false, nil
 }
+
+func (linuxPlatform) OpenFilePaths(ctx context.Context) ([]string, error) {
+	entries, err := os.ReadDir("/proc")
+	if err != nil {
+		return nil, err
+	}
+	paths := []string{}
+	for _, entry := range entries {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if _, err := strconv.Atoi(entry.Name()); err != nil {
+			continue
+		}
+		dir := filepath.Join("/proc", entry.Name(), "fd")
+		fds, err := os.ReadDir(dir)
+		if errors.Is(err, os.ErrNotExist) || errors.Is(err, os.ErrPermission) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		for _, fd := range fds {
+			target, err := os.Readlink(filepath.Join(dir, fd.Name()))
+			if errors.Is(err, os.ErrNotExist) || errors.Is(err, os.ErrPermission) {
+				continue
+			}
+			if err != nil {
+				return nil, err
+			}
+			target = strings.TrimSuffix(target, " (deleted)")
+			if !filepath.IsAbs(target) {
+				continue
+			}
+			if canonical, err := filepath.EvalSymlinks(target); err == nil {
+				target = canonical
+			}
+			paths = append(paths, target)
+		}
+	}
+	return paths, nil
+}

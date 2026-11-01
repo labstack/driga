@@ -92,14 +92,9 @@ func inspectWorktree(ctx context.Context, e Env, s snapshot, w model.Worktree, e
 		case "!!":
 			path := entry[3:]
 			regen := false
-			// Only whole ignored directories from the allowlist are regenerable.
-			// A file called 'build' or '.env' never inherits that permission.
 			if strings.HasSuffix(path, "/") {
-				for _, rule := range e.Cfg.Regenerable {
-					if strings.HasSuffix(rule, "/") && strings.HasSuffix("/"+path, "/"+rule) {
-						regen = true
-					}
-				}
+				_, err := qualifyRegenerable(c.Path, path, e.Cfg.Regenerable)
+				regen = err == nil
 			}
 			c.Ignored = append(c.Ignored, IgnoredPath{Path: path, Regenerable: regen})
 			if !regen {

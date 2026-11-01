@@ -17,6 +17,9 @@ import (
 
 func cleanupFake(t *testing.T) {
 	t.Helper()
+	t.Setenv("PATH", t.TempDir())
+	t.Setenv("BUN_INSTALL_CACHE_DIR", "")
+	t.Setenv("BUN_INSTALL", "")
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "procs.json"), []byte("[]"), 0600); err != nil {
 		t.Fatal(err)
@@ -177,5 +180,42 @@ func TestCleanupJSONFailureIsOneRecord(t *testing.T) {
 	code := run([]string{"cleanup", "remove", "stale-id", "--yes", "--json"}, "test", nil, &out, &diagnostic)
 	if code != 1 || !json.Valid(out.Bytes()) || !strings.Contains(out.String(), `"outcomes":[]`) || !strings.Contains(out.String(), `"cleanup_failed"`) {
 		t.Fatalf("code=%d stdout=%s stderr=%s", code, &out, &diagnostic)
+	}
+}
+
+func TestCleanupBuildKindAndInvalidKind(t *testing.T) {
+	readEnv(t)
+	cleanupFake(t)
+	readRun(t, "cleanup", "list", "--kind", "build")
+	var out, diagnostic bytes.Buffer
+	code := run([]string{"cleanup", "list", "--kind", "bogus"}, "test", nil, &out, &diagnostic)
+	if code != 2 || !strings.Contains(diagnostic.String(), "worktree, scratch, build, cache, history") {
+		t.Fatalf("%d %s", code, &diagnostic)
+	}
+}
+
+func TestCleanupCacheAllSkipsReportOnly(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake POSIX tool script")
+	}
+	readEnv(t)
+	cleanupFake(t)
+	cache := t.TempDir()
+	bin := t.TempDir()
+	script := "#!/bin/sh\ncase \"$*\" in 'env GOCACHE') echo '" + cache + "';; 'clean -cache') exit 0;; *) exit 1;; esac\n"
+	if err := os.WriteFile(filepath.Join(bin, "go"), []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin)
+	if err := os.MkdirAll(filepath.Join(os.Getenv("HOME"), ".cache/huggingface"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	out, _ := readRun(t, "cleanup", "remove", "--kind", "cache", "--all", "--dry-run", "--yes")
+	if !strings.Contains(out, "cache:huggingface: skipped") || !strings.Contains(out, "go clean -cache") {
+		t.Fatal(out)
+	}
+	out, _ = readRun(t, "cleanup", "remove", "--kind", "cache", "--all", "--dry-run", "--yes", "--json")
+	if !strings.Contains(out, `"status":"skipped"`) {
+		t.Fatal(out)
 	}
 }

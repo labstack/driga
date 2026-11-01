@@ -109,3 +109,7 @@ func (s windowsRestartManager) End() error {
 	code, _, _ := rmEnd.Call(uintptr(s))
 	return rmError("RmEndSession", code)
 }
+
+func (winPlatform) OpenFilePaths(context.Context) ([]string, error) {
+	return nil, fmt.Errorf("open-file listing unavailable")
+}

@@ -24,12 +24,35 @@ import (
 )
 
 type fakePlatform struct {
-	procs    []model.Proc
-	open     bool
-	cwdCalls int
-	pids     []int32
-	probe    func()
-	alive    bool
+	openPaths     []string
+	openPathCalls int
+	openCalls     int
+	procs         []model.Proc
+	open          bool
+	cwdCalls      int
+	pids          []int32
+	probe         func()
+	alive         bool
+}
+
+func (f *fakePlatform) OpenFilePaths(context.Context) ([]string, error) {
+	f.openPathCalls++
+	return append([]string{}, f.openPaths...), nil
+}
+
+func TestOpenUnderPrefix(t *testing.T) {
+	for _, tc := range []struct {
+		path string
+		want bool
+	}{{"/a/node_modules/x", true}, {"/a/node_modules2/x", false}, {"/a/x", false}} {
+		got, err := openUnder(snapshot{open: []string{tc.path}}, "/a/node_modules")
+		if err != nil || got != tc.want {
+			t.Fatalf("%s: %v %v", tc.path, got, err)
+		}
+	}
+	if _, err := openUnder(snapshot{}, "/a/node_modules"); err == nil {
+		t.Fatal("nil table accepted")
+	}
 }
 
 func (f *fakePlatform) Procs(context.Context) ([]model.Proc, error) { return f.procs, nil }
@@ -47,6 +70,7 @@ func (f *fakePlatform) Cwds(_ context.Context, pids []int32) (map[int32]string, 
 	return m, nil
 }
 func (f *fakePlatform) OpenFiles(context.Context, string) (bool, error) {
+	f.openCalls++
 	if f.probe != nil {
 		f.probe()
 	}
@@ -110,15 +134,6 @@ func git(t *testing.T, dir string, args ...string) string {
 	}
 	return strings.TrimSpace(string(out))
 }
-func put(t *testing.T, p, s string) {
-	t.Helper()
-	if err := os.MkdirAll(filepath.Dir(p), 0700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(p, []byte(s), 0600); err != nil {
-		t.Fatal(err)
-	}
-}
 func tx(t *testing.T, e Env, f func(*store.Tx) error) {
 	t.Helper()
 	if err := e.Store.Tx(context.Background(), f); err != nil {
@@ -148,6 +163,7 @@ func fixture(t *testing.T) (Env, *fakePlatform, string, string) {
 	git(t, repo, "config", "user.email", "test@example.invalid")
 	git(t, repo, "config", "user.name", "Test")
 	put(t, filepath.Join(repo, "tracked"), "one")
+	put(t, filepath.Join(repo, "package.json"), "{}")
 	put(t, filepath.Join(repo, ".gitignore"), "node_modules/\n.env\n")
 	git(t, repo, "add", ".")
 	git(t, repo, "commit", "-m", "base")
@@ -271,6 +287,20 @@ func TestWorktreeIgnoredClassification(t *testing.T) {
 	}
 	if _, err := Apply(context.Background(), e, c, ApplyOpts{IncludeIgnored: true}); err != nil {
 		t.Fatal("explicit ignored consent", err)
+	}
+}
+
+func TestWorktreePycacheRegenerable(t *testing.T) {
+	e, _, repo, wt := fixture(t)
+	// Keep the ignore rule outside tracked files so the worktree stays clean.
+	put(t, filepath.Join(repo, ".git", "info", "exclude"), "__pycache__/\n")
+	put(t, filepath.Join(wt, "__pycache__", "module.pyc"), "bytecode")
+	c := listed(t, e, wt)
+	if c.Status != "ready" || len(c.Ignored) != 1 || c.Ignored[0].Path != "__pycache__/" || !c.Ignored[0].Regenerable {
+		t.Fatal(c)
+	}
+	if _, err := Apply(context.Background(), e, c, ApplyOpts{DryRun: true}); err != nil {
+		t.Fatal(err)
 	}
 }
 func TestVerifyAtActionTime(t *testing.T) {

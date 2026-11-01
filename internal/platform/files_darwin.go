@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"path/filepath"
 	"strings"
 )
 
@@ -25,4 +26,26 @@ func (darwinPlatform) OpenFiles(ctx context.Context, path string) (bool, error) 
 		}
 	}
 	return len(out) > 0, nil
+}
+
+func (darwinPlatform) OpenFilePaths(ctx context.Context) ([]string, error) {
+	out, err := exec.CommandContext(ctx, "lsof", "-Fn", "-w").Output()
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+	if err != nil {
+		if exit, ok := err.(*exec.ExitError); !ok || exit.ExitCode() != 1 || len(out) != 0 {
+			return nil, err
+		}
+	}
+	paths := []string{}
+	for _, line := range strings.Split(string(out), "\n") {
+		if !strings.HasPrefix(line, "n/") {
+			continue
+		}
+		if path, err := filepath.EvalSymlinks(line[1:]); err == nil {
+			paths = append(paths, path)
+		}
+	}
+	return paths, nil
 }

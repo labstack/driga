@@ -27,14 +27,14 @@ type CleanupCmd struct {
 }
 type CleanupListCmd struct {
 	JSONOptions
-	Kind  string `help:"Filter by worktree, scratch, or history."`
+	Kind  string `help:"Filter by worktree, scratch, build, cache, history."`
 	Sizes bool   `help:"Walk candidate sizes on demand."`
-	Why   bool   `help:"Include worktrees that do not qualify, with reasons."`
+	Why   bool   `help:"Include worktrees and build directories that do not qualify, with reasons."`
 }
 
 func (c CleanupListCmd) Run(g *Globals) error {
-	if c.Kind != "" && c.Kind != "worktree" && c.Kind != "scratch" && c.Kind != "history" {
-		return invalidUsage("unknown cleanup kind %q", c.Kind)
+	if c.Kind != "" && c.Kind != "worktree" && c.Kind != "scratch" && c.Kind != "build" && c.Kind != "cache" && c.Kind != "history" {
+		return invalidUsage("unknown cleanup kind %q; expected worktree, scratch, build, cache, history", c.Kind)
 	}
 	envelope, err := cleanupRead(context.Background(), g, c.Kind, c.Sizes, c.Why)
 	if err != nil {
@@ -49,7 +49,7 @@ func (c CleanupListCmd) Run(g *Globals) error {
 type CleanupRemoveCmd struct {
 	JSONOptions
 	ID             string `arg:"" name:"candidate-id" optional:"" help:"Candidate ID to clean after confirmation."`
-	Kind           string `help:"Filter by worktree or scratch (required with --all); history is report-only."`
+	Kind           string `help:"Filter by worktree, scratch, build, cache, history (required with --all); history is report-only."`
 	Sizes          bool   `help:"Walk candidate sizes on demand (30s cap per walk)."`
 	All            bool   `help:"Remove ready candidates of --kind; skip candidates needing review and report failures."`
 	DryRun         bool   `help:"Print exact commands after verification without removing anything."`
@@ -86,7 +86,7 @@ func openCleanup(ctx context.Context, g *Globals) (cleanup.Env, view.Envelope, f
 		return env, envelope, nil, err
 	}
 	closeFn := func() { _ = st.Close() }
-	env = cleanup.Env{Store: st, Plat: cleanupPlatform(), Sigs: sigs, Home: config.ExpandHome("~"), DataDir: config.DataDir(), Cfg: cfg.Cleanup}
+	env = cleanup.Env{RunTools: true, Store: st, Plat: cleanupPlatform(), Sigs: sigs, Home: config.ExpandHome("~"), DataDir: config.DataDir(), Cfg: cfg.Cleanup}
 	if g.CleanupPlatform != nil {
 		env.Plat = g.CleanupPlatform
 	}
@@ -133,8 +133,8 @@ func cleanupRead(ctx context.Context, g *Globals, kind string, sizes, why bool) 
 	return envelope, nil
 }
 func (c CleanupRemoveCmd) Run(g *Globals) error {
-	if c.Kind != "" && c.Kind != "worktree" && c.Kind != "scratch" && c.Kind != "history" {
-		return invalidUsage("unknown cleanup kind %q", c.Kind)
+	if c.Kind != "" && c.Kind != "worktree" && c.Kind != "scratch" && c.Kind != "build" && c.Kind != "cache" && c.Kind != "history" {
+		return invalidUsage("unknown cleanup kind %q; expected worktree, scratch, build, cache, history", c.Kind)
 	}
 	if c.ID != "" && c.All {
 		return invalidUsage("provide an id or --all")

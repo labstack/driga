@@ -226,7 +226,8 @@ Defaults and their purpose:
 | `summaries.model` | `haiku` | Model passed to `claude -p` for summaries. |
 | `cleanup.worktree_idle` | `168h` | Minimum idle time before a worktree is a candidate. |
 | `machine.disk_free_min` | `"0"` (automatic) | Inbox `low_disk` warning below the smaller of 10% of the volume or decimal 20 GB; override with a byte string or KiB/MiB/GiB. Env: `DRIGA_MACHINE_DISK_FREE_MIN`. |
-| `cleanup.regenerable` | `node_modules/`, `target/`, `.venv/`, … | Ignored directories that may leave with a worktree; extends the defaults. |
+| `cleanup.build_idle` | `168h` | Checkout idle time before its build output is a candidate. |
+| `cleanup.regenerable` | `[]` | Extra regenerable directory names, beyond the built-in rules. |
 
 The Claude, Codex, Copilot and Gemini adapters are enabled by default. Disable individual
 adapters with `[adapters.<name>]` and `enabled = false`. Windows collection resolves the account's
@@ -663,7 +664,7 @@ automatically, and nothing is removed on another machine.
 ```sh
 driga cleanup list                        # candidates with evidence
 driga cleanup list --sizes                # walk sizes on demand (30 s cap per walk)
-driga cleanup list --why                  # also list worktrees that don't qualify, and why
+driga cleanup list --why                  # also list refused worktrees and build output, and why
 driga cleanup remove <id> --dry-run        # print the exact commands
 driga cleanup remove <id>                  # re-verify, then ask y/N
 driga cleanup remove --kind worktree --all # every ready worktree; skips anything changed
@@ -673,12 +674,40 @@ driga cleanup remove --kind worktree --all # every ready worktree; skips anythin
   session or process inside, no tracked or untracked changes, commits merged
   into the default branch or pushed, and idle for `cleanup.worktree_idle`. The
   action is `git worktree remove`, `git worktree prune`, then `git branch -d`
-  only when merged (never `-D`). Ignored build output (`cleanup.regenerable`) leaves
-  with the worktree; any other ignored file (`.env`, local databases) makes the
+  only when merged (never `-D`). Ignored build output (built-in rules plus `cleanup.regenerable`) leaves
+  with the worktree; `__pycache__/` is also regenerable without sibling evidence.
+  Any other ignored file (`.env`, local databases) makes the
   candidate `needs-review`, and acting on it needs `--include-ignored`.
 - **Scratch**: a Claude Code per-session temp directory whose session has ended
   for 24 h and has no open files. It is moved to the trash (macOS Trash,
   or the freedesktop trash on Linux), never deleted.
+- **Build**: whole ignored directories in stored Git checkouts and sibling repos
+  within two levels of their parent. Built-in rules require sibling evidence:
+  `node_modules`, `.next`, `.nuxt`, `.svelte-kit`, `.turbo`, `dist` need
+  `package.json`; `target` needs `Cargo.toml`; `.venv` and `venv` need
+  `pyproject.toml`, `requirements*.txt`, `uv.lock` or `setup.py`; `.gradle` and
+  `build` need `build.gradle*` or `settings.gradle*`; `.build` needs `Package.swift`;
+  `Pods` needs `Podfile`; `.pio` needs `platformio.ini`.
+  `__pycache__` is omitted from standalone build candidates.
+  `cleanup.regenerable` adds user-asserted names. `out`, `.terraform` and
+  `.codegraph` are always excluded, including from user additions. Symlinks,
+  nested Git repositories, process cwds or open files inside, live sessions in
+  the checkout, and checkouts active within `cleanup.build_idle` are refused.
+  A terminal at the checkout root does not block build cleanup. Build output is
+  deleted through `os.Root`, not moved to Trash; venv package names are logged.
+  Non-Git directories are outside discovery.
+- **Cache**: CLI-only cleanup. Tool-managed caches use: `go clean -cache`,
+  `uv cache prune`, `npm cache clean --force`, `pnpm store prune`,
+  and `brew cleanup`. Missing tools and empty cache locations are skipped.
+  Bun uses `BUN_INSTALL_CACHE_DIR` if set, otherwise `$BUN_INSTALL/install/cache`
+  (`BUN_INSTALL` defaults to `~/.bun`), without invoking bun. Its cache directory
+  and, on macOS, Xcode DerivedData are deleted through `os.Root`. Removing the
+  bun cache is safe: installed `node_modules` are APFS clones or copies.
+  Go modules, Cargo registry, rustup toolchains (total usage), Hugging Face models,
+  Colima and Docker VM disks, and Codex history are report-only. The service
+  never runs these tools. Use `--kind build` or `--kind cache` to filter.
+  Size previews show **up to** N bytes; APFS clones and hard links may share
+  storage. After cleanup, nonzero free-space deltas are printed as `freed`.
 - **History**: agent history sizes by age. Report only; use the agent's own
   retention setting (Claude Code: `cleanupPeriodDays`).
 
@@ -1028,9 +1057,9 @@ contains related sessions; selecting a session never selects the whole family.
 | `machines list` | Known machine connection health; `--machine`, `--snapshot`, `--json`, `--no-color`. |
 | `machines show [<machine>]` | Default target is `local`; `all` is rejected. `--full`, `--project`, `--snapshot`, `--json`, `--no-color`. |
 | `machines reset-id` | Confirm local cloned-machine identity repair; `--yes/-y`. |
-| `cleanup list` | Local candidates; `--kind=worktree\|scratch\|history`, `--sizes`, `--why`, `--json`. History is report-only. |
+| `cleanup list` | Local candidates; `--kind=worktree\|scratch\|build\|cache\|history`, `--sizes`, `--why`, `--json`. History is report-only. |
 | `cleanup remove <candidate-id>` | Verify and remove one candidate; `--dry-run`, `--sizes`, `--include-ignored`, `--yes/-y`, `--json`. |
-| `cleanup remove --all --kind worktree` or `--kind scratch` | Remove ready candidates of the selected kind; report completed/skipped/failed counts. `--include-ignored` requires one explicit ID. |
+| `cleanup remove --all --kind worktree` , `--kind scratch`, `--kind build`, or `--kind cache` | Remove ready candidates of the selected kind; report completed/skipped/failed counts. `--include-ignored` requires one explicit ID. |
 | `top` | Interactive terminal dashboard; `--tab=flow\|projects\|machines`, `--theme=system\|light\|dark`, `--machine`, `--project`, `--since`, `--snapshot`, `--no-color`. |
 | `app` | Open the Driga desktop app, or bring the running one forward. |
 | `ask <question>...` | One-shot Chat question; `--machine`, `--project`, `--json`. |
