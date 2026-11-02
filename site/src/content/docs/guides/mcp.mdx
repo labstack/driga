@@ -1,6 +1,6 @@
 ---
 title: Connect an agent over MCP
-description: Register driga mcp with Claude Code or Codex so your agent can read sessions, projects, inbox and machine health through read-only tools.
+description: Register driga mcp with Claude Code or Codex so your agent can read sessions, projects, inbox and machine health through read-only tools, and edit Driga's own dashboards.
 summary: Registering driga's MCP server for read views and editable dashboards with Claude Code and Codex, what the tools return, and scoping requests.
 read_when:
   - You want your coding agent to ask Driga what other agents are doing.
@@ -11,7 +11,8 @@ import { Tabs, TabItem } from "@astrojs/starlight/components";
 
 `driga mcp` serves read views and editable Driga dashboards over stdio. Every response is the same
 schema-2 envelope as `--json`, and reading never acknowledges inbox items. The
-server has no `run_command` or approval tools and cannot answer prompts, kill processes or remove anything; those actions
+server has no `run_command` or approval tools and cannot answer prompts, kill processes or remove anything but
+Driga's own dashboards (`delete_dashboard`, annotated destructive); those actions
 exist only inside Driga's own [Chat](/guides/chat), behind approval cards.
 
 Chat's private `driga mcp --chat` bridge binds requests to an active

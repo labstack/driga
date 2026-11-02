@@ -74,3 +74,62 @@ func TestChatToolsOnlyWithChat(t *testing.T) {
 		})
 	}
 }
+
+// Every tool declares its effect (Canon mcp.md): read tools are read-only,
+// and each tool that changes state says whether it can destroy, repeats
+// harmlessly and reaches beyond the machine.
+func TestToolAnnotationsAreTruthful(t *testing.T) {
+	ctx := context.Background()
+	a, b := sdk.NewInMemoryTransports()
+	ss, err := drigamcp.NewServer(drigamcp.Options{Chat: true}).Connect(ctx, a, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ss.Close()
+	cs, err := sdk.NewClient(&sdk.Implementation{Name: "test"}, nil).Connect(ctx, b, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cs.Close()
+	list, err := cs.ListTools(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	type effect struct{ destructive, idempotent, openWorld bool }
+	want := map[string]effect{
+		"run_command":   {true, false, true},
+		"answer_prompt": {true, false, false},
+		"kill":          {true, false, false},
+		"cleanup":       {true, false, false},
+		"ack_inbox":     {false, true, false},
+		"jump":          {false, false, false},
+		"summarize":     {false, false, true},
+		"approve":       {false, false, false},
+	}
+	for _, tool := range list.Tools {
+		h := tool.Annotations
+		if h == nil {
+			t.Errorf("%s has no annotations", tool.Name)
+			continue
+		}
+		if h.ReadOnlyHint {
+			if _, ok := want[tool.Name]; ok {
+				t.Errorf("%s changes state but is annotated read-only", tool.Name)
+			}
+			continue
+		}
+		if h.DestructiveHint == nil || h.OpenWorldHint == nil {
+			t.Errorf("%s changes state without destructive and open-world hints", tool.Name)
+			continue
+		}
+		if w, ok := want[tool.Name]; ok {
+			if got := (effect{*h.DestructiveHint, h.IdempotentHint, *h.OpenWorldHint}); got != w {
+				t.Errorf("%s annotations = %+v, want %+v", tool.Name, got, w)
+			}
+			delete(want, tool.Name)
+		}
+	}
+	if len(want) > 0 {
+		t.Errorf("tools not served with Chat: %v", want)
+	}
+}

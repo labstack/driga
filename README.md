@@ -31,7 +31,7 @@ Pre-release databases must be reset; `driga doctor` prints the reset command.
 | Leftovers | Orphan helper process candidates and local disk cleanup candidates, with evidence and confirmation before removal. |
 | Machine health | Memory, CPU, pressure, disk, and agent process attribution. |
 | Multiple machines | Optional fleet views over pinned mutual TLS, with explicit pairing and sharing controls. |
-| Other interfaces | Versioned JSON, read-only MCP tools, the terminal UI, and opt-in summaries and Chat through Claude. |
+| Other interfaces | Versioned JSON, MCP tools (read-only views plus edits to Driga's own dashboards), the terminal UI, and opt-in summaries and Chat through Claude. |
 
 ## Install
 
@@ -48,8 +48,12 @@ sends notifications under its own name. Hooks keep using the stable Homebrew
 `driga` link. After `brew upgrade`, a running app restarts itself on
 the new version.
 
-If you installed the Driga service with an earlier release, the app
-removes it on its first launch, says so once, and runs the Driga service itself.
+The app installs the Driga service as a per-user launch agent on its first
+launch and repairs it on every launch, for example after Driga.app moves.
+`brew uninstall --cask driga` removes the service with the app, and
+`brew uninstall --zap --cask driga` also removes Driga's data, logs and
+configuration. Before deleting Driga.app any other way, run
+`driga service uninstall`.
 
 On Windows (experimental), use Scoop:
 
@@ -76,7 +80,11 @@ CGO_ENABLED=0 go build ./cmd/driga
 ```
 
 Keep Git on PATH and the installed binary at a stable absolute path before
-setting up hooks or a service. On a machine without a desktop, install the CLI
+setting up hooks or a service. A source build is a development build: its
+service installs as `run.driga.service.dev` on macOS, `driga-dev` on Linux and
+`Driga service (dev)` on Windows, beside a release's. To run a source build as
+the account's service, build it with
+`-ldflags "-X github.com/labstack/driga/internal/service.release=true"`. On a machine without a desktop, install the CLI
 alone and run the Driga service as a service with `driga service install`. CalVer
 tags use the year as their major number; Go module major-version rules prevent
 `go install ...@<tag>` with this module path. Use a package, archive, or source checkout.
@@ -147,7 +155,8 @@ driga inbox ack <item-id>
 driga cleanup list --sizes
 ```
 
-`driga mcp` serves the same reads as MCP tools. Use `driga <command> --help`
+`driga mcp` serves the same reads as read-only MCP tools, plus tools that
+create, edit and delete Driga's own dashboards. Use `driga <command> --help`
 for command-specific flags.
 
 ## Privacy and what it reads

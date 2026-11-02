@@ -24,22 +24,22 @@ Every read tool shares this contract:
 
 Served by `driga mcp`. All 14 are annotated read-only.
 
-| Tool | Read-only |
-|---|---|
-| [`get_activity`](#get_activity) | yes |
-| [`get_agent`](#get_agent) | yes |
-| [`get_flow`](#get_flow) | yes |
-| [`get_machine`](#get_machine) | yes |
-| [`get_summary`](#get_summary) | yes |
-| [`inspect_project`](#inspect_project) | yes |
-| [`inspect_setup`](#inspect_setup) | yes |
-| [`list_agents`](#list_agents) | yes |
-| [`list_cleanup_candidates`](#list_cleanup_candidates) | yes |
-| [`list_conflicts`](#list_conflicts) | yes |
-| [`list_inbox`](#list_inbox) | yes |
-| [`list_machines`](#list_machines) | yes |
-| [`list_orphans`](#list_orphans) | yes |
-| [`list_projects`](#list_projects) | yes |
+| Tool | Read-only | Destructive | Idempotent |
+|---|---|---|---|
+| [`get_activity`](#get_activity) | yes | no | yes |
+| [`get_agent`](#get_agent) | yes | no | yes |
+| [`get_flow`](#get_flow) | yes | no | yes |
+| [`get_machine`](#get_machine) | yes | no | yes |
+| [`get_summary`](#get_summary) | yes | no | yes |
+| [`inspect_project`](#inspect_project) | yes | no | yes |
+| [`inspect_setup`](#inspect_setup) | yes | no | yes |
+| [`list_agents`](#list_agents) | yes | no | yes |
+| [`list_cleanup_candidates`](#list_cleanup_candidates) | yes | no | yes |
+| [`list_conflicts`](#list_conflicts) | yes | no | yes |
+| [`list_inbox`](#list_inbox) | yes | no | yes |
+| [`list_machines`](#list_machines) | yes | no | yes |
+| [`list_orphans`](#list_orphans) | yes | no | yes |
+| [`list_projects`](#list_projects) | yes | no | yes |
 
 ### get_activity
 
@@ -188,19 +188,19 @@ change only Driga's own dashboards: every save is a version that
 `restore_dashboard_version` can bring back. `run_panels` is called only by the
 rendered card, to refresh it.
 
-| Tool | Read-only |
-|---|---|
-| [`create_dashboard`](#create_dashboard) | no |
-| [`delete_dashboard`](#delete_dashboard) | no |
-| [`describe_panels`](#describe_panels) | yes |
-| [`edit_dashboard`](#edit_dashboard) | no |
-| [`list_dashboard_versions`](#list_dashboard_versions) | yes |
-| [`list_dashboards`](#list_dashboards) | yes |
-| [`open_dashboard`](#open_dashboard) | yes |
-| [`replace_dashboard`](#replace_dashboard) | no |
-| [`restore_dashboard_version`](#restore_dashboard_version) | no |
-| [`run_panels`](#run_panels) | yes |
-| [`show_panels`](#show_panels) | yes |
+| Tool | Read-only | Destructive | Idempotent |
+|---|---|---|---|
+| [`create_dashboard`](#create_dashboard) | no | no | no |
+| [`delete_dashboard`](#delete_dashboard) | no | yes | no |
+| [`describe_panels`](#describe_panels) | yes | no | yes |
+| [`edit_dashboard`](#edit_dashboard) | no | no | no |
+| [`list_dashboard_versions`](#list_dashboard_versions) | yes | no | yes |
+| [`list_dashboards`](#list_dashboards) | yes | no | yes |
+| [`open_dashboard`](#open_dashboard) | yes | no | yes |
+| [`replace_dashboard`](#replace_dashboard) | no | yes | no |
+| [`restore_dashboard_version`](#restore_dashboard_version) | no | yes | no |
+| [`run_panels`](#run_panels) | yes | no | yes |
+| [`show_panels`](#show_panels) | yes | no | yes |
 
 ### create_dashboard
 
@@ -304,17 +304,17 @@ Offered only to Driga's own Chat turn through a private MCP child, never by
 `driga mcp`. Action tools run through Chat's approval cards and trust modes;
 see [Chat and actions](/guides/chat).
 
-| Tool | Read-only |
-|---|---|
-| [`ack_inbox`](#ack_inbox) | no |
-| [`answer_prompt`](#answer_prompt) | no |
-| [`approve`](#approve) | no |
-| [`cleanup`](#cleanup) | no |
-| [`jump`](#jump) | no |
-| [`kill`](#kill) | no |
-| [`list_prompts`](#list_prompts) | yes |
-| [`run_command`](#run_command) | no |
-| [`summarize`](#summarize) | no |
+| Tool | Read-only | Destructive | Idempotent |
+|---|---|---|---|
+| [`ack_inbox`](#ack_inbox) | no | no | yes |
+| [`answer_prompt`](#answer_prompt) | no | yes | no |
+| [`approve`](#approve) | no | no | no |
+| [`cleanup`](#cleanup) | no | yes | no |
+| [`jump`](#jump) | no | no | no |
+| [`kill`](#kill) | no | yes | no |
+| [`list_prompts`](#list_prompts) | yes | no | yes |
+| [`run_command`](#run_command) | no | yes | no |
+| [`summarize`](#summarize) | no | no | no |
 
 ### ack_inbox
 

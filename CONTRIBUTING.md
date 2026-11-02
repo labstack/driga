@@ -43,6 +43,11 @@ just build        # builds ./bin/driga, which is not on PATH
 just install      # deliberately copies it to ~/.local/bin
 ```
 
+A checkout build is a development build: its Driga service installs as
+`run.driga.service.dev` (Linux `driga-dev`, Windows `Driga service (dev)`), so it
+never replaces a release's service. Only release builds carry the
+`internal/service.release=true` link-time marker.
+
 ### The app's UI
 
 The app's page and the panels MCP App are built from `ui/` with [Bun](https://bun.sh):

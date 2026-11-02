@@ -142,14 +142,22 @@ func renderMCP() (string, error) {
 	return strings.TrimRight(b.String(), "\n") + "\n", nil
 }
 
+// toolIndex lists tools with their annotations. MCP's defaults apply to a
+// hint a tool leaves out: a tool that is not read-only may be destructive,
+// and is not idempotent.
 func toolIndex(b *strings.Builder, tools []*sdk.Tool) {
-	b.WriteString("| Tool | Read-only |\n|---|---|\n")
+	b.WriteString("| Tool | Read-only | Destructive | Idempotent |\n|---|---|---|---|\n")
+	yes := map[bool]string{true: "yes", false: "no"}
 	for _, tool := range tools {
-		ro := "no"
-		if tool.Annotations != nil && tool.Annotations.ReadOnlyHint {
-			ro = "yes"
+		h := tool.Annotations
+		if h == nil {
+			h = &sdk.ToolAnnotations{}
 		}
-		fmt.Fprintf(b, "| [%s](#%s) | %s |\n", code(tool.Name), tool.Name, ro)
+		destructive, idempotent := !h.ReadOnlyHint, h.ReadOnlyHint || h.IdempotentHint
+		if !h.ReadOnlyHint && h.DestructiveHint != nil {
+			destructive = *h.DestructiveHint
+		}
+		fmt.Fprintf(b, "| [%s](#%s) | %s | %s | %s |\n", code(tool.Name), tool.Name, yes[h.ReadOnlyHint], yes[destructive], yes[idempotent])
 	}
 	b.WriteString("\n")
 }

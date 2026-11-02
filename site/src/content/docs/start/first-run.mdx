@@ -105,7 +105,8 @@ On macOS the label is `run.driga.service` and logs are at
 ## Undo
 
 `driga hooks uninstall` removes only Driga's entries, and
-`driga service uninstall` removes the service. Turn off launch at login in
+`driga service uninstall` removes the service; run it before deleting
+Driga.app by hand. `brew uninstall --cask driga` removes the service too. Turn off launch at login in
 Driga's Settings window. Your agent configuration is changed only by these
 explicit commands.
 
