@@ -17,8 +17,14 @@ import (
 // clients. On launch the app installs or starts it with the login shell's
 // environment, and restarts it when it runs another version than the app.
 
-// servicePoll is how often the app checks that the service runs.
-const servicePoll = 2 * time.Second
+// servicePoll is how often the app checks that the service runs: its lock
+// and process, which cost no subprocess. The service manager (launchctl,
+// systemctl, Task Scheduler) is asked at most every serviceRegistrationTTL,
+// or when the service starts or stops.
+const (
+	servicePoll            = 2 * time.Second
+	serviceRegistrationTTL = 30 * time.Second
+)
 
 // ensureService supplies the app environment; lifecycle owns startup decisions.
 func (s *shell) ensureService(ctx context.Context) error {
@@ -26,7 +32,8 @@ func (s *shell) ensureService(ctx context.Context) error {
 	s.lifecycle = service.NewLifecycle(service.LifecycleOptions{
 		Executable: s.serviceExe, DataDir: s.dataDir, Version: s.opts.Version,
 		Platform: s.goos, Home: home, AccountHome: account,
-		Environment: childEnvironment(s.serviceEnv(ctx)),
+		Environment:     childEnvironment(s.serviceEnv(ctx)),
+		RegistrationTTL: serviceRegistrationTTL,
 	})
 	return s.lifecycle.Ensure(ctx)
 }
@@ -44,6 +51,11 @@ func (s *shell) serviceEnv(ctx context.Context) map[string]string {
 	s.mu.Unlock()
 	if err != nil {
 		slog.Warn("login environment unavailable", "event", "login_env_failed", "err", err.Error())
+		// Installing refreshes the environment the service records; keep the
+		// one it has rather than replace it with the app's bare PATH.
+		if recorded := recordedServiceEnv(s.serviceExe); len(recorded) > 0 {
+			return recorded
+		}
 	}
 	if len(shadowed) > 0 {
 		slog.Warn("the login shell sets DRIGA_* variables the app does not use", "event", "login_env_shadowed", "keys", strings.Join(shadowed, ","))
@@ -86,4 +98,18 @@ func accountHomes() (env, account string) {
 		account = u.HomeDir
 	}
 	return os.Getenv("HOME"), account
+}
+
+// recordedServiceEnv is the environment the installed service records, or
+// nil where it records none or none is installed.
+func recordedServiceEnv(exe string) map[string]string {
+	c, err := service.New(exe)
+	if err != nil {
+		return nil
+	}
+	env, err := service.RecordedEnvironment(c)
+	if err != nil {
+		return nil
+	}
+	return env
 }
