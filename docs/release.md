@@ -172,13 +172,20 @@ explains the organization-name fallback and `AssociatedBundleIdentifiers`.
 `Contents/Helpers/Driga Service.app/Contents/MacOS/drigad`, associates
 `run.driga.service`, registers both bundles with Launch Services, and atomically
 replaces an existing plist that differs from the one it would write: another
-executable, a missing association, an older definition or a changed
-environment. launchd keeps the definition it bootstrapped, so install first
+executable, a missing association, an older definition or a refreshed
+environment (the app installs with `--refresh-env`; a terminal install keeps
+the recorded one). It renders and checks the new plist and writes it beside the
+old one first. launchd keeps the definition it bootstrapped, so install then
 runs `launchctl bootout gui/<uid>/run.driga.service` whether or not the job's
 process runs (a job loaded but not running, as after Driga.app moved, would
-otherwise keep its old definition), then writes the plist; start runs
-`launchctl bootstrap gui/<uid>` on it, or `launchctl kickstart` for a loaded job
-whose process exited. Driga never uses the deprecated `launchctl load` and
+otherwise keep its old definition) and polls `launchctl print` until launchd has
+let the job go (at most 10 seconds), renames the new plist into place and runs
+`launchctl bootstrap gui/<uid>` on it, retrying with backoff while launchd
+answers 5, 36 or 37. When launchd refuses the new definition, the previous plist
+is restored and bootstrapped again. Start bootstraps an unloaded job, and
+`launchctl kickstart` only a loaded job that stays loaded with its process
+exited. Without a `gui/<uid>` domain (exit 112), uninstall still deletes the
+plist and start and status ask for a desktop login. Driga never uses the deprecated `launchctl load` and
 `unload`. This migrates the former `Contents/MacOS/drigad` path even when the
 version has not changed. Reinstalling a current definition is harmless. It also
 removes the `run.driga.collector` agent earlier releases installed.

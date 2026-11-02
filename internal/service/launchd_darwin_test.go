@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	ks "github.com/kardianos/service"
 	"github.com/labstack/driga/internal/config"
@@ -23,12 +24,31 @@ type fakeLaunchctl struct {
 	definition       string      // the plist launchd bootstrapped
 	calls            []string
 	bootouts, starts int
+	// noDomain models an account without a desktop session: gui/<uid>
+	// does not exist.
+	noDomain bool
+	// linger keeps a booted-out job loaded for that many print calls, as
+	// launchd finishes tearing it down after bootout returns; bootstrap
+	// and kickstart meanwhile fail.
+	linger, tearingDown int
+	// refuse makes bootstrap fail with code 78 for a definition it matches.
+	refuse func(definition string) bool
 }
 
 func (f *fakeLaunchctl) run(args ...string) (string, int, error) {
 	f.calls = append(f.calls, strings.Join(args, " "))
+	if f.noDomain {
+		return "Bad request.\nCould not find domain for user gui: 501", 112, nil
+	}
 	switch {
 	case slices.Equal(args, []string{"print", f.target}):
+		if f.tearingDown > 0 {
+			f.tearingDown--
+			if f.tearingDown == 0 {
+				f.loaded = false
+			}
+			return f.target + " = {\n\tstate = not running\n}\n", 0, nil
+		}
 		if !f.loaded {
 			return "Bad request.\nCould not find service in domain", 113, nil
 		}
@@ -42,9 +62,17 @@ func (f *fakeLaunchctl) run(args ...string) (string, int, error) {
 			return "Boot-out failed: 3: No such process", 3, nil
 		}
 		f.bootouts++
-		f.loaded, f.running = false, false
+		f.running = false
+		if f.linger > 0 {
+			f.tearingDown = f.linger
+		} else {
+			f.loaded = false
+		}
 		return "", 0, nil
 	case len(args) == 3 && args[0] == "bootstrap" && args[1] == f.domain:
+		if f.tearingDown > 0 {
+			return "Bootstrap failed: 37: Operation already in progress", 37, nil
+		}
 		if f.loaded {
 			return "Bootstrap failed: 5: Input/output error", 5, nil
 		}
@@ -52,10 +80,16 @@ func (f *fakeLaunchctl) run(args ...string) (string, int, error) {
 		if err != nil {
 			return "Bootstrap failed: 2: No such file or directory", 2, nil
 		}
+		if f.refuse != nil && f.refuse(string(data)) {
+			return "Bootstrap failed: 78: Function not implemented", 78, nil
+		}
 		f.loaded, f.definition = true, string(data)
 		f.spawn()
 		return "", 0, nil
 	case slices.Equal(args, []string{"kickstart", f.target}), slices.Equal(args, []string{"kickstart", "-k", f.target}):
+		if f.tearingDown > 0 {
+			f.t.Fatalf("kickstart of a job being torn down; calls %q", f.calls)
+		}
 		if !f.loaded {
 			return "Could not find service", 113, nil
 		}
@@ -87,6 +121,7 @@ func newTestLaunchd(t *testing.T) (*launchdController, *fakeLaunchctl, string) {
 	fake := &fakeLaunchctl{t: t, domain: "gui/501", target: "gui/501/" + Label("darwin")}
 	s := &launchdController{binPath: bin, label: Label("darwin"), domain: fake.domain,
 		plistPath: filepath.Join(root, "collector.plist"), launchctl: fake.run,
+		sleep: func(time.Duration) {},
 		register: func(app string) error {
 			if app != filepath.Join(root, "Driga.app") && app != filepath.Join(root, "Driga.app", "Contents", "Helpers", "Driga Service.app") {
 				t.Fatal(app)
@@ -111,8 +146,8 @@ func TestLaunchdInstallRepairsAndIsIdempotent(t *testing.T) {
 	if err := s.Install(); err != nil {
 		t.Fatal(err)
 	}
-	if fake.bootouts != 1 || fake.loaded {
-		t.Fatalf("bootouts = %d, loaded = %t", fake.bootouts, fake.loaded)
+	if fake.bootouts != 1 || !fake.loaded || !fake.running {
+		t.Fatalf("bootouts = %d, loaded = %t, running = %t", fake.bootouts, fake.loaded, fake.running)
 	}
 	if err := s.Start(); err != nil {
 		t.Fatal(err)
@@ -250,10 +285,12 @@ func TestLaunchdStopAndUninstall(t *testing.T) {
 	}
 }
 
-// The login environment the service records is part of its definition: a
-// changed PATH rewrites the plist and replaces the running job.
+// The login environment the service records is part of its definition: with
+// --refresh-env, as the app installs, a changed PATH rewrites the plist and
+// replaces the running job.
 func TestLaunchdInstallRefreshesEnvironment(t *testing.T) {
 	s, fake, _ := newTestLaunchd(t)
+	s.refreshEnvironment()
 	t.Setenv("PATH", "/usr/bin:/bin")
 	if err := s.Install(); err != nil {
 		t.Fatal(err)
@@ -324,4 +361,193 @@ func TestLaunchdDataDir(t *testing.T) {
 			t.Fatalf("DataDir with %v = %q, %v; want %q", tc.env, got, err, tc.want)
 		}
 	}
+}
+
+// launchd finishes tearing a job down after bootout returns. Install waits
+// until print no longer has it before it bootstraps the new definition, and
+// never kicks the old one.
+func TestLaunchdInstallWaitsForTeardown(t *testing.T) {
+	s, fake, bin := newTestLaunchd(t)
+	old := strings.Replace(mustRender(t, bin), "<key>ThrottleInterval</key>", "<key>Old</key><true/><key>ThrottleInterval</key>", 1)
+	if err := os.WriteFile(s.plistPath, []byte(old), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	fake.loaded, fake.running, fake.definition, fake.linger = true, true, old, 3
+	if err := s.Install(); err != nil {
+		t.Fatal(err)
+	}
+	if !fake.loaded || !fake.running || fake.definition == old {
+		t.Fatalf("loaded=%t running=%t; calls %q", fake.loaded, fake.running, fake.calls)
+	}
+	bootout, bootstrap := slices.Index(fake.calls, "bootout "+fake.target), slices.IndexFunc(fake.calls, func(c string) bool { return strings.HasPrefix(c, "bootstrap ") })
+	if bootout < 0 || bootstrap-bootout != 5 {
+		t.Fatalf("bootstrap must follow three teardown prints and the unloaded one: %q", fake.calls)
+	}
+	if err := s.Start(); err != nil {
+		t.Fatal(err)
+	}
+	// Stop waits too, so Start right after it bootstraps.
+	fake.linger = 4
+	if err := s.Stop(); err != nil || fake.loaded {
+		t.Fatalf("Stop: %v, loaded=%t", err, fake.loaded)
+	}
+	if err := s.Start(); err != nil || !fake.running {
+		t.Fatalf("Start: %v, running=%t", err, fake.running)
+	}
+}
+
+// A job another client is booting out is not kicked: Start lets it go and
+// bootstraps the plist.
+func TestLaunchdStartDoesNotKickJobBeingTornDown(t *testing.T) {
+	s, fake, bin := newTestLaunchd(t)
+	if err := os.WriteFile(s.plistPath, []byte(mustRender(t, bin)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	fake.loaded, fake.tearingDown = true, 3
+	if err := s.Start(); err != nil {
+		t.Fatal(err)
+	}
+	if !fake.loaded || !fake.running {
+		t.Fatalf("calls %q", fake.calls)
+	}
+}
+
+// bootstrap retries while launchd answers that it is busy with the job, with
+// growing backoff.
+func TestLaunchdBootstrapRetriesWhileBusy(t *testing.T) {
+	s, fake, bin := newTestLaunchd(t)
+	if err := os.WriteFile(s.plistPath, []byte(mustRender(t, bin)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var sleeps []time.Duration
+	s.sleep = func(d time.Duration) { sleeps = append(sleeps, d) }
+	fake.loaded, fake.tearingDown = true, 2
+	if err := s.bootstrap(); err != nil {
+		t.Fatal(err)
+	}
+	if !fake.running || !slices.Equal(sleeps, []time.Duration{unloadPoll, 2 * unloadPoll}) {
+		t.Fatalf("running=%t sleeps=%v calls=%q", fake.running, sleeps, fake.calls)
+	}
+}
+
+// When launchd never lets the old job go, Install gives up after unloadWait
+// and leaves the old plist in place.
+func TestLaunchdInstallBoundsTeardownWait(t *testing.T) {
+	s, fake, bin := newTestLaunchd(t)
+	old := strings.Replace(mustRender(t, bin), "<key>ThrottleInterval</key>", "<key>Old</key><true/><key>ThrottleInterval</key>", 1)
+	if err := os.WriteFile(s.plistPath, []byte(old), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var waited time.Duration
+	s.sleep = func(d time.Duration) { waited += d }
+	fake.loaded, fake.definition, fake.linger = true, old, 1<<20
+	if err := s.Install(); err == nil || !strings.Contains(err.Error(), "after bootout") {
+		t.Fatalf("Install = %v", err)
+	}
+	if waited != unloadWait {
+		t.Fatalf("waited %s, want %s", waited, unloadWait)
+	}
+	if data, _ := os.ReadFile(s.plistPath); string(data) != old {
+		t.Fatal("plist replaced although the old job was still loaded")
+	}
+	matches, _ := filepath.Glob(filepath.Join(filepath.Dir(s.plistPath), ".*"))
+	if len(matches) != 0 {
+		t.Fatalf("temporary plist left behind: %v", matches)
+	}
+}
+
+// A definition launchd refuses does not cost the working service: the
+// previous plist is restored and bootstrapped again.
+func TestLaunchdInstallRestoresPreviousDefinition(t *testing.T) {
+	s, fake, bin := newTestLaunchd(t)
+	old := strings.Replace(mustRender(t, bin), "<key>ThrottleInterval</key>", "<key>Old</key><true/><key>ThrottleInterval</key>", 1)
+	if err := os.WriteFile(s.plistPath, []byte(old), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	fake.loaded, fake.running, fake.definition = true, true, old
+	fake.refuse = func(definition string) bool { return definition != old }
+	err := s.Install()
+	if err == nil || !strings.Contains(err.Error(), "previous one runs again") {
+		t.Fatalf("Install = %v", err)
+	}
+	if data, _ := os.ReadFile(s.plistPath); string(data) != old {
+		t.Fatal("previous plist not restored")
+	}
+	if !fake.loaded || !fake.running || fake.definition != old {
+		t.Fatalf("previous definition not running again: loaded=%t running=%t", fake.loaded, fake.running)
+	}
+	// With nothing to restore the error is launchd's.
+	if err := os.Remove(s.plistPath); err != nil {
+		t.Fatal(err)
+	}
+	fake.loaded, fake.running = false, false
+	if err := s.Install(); err == nil || !strings.Contains(err.Error(), "exited 78") {
+		t.Fatalf("fresh Install = %v", err)
+	}
+}
+
+// Over SSH with nobody logged in to the desktop there is no gui/<uid>
+// domain. Uninstall still deletes the plist; start and status say what to
+// do; install leaves the plist for launchd to load at the next login.
+func TestLaunchdWithoutDesktopSession(t *testing.T) {
+	s, fake, bin := newTestLaunchd(t)
+	fake.noDomain = true
+	if _, err := s.Status(); !errors.Is(err, ks.ErrNotInstalled) {
+		t.Fatalf("Status without plist = %v", err)
+	}
+	if err := s.Install(); err != nil {
+		t.Fatal(err)
+	}
+	if data, err := os.ReadFile(s.plistPath); err != nil || string(data) != mustRender(t, bin) {
+		t.Fatalf("plist not written: %v", err)
+	}
+	for name, f := range map[string]func() error{"Start": s.Start, "Restart": s.Restart, "Status": func() error { _, err := s.Status(); return err }} {
+		if err := f(); !errors.Is(err, ErrNoGUISession) || !strings.Contains(err.Error(), "log in to the desktop session to start the Driga service") {
+			t.Errorf("%s = %v", name, err)
+		}
+	}
+	if err := s.Stop(); err != nil {
+		t.Fatalf("Stop = %v", err)
+	}
+	if err := s.Uninstall(); err != nil {
+		t.Fatalf("Uninstall = %v", err)
+	}
+	if _, err := os.Stat(s.plistPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("plist left behind")
+	}
+	if err := s.Uninstall(); !errors.Is(err, ks.ErrNotInstalled) {
+		t.Fatalf("second Uninstall = %v", err)
+	}
+}
+
+// Without --refresh-env, as from a terminal, an installed service keeps the
+// environment it records, so a terminal install does not restart it.
+func TestLaunchdInstallKeepsRecordedEnvironment(t *testing.T) {
+	s, fake, _ := newTestLaunchd(t)
+	t.Setenv("PATH", "/login/bin:/usr/bin")
+	s.refreshEnv = true
+	if err := s.Install(); err != nil {
+		t.Fatal(err)
+	}
+	s.refreshEnv = false
+	t.Setenv("PATH", "/terminal/bin:/usr/bin")
+	t.Setenv("TMUX_TMPDIR", "/terminal/tmux")
+	if err := s.Install(); err != nil {
+		t.Fatal(err)
+	}
+	if fake.bootouts != 0 || !strings.Contains(fake.definition, "/login/bin:/usr/bin") || strings.Contains(fake.definition, "/terminal") {
+		t.Fatalf("bootouts = %d; definition:\n%s", fake.bootouts, fake.definition)
+	}
+	if got := changedKeys(map[string]string{"PATH": "a", "HOME": "h", "OLD": "x"}, map[string]string{"PATH": "b", "HOME": "h", "NEW": "y"}); !slices.Equal(got, []string{"NEW", "OLD", "PATH"}) {
+		t.Fatalf("changedKeys = %v", got)
+	}
+}
+
+func mustRender(t *testing.T, bin string) string {
+	t.Helper()
+	data, err := renderLaunchd(configForOS(bin, "darwin"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(data)
 }
