@@ -164,3 +164,32 @@ func TestPlistStaleDataDir(t *testing.T) {
 		})
 	}
 }
+
+// driga service install refuses a driga whose drigad is missing, as after
+// go build ./cmd/driga alone.
+func TestCheckDaemon(t *testing.T) {
+	dir := t.TempDir()
+	exe := ""
+	if runtime.GOOS == "windows" {
+		exe = ".exe"
+	}
+	cli, daemon := filepath.Join(dir, "driga"+exe), filepath.Join(dir, "drigad"+exe)
+	if err := os.WriteFile(cli, []byte("fixture"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := CheckDaemon(cli); err == nil || !strings.Contains(err.Error(), "does not exist") {
+		t.Fatalf("missing drigad: %v", err)
+	}
+	if err := os.WriteFile(daemon, []byte("fixture"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := CheckDaemon(cli); runtime.GOOS != "windows" && (err == nil || !strings.Contains(err.Error(), "not an executable")) {
+		t.Fatalf("non-executable drigad: %v", err)
+	}
+	if err := os.Chmod(daemon, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := CheckDaemon(cli); err != nil {
+		t.Fatal(err)
+	}
+}

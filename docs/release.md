@@ -357,9 +357,14 @@ Retain the archive's license notices.
 Use a source checkout and the Go version in `go.mod` or newer:
 
 ```sh
-CGO_ENABLED=0 go build ./cmd/driga
-./driga version
+CGO_ENABLED=0 go build -o bin/driga ./cmd/driga
+ln -f bin/driga bin/drigad   # the Driga service runs drigad, beside driga
+./bin/driga version
 ```
+
+`just build` does both. Keep `drigad` beside `driga`: `driga service install`
+refuses to install without it. A source build is a development build, with its
+own service label and `driga-dev` data directory.
 
 Check out a release tag first to build that source. Ordinary builds still report
 `dev` without linker stamps. CalVer's year is the major number, so Go module

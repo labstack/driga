@@ -75,12 +75,15 @@ checksums, packages, and archive installation.
 To build from a source checkout, use the Go version in [go.mod](go.mod) or newer:
 
 ```sh
-CGO_ENABLED=0 go build ./cmd/driga
-./driga version
+CGO_ENABLED=0 go build -o bin/driga ./cmd/driga
+ln -f bin/driga bin/drigad   # the Driga service is the same program as drigad
+./bin/driga version
 ```
 
-Keep Git on PATH and the installed binary at a stable absolute path before
-setting up hooks or a service. A source build is a development build: its
+`just build` does both. The service runs `drigad` from beside `driga`, so keep
+the two together (`driga service install` refuses a `driga` without its
+`drigad`), Git on PATH and the installed binaries at a stable absolute path
+before setting up hooks or a service. A source build is a development build: its
 service installs as `run.driga.service.dev` on macOS, `driga-dev` on Linux and
 `Driga service (dev)` on Windows, beside a release's, and keeps its data in a
 `driga-dev` data directory. To run a source build as the account's service, build it with

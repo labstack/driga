@@ -3,9 +3,11 @@ package service
 import (
 	"encoding/xml"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/labstack/driga/internal/config"
@@ -53,6 +55,23 @@ func DaemonPath(binPath string) string {
 		return filepath.Join(dir, "drigad"+rest+ext)
 	}
 	return binPath
+}
+
+// CheckDaemon reports a drigad the service for the CLI at binPath would run
+// that is missing or not executable: a source build of driga alone has none.
+func CheckDaemon(binPath string) error {
+	daemon := DaemonPath(ExecutablePath(binPath))
+	info, err := os.Stat(daemon)
+	if errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("the Driga service executable %s does not exist; build drigad beside driga (just build makes both, or go build -o %s ./cmd/driga)", daemon, daemon)
+	}
+	if err != nil {
+		return err
+	}
+	if !info.Mode().IsRegular() || runtime.GOOS != "windows" && info.Mode().Perm()&0o111 == 0 {
+		return fmt.Errorf("the Driga service executable %s is not an executable file", daemon)
+	}
+	return nil
 }
 
 // IsDaemon reports whether an executable name is drigad's.

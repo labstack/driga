@@ -101,6 +101,11 @@ func (c serviceControl) Run(g *Globals) error {
 	if runtime.GOOS == "darwin" {
 		serviceBin = service.ExecutablePath(serviceBin)
 	}
+	if c.Action == "install" {
+		if err := service.CheckDaemon(serviceBin); err != nil {
+			return err
+		}
+	}
 	lifecycle := service.NewLifecycle(service.LifecycleOptions{Executable: serviceBin, DataDir: config.DataDir(), Output: commandOutput(g), RefreshEnvironment: c.RefreshEnv})
 	if c.Action == "status" {
 		st := lifecycle.Observe()
