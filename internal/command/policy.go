@@ -12,14 +12,34 @@ import (
 )
 
 // canonical resolves existing ancestors too, so a missing leaf cannot hide a
-// symlink escape. Preparation never creates a requested path.
+// symlink escape, and follows a dangling symlink to the path it names.
+// Preparation never creates a requested path.
 func canonical(p string) (string, error) {
+	return canonicalDepth(p, 0)
+}
+
+func canonicalDepth(p string, depth int) (string, error) {
 	p, err := filepath.Abs(p)
 	if err != nil {
 		return "", err
 	}
 	var tail []string
 	for {
+		if info, e := os.Lstat(p); e == nil && info.Mode()&os.ModeSymlink != 0 && depth < 40 {
+			if _, e := os.Stat(p); os.IsNotExist(e) {
+				target, e := os.Readlink(p)
+				if e != nil {
+					return "", e
+				}
+				if !filepath.IsAbs(target) {
+					target = filepath.Join(filepath.Dir(p), target)
+				}
+				for i := len(tail) - 1; i >= 0; i-- {
+					target = filepath.Join(target, tail[i])
+				}
+				return canonicalDepth(target, depth+1)
+			}
+		}
 		q, e := filepath.EvalSymlinks(p)
 		if e == nil {
 			for i := len(tail) - 1; i >= 0; i-- {
@@ -61,14 +81,23 @@ func normalizeScope(s Scope) (Scope, error) {
 		}
 	}
 	s.Denied = append([]string(nil), s.Denied...)
-	s.Denied = append(s.Denied, config.Path(), config.DataDir(), config.DefaultDataDir(), config.SpoolDir())
+	// Every Driga build's configuration, data, spool and state, release and
+	// development alike, overrides included.
+	s.Denied = append(s.Denied, config.StateDirs()...)
 	if h, e := os.UserHomeDir(); e == nil {
-		for _, p := range []string{".claude", ".codex", ".ssh", ".aws", ".azure", ".kube", ".docker", ".config/gh", ".config/azure", ".config/gcloud", ".netrc", ".npmrc", ".git-credentials", ".config/driga", ".local/share/driga", ".local/share/driga-dev", "Library/Keychains", "Library/Application Support/driga", "Library/Application Support/driga-dev"} {
+		for _, p := range []string{".claude", ".codex", ".ssh", ".aws", ".azure", ".kube", ".docker", ".config/gh", ".config/azure", ".config/gcloud", ".netrc", ".npmrc", ".git-credentials", "Library/Keychains"} {
 			s.Denied = append(s.Denied, filepath.Join(h, p))
 		}
 		// Claude also uses sibling files and directories (e.g. .claude.json).
 		matches, _ := filepath.Glob(filepath.Join(h, ".claude*"))
 		s.Denied = append(s.Denied, matches...)
+		// Driga's default roots under HOME, whatever XDG variables this
+		// process has, for every variant: driga, driga-dev, driga-<name>.
+		for _, root := range []string{".config", ".local/share", ".local/state", "Library/Application Support", "Library/Logs"} {
+			s.Denied = append(s.Denied, filepath.Join(h, root, "driga"), filepath.Join(h, root, "driga-dev"))
+			matches, _ := filepath.Glob(filepath.Join(h, root, "driga-*"))
+			s.Denied = append(s.Denied, matches...)
+		}
 	}
 	if filepath.Separator == '/' {
 		s.Denied = append(s.Denied, "/Library/Keychains")
