@@ -2,7 +2,6 @@ package scripts_test
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -227,8 +226,9 @@ func TestMacOSReleaseVerificationOrder(t *testing.T) {
 	}
 }
 
-// Execute the generated Ruby block with a fake cask DSL. No installation or
-// launchctl is reachable; only an existing service should trigger migration.
+// Execute the generated Ruby block with a fake cask DSL under a temporary
+// HOME. No installation or launchctl is reachable; only an existing service,
+// or the copy an upgrade's uninstall kept of it, should trigger migration.
 func TestMacOSCaskRepairsExistingServiceOnly(t *testing.T) {
 	if _, err := exec.LookPath("ruby"); err != nil {
 		t.Skip("ruby unavailable")
@@ -244,37 +244,59 @@ func TestMacOSCaskRepairsExistingServiceOnly(t *testing.T) {
 	if len(config.Casks) != 1 {
 		t.Fatal("expected one cask")
 	}
-	for _, existing := range []bool{false, true} {
+	for _, scenario := range []string{"fresh", "existing", "upgrade", "stale-copy"} {
 		setup := `
+require "fileutils"
 $calls = []
+$blocks = {}
+$uninstall = nil
+$zap = nil
 def app(name); end
 def appdir; "/Applications"; end
-def postflight; yield; end
+def postflight(&block); $blocks[:postflight] = block; end
+def uninstall_preflight(&block); $blocks[:uninstall_preflight] = block; end
+def uninstall(**directives); $uninstall = directives; end
+def zap(**directives); $zap = directives; end
 def system_command(name, **opts)
  $calls << [name, opts]
  Struct.new(:stdout).new('{"EnvironmentVariables":{"DRIGA_DATA_DIR":"/Users/me/Library/Application Support/driga","PATH":"/custom/bin:/usr/bin"}}')
 end
-class File
- def self.exist?(path)
-  raise "wrong migration guard" unless path.end_with?("/Library/LaunchAgents/run.driga.service.plist")
-  ENV["EXISTING_SERVICE"] == "true"
- end
-end
 `
 		check := `
-if ENV["EXISTING_SERVICE"] == "true"
- raise "plist not read" unless $calls.length == 2 && $calls[0] == ["/usr/bin/plutil", {args: ["-convert", "json", "-o", "-", File.expand_path("~/Library/LaunchAgents/run.driga.service.plist")], must_succeed: true}]
+plist = File.expand_path("~/Library/LaunchAgents/run.driga.service.plist")
+kept = File.expand_path("~/Library/Caches/run.driga/run.driga.service.plist")
+scenario = ENV["CASK_SCENARIO"]
+unless scenario == "fresh"
+ FileUtils.mkdir_p(File.dirname(plist))
+ File.write(plist, "<plist/>")
+end
+if scenario == "upgrade" || scenario == "stale-copy"
+ # The old version's uninstall: its preflight keeps the plist, then
+ # uninstall launchctl removes the agent and its plist.
+ $blocks.fetch(:uninstall_preflight).call
+ raise "plist not kept" unless File.read(kept) == "<plist/>" && (File.stat(kept).mode & 0o777) == 0o600
+ File.delete(plist)
+ File.utime(Time.now - 3600, Time.now - 3600, kept) if scenario == "stale-copy"
+end
+$blocks.fetch(:postflight).call
+raise "kept copy left behind" if File.exist?(kept)
+raise "uninstall does not remove the service: #{$uninstall}" unless $uninstall[:launchctl] == "run.driga.service"
+raise "uninstall does not stop the app: #{$uninstall}" unless $uninstall[:signal] == [["TERM", "run.driga"]]
+raise "zap keeps user data: #{$zap}" unless $zap[:trash].include?("~/Library/Application Support/driga") && $zap[:trash].include?("~/Library/Logs/driga")
+if scenario == "existing" || scenario == "upgrade"
+ source = scenario == "existing" ? plist : kept
+ raise "plist not read: #{$calls}" unless $calls.length == 2 && $calls[0] == ["/usr/bin/plutil", {args: ["-convert", "json", "-o", "-", source], must_succeed: true}]
  # env: would reach the service as "Application\\ Support"; /usr/bin/env args do not.
  expected = ["/usr/bin/env", {args: ["DRIGA_DATA_DIR=/Users/me/Library/Application Support/driga", "PATH=/custom/bin:/usr/bin", "/Applications/Driga.app/Contents/MacOS/driga", "service", "install"], must_succeed: true}]
  raise "environment or command changed: #{$calls}" unless $calls[1] == expected
 else
- raise "fresh install started service" unless $calls.empty?
+ raise "#{scenario} install started service: #{$calls}" unless $calls.empty?
 end
 `
 		cmd := exec.CommandContext(t.Context(), "ruby", "-e", setup+config.Casks[0].Block+check)
-		cmd.Env = append(releaseTestEnv(t), "EXISTING_SERVICE="+fmt.Sprint(existing))
+		cmd.Env = append(releaseTestEnv(t), "CASK_SCENARIO="+scenario)
 		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("existing=%v: %v: %s", existing, err, out)
+			t.Fatalf("%s: %v: %s", scenario, err, out)
 		}
 	}
 }

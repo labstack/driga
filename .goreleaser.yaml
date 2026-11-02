@@ -34,6 +34,7 @@ builds:
         -X main.version={{ .Version }}
         -X main.commit={{ .FullCommit }}
         -X main.date={{ .CommitDate }}
+        -X github.com/labstack/driga/internal/service.release=true
 
     hooks:
       post:
@@ -63,6 +64,7 @@ builds:
         -X main.version={{ .Version }}
         -X main.commit={{ .FullCommit }}
         -X main.date={{ .CommitDate }}
+        -X github.com/labstack/driga/internal/service.release=true
 
   # Driga.exe, the Windows desktop app: a GUI-subsystem binary that installs
   # the Driga service and shows its data.
@@ -84,6 +86,7 @@ builds:
         -X main.version={{ .Version }}
         -X main.commit={{ .FullCommit }}
         -X main.date={{ .CommitDate }}
+        -X github.com/labstack/driga/internal/service.release=true
 
 archives:
   - id: driga
@@ -229,13 +232,35 @@ homebrew_casks:
     # `app` (DMG) integration.
     custom_block: |
       app "Driga.app"
+      require "fileutils"
       require "json"
+      # Uninstalling Driga.app removes the Driga service's launch agent
+      # with it. An upgrade runs the old version's uninstall too, so its
+      # preflight first keeps the plist for the new version's postflight.
+      uninstall_preflight do
+        plist = File.expand_path("~/Library/LaunchAgents/run.driga.service.plist")
+        if File.exist?(plist)
+          kept = File.expand_path("~/Library/Caches/run.driga/run.driga.service.plist")
+          FileUtils.mkdir_p(File.dirname(kept), mode: 0o700)
+          FileUtils.rm_f(kept)
+          FileUtils.cp(plist, kept)
+          File.chmod(0o600, kept)
+        end
+      end
+      # Homebrew skips signal on upgrade, where the app restarts itself.
+      uninstall launchctl: "run.driga.service",
+                signal:    [["TERM", "run.driga"]]
       postflight do
         # Migrate before open -a can activate an old same-bundle drigad.
         # Fresh installs still wait for the app's first launch.
-        if File.exist?(File.expand_path("~/Library/LaunchAgents/run.driga.service.plist"))
+        plist = File.expand_path("~/Library/LaunchAgents/run.driga.service.plist")
+        kept = File.expand_path("~/Library/Caches/run.driga/run.driga.service.plist")
+        # Only an upgrade's own copy, not one a past uninstall left behind.
+        kept = nil unless File.exist?(kept) && Time.now - File.mtime(kept) < 600
+        previous_plist = [plist, kept].compact.find { |path| File.exist?(path) }
+        if previous_plist
           previous = system_command "/usr/bin/plutil",
-                                    args: ["-convert", "json", "-o", "-", File.expand_path("~/Library/LaunchAgents/run.driga.service.plist")],
+                                    args: ["-convert", "json", "-o", "-", previous_plist],
                                     must_succeed: true
           # system_command shell-escapes env: values yet runs no shell, so a
           # value with a space would gain a literal backslash. /usr/bin/env
@@ -245,13 +270,27 @@ homebrew_casks:
                          args: [*environment, "#{appdir}/Driga.app/Contents/MacOS/driga", "service", "install"],
                          must_succeed: true
         end
+        FileUtils.rm_f(File.expand_path("~/Library/Caches/run.driga/run.driga.service.plist"))
       end
+      zap trash: [
+        "~/.config/driga",
+        "~/Library/Application Support/driga",
+        "~/Library/Caches/run.driga",
+        "~/Library/HTTPStorages/run.driga",
+        "~/Library/LaunchAgents/run.driga.collector.plist",
+        "~/Library/Logs/driga",
+        "~/Library/Preferences/run.driga.plist",
+        "~/Library/Saved Application State/run.driga.savedState",
+        "~/Library/WebKit/run.driga",
+      ]
     caveats: |
       Driga.app is in /Applications, and driga links to the CLI inside it.
       Open Driga from Finder, Spotlight or with driga app. Its first launch
       installs the Driga service (drigad), which collects at login whether or
-      not the app is open. Upgrades migrate an existing service automatically.
-      Open Driga once to finish first-launch setup.
+      not the app is open. Upgrades migrate an existing service automatically,
+      and brew uninstall removes it. Open Driga once to finish first-launch
+      setup. Before deleting Driga.app without Homebrew, run
+      driga service uninstall.
     url:
       template: "https://github.com/labstack/driga/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
     commit_msg_template: "chore: update driga to {{ .Tag }}"
