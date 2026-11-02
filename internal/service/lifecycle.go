@@ -138,11 +138,19 @@ func (l *Lifecycle) Ensure(ctx context.Context) (err error) {
 }
 
 // Control implements explicit service administration, shared with the CLI.
-// A failed install leaves the previous collector available.
+// On macOS a failed install leaves the previous definition loaded: the new
+// one replaces it only once written, and launchd refusing it restores the
+// previous one. Every action makes the next Observe ask the service manager
+// again.
 func (l *Lifecycle) Control(ctx context.Context, action string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	defer func() {
+		l.mu.Lock()
+		l.regAt = time.Time{}
+		l.mu.Unlock()
+	}()
 	c, err := l.host.controller()
 	if err != nil {
 		return fmt.Errorf("initialize service controller: %w", err)

@@ -281,3 +281,20 @@ func TestLifecycleObserveReusesRegistration(t *testing.T) {
 		t.Fatalf("without a TTL, probes = %d, want 4", h.probes)
 	}
 }
+
+// After an explicit action the tray shows the service manager's new answer
+// at once, even while the lock and process tell the same story.
+func TestLifecycleControlClearsRegistrationCache(t *testing.T) {
+	l, h := testLifecycle("darwin")
+	l.opts.RegistrationTTL = time.Hour
+	h.installed, h.live, h.held = true, true, true
+	if st := l.Observe(); st.Registration != "running" {
+		t.Fatalf("%+v", st)
+	}
+	if err := l.Control(context.Background(), "install"); err != nil {
+		t.Fatal(err)
+	}
+	if st := l.Observe(); st.Registration != "running" || h.probes != 2 {
+		t.Fatalf("Observe reused the registration from before Control: %+v, probes = %d", st, h.probes)
+	}
+}
