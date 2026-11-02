@@ -627,8 +627,12 @@ driga service run [flags]
 Install the Driga service as a login service and start it.
 
 ```sh
-driga service install
+driga service install [flags]
 ```
+
+| Flag | Default | Description |
+|---|---|---|
+| `--refresh-env` |  | macOS: record this shell's PATH and Driga variables in the service instead of keeping the ones it records. |
 
 ### driga service start
 
