@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/labstack/driga/internal/secfile"
 	"io"
 	"math"
 	"os"
@@ -17,6 +16,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/labstack/driga/internal/model"
+	"github.com/labstack/driga/internal/secfile"
 	"github.com/labstack/driga/internal/tail"
 )
 
@@ -63,6 +63,11 @@ func AppendAll(dir string, evs []model.HookEvent) error {
 		if err != nil {
 			return err
 		}
+		// A day file an older release made readable to others is tightened
+		// to its owner, as the store does.
+		if err := secfile.ProtectFile(f); err != nil {
+			return errors.Join(err, f.Close())
+		}
 		n, writeErr := f.Write(files[path])
 		if writeErr == nil && n != len(files[path]) {
 			writeErr = io.ErrShortWrite
@@ -71,10 +76,36 @@ func AppendAll(dir string, evs []model.HookEvent) error {
 			return err
 		}
 	}
+	if err := secfile.Protect(dir); err != nil {
+		return err
+	}
 	// Appending leaves directory mtime unchanged; wake the collector with one
 	// directory stat even when writing an existing day file.
 	now := time.Now()
 	return os.Chtimes(dir, now, now)
+}
+
+// Protect tightens the spool directory and its files to their owner: 0700
+// and 0600 on Unix, a private DACL on Windows. An existing spool that an
+// older release left readable to others stays private from then on. A
+// missing directory is fine.
+func Protect(dir string) error {
+	entries, err := os.ReadDir(dir)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	errs := []error{secfile.Protect(dir)}
+	for _, entry := range entries {
+		if entry.Type().IsRegular() {
+			if err := secfile.Protect(filepath.Join(dir, entry.Name())); err != nil && !errors.Is(err, os.ErrNotExist) {
+				errs = append(errs, err)
+			}
+		}
+	}
+	return errors.Join(errs...)
 }
 
 func appendLine(ev model.HookEvent) ([]byte, error) {
@@ -161,7 +192,8 @@ func Drain(dir string, off map[string]model.Offset, since ...time.Time) ([]model
 	return events, next, errors.Join(errs...)
 }
 
-// Prune removes day files older than 30 days, retaining the cutoff day.
+// Prune removes day files older than 30 days, retaining the cutoff day, and
+// keeps the rest private (see Protect).
 func Prune(dir string, now time.Time) error {
 	entries, err := os.ReadDir(dir)
 	if errors.Is(err, os.ErrNotExist) {
@@ -170,7 +202,7 @@ func Prune(dir string, now time.Time) error {
 	if err != nil {
 		return err
 	}
-	var errs []error
+	errs := []error{Protect(dir)}
 	for _, entry := range entries {
 		if !entry.IsDir() && !RecentDay(entry.Name(), now.AddDate(0, 0, -30)) {
 			if err := os.Remove(filepath.Join(dir, entry.Name())); err != nil && !errors.Is(err, os.ErrNotExist) {
