@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	ks "github.com/kardianos/service"
+	"github.com/labstack/driga/internal/variant"
 )
 
 func TestServiceConfig(t *testing.T) {
@@ -150,25 +151,6 @@ func TestDaemonPathAndVariant(t *testing.T) {
 			t.Errorf("DaemonPath(%q) = %q, want %q", in, got, want)
 		}
 	}
-	for exe, want := range map[string]string{"/opt/driga": "", "/opt/drigad": "", "/opt/driga-dev": "-dev", "/opt/drigad-dev": "-dev", "/opt/driga.exe": "", "/opt/service.test": ""} {
-		if got := variantOf(exe); got != want {
-			t.Errorf("variantOf(%q) = %q, want %q", exe, got, want)
-		}
-	}
-	// A build under the release's name is a development build unless the
-	// release marker says otherwise; a variant's name always wins.
-	for _, tc := range []struct {
-		exe     string
-		release bool
-		want    string
-	}{
-		{"/opt/driga", true, ""}, {"/opt/driga", false, "-dev"}, {"/opt/drigad", false, "-dev"},
-		{"/opt/driga-dev", true, "-dev"}, {"/opt/driga-foo", false, "-foo"}, {"", false, "-dev"},
-	} {
-		if got := variantFor(tc.exe, tc.release); got != tc.want {
-			t.Errorf("variantFor(%q, %t) = %q, want %q", tc.exe, tc.release, got, tc.want)
-		}
-	}
 	if !IsDaemon("/opt/drigad-dev") || !IsDaemon("drigad.exe") || IsDaemon("/opt/driga") || IsDaemon("/opt/driga-dev") {
 		t.Error("IsDaemon")
 	}
@@ -178,7 +160,5 @@ func TestDaemonPathAndVariant(t *testing.T) {
 // marks published ones, for the test's duration.
 func releaseBuild(t *testing.T) {
 	t.Helper()
-	previous := release
-	release = "true"
-	t.Cleanup(func() { release = previous })
+	t.Cleanup(variant.SetForTest(""))
 }

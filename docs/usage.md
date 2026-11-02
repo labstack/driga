@@ -362,14 +362,11 @@ systemd user unit on Linux (`driga`) and a Task Scheduler task at logon on
 Windows. Only published releases install under those names. Any other build
 (`just build`, `just install`, `go build`, `go run`) is a development build and
 installs its own service (`run.driga.service.dev`, `driga-dev`, and Windows task
-`Driga service (dev)`, logging to `driga-dev`), so it never takes over the
-release's; so does an executable named `driga-<name>`, under `<name>`. The
-release build sets
-`-ldflags "-X github.com/labstack/driga/internal/service.release=true"`; set it
-yourself only to run a source build as the account's service. A development
-build released before this distinction installed `run.driga.service`; remove
-that with the build that installed it, `driga service uninstall`, before
-installing a release.
+`Driga service (dev)`, logging to `driga-dev`) and keeps its own database and
+spool in a `driga-dev` data directory, so it never takes over the release's
+service or reads its data; so does an executable named `driga-<name>`, under
+`<name>`. The configuration file is shared. `DRIGA_DATA_DIR` and
+`DRIGA_SPOOL_DIR` still override the directories.
 
 The app's first launch installs the service, and every launch makes sure it
 runs and restarts it when it runs another version, as after an upgrade. It

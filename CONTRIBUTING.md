@@ -44,9 +44,11 @@ just install      # deliberately copies it to ~/.local/bin
 ```
 
 A checkout build is a development build: its Driga service installs as
-`run.driga.service.dev` (Linux `driga-dev`, Windows `Driga service (dev)`), so it
-never replaces a release's service. Only release builds carry the
-`internal/service.release=true` link-time marker.
+`run.driga.service.dev` (Linux `driga-dev`, Windows `Driga service (dev)`) and
+keeps its database and spool in a `driga-dev` data directory (on macOS
+`~/Library/Application Support/driga-dev`), so it never replaces a release's
+service or shares its data. The configuration file is shared. Only release
+builds carry the `internal/variant.release=true` link-time marker.
 
 ### The app's UI
 

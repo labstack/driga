@@ -8,6 +8,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/labstack/driga/internal/variant"
 )
 
 // Config is the effective configuration (§12 of the design).
@@ -139,17 +141,24 @@ func dataDirForOS(goos string) string {
 }
 
 func defaultDataDirForOS(goos string) string {
+	name := dataName()
 	if goos == "windows" {
-		return filepath.Join(windowsAppDir("LOCALAPPDATA", "Local"), "driga")
+		return filepath.Join(windowsAppDir("LOCALAPPDATA", "Local"), name)
 	}
 	if goos == "linux" {
 		if p := os.Getenv("XDG_DATA_HOME"); filepath.IsAbs(p) {
-			return filepath.Join(p, "driga")
+			return filepath.Join(p, name)
 		}
-		return filepath.Join(home(), ".local", "share", "driga")
+		return filepath.Join(home(), ".local", "share", name)
 	}
-	return filepath.Join(home(), "Library", "Application Support", "driga")
+	return filepath.Join(home(), "Library", "Application Support", name)
 }
+
+// dataName names the default data and spool directories: "driga" for a
+// release and "driga-dev" for a development build, so a development service
+// never shares the release's database or spool. The configuration file is
+// shared.
+func dataName() string { return "driga" + variant.Suffix() }
 
 // SpoolDir holds hook/ack event files (env DRIGA_SPOOL_DIR overrides).
 func SpoolDir() string { return absolutePath(spoolDirForOS(runtime.GOOS)) }
@@ -158,16 +167,17 @@ func spoolDirForOS(goos string) string {
 	if p := os.Getenv("DRIGA_SPOOL_DIR"); p != "" {
 		return p
 	}
+	name := dataName()
 	if goos == "windows" {
-		return filepath.Join(windowsAppDir("LOCALAPPDATA", "Local"), "driga", "events")
+		return filepath.Join(windowsAppDir("LOCALAPPDATA", "Local"), name, "events")
 	}
 	if goos == "linux" {
 		if p := os.Getenv("XDG_STATE_HOME"); filepath.IsAbs(p) {
-			return filepath.Join(p, "driga", "events")
+			return filepath.Join(p, name, "events")
 		}
-		return filepath.Join(home(), ".local", "state", "driga", "events")
+		return filepath.Join(home(), ".local", "state", name, "events")
 	}
-	return filepath.Join(home(), "Library", "Application Support", "driga", "events")
+	return filepath.Join(home(), "Library", "Application Support", name, "events")
 }
 
 func windowsAppDir(env, leaf string) string {

@@ -63,7 +63,7 @@ func normalizeScope(s Scope) (Scope, error) {
 	s.Denied = append([]string(nil), s.Denied...)
 	s.Denied = append(s.Denied, config.Path(), config.DataDir(), config.DefaultDataDir(), config.SpoolDir())
 	if h, e := os.UserHomeDir(); e == nil {
-		for _, p := range []string{".claude", ".codex", ".ssh", ".aws", ".azure", ".kube", ".docker", ".config/gh", ".config/azure", ".config/gcloud", ".netrc", ".npmrc", ".git-credentials", ".config/driga", ".local/share/driga", "Library/Keychains", "Library/Application Support/driga"} {
+		for _, p := range []string{".claude", ".codex", ".ssh", ".aws", ".azure", ".kube", ".docker", ".config/gh", ".config/azure", ".config/gcloud", ".netrc", ".npmrc", ".git-credentials", ".config/driga", ".local/share/driga", ".local/share/driga-dev", "Library/Keychains", "Library/Application Support/driga", "Library/Application Support/driga-dev"} {
 			s.Denied = append(s.Denied, filepath.Join(h, p))
 		}
 		// Claude also uses sibling files and directories (e.g. .claude.json).

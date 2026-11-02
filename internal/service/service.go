@@ -12,6 +12,7 @@ import (
 
 	ks "github.com/kardianos/service"
 	"github.com/labstack/driga/internal/config"
+	"github.com/labstack/driga/internal/variant"
 )
 
 // LogPath is shared by launchd output and the service logs command.
@@ -31,41 +32,10 @@ func logPathForOS(goos string) string {
 	return filepath.Join(config.ExpandHome("~"), "Library", "Logs", "driga"+Variant(), "service.log")
 }
 
-// release is "true" in published builds: .goreleaser.yaml sets it with
-// -ldflags "-X github.com/labstack/driga/internal/service.release=true".
-// Every other build, including just build, go build and go run, is a
-// development build.
-var release string
-
-// Variant is what follows "driga" in this executable's name, or "-dev" for a
-// development build under the release's name, and empty for a release. Each
-// variant installs its own service, with its own label and log, so a
-// development copy never takes over the release's.
-func Variant() string {
-	exe, err := os.Executable()
-	if err != nil {
-		exe = ""
-	}
-	return variantFor(exe, release == "true")
-}
-
-func variantFor(exe string, release bool) string {
-	if v := variantOf(exe); v != "" || release {
-		return v
-	}
-	return "-dev"
-}
-
-func variantOf(exe string) string {
-	name := strings.TrimSuffix(filepath.Base(exe), filepath.Ext(exe))
-	if rest, ok := strings.CutPrefix(name, "drigad"); ok && (rest == "" || strings.HasPrefix(rest, "-")) {
-		return rest
-	}
-	if rest, ok := strings.CutPrefix(name, "driga"); ok && (rest == "" || strings.HasPrefix(rest, "-")) {
-		return rest
-	}
-	return ""
-}
+// Variant is what follows "driga" in this build's service label, log and
+// default data directory: empty for a release and "-dev" for a development
+// build. See internal/variant.
+func Variant() string { return variant.Suffix() }
 
 // EnvKeys lists the environment variables a collector started outside the
 // user's shell needs from it. PATH and TMUX_TMPDIR matter most: launchd,

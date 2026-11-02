@@ -34,7 +34,7 @@ builds:
         -X main.version={{ .Version }}
         -X main.commit={{ .FullCommit }}
         -X main.date={{ .CommitDate }}
-        -X github.com/labstack/driga/internal/service.release=true
+        -X github.com/labstack/driga/internal/variant.release=true
 
     hooks:
       post:
@@ -64,7 +64,7 @@ builds:
         -X main.version={{ .Version }}
         -X main.commit={{ .FullCommit }}
         -X main.date={{ .CommitDate }}
-        -X github.com/labstack/driga/internal/service.release=true
+        -X github.com/labstack/driga/internal/variant.release=true
 
   # Driga.exe, the Windows desktop app: a GUI-subsystem binary that installs
   # the Driga service and shows its data.
@@ -86,7 +86,7 @@ builds:
         -X main.version={{ .Version }}
         -X main.commit={{ .FullCommit }}
         -X main.date={{ .CommitDate }}
-        -X github.com/labstack/driga/internal/service.release=true
+        -X github.com/labstack/driga/internal/variant.release=true
 
 archives:
   - id: driga

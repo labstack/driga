@@ -51,7 +51,8 @@ func TestHookUsesRuntimeSpoolAndStructuredRotatedErrors(t *testing.T) {
 	if d.SpoolDir != config.SpoolDir() {
 		t.Fatal("hook and collector spool differ", d.SpoolDir, config.SpoolDir())
 	}
-	if runtime.GOOS == "darwin" && d.SpoolDir != filepath.Join(home, "Library", "Application Support", "driga", "events") {
+	// A test binary is a development build, which keeps its own spool.
+	if runtime.GOOS == "darwin" && d.SpoolDir != filepath.Join(home, "Library", "Application Support", "driga-dev", "events") {
 		t.Fatal("macOS hook used XDG state", d.SpoolDir)
 	}
 	events, _, err := spool.Drain(d.SpoolDir, nil)

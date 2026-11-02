@@ -3,12 +3,15 @@
 package config_test
 
 import (
-	"github.com/labstack/driga/internal/config"
 	"path/filepath"
 	"testing"
+
+	"github.com/labstack/driga/internal/config"
+	"github.com/labstack/driga/internal/variant"
 )
 
 func TestDataDirLinuxXDG(t *testing.T) {
+	t.Cleanup(variant.SetForTest("")) // a release build
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("DRIGA_DATA_DIR", "")

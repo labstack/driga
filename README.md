@@ -82,9 +82,9 @@ CGO_ENABLED=0 go build ./cmd/driga
 Keep Git on PATH and the installed binary at a stable absolute path before
 setting up hooks or a service. A source build is a development build: its
 service installs as `run.driga.service.dev` on macOS, `driga-dev` on Linux and
-`Driga service (dev)` on Windows, beside a release's. To run a source build as
-the account's service, build it with
-`-ldflags "-X github.com/labstack/driga/internal/service.release=true"`. On a machine without a desktop, install the CLI
+`Driga service (dev)` on Windows, beside a release's, and keeps its data in a
+`driga-dev` data directory. To run a source build as the account's service, build it with
+`-ldflags "-X github.com/labstack/driga/internal/variant.release=true"`. On a machine without a desktop, install the CLI
 alone and run the Driga service as a service with `driga service install`. CalVer
 tags use the year as their major number; Go module major-version rules prevent
 `go install ...@<tag>` with this module path. Use a package, archive, or source checkout.
