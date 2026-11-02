@@ -323,6 +323,11 @@ func run(ctx context.Context, d Deps, dataDir string) error {
 	pullers.server = server
 	defer pullers.close()
 	var timers schedule
+	// A spool an older release left readable to others becomes private now,
+	// not at the first hourly prune.
+	if err := spool.Protect(d.SpoolDir); err != nil {
+		slog.Warn("could not make the spool private", "event", "spool_protect_failed", "err", scrub.Scrub(err.Error()))
+	}
 	lastPrune := clock.Now()
 	var spoolStamp time.Time
 	var lastPoll time.Time

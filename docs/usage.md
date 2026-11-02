@@ -359,16 +359,37 @@ database, hosts Chat and runs actions. It starts at login and keeps running
 whether or not the app or the terminal UI is open; both are its clients, as is
 `driga mcp`. It runs as a per-user LaunchAgent on macOS (`run.driga.service`), a
 systemd user unit on Linux (`driga`) and a Task Scheduler task at logon on
-Windows. A `driga-dev` build installs its own (`run.driga.service.dev`,
-`driga-dev`, and Windows task `Driga service (dev)`), so it never takes over the release's.
+Windows. Only published releases install under those names. Any other build
+(`just build`, `just install`, `go build`, `go run`, a GoReleaser snapshot) is a
+development build and
+installs its own service (`run.driga.service.dev`, `driga-dev`, and Windows task
+`Driga service (dev)`, logging to `driga-dev`) and keeps its own database and
+spool in a `driga-dev` data directory, so it never takes over the release's
+service or reads its data; so does an executable named `driga-<name>`, under
+`<name>`. The configuration file is shared. `DRIGA_DATA_DIR` and
+`DRIGA_SPOOL_DIR` still override the directories. Installing a release
+replaces whatever service holds the release's label, including one an older
+development build installed.
 
 The app's first launch installs the service, and every launch makes sure it
 runs and restarts it when it runs another version, as after an upgrade. It
 installs the service with the PATH and other variables of your login shell, so
 agent discovery and terminal jumps work when Driga is opened from Finder or at
-login. Quitting the app leaves the service running. On a machine without the
-app, or to install it yourself, run `driga service install`; `driga init`
-offers it too. Installing removes the `run.driga.collector` agent, systemd unit
+login. On macOS that login-shell environment is the one the service records:
+the app installs with `--refresh-env`, so a changed login-shell PATH reaches the
+service at the next app launch, and the service restarts only when the
+definition changes (its log names the changed variables, never their values).
+`driga service install` from a terminal keeps the recorded environment; pass
+`--refresh-env` to record the terminal's instead. When the app cannot read the
+login shell, it keeps the environment the service already has. Replacing a
+definition writes the new plist first, boots the old job out and waits until
+launchd has let it go, then loads the new one; when launchd refuses it, the
+previous plist is restored and loaded again. Without a desktop session (over
+SSH before anyone logs in), `driga service uninstall` still removes the plist,
+and start and status say to log in to the desktop session. On Linux and Windows an existing service keeps its environment until
+`driga service uninstall` and `driga service install`. Quitting the app leaves
+the service running. On a machine without the app, or to install it yourself,
+run `driga service install`; `driga init` offers it too. Installing removes the `run.driga.collector` agent, systemd unit
 or task an earlier release installed. Only one service runs per data
 directory; `driga doctor` names it.
 
@@ -380,6 +401,15 @@ driga service start
 driga service restart
 driga service uninstall
 ```
+
+On macOS, launchd keeps the service alive only while its executable exists, as
+a background process, and the service exits when its executable is deleted, so
+deleting Driga.app does not leave launchd restarting a missing helper. The
+launch agent stays registered until it is removed, though: `brew uninstall
+--cask driga` removes it, and before deleting Driga.app any other way, run
+`driga service uninstall`. Driga finds its app by bundle identifier
+(`run.driga`) and layout, not by name, so a renamed or moved Driga.app keeps its
+service; open it once afterwards so the launch agent points at the new path.
 
 ### Service identity
 

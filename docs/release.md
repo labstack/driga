@@ -171,13 +171,33 @@ explains the organization-name fallback and `AssociatedBundleIdentifiers`.
 `service install`, which the app runs on launch, points the launch agent at
 `Contents/Helpers/Driga Service.app/Contents/MacOS/drigad`, associates
 `run.driga.service`, registers both bundles with Launch Services, and atomically
-repairs an existing stale plist. It unloads the running service before replacing
-its stale definition, then starts it. This migrates the former
-`Contents/MacOS/drigad` path even when the version has not changed. Reinstalling
-a current definition is harmless. It also removes the `run.driga.collector`
-agent earlier releases installed. Development binaries outside the app keep
-their ordinary path and have no association; a `driga-dev` build installs as
-`run.driga.service.dev`, so it never takes over the release's service.
+replaces an existing plist that differs from the one it would write: another
+executable, a missing association, an older definition or a refreshed
+environment (the app installs with `--refresh-env`; a terminal install keeps
+the recorded one). It renders and checks the new plist and writes it beside the
+old one first. launchd keeps the definition it bootstrapped, so install then
+runs `launchctl bootout gui/<uid>/run.driga.service` whether or not the job's
+process runs (a job loaded but not running, as after Driga.app moved, would
+otherwise keep its old definition) and polls `launchctl print` until launchd has
+let the job go (at most 10 seconds), renames the new plist into place and runs
+`launchctl bootstrap gui/<uid>` on it, retrying with backoff while launchd
+answers 5, 36 or 37. When launchd refuses the new definition, the previous plist
+is restored and bootstrapped again. Start bootstraps an unloaded job, and
+`launchctl kickstart` only a loaded job that stays loaded with its process
+exited. Without a `gui/<uid>` domain (exit 112), uninstall still deletes the
+plist and start and status ask for a desktop login. Driga never uses the deprecated `launchctl load` and
+`unload`. This migrates the former `Contents/MacOS/drigad` path even when the
+version has not changed. Reinstalling a current definition is harmless. It also
+removes the `run.driga.collector` agent earlier releases installed.
+
+The plist keeps the job alive only while its executable exists (`KeepAlive`
+`PathState`), with `ProcessType` `Background` and a 30-second
+`ThrottleInterval`; the service also exits by itself within a minute of its
+executable's deletion. Development binaries outside the app keep their ordinary
+path and have no association. Only tagged GoReleaser releases, not snapshots, carry the
+`internal/variant.release=true` link-time marker; every other build installs as
+`run.driga.service.dev` and collects into a `driga-dev` data directory, so it
+never takes over the release's service or shares its data.
 
 The service has its own nested app, `Contents/Helpers/Driga Service.app`, with
 bundle identifier `run.driga.service`, `LSBackgroundOnly=true`, matching version
@@ -185,10 +205,20 @@ metadata, and Driga's icon and display name. `Contents/Helpers` is for this
 launchd-managed helper; `Contents/Library/LoginItems` would imply a Service
 Management login item, which this service does not use. The GUI retains
 `run.driga`, its existing executable, and the Homebrew `bin/driga` symlink.
-The cask postflight runs `service install` when a service plist already exists,
-so an upgrade stops the old same-bundle process before the first `open -a`.
-It passes the saved launch agent environment through to preserve custom data
-paths, configuration, and PATH during that repair.
+The cask's `uninstall launchctl: "run.driga.service"` removes the launch agent
+and its plist when Driga is uninstalled, and `signal` stops a running app
+(Homebrew skips it on upgrade, where the app restarts itself). `zap` also
+trashes Driga's data, logs, configuration and caches. Homebrew runs the old
+version's uninstall during an upgrade too, in the same brew process as the new
+version's postflight, so the cask's `uninstall_preflight` first copies the plist
+to `~/Library/Caches/run.driga/run.driga.service.<brew pid>.plist` and deletes
+the copy when that process exits. The postflight restores the plist only from
+its own process's copy, however long the upgrade took, and runs
+`service install` when a service plist exists, so an upgrade (or reinstall)
+restores the service and stops the old same-bundle process before the first
+`open -a`. The restored plist keeps its recorded environment (custom data
+paths, configuration and PATH). An ordinary `brew uninstall` leaves no copy,
+and a copy another brew process left behind is deleted, never restored.
 Fresh cask installs still wait for the first GUI launch to install the service.
 The helper can never register as the GUI's running instance. It also keeps
 Prohibited activation policy on the main thread as defense in depth.
@@ -330,9 +360,14 @@ Retain the archive's license notices.
 Use a source checkout and the Go version in `go.mod` or newer:
 
 ```sh
-CGO_ENABLED=0 go build ./cmd/driga
-./driga version
+CGO_ENABLED=0 go build -o bin/driga ./cmd/driga
+ln -f bin/driga bin/drigad   # the Driga service runs drigad, beside driga
+./bin/driga version
 ```
+
+`just build` does both. Keep `drigad` beside `driga`: `driga service install`
+refuses to install without it. A source build is a development build, with its
+own service label and `driga-dev` data directory.
 
 Check out a release tag first to build that source. Ordinary builds still report
 `dev` without linker stamps. CalVer's year is the major number, so Go module

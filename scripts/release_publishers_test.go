@@ -1,12 +1,14 @@
 package scripts_test
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"regexp"
 	"sort"
 	"strings"
 	"testing"
+	"text/template"
 
 	"go.yaml.in/yaml/v3"
 )
@@ -126,4 +128,37 @@ func preflightedRepositories(t *testing.T) []string {
 	repositories := strings.Fields(loop[1])
 	sort.Strings(repositories)
 	return repositories
+}
+
+// Only a tagged release is a release build: a snapshot, like any checkout
+// build, installs the development service and data directory.
+func TestReleaseMarkerOnlyOnTaggedReleases(t *testing.T) {
+	var config struct {
+		Builds []struct {
+			ID      string   `yaml:"id"`
+			LDFlags []string `yaml:"ldflags"`
+		} `yaml:"builds"`
+	}
+	if err := yaml.Unmarshal([]byte(readRepositoryFile(t, "../.goreleaser.yaml")), &config); err != nil {
+		t.Fatal(err)
+	}
+	if len(config.Builds) == 0 {
+		t.Fatal("no builds")
+	}
+	const marker = "-X github.com/labstack/driga/internal/variant.release=true"
+	for _, build := range config.Builds {
+		for _, snapshot := range []bool{false, true} {
+			flags, err := template.New("ldflags").Parse(strings.Join(build.LDFlags, " "))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var rendered bytes.Buffer
+			if err := flags.Execute(&rendered, map[string]any{"Os": "darwin", "Version": "v", "FullCommit": "c", "CommitDate": "d", "IsSnapshot": snapshot}); err != nil {
+				t.Fatal(err)
+			}
+			if got := strings.Contains(rendered.String(), marker); got == snapshot {
+				t.Errorf("%s (snapshot=%t) carries the release marker: %t: %s", build.ID, snapshot, got, rendered.String())
+			}
+		}
+	}
 }

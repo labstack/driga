@@ -150,11 +150,15 @@ func releaseDistFixture(t *testing.T, version, tag string) (string, string) {
   end
 
   app "Driga.app"
+  require "fileutils"
   require "json"
+  uninstall launchctl: "run.driga.service",
+            signal:    [["TERM", "run.driga"]]
   postflight do
-    if File.exist?(File.expand_path("~/Library/LaunchAgents/run.driga.service.plist"))
+    plist = File.expand_path("~/Library/LaunchAgents/run.driga.service.plist")
+    if File.exist?(plist)
       previous = system_command "/usr/bin/plutil",
-                                args: ["-convert", "json", "-o", "-", File.expand_path("~/Library/LaunchAgents/run.driga.service.plist")],
+                                args: ["-convert", "json", "-o", "-", plist],
                                 must_succeed: true
       environment = JSON.parse(previous.stdout).fetch("EnvironmentVariables", {}).map { |name, value| "#{name}=#{value}" }
       system_command "/usr/bin/env",
@@ -162,6 +166,9 @@ func releaseDistFixture(t *testing.T, version, tag string) (string, string) {
                      must_succeed: true
     end
   end
+  zap trash: [
+    "~/Library/Application Support/driga",
+  ]
   binary "#{appdir}/Driga.app/Contents/MacOS/driga"
 end
 `, version, hashes[fmt.Sprintf("driga_%s_darwin_amd64.tar.gz", version)], hashes[fmt.Sprintf("driga_%s_darwin_arm64.tar.gz", version)])

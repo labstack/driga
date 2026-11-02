@@ -15,6 +15,7 @@ import (
 	"github.com/labstack/driga/internal/collector"
 	"github.com/labstack/driga/internal/config"
 	"github.com/labstack/driga/internal/model"
+	"github.com/labstack/driga/internal/service"
 	"github.com/labstack/driga/internal/store"
 )
 
@@ -385,7 +386,8 @@ func TestDoctorLinuxChecks(t *testing.T) {
 
 func TestServiceLogsLinux(t *testing.T) {
 	name, args := serviceLogCommand("linux", true)
-	if name != "journalctl" || strings.Join(args, " ") != "--user -u driga -n 50 -f" {
+	// A test binary is a development build, so its unit is driga-dev.
+	if name != "journalctl" || strings.Join(args, " ") != "--user -u "+service.Label("linux")+" -n 50 -f" || service.Label("linux") != "driga-dev" {
 		t.Fatal(name, args)
 	}
 	name, args = serviceLogCommand("linux", false)

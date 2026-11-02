@@ -3,17 +3,25 @@ package service
 import (
 	"encoding/xml"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/labstack/driga/internal/config"
 	"github.com/labstack/driga/internal/self"
 )
 
+// BundleID is Driga.app's bundle identifier. The app is found by it and by
+// its layout, never by its name, so a renamed Driga.app still works.
+const BundleID = "run.driga"
+
 // BundlePath identifies our CLI's app layout, including when invoked via a
-// Homebrew symlink. Other apps and ordinary development binaries are excluded.
+// Homebrew symlink: driga or drigad in <name>.app/Contents/MacOS, or the
+// nested Driga Service.app's drigad, in a bundle whose Info.plist names
+// run.driga. Other apps and ordinary development binaries are excluded.
 func BundlePath(binPath string) string {
 	if resolved, err := filepath.EvalSymlinks(binPath); err == nil {
 		binPath = resolved
@@ -24,10 +32,47 @@ func BundlePath(binPath string) string {
 	}
 	contents := filepath.Dir(filepath.Dir(binPath))
 	app := filepath.Dir(contents)
-	if filepath.Base(contents) != "Contents" || filepath.Base(app) != "Driga.app" {
+	if filepath.Base(contents) != "Contents" || filepath.Ext(app) != ".app" || bundleIdentifier(app) != BundleID {
 		return ""
 	}
 	return app
+}
+
+// bundleIdentifier is the CFBundleIdentifier of the app at path, or "".
+func bundleIdentifier(app string) string {
+	f, err := os.Open(filepath.Join(app, "Contents", "Info.plist"))
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+	decoder := xml.NewDecoder(f)
+	depth, key := 0, ""
+	for {
+		token, err := decoder.Token()
+		if err != nil {
+			return ""
+		}
+		switch t := token.(type) {
+		case xml.EndElement:
+			depth--
+		case xml.StartElement:
+			depth++
+			// plist > dict > its keys and values
+			if depth != 3 || t.Name.Local != "key" && t.Name.Local != "string" {
+				continue
+			}
+			var text string
+			if err := decoder.DecodeElement(&text, &t); err != nil {
+				return ""
+			}
+			depth--
+			if t.Name.Local == "key" {
+				key = text
+			} else if key == "CFBundleIdentifier" {
+				return text
+			}
+		}
+	}
 }
 
 // ExecutablePath keeps ordinary builds' stable PATH entry, but launchd needs
@@ -53,6 +98,23 @@ func DaemonPath(binPath string) string {
 		return filepath.Join(dir, "drigad"+rest+ext)
 	}
 	return binPath
+}
+
+// CheckDaemon reports a drigad the service for the CLI at binPath would run
+// that is missing or not executable: a source build of driga alone has none.
+func CheckDaemon(binPath string) error {
+	daemon := DaemonPath(ExecutablePath(binPath))
+	info, err := os.Stat(daemon)
+	if errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("the Driga service executable %s does not exist; build drigad beside driga (just build makes both, or go build -o %s ./cmd/driga)", daemon, daemon)
+	}
+	if err != nil {
+		return err
+	}
+	if !info.Mode().IsRegular() || runtime.GOOS != "windows" && info.Mode().Perm()&0o111 == 0 {
+		return fmt.Errorf("the Driga service executable %s is not an executable file", daemon)
+	}
+	return nil
 }
 
 // IsDaemon reports whether an executable name is drigad's.
@@ -143,19 +205,26 @@ func PlistStale(path, binPath string) (bool, error) {
 // plistEnv is the value the collector plist at path sets for the environment
 // variable key, or "" when it sets none.
 func plistEnv(path, key string) (string, error) {
+	env, err := plistEnvironment(path)
+	return env[key], err
+}
+
+// plistEnvironment is the EnvironmentVariables dictionary of the collector
+// plist at path; empty when it sets none.
+func plistEnvironment(path string) (map[string]string, error) {
 	data, err := os.Open(path)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	defer data.Close()
 	decoder := xml.NewDecoder(data)
 	for {
 		token, err := decoder.Token()
 		if err == io.EOF {
-			return "", nil
+			return map[string]string{}, nil
 		}
 		if err != nil {
-			return "", err
+			return nil, err
 		}
 		start, ok := token.(xml.StartElement)
 		if !ok || start.Name.Local != "key" {
@@ -163,7 +232,7 @@ func plistEnv(path, key string) (string, error) {
 		}
 		var name string
 		if err := decoder.DecodeElement(&name, &start); err != nil {
-			return "", err
+			return nil, err
 		}
 		if name != "EnvironmentVariables" {
 			continue
@@ -178,23 +247,24 @@ func plistEnv(path, key string) (string, error) {
 		for {
 			token, err := decoder.Token()
 			if err != nil {
-				return "", err
+				return nil, err
 			}
 			if start, ok = token.(xml.StartElement); ok {
 				break
 			}
 		}
 		if start.Name.Local != "dict" {
-			return "", errors.New("collector plist expects a dict for EnvironmentVariables")
+			return nil, errors.New("collector plist expects a dict for EnvironmentVariables")
 		}
 		if err := decoder.DecodeElement(&dict, &start); err != nil {
-			return "", err
+			return nil, err
 		}
+		env := map[string]string{}
 		for i := 0; i+1 < len(dict.Entries); i += 2 {
-			if dict.Entries[i].XMLName.Local == "key" && dict.Entries[i].Text == key {
-				return dict.Entries[i+1].Text, nil
+			if dict.Entries[i].XMLName.Local == "key" {
+				env[dict.Entries[i].Text] = dict.Entries[i+1].Text
 			}
 		}
-		return "", nil
+		return env, nil
 	}
 }

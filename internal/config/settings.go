@@ -87,8 +87,8 @@ func (s Setting) Value(c Config) any {
 // exemptions are accepted. Internal names are inherited by helper/test processes.
 var runtimeSettings = []RuntimeSetting{
 	{"DRIGA_CONFIG", "path", "$XDG_CONFIG_HOME/driga/config.toml or ~/.config/driga/config.toml", "Configuration file override."},
-	{"DRIGA_DATA_DIR", "path", "Linux: $XDG_DATA_HOME/driga or ~/.local/share/driga; macOS: ~/Library/Application Support/driga", "Database and fleet data directory override."},
-	{"DRIGA_SPOOL_DIR", "path", "Linux: $XDG_STATE_HOME/driga/events or ~/.local/state/driga/events; macOS: ~/Library/Application Support/driga/events", "Hook/ack spool directory override."},
+	{"DRIGA_DATA_DIR", "path", "Linux: $XDG_DATA_HOME/driga or ~/.local/share/driga; macOS: ~/Library/Application Support/driga; development builds use driga-dev", "Database and fleet data directory override."},
+	{"DRIGA_SPOOL_DIR", "path", "Linux: $XDG_STATE_HOME/driga/events or ~/.local/state/driga/events; macOS: ~/Library/Application Support/driga/events; development builds use driga-dev", "Hook/ack spool directory override."},
 	{"DRIGA_CHAT_SOCKET", "path", "unset", "Chat broker socket for the MCP child of one Chat turn."},
 	{"DRIGA_CHAT_CONVERSATION", "id", "unset", "Chat conversation of the MCP child's turn."},
 	{"DRIGA_CHAT_TOKEN", "secret", "unset", "Per-turn token tying the MCP child's approval requests to its turn."},

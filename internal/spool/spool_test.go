@@ -196,3 +196,55 @@ func TestAppendCreatesParentsAndWakesExistingDirectory(t *testing.T) {
 		t.Fatal("lost batched appends", len(got), err)
 	}
 }
+
+// A spool an older release made readable to others is tightened to its
+// owner: by the next append, and by Protect for files nobody appends to.
+func TestSpoolTightensExistingPermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix modes; Windows DACLs are covered by secfile")
+	}
+	dir := filepath.Join(t.TempDir(), "events")
+	if err := os.Mkdir(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 11, 2, 12, 0, 0, 0, time.UTC)
+	today := filepath.Join(dir, "20261102.jsonl")
+	old := filepath.Join(dir, "20261101.jsonl")
+	for _, path := range []string{today, old} {
+		if err := os.WriteFile(path, nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(path, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Chmod(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mode := func(path string) os.FileMode {
+		t.Helper()
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return info.Mode().Perm()
+	}
+	if err := Append(dir, model.HookEvent{TS: now}); err != nil {
+		t.Fatal(err)
+	}
+	if mode(dir) != 0o700 || mode(today) != 0o600 {
+		t.Fatalf("after append: dir %o, file %o", mode(dir), mode(today))
+	}
+	if mode(old) != 0o644 {
+		t.Fatalf("append touched another day's file: %o", mode(old))
+	}
+	if err := Protect(dir); err != nil {
+		t.Fatal(err)
+	}
+	if mode(old) != 0o600 {
+		t.Fatalf("after Protect: %o", mode(old))
+	}
+	if err := Protect(filepath.Join(dir, "missing")); err != nil {
+		t.Fatalf("missing spool: %v", err)
+	}
+}

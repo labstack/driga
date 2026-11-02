@@ -17,13 +17,7 @@ func TestLaunchdPlistBundleAndDevelopment(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	bundled := filepath.Join(root, "Driga.app", "Contents", "MacOS", "driga")
-	if err := os.MkdirAll(filepath.Dir(bundled), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(bundled, []byte("fixture"), 0o700); err != nil {
-		t.Fatal(err)
-	}
+	bundled := writeTestBundle(t, filepath.Join(root, "Driga.app"))
 	link := filepath.Join(root, "driga")
 	if err := os.Symlink(bundled, link); err != nil {
 		t.Fatal(err)
@@ -162,5 +156,89 @@ func TestPlistStaleDataDir(t *testing.T) {
 				t.Fatalf("stale = %t, %v; want %t", stale, err, tc.stale)
 			}
 		})
+	}
+}
+
+// driga service install refuses a driga whose drigad is missing, as after
+// go build ./cmd/driga alone.
+func TestCheckDaemon(t *testing.T) {
+	dir := t.TempDir()
+	exe := ""
+	if runtime.GOOS == "windows" {
+		exe = ".exe"
+	}
+	cli, daemon := filepath.Join(dir, "driga"+exe), filepath.Join(dir, "drigad"+exe)
+	if err := os.WriteFile(cli, []byte("fixture"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := CheckDaemon(cli); err == nil || !strings.Contains(err.Error(), "does not exist") {
+		t.Fatalf("missing drigad: %v", err)
+	}
+	if err := os.WriteFile(daemon, []byte("fixture"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := CheckDaemon(cli); runtime.GOOS != "windows" && (err == nil || !strings.Contains(err.Error(), "not an executable")) {
+		t.Fatalf("non-executable drigad: %v", err)
+	}
+	if err := os.Chmod(daemon, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := CheckDaemon(cli); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// writeTestBundle makes a minimal Driga.app at app, with its Info.plist and
+// executable, and returns the executable.
+func writeTestBundle(t *testing.T, app string) string {
+	t.Helper()
+	bin := filepath.Join(app, "Contents", "MacOS", "driga")
+	if err := os.MkdirAll(filepath.Dir(bin), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	info := `<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict><key>CFBundleExecutable</key><string>driga</string><key>CFBundleIdentifier</key><string>run.driga</string></dict></plist>
+`
+	if err := os.WriteFile(filepath.Join(app, "Contents", "Info.plist"), []byte(info), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(bin, []byte("fixture"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	return bin
+}
+
+// Driga.app is found by its bundle identifier and layout, so renaming it
+// keeps the service and its helper; another app with the same layout is not
+// Driga.
+func TestBundlePathSurvivesRename(t *testing.T) {
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	app := filepath.Join(root, "Driga Beta.app")
+	bin := writeTestBundle(t, app)
+	helper := filepath.Join(app, "Contents", "Helpers", "Driga Service.app", "Contents", "MacOS", "drigad")
+	for _, path := range []string{bin, helper} {
+		if got := BundlePath(path); got != app {
+			t.Errorf("BundlePath(%s) = %q, want %q", path, got, app)
+		}
+	}
+	if got := DaemonPath(ExecutablePath(bin)); got != helper {
+		t.Errorf("DaemonPath = %s, want %s", got, helper)
+	}
+	if c := configForOS(bin, "darwin"); c.Executable != helper || !strings.Contains(c.Option["LaunchdConfig"].(string), "AssociatedBundleIdentifiers") {
+		t.Errorf("renamed bundle config: %+v", c)
+	}
+	other := filepath.Join(root, "Other.app")
+	otherBin := writeTestBundle(t, other)
+	if err := os.WriteFile(filepath.Join(other, "Contents", "Info.plist"), []byte(`<plist><dict><key>CFBundleIdentifier</key><string>com.example.other</string></dict></plist>`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := BundlePath(otherBin); got != "" {
+		t.Errorf("another app's driga is Driga.app: %q", got)
+	}
+	if got := BundlePath(filepath.Join(root, "Missing.app", "Contents", "MacOS", "driga")); got != "" {
+		t.Errorf("a bundle without Info.plist: %q", got)
 	}
 }

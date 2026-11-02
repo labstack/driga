@@ -78,9 +78,14 @@ Use the Go version in `go.mod` or newer. This builds the CLI; the packaged
 app, with its name, icon and notifications, comes from a release:
 
 ```sh
-CGO_ENABLED=0 go build ./cmd/driga
-./driga version
+CGO_ENABLED=0 go build -o bin/driga ./cmd/driga
+ln -f bin/driga bin/drigad   # the Driga service runs drigad, beside driga
+./bin/driga version
 ```
+
+`just build` does both. Keep `drigad` beside `driga`: `driga service install`
+refuses to install without it. A source build is a development build, with its
+own service label and `driga-dev` data directory.
 
 `go install ...@<tag>` does not work: CalVer tags use the year as their major
 version, which Go module rules reject for this module path. Use a package, an

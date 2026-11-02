@@ -3,9 +3,12 @@ package config
 import (
 	"path/filepath"
 	"testing"
+
+	"github.com/labstack/driga/internal/variant"
 )
 
 func TestWindowsDefaultPathsAndOverrides(t *testing.T) {
+	t.Cleanup(variant.SetForTest("")) // a release build
 	root := t.TempDir()
 	for key, value := range map[string]string{"HOME": filepath.Join(root, "ignored"), "USERPROFILE": root, "APPDATA": filepath.Join(root, "roaming"), "LOCALAPPDATA": filepath.Join(root, "local"), "DRIGA_CONFIG": "", "DRIGA_DATA_DIR": "", "DRIGA_SPOOL_DIR": "", "XDG_CONFIG_HOME": filepath.Join(root, "xdg"), "XDG_STATE_HOME": filepath.Join(root, "state")} {
 		t.Setenv(key, value)

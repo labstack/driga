@@ -10,12 +10,14 @@ import (
 	"testing"
 
 	ks "github.com/kardianos/service"
+	"github.com/labstack/driga/internal/variant"
 )
 
 func TestServiceConfig(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Unix service or hook path contract; Windows has watch/refusal tests")
 	}
+	releaseBuild(t)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", os.Getenv("HOME"))
@@ -39,6 +41,7 @@ func TestServiceConfigLinux(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Unix service or hook path contract; Windows has watch/refusal tests")
 	}
+	releaseBuild(t)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", os.Getenv("HOME"))
@@ -148,12 +151,14 @@ func TestDaemonPathAndVariant(t *testing.T) {
 			t.Errorf("DaemonPath(%q) = %q, want %q", in, got, want)
 		}
 	}
-	for exe, want := range map[string]string{"/opt/driga": "", "/opt/drigad": "", "/opt/driga-dev": "-dev", "/opt/drigad-dev": "-dev", "/opt/driga.exe": "", "/opt/service.test": ""} {
-		if got := variantOf(exe); got != want {
-			t.Errorf("variantOf(%q) = %q, want %q", exe, got, want)
-		}
-	}
 	if !IsDaemon("/opt/drigad-dev") || !IsDaemon("drigad.exe") || IsDaemon("/opt/driga") || IsDaemon("/opt/driga-dev") {
 		t.Error("IsDaemon")
 	}
+}
+
+// releaseBuild makes this test binary a release build, as .goreleaser.yaml
+// marks published ones, for the test's duration.
+func releaseBuild(t *testing.T) {
+	t.Helper()
+	t.Cleanup(variant.SetForTest(""))
 }

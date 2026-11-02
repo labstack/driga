@@ -6,8 +6,11 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"time"
+
+	"github.com/labstack/driga/internal/variant"
 )
 
 // Config is the effective configuration (§12 of the design).
@@ -116,6 +119,10 @@ func configPath() string {
 	if p := os.Getenv("DRIGA_CONFIG"); p != "" {
 		return p
 	}
+	return defaultConfigPath()
+}
+
+func defaultConfigPath() string {
 	if runtime.GOOS == "windows" {
 		return filepath.Join(windowsAppDir("APPDATA", "Roaming"), "driga", "config.toml")
 	}
@@ -138,18 +145,26 @@ func dataDirForOS(goos string) string {
 	return defaultDataDirForOS(goos)
 }
 
-func defaultDataDirForOS(goos string) string {
+func defaultDataDirForOS(goos string) string { return dataDirNamed(goos, dataName()) }
+
+func dataDirNamed(goos, name string) string {
 	if goos == "windows" {
-		return filepath.Join(windowsAppDir("LOCALAPPDATA", "Local"), "driga")
+		return filepath.Join(windowsAppDir("LOCALAPPDATA", "Local"), name)
 	}
 	if goos == "linux" {
 		if p := os.Getenv("XDG_DATA_HOME"); filepath.IsAbs(p) {
-			return filepath.Join(p, "driga")
+			return filepath.Join(p, name)
 		}
-		return filepath.Join(home(), ".local", "share", "driga")
+		return filepath.Join(home(), ".local", "share", name)
 	}
-	return filepath.Join(home(), "Library", "Application Support", "driga")
+	return filepath.Join(home(), "Library", "Application Support", name)
 }
+
+// dataName names the default data and spool directories: "driga" for a
+// release and "driga-dev" for a development build, so a development service
+// never shares the release's database or spool. The configuration file is
+// shared.
+func dataName() string { return "driga" + variant.Suffix() }
 
 // SpoolDir holds hook/ack event files (env DRIGA_SPOOL_DIR overrides).
 func SpoolDir() string { return absolutePath(spoolDirForOS(runtime.GOOS)) }
@@ -158,16 +173,42 @@ func spoolDirForOS(goos string) string {
 	if p := os.Getenv("DRIGA_SPOOL_DIR"); p != "" {
 		return p
 	}
-	if goos == "windows" {
-		return filepath.Join(windowsAppDir("LOCALAPPDATA", "Local"), "driga", "events")
-	}
+	return spoolDirNamed(goos, dataName())
+}
+
+func spoolDirNamed(goos, name string) string {
 	if goos == "linux" {
 		if p := os.Getenv("XDG_STATE_HOME"); filepath.IsAbs(p) {
-			return filepath.Join(p, "driga", "events")
+			return filepath.Join(p, name, "events")
 		}
-		return filepath.Join(home(), ".local", "state", "driga", "events")
+		return filepath.Join(home(), ".local", "state", name, "events")
 	}
-	return filepath.Join(home(), "Library", "Application Support", "driga", "events")
+	return filepath.Join(dataDirNamed(goos, name), "events")
+}
+
+// StateDirs lists every file and directory where any Driga build keeps
+// state: the configuration, this process's data and spool directories with
+// their overrides, and the default data and state directories of a release,
+// a development build and every driga-<name> variant found beside them.
+// Commands Driga runs for an agent are denied all of them.
+func StateDirs() []string { return stateDirsForOS(runtime.GOOS) }
+
+func stateDirsForOS(goos string) []string {
+	dirs := []string{absolutePath(configPath()), absolutePath(filepath.Dir(defaultConfigPath())), absolutePath(dataDirForOS(goos)), absolutePath(spoolDirForOS(goos))}
+	names := []string{"driga", "driga-dev"}
+	for _, root := range []string{filepath.Dir(dataDirNamed(goos, "driga")), filepath.Dir(filepath.Dir(spoolDirNamed(goos, "driga")))} {
+		matches, _ := filepath.Glob(filepath.Join(root, "driga-*"))
+		for _, match := range matches {
+			names = append(names, filepath.Base(match))
+		}
+	}
+	for _, name := range names {
+		// The spool's parent is the data directory, or on Linux the state
+		// directory that also holds the service log.
+		dirs = append(dirs, absolutePath(dataDirNamed(goos, name)), absolutePath(filepath.Dir(spoolDirNamed(goos, name))))
+	}
+	slices.Sort(dirs)
+	return slices.Compact(dirs)
 }
 
 func windowsAppDir(env, leaf string) string {

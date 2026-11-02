@@ -28,9 +28,17 @@ type ServiceCmd struct {
 	Logs      ServiceLogsCmd      `cmd:"" help:"Print the Driga service's log."`
 	Uninstall ServiceUninstallCmd `cmd:"" help:"Uninstall the Driga service."`
 }
-type ServiceInstallCmd struct{}
 
-func (ServiceInstallCmd) Run(g *Globals) error { return (serviceControl{Action: "install"}).Run(g) }
+// ServiceInstallCmd installs the service. On macOS an installed service
+// keeps the environment it records (the app's login shell) unless
+// --refresh-env records this shell's instead.
+type ServiceInstallCmd struct {
+	RefreshEnv bool `name:"refresh-env" help:"macOS: record this shell's PATH and Driga variables in the service instead of keeping the ones it records."`
+}
+
+func (c ServiceInstallCmd) Run(g *Globals) error {
+	return (serviceControl{Action: "install", RefreshEnv: c.RefreshEnv}).Run(g)
+}
 
 type ServiceStartCmd struct{}
 
@@ -61,8 +69,9 @@ type ServiceUninstallCmd struct{}
 func (ServiceUninstallCmd) Run(g *Globals) error { return (serviceControl{Action: "uninstall"}).Run(g) }
 
 type serviceControl struct {
-	Action string
-	Follow bool
+	Action     string
+	Follow     bool
+	RefreshEnv bool
 }
 
 // Run controls the login service or prints the last 50 lines of its log.
@@ -93,7 +102,12 @@ func (c serviceControl) Run(g *Globals) error {
 	if runtime.GOOS == "darwin" {
 		serviceBin = service.ExecutablePath(serviceBin)
 	}
-	lifecycle := service.NewLifecycle(service.LifecycleOptions{Executable: serviceBin, DataDir: config.DataDir(), Output: commandOutput(g)})
+	if c.Action == "install" {
+		if err := service.CheckDaemon(serviceBin); err != nil {
+			return err
+		}
+	}
+	lifecycle := service.NewLifecycle(service.LifecycleOptions{Executable: serviceBin, DataDir: config.DataDir(), Output: commandOutput(g), RefreshEnvironment: c.RefreshEnv})
 	if c.Action == "status" {
 		st := lifecycle.Observe()
 		if st.Err != nil {

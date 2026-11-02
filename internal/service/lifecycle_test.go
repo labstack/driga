@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	ks "github.com/kardianos/service"
 	"github.com/labstack/driga/internal/collector"
@@ -21,6 +22,7 @@ type testLifecycleHost struct {
 	platform, binaryVersion, fail string
 	installed, legacy, held, live bool
 	registrationRevision          int
+	probes                        int
 	process                       collector.Owner
 	output                        io.Writer
 }
@@ -89,6 +91,7 @@ func (c testController) Restart() error {
 }
 func (c testController) Uninstall() error { c.h.installed = false; return c.Stop() }
 func (c testController) Status() (ks.Status, error) {
+	c.h.probes++
 	if c.h.fail == "probe" {
 		return ks.StatusUnknown, lifecycleFailure
 	}
@@ -250,5 +253,48 @@ func TestLifecycleStatusDiagnostics(t *testing.T) {
 	d.RestartPending = true
 	if st := base.WithDiagnostics(d); !st.RestartPending || st.Err != nil {
 		t.Fatal("app restart did not take precedence")
+	}
+}
+
+// The app polls Observe often; with a RegistrationTTL the service manager is
+// asked again only when the lock and process change or the answer ages out.
+func TestLifecycleObserveReusesRegistration(t *testing.T) {
+	l, h := testLifecycle("darwin")
+	l.opts.RegistrationTTL = time.Hour
+	h.installed, h.live, h.held = true, true, true
+	for range 3 {
+		if st := l.Observe(); !st.Running || st.Registration != "running" {
+			t.Fatalf("%+v", st)
+		}
+	}
+	if h.probes != 1 {
+		t.Fatalf("probes = %d, want 1", h.probes)
+	}
+	h.live, h.held = false, false
+	if st := l.Observe(); st.Running || st.Registration != "stopped" || h.probes != 2 {
+		t.Fatalf("a stopped service reused the old registration: %+v, probes = %d", st, h.probes)
+	}
+	l.opts.RegistrationTTL = 0
+	l.Observe()
+	l.Observe()
+	if h.probes != 4 {
+		t.Fatalf("without a TTL, probes = %d, want 4", h.probes)
+	}
+}
+
+// After an explicit action the tray shows the service manager's new answer
+// at once, even while the lock and process tell the same story.
+func TestLifecycleControlClearsRegistrationCache(t *testing.T) {
+	l, h := testLifecycle("darwin")
+	l.opts.RegistrationTTL = time.Hour
+	h.installed, h.live, h.held = true, true, true
+	if st := l.Observe(); st.Registration != "running" {
+		t.Fatalf("%+v", st)
+	}
+	if err := l.Control(context.Background(), "install"); err != nil {
+		t.Fatal(err)
+	}
+	if st := l.Observe(); st.Registration != "running" || h.probes != 2 {
+		t.Fatalf("Observe reused the registration from before Control: %+v, probes = %d", st, h.probes)
 	}
 }

@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/labstack/driga/internal/config"
+	"github.com/labstack/driga/internal/variant"
 )
 
 func TestDefaults(t *testing.T) {
@@ -80,6 +81,7 @@ func TestLoadRejectsBadCaptureText(t *testing.T) {
 }
 
 func TestPathsHonorEnv(t *testing.T) {
+	t.Cleanup(variant.SetForTest("")) // a release build
 	if runtime.GOOS == "windows" {
 		t.Skip("Unix path or action contract; Windows phase 1 has dedicated watch/refusal tests")
 	}

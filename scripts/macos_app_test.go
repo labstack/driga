@@ -2,7 +2,6 @@ package scripts_test
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -227,8 +226,11 @@ func TestMacOSReleaseVerificationOrder(t *testing.T) {
 	}
 }
 
-// Execute the generated Ruby block with a fake cask DSL. No installation or
-// launchctl is reachable; only an existing service should trigger migration.
+// Execute the generated Ruby block with a fake cask DSL under a temporary
+// HOME. No installation or launchctl is reachable. Only an existing service,
+// or the copy the same brew process's uninstall kept of it during an upgrade,
+// should trigger migration; an ordinary uninstall leaves no copy behind, and
+// a copy from another brew process is never restored.
 func TestMacOSCaskRepairsExistingServiceOnly(t *testing.T) {
 	if _, err := exec.LookPath("ruby"); err != nil {
 		t.Skip("ruby unavailable")
@@ -244,37 +246,87 @@ func TestMacOSCaskRepairsExistingServiceOnly(t *testing.T) {
 	if len(config.Casks) != 1 {
 		t.Fatal("expected one cask")
 	}
-	for _, existing := range []bool{false, true} {
-		setup := `
+	setup := `
+require "fileutils"
 $calls = []
+$blocks = {}
+$uninstall = nil
+$zap = nil
 def app(name); end
 def appdir; "/Applications"; end
-def postflight; yield; end
-def system_command(name, **opts)
- $calls << [name, opts]
- Struct.new(:stdout).new('{"EnvironmentVariables":{"DRIGA_DATA_DIR":"/Users/me/Library/Application Support/driga","PATH":"/custom/bin:/usr/bin"}}')
+def postflight(&block); $blocks[:postflight] = block; end
+def uninstall_preflight(&block); $blocks[:uninstall_preflight] = block; end
+def uninstall(**directives); $uninstall = directives; end
+def zap(**directives); $zap = directives; end
+def system_command(name, **opts); $calls << [name, opts]; end
+`
+	check := `
+plist = File.expand_path("~/Library/LaunchAgents/run.driga.service.plist")
+caches = File.expand_path("~/Library/Caches/run.driga")
+kept = File.join(caches, "run.driga.service.#{Process.pid}.plist")
+install = [["/Applications/Driga.app/Contents/MacOS/driga", {args: ["service", "install"], must_succeed: true}]]
+raise "uninstall does not remove the service: #{$uninstall}" unless $uninstall[:launchctl] == "run.driga.service"
+raise "uninstall does not stop the app: #{$uninstall}" unless $uninstall[:signal] == [["TERM", "run.driga"]]
+raise "zap keeps user data: #{$zap}" unless $zap[:trash].include?("~/Library/Application Support/driga") && $zap[:trash].include?("~/Library/Logs/driga")
+def old_uninstall(plist)
+  # The old version's uninstall: its preflight keeps the plist, then
+  # uninstall launchctl removes the agent and its plist.
+  $blocks.fetch(:uninstall_preflight).call
+  File.delete(plist)
 end
-class File
- def self.exist?(path)
-  raise "wrong migration guard" unless path.end_with?("/Library/LaunchAgents/run.driga.service.plist")
-  ENV["EXISTING_SERVICE"] == "true"
- end
+case ENV["CASK_SCENARIO"]
+when "fresh"
+  $blocks.fetch(:postflight).call
+  raise "fresh install started service: #{$calls}" unless $calls.empty?
+when "existing"
+  FileUtils.mkdir_p(File.dirname(plist))
+  File.write(plist, "<plist/>")
+  $blocks.fetch(:postflight).call
+  raise "existing service not migrated: #{$calls}" unless $calls == install
+when "slow-upgrade"
+  FileUtils.mkdir_p(File.dirname(plist))
+  File.write(plist, "<plist/>")
+  old_uninstall(plist)
+  raise "plist not kept" unless File.read(kept) == "<plist/>" && (File.stat(kept).mode & 0o777) == 0o600
+  # However long the download took, the same brew process restores it.
+  File.utime(Time.now - 86400, Time.now - 86400, kept)
+  $blocks.fetch(:postflight).call
+  raise "upgrade did not restore the plist" unless File.read(plist) == "<plist/>" && (File.stat(plist).mode & 0o777) == 0o600
+  raise "upgrade did not reinstall the service: #{$calls}" unless $calls == install
+  raise "kept copy left behind" unless Dir.glob(File.join(caches, "*")).empty?
+when "uninstall"
+  FileUtils.mkdir_p(File.dirname(plist))
+  File.write(plist, "<plist/>")
+  old_uninstall(plist)
+  # brew exits here; at_exit deletes the copy.
+when "later-install"
+  $blocks.fetch(:postflight).call
+  raise "a past uninstall's service came back: #{$calls}" unless $calls.empty? && !File.exist?(plist)
+when "foreign-copy"
+  FileUtils.mkdir_p(caches)
+  File.write(File.join(caches, "run.driga.service.1.plist"), "<plist/>")
+  $blocks.fetch(:postflight).call
+  raise "another brew process's copy restored: #{$calls}" unless $calls.empty? && !File.exist?(plist)
+  raise "foreign copy left behind" unless Dir.glob(File.join(caches, "*")).empty?
 end
 `
-		check := `
-if ENV["EXISTING_SERVICE"] == "true"
- raise "plist not read" unless $calls.length == 2 && $calls[0] == ["/usr/bin/plutil", {args: ["-convert", "json", "-o", "-", File.expand_path("~/Library/LaunchAgents/run.driga.service.plist")], must_succeed: true}]
- # env: would reach the service as "Application\\ Support"; /usr/bin/env args do not.
- expected = ["/usr/bin/env", {args: ["DRIGA_DATA_DIR=/Users/me/Library/Application Support/driga", "PATH=/custom/bin:/usr/bin", "/Applications/Driga.app/Contents/MacOS/driga", "service", "install"], must_succeed: true}]
- raise "environment or command changed: #{$calls}" unless $calls[1] == expected
-else
- raise "fresh install started service" unless $calls.empty?
-end
-`
+	run := func(home, scenario string) {
+		t.Helper()
 		cmd := exec.CommandContext(t.Context(), "ruby", "-e", setup+config.Casks[0].Block+check)
-		cmd.Env = append(releaseTestEnv(t), "EXISTING_SERVICE="+fmt.Sprint(existing))
+		cmd.Env = append(releaseTestEnv(t), "HOME="+home, "CASK_SCENARIO="+scenario)
 		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("existing=%v: %v: %s", existing, err, out)
+			t.Fatalf("%s: %v: %s", scenario, err, out)
 		}
 	}
+	for _, scenario := range []string{"fresh", "existing", "slow-upgrade", "foreign-copy"} {
+		run(t.TempDir(), scenario)
+	}
+	// A recent ordinary uninstall: the copy goes when brew exits, and a
+	// later install does not bring the service back.
+	home := t.TempDir()
+	run(home, "uninstall")
+	if matches, _ := filepath.Glob(filepath.Join(home, "Library", "Caches", "run.driga", "*")); len(matches) != 0 {
+		t.Fatalf("uninstall left a copy: %v", matches)
+	}
+	run(home, "later-install")
 }

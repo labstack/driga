@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"time"
 
 	ks "github.com/kardianos/service"
 	"github.com/labstack/driga/internal/collector"
@@ -55,6 +56,14 @@ type LifecycleOptions struct {
 	Home, AccountHome                      string
 	Environment                            []string
 	Output                                 io.Writer
+	// RefreshEnvironment records Environment, or this process's environment,
+	// in an installed macOS service instead of keeping the one it records.
+	// The app sets it: its login-shell environment is the one source.
+	RefreshEnvironment bool
+	// RegistrationTTL lets Observe reuse the service manager's last answer
+	// for this long while the service's lock and process are unchanged. Zero
+	// asks it every time.
+	RegistrationTTL time.Duration
 }
 
 // lifecycleHost has two adapters: the local OS and a local registration/process
@@ -75,6 +84,10 @@ type Lifecycle struct {
 	host lifecycleHost
 	mu   sync.Mutex
 	err  error
+	// The last registration Observe read, when, and whether the service ran.
+	reg        registration
+	regAt      time.Time
+	regRunning bool
 }
 
 func NewLifecycle(opts LifecycleOptions) *Lifecycle {
@@ -95,6 +108,7 @@ func (l *Lifecycle) Ensure(ctx context.Context) (err error) {
 		l.mu.Lock()
 		defer l.mu.Unlock()
 		l.err = err
+		l.regAt = time.Time{}
 		if errors.Is(err, ErrIsolatedHome) {
 			l.err = nil
 		}
@@ -128,11 +142,19 @@ func (l *Lifecycle) Ensure(ctx context.Context) (err error) {
 }
 
 // Control implements explicit service administration, shared with the CLI.
-// A failed install leaves the previous collector available.
+// On macOS a failed install leaves the previous definition loaded: the new
+// one replaces it only once written, and launchd refusing it restores the
+// previous one. Every action makes the next Observe ask the service manager
+// again.
 func (l *Lifecycle) Control(ctx context.Context, action string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	defer func() {
+		l.mu.Lock()
+		l.regAt = time.Time{}
+		l.mu.Unlock()
+	}()
 	c, err := l.host.controller()
 	if err != nil {
 		return fmt.Errorf("initialize service controller: %w", err)
@@ -171,37 +193,65 @@ func (l *Lifecycle) Control(ctx context.Context, action string) error {
 }
 
 func (l *Lifecycle) Observe() Status {
-	s := Status{Registration: "unknown"}
+	s := Status{}
 	s.Owner, s.LockHeld, s.Err = l.host.owner()
 	s.Alive = l.host.alive()
 	s.Running = s.LockHeld && s.Alive
-	c, err := l.host.controller()
-	if err == nil {
-		var status ks.Status
-		status, err = c.Status()
-		s.Installed = err == nil
-		switch status {
-		case ks.StatusRunning:
-			s.Registration = "running"
-		case ks.StatusStopped:
-			s.Registration = "stopped"
-		}
-		if task, ok := c.(interface{ TaskState() (string, error) }); ok {
-			s.TaskState, err = task.TaskState()
-		}
-	}
-	if errors.Is(err, ks.ErrNotInstalled) {
-		s.Registration, err = "not installed", nil
-	}
+	r := l.registration(s.Running)
+	s.Installed, s.Registration, s.TaskState = r.installed, r.registration, r.taskState
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if s.Err == nil {
 		s.Err = l.err
 	}
 	if s.Err == nil {
-		s.Err = err
+		s.Err = r.err
 	}
 	return s
+}
+
+// registration is what the service manager reports, which costs a process
+// (launchctl, systemctl) or a Task Scheduler query. Within RegistrationTTL
+// Observe reuses the last answer while the service's lock and process tell
+// the same story.
+type registration struct {
+	installed               bool
+	registration, taskState string
+	err                     error
+}
+
+func (l *Lifecycle) registration(running bool) registration {
+	l.mu.Lock()
+	if l.opts.RegistrationTTL > 0 && !l.regAt.IsZero() && l.regRunning == running && time.Since(l.regAt) < l.opts.RegistrationTTL {
+		r := l.reg
+		l.mu.Unlock()
+		return r
+	}
+	l.mu.Unlock()
+	r := registration{registration: "unknown"}
+	c, err := l.host.controller()
+	if err == nil {
+		var status ks.Status
+		status, err = c.Status()
+		r.installed = err == nil
+		switch status {
+		case ks.StatusRunning:
+			r.registration = "running"
+		case ks.StatusStopped:
+			r.registration = "stopped"
+		}
+		if task, ok := c.(interface{ TaskState() (string, error) }); ok {
+			r.taskState, err = task.TaskState()
+		}
+	}
+	if errors.Is(err, ks.ErrNotInstalled) {
+		r.registration, err = "not installed", nil
+	}
+	r.err = err
+	l.mu.Lock()
+	l.reg, l.regAt, l.regRunning = r, time.Now(), running
+	l.mu.Unlock()
+	return r
 }
 
 func isolatedHome(home, account string) bool {

@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/labstack/driga/internal/variant"
 )
 
 func TestStrictConfiguration(t *testing.T) {
@@ -77,6 +79,7 @@ func TestUnknownEnvironmentEvenWithoutFile(t *testing.T) {
 }
 
 func TestConfigAndSpoolXDGPaths(t *testing.T) {
+	t.Cleanup(variant.SetForTest("")) // a release build
 	if runtime.GOOS == "windows" {
 		t.Skip("Unix path or action contract; Windows phase 1 has dedicated watch/refusal tests")
 	}

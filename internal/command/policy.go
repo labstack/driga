@@ -2,6 +2,7 @@ package command
 
 import (
 	"crypto/sha256"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -11,33 +12,157 @@ import (
 	"github.com/labstack/driga/internal/config"
 )
 
-// canonical resolves existing ancestors too, so a missing leaf cannot hide a
-// symlink escape. Preparation never creates a requested path.
+// canonical resolves p the way the kernel does: component by component from
+// the root, splicing each symlink's target in relative to the already
+// resolved prefix, including a dangling symlink and one whose target does
+// not exist yet. A missing component keeps the rest of the path literal, so
+// a missing leaf cannot hide a symlink escape. Preparation never creates a
+// requested path.
 func canonical(p string) (string, error) {
-	p, err := filepath.Abs(p)
-	if err != nil {
-		return "", err
+	// filepath.Abs would clean "link/.." lexically; the kernel does not.
+	if runtime.GOOS == "windows" {
+		abs, err := filepath.Abs(p)
+		if err != nil {
+			return "", err
+		}
+		p = abs
+	} else if !filepath.IsAbs(p) {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return "", err
+		}
+		p = cwd + string(filepath.Separator) + p
 	}
+	// An existing path is the OS's to resolve; the walk below covers a
+	// missing tail and dangling links.
+	if r, err := filepath.EvalSymlinks(p); err == nil {
+		return r, nil
+	}
+	const maxHops = 40
+	windows := runtime.GOOS == "windows"
+	sep := string(filepath.Separator)
+	volume := filepath.VolumeName(p)
+	resolved := volume + sep
+	rest := splitPath(p[len(volume):])
+	for hops := 0; len(rest) > 0; {
+		name := rest[0]
+		rest = rest[1:]
+		switch name {
+		case ".":
+			continue
+		case "..":
+			resolved = filepath.Dir(resolved)
+			continue
+		}
+		next := filepath.Join(resolved, name)
+		info, err := os.Lstat(next)
+		if os.IsNotExist(err) {
+			resolved = filepath.Join(append([]string{next}, rest...)...)
+			break
+		}
+		if err != nil {
+			return "", err
+		}
+		if info.Mode()&os.ModeSymlink == 0 {
+			resolved = next
+			continue
+		}
+		if hops++; hops > maxHops {
+			return "", &os.PathError{Op: "canonical", Path: p, Err: errors.New("too many levels of symbolic links")}
+		}
+		target, err := os.Readlink(next)
+		if err != nil {
+			return "", err
+		}
+		// A relative target is relative to resolved, the link's own
+		// resolved directory.
+		base, parts, err := linkTarget(windows, resolved, target)
+		if err != nil {
+			return "", &os.PathError{Op: "canonical", Path: next, Err: err}
+		}
+		resolved, rest = base, append(parts, rest...)
+	}
+	// What exists is resolved once more by the OS, for Windows junctions and
+	// short names the walk above leaves alone.
 	var tail []string
-	for {
-		q, e := filepath.EvalSymlinks(p)
-		if e == nil {
+	for q := resolved; ; {
+		if r, err := filepath.EvalSymlinks(q); err == nil {
 			for i := len(tail) - 1; i >= 0; i-- {
-				q = filepath.Join(q, tail[i])
+				r = filepath.Join(r, tail[i])
 			}
-			return q, nil
+			return r, nil
+		} else if !os.IsNotExist(err) {
+			return "", err
 		}
-		if !os.IsNotExist(e) {
-			return "", e
+		parent := filepath.Dir(q)
+		if parent == q {
+			return resolved, nil
 		}
-		parent := filepath.Dir(p)
-		if parent == p {
-			return "", e
-		}
-		tail = append(tail, filepath.Base(p))
-		p = parent
+		tail = append(tail, filepath.Base(q))
+		q = parent
 	}
 }
+
+// errUnresolvableLink is a symlink whose target canonical does not resolve
+// by its own rules: on Windows a device, volume-GUID, \\?\, \\.\, UNC or
+// drive-relative target. A path through one is refused, never allowed.
+var errUnresolvableLink = errors.New("symlink target cannot be resolved safely")
+
+// linkTarget is where a symlink in the resolved directory dir points: the
+// directory its target starts from and the target's components, by the
+// rules of Unix or Windows whatever the host. On Windows it accepts only a
+// relative target, one rooted without a volume (\x, at dir's volume) and a
+// drive-absolute one (C:\x); everything else fails closed.
+func linkTarget(windows bool, dir, target string) (string, []string, error) {
+	if !windows {
+		if strings.HasPrefix(target, "/") {
+			return "/", splitPath(target), nil
+		}
+		return dir, splitPath(target), nil
+	}
+	sep := func(c byte) bool { return c == '\\' || c == '/' }
+	split := func(p string) []string {
+		return strings.FieldsFunc(p, func(r rune) bool { return r == '\\' || r == '/' })
+	}
+	switch {
+	case len(target) >= 2 && sep(target[0]) && sep(target[1]):
+		// UNC, \\?\ and \\.\ name devices and volumes by rules this walk
+		// does not model.
+		return "", nil, errUnresolvableLink
+	case target != "" && sep(target[0]):
+		volume := windowsDrive(dir)
+		if volume == "" {
+			return "", nil, errUnresolvableLink
+		}
+		return volume + `\`, split(target), nil
+	case len(target) >= 2 && target[1] == ':':
+		if windowsDrive(target) == "" || len(target) < 3 || !sep(target[2]) {
+			return "", nil, errUnresolvableLink
+		}
+		return target[:2] + `\`, split(target[2:]), nil
+	case strings.Contains(target, ":"):
+		// Alternate data streams and other colon forms.
+		return "", nil, errUnresolvableLink
+	}
+	return dir, split(target), nil
+}
+
+// windowsDrive is the "C:" a Windows path starts with, or "".
+func windowsDrive(p string) string {
+	if len(p) >= 2 && p[1] == ':' && 'a' <= p[0]|0x20 && p[0]|0x20 <= 'z' {
+		return p[:2]
+	}
+	return ""
+}
+
+func splitPath(p string) []string {
+	var parts []string
+	for _, part := range strings.FieldsFunc(p, func(r rune) bool { return r == filepath.Separator || r == '/' }) {
+		parts = append(parts, part)
+	}
+	return parts
+}
+
 func within(p, root string) bool {
 	if root == "" {
 		return false
@@ -61,14 +186,23 @@ func normalizeScope(s Scope) (Scope, error) {
 		}
 	}
 	s.Denied = append([]string(nil), s.Denied...)
-	s.Denied = append(s.Denied, config.Path(), config.DataDir(), config.DefaultDataDir(), config.SpoolDir())
+	// Every Driga build's configuration, data, spool and state, release and
+	// development alike, overrides included.
+	s.Denied = append(s.Denied, config.StateDirs()...)
 	if h, e := os.UserHomeDir(); e == nil {
-		for _, p := range []string{".claude", ".codex", ".ssh", ".aws", ".azure", ".kube", ".docker", ".config/gh", ".config/azure", ".config/gcloud", ".netrc", ".npmrc", ".git-credentials", ".config/driga", ".local/share/driga", "Library/Keychains", "Library/Application Support/driga"} {
+		for _, p := range []string{".claude", ".codex", ".ssh", ".aws", ".azure", ".kube", ".docker", ".config/gh", ".config/azure", ".config/gcloud", ".netrc", ".npmrc", ".git-credentials", "Library/Keychains"} {
 			s.Denied = append(s.Denied, filepath.Join(h, p))
 		}
 		// Claude also uses sibling files and directories (e.g. .claude.json).
 		matches, _ := filepath.Glob(filepath.Join(h, ".claude*"))
 		s.Denied = append(s.Denied, matches...)
+		// Driga's default roots under HOME, whatever XDG variables this
+		// process has, for every variant: driga, driga-dev, driga-<name>.
+		for _, root := range []string{".config", ".local/share", ".local/state", "Library/Application Support", "Library/Logs"} {
+			s.Denied = append(s.Denied, filepath.Join(h, root, "driga"), filepath.Join(h, root, "driga-dev"))
+			matches, _ := filepath.Glob(filepath.Join(h, root, "driga-*"))
+			s.Denied = append(s.Denied, matches...)
+		}
 	}
 	if filepath.Separator == '/' {
 		s.Denied = append(s.Denied, "/Library/Keychains")
@@ -207,6 +341,9 @@ func classify(p Parsed, scope Scope, depth int) (Policy, error) {
 				path = filepath.Join(p.Request.Cwd, path)
 			}
 			q, e := canonical(path)
+			if errors.Is(e, errUnresolvableLink) {
+				return Policy{Class: Never, Reason: "A path through an unresolvable symlink is refused"}, nil
+			}
 			if e != nil {
 				allRead = false
 				continue
