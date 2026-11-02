@@ -14,7 +14,13 @@ import (
 
 type localLifecycle struct{ opts LifecycleOptions }
 
-func (h localLifecycle) controller() (Controller, error) { return New(h.opts.Executable) }
+func (h localLifecycle) controller() (Controller, error) {
+	c, err := New(h.opts.Executable)
+	if r, ok := c.(interface{ refreshEnvironment() }); ok && h.opts.RefreshEnvironment {
+		r.refreshEnvironment()
+	}
+	return c, err
+}
 func (h localLifecycle) owner() (collector.Owner, bool, error) {
 	return collector.ReadOwner(h.opts.DataDir)
 }
@@ -30,7 +36,12 @@ func (h localLifecycle) removeLegacy() error { return RemoveLegacy() }
 func (h localLifecycle) run(ctx context.Context, action string) error {
 	ctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, h.opts.Executable, "service", action)
+	args := []string{"service", action}
+	if action == "install" {
+		// The app's login-shell environment is the one the service records.
+		args = append(args, "--refresh-env")
+	}
+	cmd := exec.CommandContext(ctx, h.opts.Executable, args...)
 	cmd.Env = h.opts.Environment
 	out, err := platform.ChildOutput(cmd, true)
 	if err != nil {

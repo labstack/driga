@@ -31,3 +31,16 @@ func TestServiceRunOwnerFlag(t *testing.T) {
 		t.Fatal("owner flag appears in help")
 	}
 }
+
+func TestServiceInstallRefreshEnvFlag(t *testing.T) {
+	for args, want := range map[string]bool{"": false, "--refresh-env": true} {
+		argv := []string{"service", "install"}
+		if args != "" {
+			argv = append(argv, args)
+		}
+		root, _, err := parseCommand(t, argv...)
+		if err != nil || root.Service.Install.RefreshEnv != want {
+			t.Fatalf("%v: RefreshEnv=%t, err=%v", argv, root.Service.Install.RefreshEnv, err)
+		}
+	}
+}

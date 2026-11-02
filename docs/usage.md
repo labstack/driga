@@ -375,11 +375,18 @@ The app's first launch installs the service, and every launch makes sure it
 runs and restarts it when it runs another version, as after an upgrade. It
 installs the service with the PATH and other variables of your login shell, so
 agent discovery and terminal jumps work when Driga is opened from Finder or at
-login. Every install compares the definition it would write, including that
-environment, with the one installed, and replaces it when they differ, so a
-changed login-shell PATH reaches the service at the next app launch. When the
-app cannot read the login shell, it keeps the environment the service already
-has. On Linux and Windows an existing service keeps its environment until
+login. On macOS that login-shell environment is the one the service records:
+the app installs with `--refresh-env`, so a changed login-shell PATH reaches the
+service at the next app launch, and the service restarts only when the
+definition changes (its log names the changed variables, never their values).
+`driga service install` from a terminal keeps the recorded environment; pass
+`--refresh-env` to record the terminal's instead. When the app cannot read the
+login shell, it keeps the environment the service already has. Replacing a
+definition writes the new plist first, boots the old job out and waits until
+launchd has let it go, then loads the new one; when launchd refuses it, the
+previous plist is restored and loaded again. Without a desktop session (over
+SSH before anyone logs in), `driga service uninstall` still removes the plist,
+and start and status say to log in to the desktop session. On Linux and Windows an existing service keeps its environment until
 `driga service uninstall` and `driga service install`. Quitting the app leaves
 the service running. On a machine without the app, or to install it yourself,
 run `driga service install`; `driga init` offers it too. Installing removes the `run.driga.collector` agent, systemd unit

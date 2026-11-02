@@ -56,6 +56,10 @@ type LifecycleOptions struct {
 	Home, AccountHome                      string
 	Environment                            []string
 	Output                                 io.Writer
+	// RefreshEnvironment records Environment, or this process's environment,
+	// in an installed macOS service instead of keeping the one it records.
+	// The app sets it: its login-shell environment is the one source.
+	RefreshEnvironment bool
 	// RegistrationTTL lets Observe reuse the service manager's last answer
 	// for this long while the service's lock and process are unchanged. Zero
 	// asks it every time.
