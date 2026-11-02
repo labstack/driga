@@ -1,6 +1,7 @@
 package command
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -127,7 +128,8 @@ func TestCanonicalFollowsSymlinksLikeTheKernel(t *testing.T) {
 	}
 }
 
-// Symlink targets are rooted by the platform's rules, whatever the host.
+// Symlink targets are rooted by the platform's rules, whatever the host,
+// and a Windows target this walk does not model fails closed.
 func TestLinkTargetRooting(t *testing.T) {
 	for _, tc := range []struct {
 		windows          bool
@@ -140,16 +142,22 @@ func TestLinkTargetRooting(t *testing.T) {
 		{true, `C:\Users\a`, `\Users\x\AppData\Local\driga`, `C:\`, "Users/x/AppData/Local/driga"},
 		{true, `D:\work`, `/Users/x/AppData/Local/driga-dev`, `D:\`, "Users/x/AppData/Local/driga-dev"},
 		{true, `C:\Users\a`, `D:\driga`, `D:\`, "driga"},
-		{true, `C:\Users\a`, `C:driga`, `C:\Users\a`, "driga"},
-		{true, `C:\Users\a`, `D:driga`, `D:\`, "driga"},
-		{true, `C:\Users\a`, `\\server\share\driga`, `\\server\share\`, "driga"},
-		{true, `\\server\share\a`, `\driga`, `\\server\share\`, "driga"},
-		{true, `C:\Users\a`, `\\?\C:\Users\x\driga`, `C:\`, "Users/x/driga"},
-		{true, `C:\Users\a`, `\\?\UNC\server\share\driga`, `\\server\share\`, "driga"},
 	} {
-		base, parts := linkTarget(tc.windows, tc.dir, tc.target)
-		if base != tc.base || strings.Join(parts, "/") != tc.components {
-			t.Errorf("linkTarget(%t, %q, %q) = %q, %q; want %q, %q", tc.windows, tc.dir, tc.target, base, parts, tc.base, tc.components)
+		base, parts, err := linkTarget(tc.windows, tc.dir, tc.target)
+		if err != nil || base != tc.base || strings.Join(parts, "/") != tc.components {
+			t.Errorf("linkTarget(%t, %q, %q) = %q, %q, %v; want %q, %q", tc.windows, tc.dir, tc.target, base, parts, err, tc.base, tc.components)
 		}
+	}
+	for _, target := range []string{
+		`C:driga`, `\\server\share\driga`, `\\?\C:\Users\x\driga`, `\\?\UNC\server\share\driga`,
+		`\\?\Volume{0b1c2d3e-0000-0000-0000-000000000000}\driga`, `\\?\GLOBALROOT\Device\HarddiskVolume1\driga`,
+		`\\.\C:\driga`, `\\.\pipe\driga`, `//server/share/driga`, `driga:stream`,
+	} {
+		if _, _, err := linkTarget(true, `C:\Users\a`, target); !errors.Is(err, errUnresolvableLink) {
+			t.Errorf("linkTarget(%q) = %v; want it to fail closed", target, err)
+		}
+	}
+	if _, _, err := linkTarget(true, `\\server\share\a`, `\driga`); !errors.Is(err, errUnresolvableLink) {
+		t.Errorf("a rooted target on a UNC share = %v; want it to fail closed", err)
 	}
 }
