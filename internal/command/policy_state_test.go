@@ -74,3 +74,54 @@ func TestPolicyDeniesEveryDrigaVariantsState(t *testing.T) {
 		t.Error("the project or a sibling of an override is denied")
 	}
 }
+
+// canonical resolves symlinks as the kernel does, so no chain of links
+// reaches a denied directory under another name.
+func TestCanonicalFollowsSymlinksLikeTheKernel(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix symlinks")
+	}
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	denied := filepath.Join(root, "home", ".local", "share", "driga-dev")
+	deep := filepath.Join(root, "real", "a")
+	for _, dir := range []string{denied, deep} {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	symlink := func(target, link string) {
+		t.Helper()
+		if err := os.Symlink(target, link); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// A relative link inside a symlinked parent resolves against the
+	// parent's target, not against the alias.
+	symlink("../../home/.local/share/driga-dev", filepath.Join(deep, "link"))
+	symlink(deep, filepath.Join(root, "alias"))
+	// An absolute link, and a dangling one into a directory not yet made.
+	symlink(denied, filepath.Join(root, "absolute"))
+	symlink(filepath.Join(root, "home", ".local", "share", "driga-feature", "new"), filepath.Join(root, "dangling"))
+	// filepath.Join would clean the ".." lexically; the kernel does not.
+	// A loop.
+	symlink(filepath.Join(root, "loop-b"), filepath.Join(root, "loop-a"))
+	symlink(filepath.Join(root, "loop-a"), filepath.Join(root, "loop-b"))
+	for in, want := range map[string]string{
+		filepath.Join(root, "alias", "link", "driga.db"):     filepath.Join(denied, "driga.db"),
+		filepath.Join(root, "absolute", "events", "x.jsonl"): filepath.Join(denied, "events", "x.jsonl"),
+		filepath.Join(root, "dangling", "missing", "tail"):   filepath.Join(root, "home", ".local", "share", "driga-feature", "new", "missing", "tail"),
+		root + "/alias/../a/link/../driga-dev":               filepath.Join(root, "home", ".local", "share", "driga-dev"),
+		root + "/real/missing/../a":                          filepath.Join(root, "real", "a"),
+	} {
+		got, err := canonical(in)
+		if err != nil || got != want {
+			t.Errorf("canonical(%s) = %s, %v; want %s", in, got, err, want)
+		}
+	}
+	if _, err := canonical(filepath.Join(root, "loop-a", "x")); err == nil {
+		t.Error("a symlink loop resolved")
+	}
+}

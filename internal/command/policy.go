@@ -2,6 +2,7 @@ package command
 
 import (
 	"crypto/sha256"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -11,53 +12,103 @@ import (
 	"github.com/labstack/driga/internal/config"
 )
 
-// canonical resolves existing ancestors too, so a missing leaf cannot hide a
-// symlink escape, and follows a dangling symlink to the path it names.
-// Preparation never creates a requested path.
+// canonical resolves p the way the kernel does: component by component from
+// the root, splicing each symlink's target in relative to the already
+// resolved prefix, including a dangling symlink and one whose target does
+// not exist yet. A missing component keeps the rest of the path literal, so
+// a missing leaf cannot hide a symlink escape. Preparation never creates a
+// requested path.
 func canonical(p string) (string, error) {
-	return canonicalDepth(p, 0)
+	// filepath.Abs would clean "link/.." lexically; the kernel does not.
+	if runtime.GOOS == "windows" {
+		abs, err := filepath.Abs(p)
+		if err != nil {
+			return "", err
+		}
+		p = abs
+	} else if !filepath.IsAbs(p) {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return "", err
+		}
+		p = cwd + string(filepath.Separator) + p
+	}
+	const maxHops = 40
+	sep := string(filepath.Separator)
+	volume := filepath.VolumeName(p)
+	root := volume + sep
+	resolved := root
+	rest := splitPath(p[len(volume):])
+	for hops := 0; len(rest) > 0; {
+		name := rest[0]
+		rest = rest[1:]
+		switch name {
+		case ".":
+			continue
+		case "..":
+			resolved = filepath.Dir(resolved)
+			continue
+		}
+		next := filepath.Join(resolved, name)
+		info, err := os.Lstat(next)
+		if os.IsNotExist(err) {
+			resolved = filepath.Join(append([]string{next}, rest...)...)
+			break
+		}
+		if err != nil {
+			return "", err
+		}
+		if info.Mode()&os.ModeSymlink == 0 {
+			resolved = next
+			continue
+		}
+		if hops++; hops > maxHops {
+			return "", &os.PathError{Op: "canonical", Path: p, Err: errors.New("too many levels of symbolic links")}
+		}
+		target, err := os.Readlink(next)
+		if err != nil {
+			return "", err
+		}
+		if filepath.IsAbs(target) {
+			if v := filepath.VolumeName(target); v != "" {
+				root = v + sep
+			}
+			resolved = root
+			target = target[len(filepath.VolumeName(target)):]
+		}
+		// A relative target is relative to resolved, the link's own
+		// resolved directory.
+		rest = append(splitPath(target), rest...)
+	}
+	// What exists is resolved once more by the OS, for Windows junctions and
+	// short names the walk above leaves alone.
+	var tail []string
+	for q := resolved; ; {
+		if r, err := filepath.EvalSymlinks(q); err == nil {
+			for i := len(tail) - 1; i >= 0; i-- {
+				r = filepath.Join(r, tail[i])
+			}
+			return r, nil
+		} else if !os.IsNotExist(err) {
+			return "", err
+		}
+		parent := filepath.Dir(q)
+		if parent == q {
+			return resolved, nil
+		}
+		tail = append(tail, filepath.Base(q))
+		q = parent
+	}
 }
 
-func canonicalDepth(p string, depth int) (string, error) {
-	p, err := filepath.Abs(p)
-	if err != nil {
-		return "", err
+func splitPath(p string) []string {
+	var parts []string
+	for _, part := range strings.FieldsFunc(p, func(r rune) bool { return r == filepath.Separator || r == '/' }) {
+		parts = append(parts, part)
 	}
-	var tail []string
-	for {
-		if info, e := os.Lstat(p); e == nil && info.Mode()&os.ModeSymlink != 0 && depth < 40 {
-			if _, e := os.Stat(p); os.IsNotExist(e) {
-				target, e := os.Readlink(p)
-				if e != nil {
-					return "", e
-				}
-				if !filepath.IsAbs(target) {
-					target = filepath.Join(filepath.Dir(p), target)
-				}
-				for i := len(tail) - 1; i >= 0; i-- {
-					target = filepath.Join(target, tail[i])
-				}
-				return canonicalDepth(target, depth+1)
-			}
-		}
-		q, e := filepath.EvalSymlinks(p)
-		if e == nil {
-			for i := len(tail) - 1; i >= 0; i-- {
-				q = filepath.Join(q, tail[i])
-			}
-			return q, nil
-		}
-		if !os.IsNotExist(e) {
-			return "", e
-		}
-		parent := filepath.Dir(p)
-		if parent == p {
-			return "", e
-		}
-		tail = append(tail, filepath.Base(p))
-		p = parent
-	}
+	return parts
 }
+
 func within(p, root string) bool {
 	if root == "" {
 		return false
