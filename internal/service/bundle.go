@@ -14,8 +14,14 @@ import (
 	"github.com/labstack/driga/internal/self"
 )
 
+// BundleID is Driga.app's bundle identifier. The app is found by it and by
+// its layout, never by its name, so a renamed Driga.app still works.
+const BundleID = "run.driga"
+
 // BundlePath identifies our CLI's app layout, including when invoked via a
-// Homebrew symlink. Other apps and ordinary development binaries are excluded.
+// Homebrew symlink: driga or drigad in <name>.app/Contents/MacOS, or the
+// nested Driga Service.app's drigad, in a bundle whose Info.plist names
+// run.driga. Other apps and ordinary development binaries are excluded.
 func BundlePath(binPath string) string {
 	if resolved, err := filepath.EvalSymlinks(binPath); err == nil {
 		binPath = resolved
@@ -26,10 +32,47 @@ func BundlePath(binPath string) string {
 	}
 	contents := filepath.Dir(filepath.Dir(binPath))
 	app := filepath.Dir(contents)
-	if filepath.Base(contents) != "Contents" || filepath.Base(app) != "Driga.app" {
+	if filepath.Base(contents) != "Contents" || filepath.Ext(app) != ".app" || bundleIdentifier(app) != BundleID {
 		return ""
 	}
 	return app
+}
+
+// bundleIdentifier is the CFBundleIdentifier of the app at path, or "".
+func bundleIdentifier(app string) string {
+	f, err := os.Open(filepath.Join(app, "Contents", "Info.plist"))
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+	decoder := xml.NewDecoder(f)
+	depth, key := 0, ""
+	for {
+		token, err := decoder.Token()
+		if err != nil {
+			return ""
+		}
+		switch t := token.(type) {
+		case xml.EndElement:
+			depth--
+		case xml.StartElement:
+			depth++
+			// plist > dict > its keys and values
+			if depth != 3 || t.Name.Local != "key" && t.Name.Local != "string" {
+				continue
+			}
+			var text string
+			if err := decoder.DecodeElement(&text, &t); err != nil {
+				return ""
+			}
+			depth--
+			if t.Name.Local == "key" {
+				key = text
+			} else if key == "CFBundleIdentifier" {
+				return text
+			}
+		}
+	}
 }
 
 // ExecutablePath keeps ordinary builds' stable PATH entry, but launchd needs

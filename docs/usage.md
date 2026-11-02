@@ -407,7 +407,9 @@ a background process, and the service exits when its executable is deleted, so
 deleting Driga.app does not leave launchd restarting a missing helper. The
 launch agent stays registered until it is removed, though: `brew uninstall
 --cask driga` removes it, and before deleting Driga.app any other way, run
-`driga service uninstall`.
+`driga service uninstall`. Driga finds its app by bundle identifier
+(`run.driga`) and layout, not by name, so a renamed or moved Driga.app keeps its
+service; open it once afterwards so the launch agent points at the new path.
 
 ### Service identity
 

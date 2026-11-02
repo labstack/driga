@@ -116,8 +116,11 @@ func (f *fakeLaunchctl) spawn() bool {
 // registration, so no real launch agent is reachable.
 func newTestLaunchd(t *testing.T) (*launchdController, *fakeLaunchctl, string) {
 	t.Helper()
-	root := t.TempDir()
-	bin := filepath.Join(root, "Driga.app", "Contents", "MacOS", "driga")
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	bin := writeTestBundle(t, filepath.Join(root, "Driga.app"))
 	fake := &fakeLaunchctl{t: t, domain: "gui/501", target: "gui/501/" + Label("darwin")}
 	s := &launchdController{binPath: bin, label: Label("darwin"), domain: fake.domain,
 		plistPath: filepath.Join(root, "collector.plist"), launchctl: fake.run,
