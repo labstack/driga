@@ -20,7 +20,6 @@ func renderLaunchd(c *ks.Config) ([]byte, error) {
 		"Path":      func() string { return c.Executable },
 		"Arguments": func() []string { return c.Arguments },
 		"EnvVars":   func() []string { return env },
-		"KeepAlive": func() string { return "true" },
 		"RunAtLoad": func() string { return "true" },
 	}).Parse(c.Option["LaunchdConfig"].(string))
 	if err != nil {

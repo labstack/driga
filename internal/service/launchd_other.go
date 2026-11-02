@@ -2,4 +2,8 @@
 
 package service
 
-func newLaunchdController(controller Controller, _ string) Controller { return controller }
+import "errors"
+
+func newLaunchdController(string) (Controller, error) {
+	return nil, errors.New("launchd requires macOS")
+}

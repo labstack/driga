@@ -16,6 +16,7 @@ func TestServiceConfig(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Unix service or hook path contract; Windows has watch/refusal tests")
 	}
+	releaseBuild(t)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", os.Getenv("HOME"))
@@ -39,6 +40,7 @@ func TestServiceConfigLinux(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Unix service or hook path contract; Windows has watch/refusal tests")
 	}
+	releaseBuild(t)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", os.Getenv("HOME"))
@@ -153,7 +155,30 @@ func TestDaemonPathAndVariant(t *testing.T) {
 			t.Errorf("variantOf(%q) = %q, want %q", exe, got, want)
 		}
 	}
+	// A build under the release's name is a development build unless the
+	// release marker says otherwise; a variant's name always wins.
+	for _, tc := range []struct {
+		exe     string
+		release bool
+		want    string
+	}{
+		{"/opt/driga", true, ""}, {"/opt/driga", false, "-dev"}, {"/opt/drigad", false, "-dev"},
+		{"/opt/driga-dev", true, "-dev"}, {"/opt/driga-foo", false, "-foo"}, {"", false, "-dev"},
+	} {
+		if got := variantFor(tc.exe, tc.release); got != tc.want {
+			t.Errorf("variantFor(%q, %t) = %q, want %q", tc.exe, tc.release, got, tc.want)
+		}
+	}
 	if !IsDaemon("/opt/drigad-dev") || !IsDaemon("drigad.exe") || IsDaemon("/opt/driga") || IsDaemon("/opt/driga-dev") {
 		t.Error("IsDaemon")
 	}
+}
+
+// releaseBuild makes this test binary a release build, as .goreleaser.yaml
+// marks published ones, for the test's duration.
+func releaseBuild(t *testing.T) {
+	t.Helper()
+	previous := release
+	release = "true"
+	t.Cleanup(func() { release = previous })
 }

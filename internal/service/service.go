@@ -31,16 +31,29 @@ func logPathForOS(goos string) string {
 	return filepath.Join(config.ExpandHome("~"), "Library", "Logs", "driga"+Variant(), "service.log")
 }
 
-// Variant is what follows "driga" in this executable's name: empty for a
-// release, "-dev" for a driga-dev build. Each variant installs its own
-// service, with its own label and log, so a development copy never takes
-// over the release's.
+// release is "true" in published builds: .goreleaser.yaml sets it with
+// -ldflags "-X github.com/labstack/driga/internal/service.release=true".
+// Every other build, including just build, go build and go run, is a
+// development build.
+var release string
+
+// Variant is what follows "driga" in this executable's name, or "-dev" for a
+// development build under the release's name, and empty for a release. Each
+// variant installs its own service, with its own label and log, so a
+// development copy never takes over the release's.
 func Variant() string {
 	exe, err := os.Executable()
 	if err != nil {
-		return ""
+		exe = ""
 	}
-	return variantOf(exe)
+	return variantFor(exe, release == "true")
+}
+
+func variantFor(exe string, release bool) string {
+	if v := variantOf(exe); v != "" || release {
+		return v
+	}
+	return "-dev"
 }
 
 func variantOf(exe string) string {
@@ -146,14 +159,10 @@ func New(binPath string) (Controller, error) {
 	if !filepath.IsAbs(binPath) {
 		return nil, errors.New("service binary path must be absolute")
 	}
-	controller, err := ks.New(controlOnly{}, Config(binPath))
-	if err != nil {
-		return nil, err
-	}
 	if runtime.GOOS == "darwin" {
-		return newLaunchdController(controller, binPath), nil
+		return newLaunchdController(binPath)
 	}
-	return controller, nil
+	return ks.New(controlOnly{}, Config(binPath))
 }
 
 // Installed reports whether the per-user service is registered, running or not.
@@ -179,6 +188,19 @@ func DataDir(c Controller) (string, error) {
 	return resolveDataDir(dir), nil
 }
 
+// RecordedEnvironment is the environment the installed service's definition
+// gives it: on macOS, the launch agent's EnvironmentVariables. Elsewhere the
+// definition records none here and RecordedEnvironment returns an error.
+func RecordedEnvironment(c Controller) (map[string]string, error) {
+	r, ok := c.(interface {
+		recordedEnvironment() (map[string]string, error)
+	})
+	if !ok {
+		return nil, errors.New("the service does not record its environment here")
+	}
+	return r.recordedEnvironment()
+}
+
 // resolveDataDir is the directory a service definition's DRIGA_DATA_DIR
 // names, or the default when it records none.
 func resolveDataDir(dir string) string {
@@ -198,6 +220,11 @@ func (controlOnly) Start(ks.Service) error {
 }
 func (controlOnly) Stop(ks.Service) error { return nil }
 
+// launchdConfig keeps the service alive only while its executable exists:
+// with Driga.app deleted, launchd stops respawning a helper that is gone, and
+// it starts the job again when the path comes back. ProcessType Background
+// applies launchd's background resource policy to the collector, and
+// ThrottleInterval spaces out restarts after a crash.
 const launchdConfig = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
@@ -207,8 +234,10 @@ BUNDLE_ASSOCIATION
 <string>{{Path | html}}</string>
 {{range Arguments}}<string>{{. | html}}</string>
 {{end}}</array>
-<key>KeepAlive</key><{{KeepAlive}}/>
+<key>KeepAlive</key><dict><key>PathState</key><dict><key>{{Path | html}}</key><true/></dict></dict>
 <key>RunAtLoad</key><{{RunAtLoad}}/>
+<key>ProcessType</key><string>Background</string>
+<key>ThrottleInterval</key><integer>30</integer>
 {{if EnvVars}}<key>EnvironmentVariables</key><dict>
 {{range EnvVars}}{{.}}
 {{end}}</dict>{{end}}

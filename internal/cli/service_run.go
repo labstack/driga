@@ -106,6 +106,16 @@ func (c ServiceRunCmd) Run(g *Globals) error {
 			return err
 		}
 		defer restore()
+		if runtime.GOOS == "darwin" && c.Owner == "service" {
+			// Driga.app deleted without driga service uninstall: exit
+			// cleanly, and launchd's PathState keeps it from respawning.
+			if exe, err := os.Executable(); err == nil {
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithCancel(ctx)
+				defer cancel()
+				go service.WatchExecutable(ctx, exe, service.ExecutableCheck, cancel)
+			}
+		}
 		return collector.Run(ctx, d, dir)
 	}
 	lock, err := collector.Lock(dir, d.Owner)
