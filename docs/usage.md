@@ -360,13 +360,16 @@ whether or not the app or the terminal UI is open; both are its clients, as is
 `driga mcp`. It runs as a per-user LaunchAgent on macOS (`run.driga.service`), a
 systemd user unit on Linux (`driga`) and a Task Scheduler task at logon on
 Windows. Only published releases install under those names. Any other build
-(`just build`, `just install`, `go build`, `go run`) is a development build and
+(`just build`, `just install`, `go build`, `go run`, a GoReleaser snapshot) is a
+development build and
 installs its own service (`run.driga.service.dev`, `driga-dev`, and Windows task
 `Driga service (dev)`, logging to `driga-dev`) and keeps its own database and
 spool in a `driga-dev` data directory, so it never takes over the release's
 service or reads its data; so does an executable named `driga-<name>`, under
 `<name>`. The configuration file is shared. `DRIGA_DATA_DIR` and
-`DRIGA_SPOOL_DIR` still override the directories.
+`DRIGA_SPOOL_DIR` still override the directories. Installing a release
+replaces whatever service holds the release's label, including one an older
+development build installed.
 
 The app's first launch installs the service, and every launch makes sure it
 runs and restarts it when it runs another version, as after an upgrade. It

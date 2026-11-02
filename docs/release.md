@@ -187,7 +187,7 @@ The plist keeps the job alive only while its executable exists (`KeepAlive`
 `PathState`), with `ProcessType` `Background` and a 30-second
 `ThrottleInterval`; the service also exits by itself within a minute of its
 executable's deletion. Development binaries outside the app keep their ordinary
-path and have no association. Only GoReleaser release builds carry the
+path and have no association. Only tagged GoReleaser releases, not snapshots, carry the
 `internal/variant.release=true` link-time marker; every other build installs as
 `run.driga.service.dev` and collects into a `driga-dev` data directory, so it
 never takes over the release's service or shares its data.

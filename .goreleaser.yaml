@@ -28,13 +28,15 @@ builds:
       - arm64
     flags:
       - -trimpath
+    # Only a tagged release is a release build; a snapshot is a development
+    # build, with its own service label and data directory.
     ldflags:
       - >-
         -s -w
         -X main.version={{ .Version }}
         -X main.commit={{ .FullCommit }}
         -X main.date={{ .CommitDate }}
-        -X github.com/labstack/driga/internal/variant.release=true
+        -X github.com/labstack/driga/internal/variant.release={{ if not .IsSnapshot }}true{{ end }}
 
     hooks:
       post:
@@ -64,7 +66,7 @@ builds:
         -X main.version={{ .Version }}
         -X main.commit={{ .FullCommit }}
         -X main.date={{ .CommitDate }}
-        -X github.com/labstack/driga/internal/variant.release=true
+        -X github.com/labstack/driga/internal/variant.release={{ if not .IsSnapshot }}true{{ end }}
 
   # Driga.exe, the Windows desktop app: a GUI-subsystem binary that installs
   # the Driga service and shows its data.
@@ -86,7 +88,7 @@ builds:
         -X main.version={{ .Version }}
         -X main.commit={{ .FullCommit }}
         -X main.date={{ .CommitDate }}
-        -X github.com/labstack/driga/internal/variant.release=true
+        -X github.com/labstack/driga/internal/variant.release={{ if not .IsSnapshot }}true{{ end }}
 
 archives:
   - id: driga
