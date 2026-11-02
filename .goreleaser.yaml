@@ -235,18 +235,22 @@ homebrew_casks:
     custom_block: |
       app "Driga.app"
       require "fileutils"
-      require "json"
       # Uninstalling Driga.app removes the Driga service's launch agent
-      # with it. An upgrade runs the old version's uninstall too, so its
-      # preflight first keeps the plist for the new version's postflight.
+      # with it. An upgrade (or reinstall) runs the old version's uninstall
+      # in the same brew process as the new version's postflight, so the
+      # preflight keeps a copy of the plist named for this process; only
+      # that process's postflight restores it. The copy is deleted when brew
+      # exits, so an ordinary uninstall leaves none behind, however long a
+      # slow upgrade takes.
       uninstall_preflight do
         plist = File.expand_path("~/Library/LaunchAgents/run.driga.service.plist")
         if File.exist?(plist)
-          kept = File.expand_path("~/Library/Caches/run.driga/run.driga.service.plist")
+          kept = File.expand_path("~/Library/Caches/run.driga/run.driga.service.#{Process.pid}.plist")
           FileUtils.mkdir_p(File.dirname(kept), mode: 0o700)
           FileUtils.rm_f(kept)
           FileUtils.cp(plist, kept)
           File.chmod(0o600, kept)
+          at_exit { FileUtils.rm_f(kept) }
         end
       end
       # Homebrew skips signal on upgrade, where the app restarts itself.
@@ -256,23 +260,22 @@ homebrew_casks:
         # Migrate before open -a can activate an old same-bundle drigad.
         # Fresh installs still wait for the app's first launch.
         plist = File.expand_path("~/Library/LaunchAgents/run.driga.service.plist")
-        kept = File.expand_path("~/Library/Caches/run.driga/run.driga.service.plist")
-        # Only an upgrade's own copy, not one a past uninstall left behind.
-        kept = nil unless File.exist?(kept) && Time.now - File.mtime(kept) < 600
-        previous_plist = [plist, kept].compact.find { |path| File.exist?(path) }
-        if previous_plist
-          previous = system_command "/usr/bin/plutil",
-                                    args: ["-convert", "json", "-o", "-", previous_plist],
-                                    must_succeed: true
-          # system_command shell-escapes env: values yet runs no shell, so a
-          # value with a space would gain a literal backslash. /usr/bin/env
-          # takes these assignments verbatim.
-          environment = JSON.parse(previous.stdout).fetch("EnvironmentVariables", {}).map { |name, value| "#{name}=#{value}" }
-          system_command "/usr/bin/env",
-                         args: [*environment, "#{appdir}/Driga.app/Contents/MacOS/driga", "service", "install"],
+        kept = File.expand_path("~/Library/Caches/run.driga/run.driga.service.#{Process.pid}.plist")
+        if !File.exist?(plist) && File.exist?(kept)
+          FileUtils.mkdir_p(File.dirname(plist))
+          FileUtils.cp(kept, plist)
+          File.chmod(0o600, plist)
+        end
+        # Copies another brew process left behind (one that did not exit
+        # cleanly) are never restored.
+        Dir.glob(File.expand_path("~/Library/Caches/run.driga/run.driga.service.*.plist")).each { |path| FileUtils.rm_f(path) }
+        # The plist keeps the environment it records (the app's login
+        # shell); install points it at this version and starts it.
+        if File.exist?(plist)
+          system_command "#{appdir}/Driga.app/Contents/MacOS/driga",
+                         args:         ["service", "install"],
                          must_succeed: true
         end
-        FileUtils.rm_f(File.expand_path("~/Library/Caches/run.driga/run.driga.service.plist"))
       end
       zap trash: [
         "~/.config/driga",

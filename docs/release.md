@@ -209,13 +209,16 @@ The cask's `uninstall launchctl: "run.driga.service"` removes the launch agent
 and its plist when Driga is uninstalled, and `signal` stops a running app
 (Homebrew skips it on upgrade, where the app restarts itself). `zap` also
 trashes Driga's data, logs, configuration and caches. Homebrew runs the old
-version's uninstall during an upgrade too, so the cask's `uninstall_preflight`
-first copies the plist to `~/Library/Caches/run.driga`. The postflight runs
-`service install` when a service plist exists, or that copy is under ten
-minutes old, so an upgrade restores the service and stops the old same-bundle
-process before the first `open -a`. It passes the saved launch agent
-environment through to preserve custom data paths, configuration, and PATH
-during that repair, then deletes the copy.
+version's uninstall during an upgrade too, in the same brew process as the new
+version's postflight, so the cask's `uninstall_preflight` first copies the plist
+to `~/Library/Caches/run.driga/run.driga.service.<brew pid>.plist` and deletes
+the copy when that process exits. The postflight restores the plist only from
+its own process's copy, however long the upgrade took, and runs
+`service install` when a service plist exists, so an upgrade (or reinstall)
+restores the service and stops the old same-bundle process before the first
+`open -a`. The restored plist keeps its recorded environment (custom data
+paths, configuration and PATH). An ordinary `brew uninstall` leaves no copy,
+and a copy another brew process left behind is deleted, never restored.
 Fresh cask installs still wait for the first GUI launch to install the service.
 The helper can never register as the GUI's running instance. It also keeps
 Prohibited activation policy on the main thread as defense in depth.
