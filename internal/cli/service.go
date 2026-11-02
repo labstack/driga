@@ -28,6 +28,7 @@ type ServiceCmd struct {
 	Logs      ServiceLogsCmd      `cmd:"" help:"Print the Driga service's log."`
 	Uninstall ServiceUninstallCmd `cmd:"" help:"Uninstall the Driga service."`
 }
+
 // ServiceInstallCmd installs the service. On macOS an installed service
 // keeps the environment it records (the app's login shell) unless
 // --refresh-env records this shell's instead.
