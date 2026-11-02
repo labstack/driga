@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -123,5 +124,32 @@ func TestCanonicalFollowsSymlinksLikeTheKernel(t *testing.T) {
 	}
 	if _, err := canonical(filepath.Join(root, "loop-a", "x")); err == nil {
 		t.Error("a symlink loop resolved")
+	}
+}
+
+// Symlink targets are rooted by the platform's rules, whatever the host.
+func TestLinkTargetRooting(t *testing.T) {
+	for _, tc := range []struct {
+		windows          bool
+		dir, target      string
+		base, components string
+	}{
+		{false, "/home/a", "../b", "/home/a", "../b"},
+		{false, "/home/a", "/var/driga", "/", "var/driga"},
+		{true, `C:\Users\a`, `..\b`, `C:\Users\a`, "../b"},
+		{true, `C:\Users\a`, `\Users\x\AppData\Local\driga`, `C:\`, "Users/x/AppData/Local/driga"},
+		{true, `D:\work`, `/Users/x/AppData/Local/driga-dev`, `D:\`, "Users/x/AppData/Local/driga-dev"},
+		{true, `C:\Users\a`, `D:\driga`, `D:\`, "driga"},
+		{true, `C:\Users\a`, `C:driga`, `C:\Users\a`, "driga"},
+		{true, `C:\Users\a`, `D:driga`, `D:\`, "driga"},
+		{true, `C:\Users\a`, `\\server\share\driga`, `\\server\share\`, "driga"},
+		{true, `\\server\share\a`, `\driga`, `\\server\share\`, "driga"},
+		{true, `C:\Users\a`, `\\?\C:\Users\x\driga`, `C:\`, "Users/x/driga"},
+		{true, `C:\Users\a`, `\\?\UNC\server\share\driga`, `\\server\share\`, "driga"},
+	} {
+		base, parts := linkTarget(tc.windows, tc.dir, tc.target)
+		if base != tc.base || strings.Join(parts, "/") != tc.components {
+			t.Errorf("linkTarget(%t, %q, %q) = %q, %q; want %q, %q", tc.windows, tc.dir, tc.target, base, parts, tc.base, tc.components)
+		}
 	}
 }

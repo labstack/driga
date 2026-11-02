@@ -33,11 +33,16 @@ func canonical(p string) (string, error) {
 		}
 		p = cwd + string(filepath.Separator) + p
 	}
+	// An existing path is the OS's to resolve; the walk below covers a
+	// missing tail and dangling links.
+	if r, err := filepath.EvalSymlinks(p); err == nil {
+		return r, nil
+	}
 	const maxHops = 40
+	windows := runtime.GOOS == "windows"
 	sep := string(filepath.Separator)
 	volume := filepath.VolumeName(p)
-	root := volume + sep
-	resolved := root
+	resolved := volume + sep
 	rest := splitPath(p[len(volume):])
 	for hops := 0; len(rest) > 0; {
 		name := rest[0]
@@ -69,16 +74,10 @@ func canonical(p string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		if filepath.IsAbs(target) {
-			if v := filepath.VolumeName(target); v != "" {
-				root = v + sep
-			}
-			resolved = root
-			target = target[len(filepath.VolumeName(target)):]
-		}
 		// A relative target is relative to resolved, the link's own
 		// resolved directory.
-		rest = append(splitPath(target), rest...)
+		base, parts := linkTarget(windows, resolved, target)
+		resolved, rest = base, append(parts, rest...)
 	}
 	// What exists is resolved once more by the OS, for Windows junctions and
 	// short names the walk above leaves alone.
@@ -99,6 +98,62 @@ func canonical(p string) (string, error) {
 		tail = append(tail, filepath.Base(q))
 		q = parent
 	}
+}
+
+// linkTarget is where a symlink in the resolved directory dir points: the
+// directory its target starts from and the target's components, by the
+// rules of Unix or Windows whatever the host. On Windows a target rooted
+// without a volume (\x) starts at dir's volume, a drive-relative one (C:x)
+// at dir on that drive or else the drive's root, and \\?\ and UNC prefixes
+// name their volume.
+func linkTarget(windows bool, dir, target string) (string, []string) {
+	if !windows {
+		if strings.HasPrefix(target, "/") {
+			return "/", splitPath(target)
+		}
+		return dir, splitPath(target)
+	}
+	sep := func(c byte) bool { return c == '\\' || c == '/' }
+	split := func(p string) []string {
+		return strings.FieldsFunc(p, func(r rune) bool { return r == '\\' || r == '/' })
+	}
+	if len(target) >= 4 && sep(target[0]) && sep(target[1]) && target[2] == '?' && sep(target[3]) {
+		target = target[4:]
+		if len(target) >= 4 && strings.EqualFold(target[:3], "UNC") && sep(target[3]) {
+			target = `\\` + target[4:]
+		}
+	}
+	volume := windowsVolume(target)
+	rest := target[len(volume):]
+	switch {
+	case volume == "":
+		if rest != "" && sep(rest[0]) {
+			return windowsVolume(dir) + `\`, split(rest)
+		}
+		return dir, split(rest)
+	case len(volume) == 2 && (rest == "" || !sep(rest[0])):
+		if strings.EqualFold(windowsVolume(dir), volume) {
+			return dir, split(rest)
+		}
+		return volume + `\`, split(rest)
+	}
+	return volume + `\`, split(rest)
+}
+
+// windowsVolume is filepath.VolumeName's answer on Windows: "C:", or
+// \\server\share for a UNC path.
+func windowsVolume(p string) string {
+	sep := func(c byte) bool { return c == '\\' || c == '/' }
+	if len(p) >= 2 && p[1] == ':' && ('a' <= p[0]|0x20 && p[0]|0x20 <= 'z') {
+		return p[:2]
+	}
+	if len(p) >= 2 && sep(p[0]) && sep(p[1]) {
+		parts := strings.FieldsFunc(p[2:], func(r rune) bool { return r == '\\' || r == '/' })
+		if len(parts) >= 2 {
+			return `\\` + parts[0] + `\` + parts[1]
+		}
+	}
+	return ""
 }
 
 func splitPath(p string) []string {
