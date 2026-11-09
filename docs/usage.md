@@ -22,6 +22,9 @@ driga inbox list --all                # complete history, including acks and end
 driga inbox ack <item-id>          # explicit acknowledgment
 driga orphans                     # "orphans list" also works
 driga reclaim                     # disk, memory and CPU opportunities, with protected work
+driga reclaim --processes         # detached work review without disk scans
+driga reclaim --pid 12345         # exact current PID, including protection reasons
+driga reclaim --simulators        # booted iOS devices; read-only, macOS
 driga reclaim history             # process outcomes and disk cleanup receipts
 driga orphans kill <candidate-id>  # previews the tree and requires y
 driga orphans kill <candidate-id> --yes --json  # structured shutdown outcomes
@@ -156,6 +159,22 @@ followed by sampled CPU, memory and disk size; unlike units are kept separate.
 Unknown sizes remain unknown. Live work is protected and links to its session
 for deliberate review. Displayed next steps use the existing confirmation and
 fresh verification paths; listing a plan never stops or removes anything.
+
+The plan also reviews general detached work, including scripts, dev servers and
+databases with temporary data-directory provenance. These are human review
+records, not automatically safe shutdown targets. Current native agents and
+session ownership protect overlapping work; missing identity, CPU or socket
+observations remain explicit. `--processes` skips disk and simulator discovery.
+`--pid PID` inspects the exact current process, even if protected, attached, young
+or absent from ranked machine tables. An absent PID is not reported as a
+confirmed exit. These fast reads do not start a collector, read transcripts,
+walk Git repositories or create a persistent database.
+
+On macOS, `--simulators` lists booted iOS devices with their exact device IDs.
+The last-used timestamp is separate from boot time and does not establish
+present idleness. Unknown boot time and memory stay unknown; Driga does not
+automatically stop devices. Combine `--processes --simulators` to inspect both
+without disk scanning. An unavailable inventory is shown as a coverage gap.
 
 `driga reclaim history [--kind process|disk] [--limit 50] [--json]` shows local
 receipts, newest first. Process receipts include confirmed exits, survivors,
@@ -1102,7 +1121,7 @@ contains related sessions; selecting a session never selects the whole family.
 | `inbox ack <item-id>` or `inbox ack --all` | Explicit acknowledgment; `--machine` selects the source. |
 | `inbox jump <item-id>` | Jump to a local inbox destination without acknowledgment. |
 | `orphans list` | Orphan candidates, evidence, sampled CPU, memory measure and RSS; supports read-view options. |
-| `reclaim list` (or `reclaim`) | Local disk, RAM and CPU plan with protected active work; `--sizes`, `--why`, `--json`. |
+| `reclaim list` (or `reclaim`) | Local disk, RAM, CPU and simulator review with protected active work; `--sizes`, `--why`, `--processes`, `--pid PID`, `--simulators`, `--json`. |
 | `reclaim history` | Local action receipts; `--kind process\|disk`, `--limit 1–1000`, `--json`. |
 | `orphans kill <orphan-id>` or `orphans kill --all` | `--all`: Select all local orphan candidates; verify and confirm each unless --yes. Supports `--machine`, `--snapshot`, `--force`, `--yes/-y`, and `--json` with `--yes`. |
 | `machines list` | Known machine connection health; `--machine`, `--snapshot`, `--json`, `--no-color`. |

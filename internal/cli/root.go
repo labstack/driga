@@ -2,6 +2,7 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -27,13 +28,15 @@ type Globals struct {
 	Machine       string `kong:"-"`
 	// CleanupPlatform injects read-only inspection for embedded callers/tests.
 	CleanupPlatform platform.Platform `kong:"-"`
-	cachedMachines  bool              `kong:"-"`
-	JSON            bool              `kong:"-"`
-	Project         string            `kong:"-"`
-	Since           string            `kong:"-"`
-	Snapshot        bool              `kong:"-"`
-	Theme           *string           `kong:"-"`
-	NoColor         bool              `kong:"-"`
+	// ReclaimTool injects the read-only simulator inventory command.
+	ReclaimTool    func(context.Context, string, ...string) ([]byte, error) `kong:"-"`
+	cachedMachines bool                                                     `kong:"-"`
+	JSON           bool                                                     `kong:"-"`
+	Project        string                                                   `kong:"-"`
+	Since          string                                                   `kong:"-"`
+	Snapshot       bool                                                     `kong:"-"`
+	Theme          *string                                                  `kong:"-"`
+	NoColor        bool                                                     `kong:"-"`
 
 	Version string    `kong:"-"`
 	Commit  string    `kong:"-"`

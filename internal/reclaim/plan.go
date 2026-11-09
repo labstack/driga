@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/labstack/driga/internal/cleanup"
 	"github.com/labstack/driga/internal/derive"
@@ -13,6 +14,20 @@ import (
 
 // Opportunity is an estimate and a reviewable next step, never authorization.
 type Opportunity struct {
+	RootPID        int32              `json:"root_pid,omitempty"`
+	PPID           int32              `json:"ppid,omitempty"`
+	StartedAt      time.Time          `json:"started_at,omitzero"`
+	ObservedAt     time.Time          `json:"observed_at,omitzero"`
+	Name           string             `json:"name,omitempty"`
+	Cwd            string             `json:"cwd,omitempty"`
+	Category       string             `json:"category,omitempty"`
+	AgeMS          int64              `json:"age_ms,omitempty"`
+	PIDs           []int32            `json:"pids,omitempty"`
+	CPUKnown       *bool              `json:"cpu_known,omitempty"`
+	IdentityKnown  *bool              `json:"identity_known,omitempty"`
+	OwnershipKnown *bool              `json:"ownership_known,omitempty"`
+	PeersKnown     *bool              `json:"peers_known,omitempty"`
+	Simulator      *SimulatorReview   `json:"simulator,omitempty"`
 	ID             string             `json:"id"`
 	Kind           string             `json:"kind"`
 	Status         string             `json:"status"`
@@ -31,7 +46,7 @@ func Opportunities(disk []cleanup.Candidate, orphans []view.OrphanRow, sessions 
 	rows := []Opportunity{}
 	claimed := map[int32]bool{}
 	for _, o := range orphans {
-		r := Opportunity{ID: o.ID, Kind: "process", Status: "review", Reason: strings.Join(o.Evidence, "; "), ResourcesKnown: o.ResourcesKnown, CPU: o.CPUPercent,
+		r := Opportunity{ID: o.ID, Kind: "process", RootPID: o.RootPID, StartedAt: o.StartTime, Status: "review", Reason: strings.Join(o.Evidence, "; "), ResourcesKnown: o.ResourcesKnown, CPU: o.CPUPercent,
 			Memory: derive.MemoryUsage{Processes: o.ProcCount, Memory: o.Memory, Measure: o.MemoryMeasure, RSS: o.RSSTotal}}
 		if o.Young {
 			r.Status = "protected"
@@ -86,7 +101,7 @@ func Opportunities(disk []cleanup.Candidate, orphans []view.OrphanRow, sessions 
 			members = append(members, p)
 			cpu += p.CPUPercent
 		}
-		rows = append(rows, Opportunity{ID: fmt.Sprintf("session:%d", s.ID), Kind: "session", Status: "protected", Reason: "live session; open it to review work before stopping or restarting", Memory: derive.SumProcessMemory(members), ResourcesKnown: true, CPU: cpu, Action: fmt.Sprintf("driga agents jump %d", s.ID)})
+		rows = append(rows, Opportunity{ID: fmt.Sprintf("session:%d", s.ID), Kind: "session", RootPID: root.PID, StartedAt: root.StartTime, Status: "protected", Reason: "live session; open it to review work before stopping or restarting", Memory: derive.SumProcessMemory(members), ResourcesKnown: true, CPU: cpu, Action: fmt.Sprintf("driga agents jump %d", s.ID)})
 	}
 	for _, c := range disk {
 		r := Opportunity{ID: c.ID, Kind: "disk", Status: c.Status, Reason: strings.Join(c.Evidence, "; "), DiskBytes: c.Size, DiskKnown: c.SizeKnown && !c.SizeCapped}
@@ -95,6 +110,11 @@ func Opportunities(disk []cleanup.Candidate, orphans []view.OrphanRow, sessions 
 		}
 		rows = append(rows, r)
 	}
+	SortOpportunities(rows)
+	return rows
+}
+
+func SortOpportunities(rows []Opportunity) {
 	sort.SliceStable(rows, func(i, j int) bool {
 		a, b := rows[i], rows[j]
 		if (a.Status == "ready") != (b.Status == "ready") {
@@ -111,5 +131,4 @@ func Opportunities(disk []cleanup.Candidate, orphans []view.OrphanRow, sessions 
 		}
 		return a.ID < b.ID
 	})
-	return rows
 }
