@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/labstack/driga/internal/config"
@@ -18,39 +19,59 @@ func (f runnerFunc) Run(ctx context.Context, n string, a ...string) ([]byte, err
 }
 
 func TestAgentsBudgetAndFixtures(t *testing.T) {
+	const budget = 10 * time.Millisecond
+	missing := errors.New("missing")
 	for _, tc := range []struct {
 		name, data string
 		fail, slow bool
 	}{
 		{name: "blocked", data: `[{"id":"a","state":"blocked","waitingFor":"permission","cwd":"/repo"},{"sessionId":"b","state":"blocked","waitingFor":"question"},{"id":"c","state":"running"}]`},
 		{name: "missing", fail: true}, {name: "slow", slow: true},
+		{name: "late success", slow: true, data: `[{"id":"late","state":"running"}]`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			r := runnerFunc(func(ctx context.Context, n string, args ...string) ([]byte, error) {
-				if n != "claude" || strings.Join(args, " ") != "agents --json" {
-					t.Fatal(n, args)
-				}
-				if tc.slow {
-					<-ctx.Done()
-					return nil, ctx.Err()
-				}
-				if tc.fail {
-					return nil, errors.New("missing")
-				}
-				return []byte(tc.data), nil
-			})
-			start := time.Now()
-			got, err := PollAgents(context.Background(), r, 10*time.Millisecond)
-			if tc.fail || tc.slow {
-				if err == nil || len(got) != 0 {
+			// Scheduler pauses must not consume the successful fixture's budget.
+			// Virtual time still exercises the real context deadline when Run blocks.
+			synctest.Test(t, func(t *testing.T) {
+				start := time.Now()
+				r := runnerFunc(func(ctx context.Context, n string, args ...string) ([]byte, error) {
+					if n != "claude" || strings.Join(args, " ") != "agents --json" {
+						t.Fatal(n, args)
+					}
+					if deadline, ok := ctx.Deadline(); !ok || deadline.Sub(start) != budget {
+						t.Fatalf("runner deadline=%v, present=%t, want start+%v", deadline, ok, budget)
+					}
+					if tc.slow {
+						<-ctx.Done()
+						if tc.data == "" {
+							return nil, ctx.Err()
+						}
+					}
+					if tc.fail {
+						return nil, missing
+					}
+					return []byte(tc.data), nil
+				})
+				got, err := PollAgents(context.Background(), r, budget)
+				if tc.fail || tc.slow {
+					wantErr := missing
+					if tc.slow {
+						wantErr = context.DeadlineExceeded
+					}
+					if !errors.Is(err, wantErr) || len(got) != 0 {
+						t.Fatal(got, err)
+					}
+				} else if err != nil || len(got) != 3 || got[0].ID != "a" || got[0].Reason != "permission" {
 					t.Fatal(got, err)
 				}
-			} else if err != nil || len(got) != 3 || got[0].ID != "a" || got[0].Reason != "permission" {
-				t.Fatal(got, err)
-			}
-			if time.Since(start) > time.Second {
-				t.Fatal("over budget")
-			}
+				var wantElapsed time.Duration
+				if tc.slow {
+					wantElapsed = budget
+				}
+				if elapsed := time.Since(start); elapsed != wantElapsed {
+					t.Fatalf("elapsed=%v, want %v", elapsed, wantElapsed)
+				}
+			})
 		})
 	}
 }
