@@ -319,6 +319,8 @@ func run(ctx context.Context, d Deps, dataDir string) error {
 	if d.State == nil {
 		d.State = NewState()
 	}
+	d.gitWork = newGitWorker(ctx, d.now)
+	defer d.gitWork.close()
 	pullers := newFleetPullers(dataDir)
 	pullers.server = server
 	defer pullers.close()
@@ -332,6 +334,19 @@ func run(ctx context.Context, d Deps, dataDir string) error {
 			return nil
 		}
 		now := clock.Now()
+		if d.gitWork.isReady() {
+			full, err := applyReadyGit(ctx, d, st)
+			if err != nil {
+				return err
+			}
+			timers.git = clock.Now()
+			if full {
+				timers.gitFull = clock.Now()
+			}
+			if server != nil {
+				server.Notify()
+			}
+		}
 		poll := due(lastPoll, now, time.Second)
 		if poll {
 			lastPoll = now
@@ -408,6 +423,12 @@ func run(ctx context.Context, d Deps, dataDir string) error {
 			// Long source reads must leave a full cadence before collecting
 			// again, rather than keeping the collector continuously busy.
 			timers.advance(p, clock.Now())
+			if r.gitApplied {
+				timers.git = clock.Now()
+				if r.gitFull {
+					timers.gitFull = clock.Now()
+				}
+			}
 			if server != nil {
 				server.Notify()
 			}
@@ -443,6 +464,8 @@ func run(ctx context.Context, d Deps, dataDir string) error {
 			timer.Stop()
 			return nil
 		case <-timer.Chan():
+		case <-d.gitWork.wake:
+			timer.Stop()
 		case req := <-intakeRequests:
 			timer.Stop()
 			if req.stats != nil {
@@ -619,15 +642,9 @@ func drainOnly(ctx context.Context, d Deps, st *store.Store) error {
 		if err := writeInboxJumps(tx, ss, jumps); err != nil {
 			return err
 		}
-		items, err := tx.Inbox(time.Time{}, false)
+		unseen, err := tx.UnseenFinishedSessions(nil)
 		if err != nil {
 			return err
-		}
-		unseen := map[int64]bool{}
-		for _, item := range items {
-			if item.Kind == "finished" {
-				unseen[item.SessionID] = true
-			}
 		}
 		procs, err := tx.Procs()
 		if err != nil {

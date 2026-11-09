@@ -31,7 +31,7 @@ func LabelWithEvidence(in StateInput, now time.Time, th Thresholds) model.StateM
 		}
 	}
 	verdict, heuristic, evidence := label(in, now, th)
-	m := model.StateMixer{Verdict: verdict, Heuristic: heuristic, Evidence: evidence, ObservedAt: now, Input: &in, StuckAfterMS: th.StuckAfter.Milliseconds()}
+	m := model.StateMixer{Verdict: verdict, Heuristic: heuristic, Evidence: evidence, ObservedAt: now, Input: &in, StuckAfterMS: th.StuckAfter.Milliseconds(), Rows: make([]model.StateSignal, 0, 4)}
 	add := func(name, reading string, at time.Time, available bool) {
 		row := model.StateSignal{Name: name, Reading: reading, At: at}
 		if available {
@@ -205,7 +205,7 @@ func SessionMixer(s model.Session) model.StateMixer {
 	if s.Mixer != nil && s.Mixer.Input != nil {
 		return LabelWithEvidence(*s.Mixer.Input, s.Mixer.ObservedAt, Thresholds{StuckAfter: time.Duration(s.Mixer.StuckAfterMS) * time.Millisecond})
 	}
-	m := model.StateMixer{Verdict: s.Label, Heuristic: s.Heuristic, Evidence: s.Evidence}
+	m := model.StateMixer{Verdict: s.Label, Heuristic: s.Heuristic, Evidence: s.Evidence, Rows: make([]model.StateSignal, 0, 4)}
 	for _, name := range []string{"registry", "hooks", "telemetry", "process"} {
 		m.Rows = append(m.Rows, model.StateSignal{Name: name, Reading: "unavailable"})
 	}

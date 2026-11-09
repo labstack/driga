@@ -134,3 +134,47 @@ func TestSessionRowComparisonKeepsFacts(t *testing.T) {
 		}
 	}
 }
+
+func BenchmarkSameSessionRow(b *testing.B) {
+	at := time.Date(2026, 10, 30, 12, 0, 0, 0, time.UTC)
+	alive, cpu := true, 0.1
+	s := model.Session{ID: 1, SessionObs: model.SessionObs{Adapter: "claude", ExternalID: "fixture"}, Evidence: "no activity for 1m0s", Mixer: &model.StateMixer{ObservedAt: at, Input: &model.StateInput{}, Evidence: "no activity for 1m0s", Verdict: "idle"}}
+	for range 4 {
+		s.Mixer.Rows = append(s.Mixer.Rows, model.StateSignal{Name: "process", Reading: "live", At: at, Age: time.Minute, Strength: 1, Supports: true, Alive: &alive, CPUPercent: &cpu})
+	}
+	b.ReportAllocs()
+	for b.Loop() {
+		if !sameSessionRow(s, s) {
+			b.Fatal("equal facts changed")
+		}
+	}
+}
+
+func TestSessionMixerComparisonPreservesRows(t *testing.T) {
+	alive, cpu := true, 1.0
+	base := model.Session{Mixer: &model.StateMixer{Verdict: "idle", Rows: []model.StateSignal{{Name: "process", At: time.Unix(10, 0), Supports: true, Alive: &alive, CPUPercent: &cpu, Age: time.Minute, Strength: 1}}}}
+	later := base
+	m := *base.Mixer
+	m.Rows = append([]model.StateSignal(nil), m.Rows...)
+	m.Rows[0].Age = time.Hour
+	m.Rows[0].Strength = 0.1
+	later.Mixer = &m
+	if !sameSessionRow(base, later) || base.Mixer.Rows[0].Age != time.Minute || later.Mixer.Rows[0].Age != time.Hour {
+		t.Fatal("comparison changed or persisted presentation age")
+	}
+	for _, mutate := range []func(*model.StateSignal){
+		func(r *model.StateSignal) { r.Supports = false },
+		func(r *model.StateSignal) { v := false; r.Alive = &v },
+		func(r *model.StateSignal) { v := 2.0; r.CPUPercent = &v },
+		func(r *model.StateSignal) { r.At = r.At.Add(time.Second) },
+	} {
+		x := m
+		x.Rows = append([]model.StateSignal(nil), m.Rows...)
+		mutate(&x.Rows[0])
+		s := later
+		s.Mixer = &x
+		if sameSessionRow(base, s) {
+			t.Fatal("changed signal fact suppressed")
+		}
+	}
+}

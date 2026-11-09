@@ -73,6 +73,32 @@ func TestVerifyIdleRejectsCPUGrowth(t *testing.T) {
 	}
 }
 
+func TestVerifyIdleRejectsReusedChildOnUnix(t *testing.T) {
+	o, snaps := verifyFixture(0)
+	snaps[1][1].StartTime = snaps[1][1].StartTime.Add(time.Second)
+	ok, reason, err := verifyIdle(context.Background(), seqProber{&seqPlatform{snaps: snaps}}, o, []int32{101}, time.Millisecond, false)
+	if err != nil || ok || !strings.Contains(reason, "identity changed") {
+		t.Fatalf("replacement child accepted as idle: ok=%t reason=%q err=%v", ok, reason, err)
+	}
+}
+
+func TestVerifyForActionPreservesCollectedIdentities(t *testing.T) {
+	o, snaps := verifyFixture(1)
+	o.ProcessStarts = map[int32]time.Time{100: o.StartTime, 101: o.StartTime.Add(-time.Second)}
+	_, err := VerifyForAction(context.Background(), seqProber{&seqPlatform{snaps: snaps}}, o, []int32{101}, time.Millisecond)
+	if err == nil || !strings.Contains(err.Error(), "identity changed since candidate was collected") {
+		t.Fatalf("replaced collected child accepted: %v", err)
+	}
+}
+
+func TestVerifyForActionPinsAllMembers(t *testing.T) {
+	o, snaps := verifyFixture(1)
+	fresh, err := VerifyForAction(context.Background(), seqProber{&seqPlatform{snaps: snaps}}, o, []int32{101}, time.Millisecond)
+	if err != nil || len(fresh.ProcessStarts) != 2 || !fresh.ProcessStarts[101].Equal(o.StartTime) {
+		t.Fatalf("fresh=%+v err=%v", fresh, err)
+	}
+}
+
 func TestVerifyIdleBudgetsBackgroundCPUPerProcess(t *testing.T) {
 	// Each process ticks just under the background budget over the window.
 	o, snaps := verifyFixture(1.02)

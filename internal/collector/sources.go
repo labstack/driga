@@ -52,32 +52,35 @@ type repoResult struct {
 	err       error
 }
 type sourceResults struct {
-	agents         []attention.Agent
-	sessions       []model.Session
-	processAliases map[int64]int
-	internalChats  map[string]bool
-	original       map[int64]model.Session
-	procs          []model.Proc
-	procErr        error
-	procAt         time.Time
-	sample         model.MachineSample
-	machineErr     error
-	adapters       []adapterResult
-	observations   []model.SessionObs
-	first          bool
-	baseline       time.Time
-	cwdRan         bool
-	cwdErr         error
-	git            []repoResult
-	gitErr         error
-	feedEnabled    bool
-	spool          spoolResult
-	peers          map[int32]model.PeerState
-	socketErr      error
-	subreaper      int32
-	paths          map[string]string
-	logs           map[string]logBaseline
-	jumps          map[string]*model.InboxJump
+	agents          []attention.Agent
+	sessions        []model.Session
+	processAliases  map[int64]int
+	internalChats   map[string]bool
+	original        map[int64]model.Session
+	procs           []model.Proc
+	procErr         error
+	procAt          time.Time
+	sample          model.MachineSample
+	machineErr      error
+	adapters        []adapterResult
+	observations    []model.SessionObs
+	first           bool
+	baseline        time.Time
+	cwdRan          bool
+	cwdErr          error
+	git             []repoResult
+	gitErr          error
+	gitRan, gitFull bool
+	gitAt           time.Time
+	gitJob          *gitJob
+	feedEnabled     bool
+	spool           spoolResult
+	peers           map[int32]model.PeerState
+	socketErr       error
+	subreaper       int32
+	paths           map[string]string
+	logs            map[string]logBaseline
+	jumps           map[string]*model.InboxJump
 }
 
 func collectSources(ctx context.Context, d Deps, st *store.Store, p Plan, state *State, now time.Time) (sourceResults, error) {
@@ -349,7 +352,15 @@ func collectSources(ctx context.Context, d Deps, st *store.Store, p Plan, state 
 			if p.GitIdentity {
 				mode = gitscan.Identity
 			}
-			r.git, r.gitErr = collectGit(ctx, d, r.sessions, knownRepos, mode, now)
+			if d.gitWork == nil {
+				r.git, r.gitErr = collectGit(ctx, d, r.sessions, knownRepos, mode, now)
+				r.gitRan, r.gitFull, r.gitAt = true, p.GitFull, now
+			} else {
+				r.gitJob = d.gitWork.poll(d, r.sessions, knownRepos, mode, now, p.Git || p.GitIdentity)
+				if job := r.gitJob; job != nil {
+					r.git, r.gitErr, r.gitRan, r.gitFull, r.gitAt = job.results, job.err, true, job.full, job.at
+				}
+			}
 		}
 	})
 	wg.Wait()
@@ -380,22 +391,11 @@ func collectSources(ctx context.Context, d Deps, st *store.Store, p Plan, state 
 		}
 	}
 	r.jumps = collectInboxJumps(ctx, d, sessions, procs)
-	r.paths = make(map[string]string)
-	for _, s := range sessions {
-		r.paths[s.Cwd] = gitscan.NormalizePath(s.Cwd)
-	}
 	ws, err := st.Worktrees(0)
 	if err != nil {
 		return r, err
 	}
-	for _, w := range ws {
-		r.paths[w.Path] = gitscan.NormalizePath(w.Path)
-	}
-	for _, repo := range r.git {
-		for _, w := range repo.worktrees {
-			r.paths[w.Path] = w.Path
-		}
-	}
+	r.paths = normalizedInventoryPaths(sessions, ws, r.git)
 	if finder, ok := d.Plat.(platform.SubreaperFinder); ok {
 		if pid, ok := finder.UserSubreaper(); ok {
 			r.subreaper = pid
@@ -425,6 +425,10 @@ func claudeTurnHookClaimed(h model.HookEvent) bool {
 }
 
 func collectGit(ctx context.Context, d Deps, ss []model.Session, known []model.Repo, mode gitscan.ScanMode, now time.Time) ([]repoResult, error) {
+	return collectGitInventory(ctx, d, gitInventory(d, ss, known, now), mode)
+}
+
+func gitInventory(d Deps, ss []model.Session, known []model.Repo, now time.Time) gitPaths {
 	var cwds []string
 	for _, s := range ss {
 		if !strings.HasSuffix(s.Origin, "/temporary") && (s.EndedAt == nil || !s.LastActivityAt.Before(now.Add(-7*24*time.Hour))) {
@@ -434,10 +438,16 @@ func collectGit(ctx context.Context, d Deps, ss []model.Session, known []model.R
 	// Known repositories are exact inventory roots. A removed checkout must
 	// not be rediscovered as an unrelated repository in its parent directory.
 	roots := append([]string(nil), d.Cfg.Roots...)
+	var previous []string
 	for _, repo := range known {
 		roots = append(roots, repo.Path)
+		previous = append(previous, repo.Path)
 	}
-	paths, err := gitscan.DiscoverRepos(cwds, roots, d.Cfg.RootDepth, d.Cfg.Exclude)
+	return gitPaths{cwds: cwds, roots: roots, known: previous}
+}
+
+func collectGitInventory(ctx context.Context, d Deps, input gitPaths, mode gitscan.ScanMode) ([]repoResult, error) {
+	paths, err := gitscan.DiscoverReposContext(ctx, input.cwds, input.roots, d.Cfg.RootDepth, d.Cfg.Exclude)
 	errs := []error{err}
 	scanner := d.Git
 	if scanner == nil {
@@ -472,9 +482,9 @@ func collectGit(ctx context.Context, d Deps, ss []model.Session, known []model.R
 		}
 		// Missing repositories (or removed Git metadata) have no current
 		// checkouts. Keep their repo/session history, but retire inventory.
-		for _, repo := range known {
-			if !present[repo.Path] {
-				results = append(results, repoResult{path: repo.Path})
+		for _, path := range input.known {
+			if !present[path] {
+				results = append(results, repoResult{path: path})
 			}
 		}
 	}
@@ -646,7 +656,7 @@ func collectSocketPeers(ctx context.Context, d Deps, st *store.Store, state *Sta
 	// Fold the same lifecycle evidence as labelSession before selecting probe
 	// PIDs. Expanding this set would treat sockets owned by live helpers as
 	// internal, and could incorrectly verify an orphan as idle.
-	events, err := st.LatestEvents(time.Time{})
+	events, err := st.LabelEvents()
 	if err != nil {
 		return nil, err
 	}
@@ -722,4 +732,25 @@ func collectSocketPeers(ctx context.Context, d Deps, st *store.Store, state *Sta
 		return nil, err
 	}
 	return peers, nil
+}
+
+func normalizedInventoryPaths(sessions []model.Session, worktrees []model.Worktree, git []repoResult) map[string]string {
+	paths := make(map[string]string)
+	normalize := func(path string) {
+		if _, known := paths[path]; !known {
+			paths[path] = gitscan.NormalizePath(path)
+		}
+	}
+	for _, s := range sessions {
+		normalize(s.Cwd)
+	}
+	for _, w := range worktrees {
+		normalize(w.Path)
+	}
+	for _, repo := range git {
+		for _, w := range repo.worktrees {
+			paths[w.Path] = w.Path
+		}
+	}
+	return paths
 }

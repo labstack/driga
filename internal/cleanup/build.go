@@ -159,7 +159,7 @@ func inspectBuild(ctx context.Context, e Env, s snapshot, state checkoutState, c
 	}
 	walkCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	err = filepath.WalkDir(path, func(p string, d fs.DirEntry, err error) error {
+	err = filepath.WalkDir(path, func(_ string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -169,17 +169,12 @@ func inspectBuild(ctx context.Context, e Env, s snapshot, state checkoutState, c
 		if d.Name() == ".git" {
 			return fmt.Errorf("contains a nested git repository")
 		}
-		rel, err := filepath.Rel(path, p)
-		if err != nil {
-			return err
-		}
-		// Check entries through depth three without reading deeper directories.
-		if d.IsDir() && rel != "." && strings.Count(filepath.ToSlash(rel), "/") >= 2 {
-			return fs.SkipDir
-		}
 		return nil
 	})
 	if err != nil {
+		return c, err
+	}
+	if err := walkCtx.Err(); err != nil {
 		return c, err
 	}
 	for _, cwd := range s.cwds {
@@ -199,7 +194,7 @@ func inspectBuild(ctx context.Context, e Env, s snapshot, state checkoutState, c
 		if !inside(checkout, resolved(session.Cwd)) {
 			continue
 		}
-		if session.Label != "dead" && session.Label != "ended" && session.Label != "finished" {
+		if sessionLive(e, session) {
 			return fail("live session in checkout")
 		}
 		if session.LastActivityAt.After(latest) {

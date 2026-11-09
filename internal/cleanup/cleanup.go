@@ -133,6 +133,18 @@ func resolved(path string) string {
 }
 func wtID(path string) string { return fmt.Sprintf("wt:%x", sha256.Sum256([]byte(path)))[:15] }
 
+func sessionLive(e Env, session model.Session) bool {
+	switch session.Label {
+	case "dead", "ended":
+		return false
+	case "finished":
+		// Completion may be awaiting acknowledgment while the agent remains alive.
+		return session.EndedAt == nil && (session.PID == 0 || e.Plat.Alive(session.PID, session.ProcStart))
+	default:
+		return true
+	}
+}
+
 type snapshot struct {
 	open       []string
 	repos      []model.Repo
@@ -243,6 +255,7 @@ func List(ctx context.Context, e Env) ([]Candidate, error) {
 	}
 	cs = append(cs, scratchCandidates(ctx, e, s)...)
 	cs = append(cs, cacheCandidates(ctx, e)...)
+	cs = append(cs, goTmpCacheCandidates(ctx, e, s)...)
 	cs = append(cs, historyCandidates(e)...)
 	if e.Sizes {
 		for i := range cs {
@@ -267,7 +280,7 @@ func verify(ctx context.Context, e Env, c Candidate) (Candidate, error) {
 		if c.Status == "report_only" {
 			return Candidate{}, fmt.Errorf("report only")
 		}
-		if !e.RunTools {
+		if !e.RunTools && !strings.HasPrefix(c.ID, "cache:go-tmp:") {
 			return Candidate{}, fmt.Errorf("cache cleanup runs from the driga CLI only")
 		}
 	}
@@ -296,6 +309,13 @@ func verify(ctx context.Context, e Env, c Candidate) (Candidate, error) {
 			return fresh, fmt.Errorf("worktree no longer attributed")
 		}
 	case Cache:
+		if strings.HasPrefix(c.ID, "cache:go-tmp:") {
+			fresh, err = inspectGoTmpCache(e, s, c.Path)
+			if err == nil && c.Path == configuredGoCache(ctx, e) {
+				err = fmt.Errorf("cache is the configured GOCACHE")
+			}
+			break
+		}
 		found := false
 		for _, candidate := range cacheCandidates(ctx, e) {
 			if candidate.ID == c.ID {

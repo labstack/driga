@@ -21,6 +21,25 @@ func VerifyIdle(ctx context.Context, plat platform.Platform, o model.Orphan, exp
 }
 
 func verifyIdle(ctx context.Context, plat platform.Platform, o model.Orphan, expect []int32, window time.Duration, windows bool, opts ...Option) (bool, string, error) {
+	return verifyIdlePinned(ctx, plat, o, expect, window, windows, nil, opts...)
+}
+
+// VerifyForAction pins every member observed across a fresh idle window. The
+// caller passes this candidate to Tree immediately after consent.
+func VerifyForAction(ctx context.Context, plat platform.Platform, o model.Orphan, expect []int32, window time.Duration, opts ...Option) (model.Orphan, error) {
+	var starts map[int32]time.Time
+	ok, reason, err := verifyIdlePinned(ctx, plat, o, expect, window, runtime.GOOS == "windows", &starts, opts...)
+	if err != nil {
+		return o, err
+	}
+	if !ok {
+		return o, fmt.Errorf("not idle: %s", reason)
+	}
+	o.ProcessStarts = starts
+	return o, nil
+}
+
+func verifyIdlePinned(ctx context.Context, plat platform.Platform, o model.Orphan, expect []int32, window time.Duration, windows bool, pinned *map[int32]time.Time, opts ...Option) (bool, string, error) {
 	opt := collectOptions(opts)
 	prober, ok := plat.(platform.SocketProber)
 	if !ok {
@@ -46,6 +65,18 @@ func verifyIdle(ctx context.Context, plat platform.Platform, o model.Orphan, exp
 			return false, reason, nil
 		}
 	}
+	starts := make(map[int32]time.Time, len(first.tree))
+	for _, p := range first.tree {
+		starts[p.PID] = p.StartTime
+	}
+	for _, p := range second.tree {
+		if !starts[p.PID].Equal(p.StartTime) {
+			return false, fmt.Sprintf("pid %d identity changed during idle verification", p.PID), nil
+		}
+		if pinned != nil && p.StartTime.IsZero() {
+			return false, fmt.Sprintf("pid %d identity unavailable", p.PID), nil
+		}
+	}
 	// CPUSeconds has tick granularity, so each process gets 10ms of slack on
 	// top of the background share of the window, and the tree as a whole gets
 	// 10ms on top of its larger share.
@@ -53,6 +84,9 @@ func verifyIdle(ctx context.Context, plat platform.Platform, o model.Orphan, exp
 	var total float64
 	for pid, after := range second.cpu {
 		grew := after - first.cpu[pid]
+		if grew < 0 {
+			return false, fmt.Sprintf("pid %d CPU counter went backwards", pid), nil
+		}
 		if grew > budget {
 			return false, fmt.Sprintf("pid %d used %.2fs CPU in %s", pid, grew, window), nil
 		}
@@ -78,6 +112,9 @@ func verifyIdle(ctx context.Context, plat platform.Platform, o model.Orphan, exp
 		if derive.InUse(opt.classifier, root, p, state) {
 			return false, peerReason(p.PID, state), nil
 		}
+	}
+	if pinned != nil {
+		*pinned = starts
 	}
 	return true, "", nil
 }
@@ -115,6 +152,11 @@ func verifySample(ctx context.Context, plat platform.Platform, o model.Orphan, e
 		want[pid] = true
 	}
 	desc := idx.Descendants(o.RootPID)
+	for _, p := range append(desc, root) {
+		if start, pinned := o.ProcessStarts[p.PID]; pinned && (start.IsZero() || !p.StartTime.Equal(start)) {
+			return idleSample{}, fmt.Sprintf("pid %d identity changed since candidate was collected", p.PID), nil
+		}
+	}
 	if len(desc) != len(want) {
 		return idleSample{}, "orphan descendant set changed", nil
 	}

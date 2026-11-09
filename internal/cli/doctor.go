@@ -252,6 +252,14 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 			add("service_rss", status, detail, fix)
 		}
 	}
+	if err == nil && held && d.Store != nil {
+		stats, sampleErr := collector.ReadRuntimeStats(d.Store, owner.PID, d.Now, 3*intervals.Procs)
+		if sampleErr != nil {
+			add("service_runtime", "info", "no fresh Go runtime sample for this collector", "")
+		} else {
+			add("service_runtime", "info", fmt.Sprintf("after process pass %s ago: Go heap live %.1f MB, allocated %.1f MB, goal %.1f MB; Go-managed %.1f MB (sys %.1f MB, released %.1f MB); GC cycles %d, cumulative GC CPU %.2f%% of available CPU; not physical footprint", d.Now.Sub(stats.At).Round(time.Second), float64(stats.HeapLiveBytes)/1e6, float64(stats.HeapAllocatedBytes)/1e6, float64(stats.HeapGoalBytes)/1e6, float64(stats.GoSysBytes-stats.GoReleasedBytes)/1e6, float64(stats.GoSysBytes)/1e6, float64(stats.GoReleasedBytes)/1e6, stats.GCCycles, 100*stats.GCCPUFraction), "")
+		}
+	}
 	if info, err := os.Stat(filepath.Join(d.Home, ".gemini", "antigravity-cli")); err == nil && info.IsDir() {
 		found := false
 		for _, c := range checks {

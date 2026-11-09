@@ -5,6 +5,7 @@ package cleanup
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -71,7 +72,7 @@ func TestBuildOpenFileBlocks(t *testing.T) {
 }
 
 func TestBuildNestedGitRefused(t *testing.T) {
-	for _, rel := range []string{"dep/.git", "@scope/dep/.git"} {
+	for _, rel := range []string{"dep/.git", "@scope/dep/.git", "a/b/c/d/e/.git"} {
 		t.Run(rel, func(t *testing.T) {
 			e, _, _, path := buildFixture(t)
 			put(t, filepath.Join(path, rel, "HEAD"), "ref: refs/heads/main")
@@ -82,9 +83,85 @@ func TestBuildNestedGitRefused(t *testing.T) {
 
 func TestBuildDeepTreeListed(t *testing.T) {
 	e, _, _, path := buildFixture(t)
-	put(t, filepath.Join(path, "a/b/c/d/e/.git/HEAD"), "beyond inspection depth")
+	put(t, filepath.Join(path, "a/b/c/d/e/artifact"), "regenerable")
 	if c := listed(t, e, path); c.Status != "ready" {
 		t.Fatal(c)
+	}
+}
+
+func TestBuildDeepGitAppearsBeforeApply(t *testing.T) {
+	for _, gitFile := range []bool{false, true} {
+		t.Run(fmt.Sprint(gitFile), func(t *testing.T) {
+			e, _, _, path := buildFixture(t)
+			c := listed(t, e, path)
+			clone := filepath.Join(path, "a/b/c/d/repo")
+			keep := filepath.Join(clone, "unpublished.txt")
+			put(t, keep, "unpublished source")
+			if gitFile {
+				put(t, filepath.Join(clone, ".git"), "gitdir: elsewhere")
+			} else {
+				git(t, clone, "init")
+			}
+			if _, err := Apply(context.Background(), e, c, ApplyOpts{}); err == nil || !strings.Contains(err.Error(), "nested git") {
+				t.Fatalf("nested repository accepted: %v", err)
+			}
+			if _, err := os.Stat(keep); err != nil {
+				t.Fatal("nested source was removed", err)
+			}
+		})
+	}
+}
+
+func TestBuildFinishedSessionLiveness(t *testing.T) {
+	for _, state := range []string{"alive", "unknown pid", "gone", "ended", "dead label", "ended label"} {
+		t.Run(state, func(t *testing.T) {
+			e, p, repo, path := buildFixture(t)
+			p.alive = state != "gone"
+			session := model.Session{SessionObs: model.SessionObs{
+				Adapter: "claude", ExternalID: "finished-build", Cwd: repo,
+				PID: 4242, ProcStart: e.Now.Add(-10 * 24 * time.Hour), LastActivityAt: e.Now.Add(-8 * 24 * time.Hour),
+			}, Label: "finished"}
+			if state == "unknown pid" {
+				session.PID = 0
+			} else {
+				// A live agent at the checkout root does not trigger the build cwd check.
+				p.procs = []model.Proc{{PID: 4242, Cwd: repo, Cmdline: "claude"}}
+			}
+			if state == "ended" {
+				ended := e.Now.Add(-8 * 24 * time.Hour)
+				session.EndedAt = &ended
+			}
+			if state == "dead label" || state == "ended label" {
+				session.PID = 0
+				session.Label = strings.TrimSuffix(state, " label")
+			}
+			tx(t, e, func(tx *store.Tx) error { _, err := tx.UpsertSession(session); return err })
+			if state == "alive" || state == "unknown pid" {
+				buildRefused(t, e, path, "live session")
+			} else if c := listed(t, e, path); c.Status != "ready" {
+				t.Fatal(c)
+			}
+		})
+	}
+}
+
+func TestBuildFinishedSessionAppearsBeforeApply(t *testing.T) {
+	e, p, repo, path := buildFixture(t)
+	c := listed(t, e, path)
+	p.alive = true
+	p.procs = []model.Proc{{PID: 4242, Cwd: repo, Cmdline: "claude"}}
+	tx(t, e, func(tx *store.Tx) error {
+		_, err := tx.UpsertSession(model.Session{SessionObs: model.SessionObs{
+			Adapter: "claude", ExternalID: "finished-build", Cwd: repo,
+			PID: 4242, ProcStart: e.Now.Add(-10 * 24 * time.Hour), LastActivityAt: e.Now.Add(-8 * 24 * time.Hour),
+		}, Label: "finished"})
+		return err
+	})
+	if _, err := Apply(context.Background(), e, c, ApplyOpts{}); err == nil || !strings.Contains(err.Error(), "live session") {
+		t.Fatalf("live finished session accepted: %v", err)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatal("build directory was removed", err)
 	}
 }
 

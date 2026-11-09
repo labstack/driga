@@ -5,6 +5,7 @@ package kill
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -21,6 +22,90 @@ import (
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/platform"
 )
+
+func TestKillReportsObservedExitsAndFootprint(t *testing.T) {
+	for _, force := range []bool{false, true} {
+		t.Run(fmt.Sprint(force), func(t *testing.T) {
+			start := time.Now().Add(-time.Hour)
+			p := snapshotPlatform{procs: []model.Proc{
+				{PID: 100, StartTime: start, RSS: 12 << 20, Footprint: 3 << 30, MemoryMeasure: "physical_footprint"},
+				{PID: 200, PPID: 100, StartTime: start, RSS: 4 << 20, Footprint: 512 << 20, MemoryMeasure: "physical_footprint"},
+			}}
+			p.alive = func(pid int32, at time.Time) bool {
+				for _, proc := range p.procs {
+					if proc.PID == pid && proc.StartTime.Equal(at) {
+						return true
+					}
+				}
+				return false
+			}
+			r, err := tree(context.Background(), &p, model.Orphan{RootPID: 100, StartTime: start}, []int32{200}, force, time.Millisecond, func(pid int, sig syscall.Signal) error {
+				if pid == 200 || sig == syscall.SIGKILL {
+					p.procs = slices.DeleteFunc(p.procs, func(proc model.Proc) bool { return int(proc.PID) == pid })
+				}
+				return nil
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			data, err := json.Marshal(r)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var got struct {
+				Stopped   []int32 `json:"stopped"`
+				Survivors []int32 `json:"survivors"`
+				Before    struct {
+					Memory  uint64 `json:"memory_bytes"`
+					RSS     uint64 `json:"rss_bytes"`
+					Measure string `json:"memory_measure"`
+				} `json:"before"`
+				StoppedUsage struct {
+					Memory uint64 `json:"memory_bytes"`
+				} `json:"stopped_usage"`
+			}
+			if err := json.Unmarshal(data, &got); err != nil {
+				t.Fatal(err)
+			}
+			if got.Before.Memory != 3758096384 || got.Before.RSS != 16777216 || got.Before.Measure != "physical_footprint" {
+				t.Fatalf("lost memory measure: %s", data)
+			}
+			if force {
+				if len(got.Stopped) != 2 || len(got.Survivors) != 0 || got.StoppedUsage.Memory != 3758096384 {
+					t.Fatalf("force outcome: %s", data)
+				}
+			} else if !slices.Equal(got.Stopped, []int32{200}) || !slices.Equal(got.Survivors, []int32{100}) || got.StoppedUsage.Memory != 536870912 {
+				t.Fatalf("partial outcome: %s", data)
+			}
+		})
+	}
+}
+
+type failedFinalObservation struct {
+	snapshotPlatform
+	calls int
+}
+
+func (p *failedFinalObservation) Procs(context.Context) ([]model.Proc, error) {
+	p.calls++
+	if p.calls > 1 {
+		return nil, errors.New("process observation unavailable")
+	}
+	return p.procs, nil
+}
+
+func TestKillDoesNotInferExitFromFailedObservation(t *testing.T) {
+	start := time.Now().Add(-time.Hour)
+	p := &failedFinalObservation{snapshotPlatform: snapshotPlatform{procs: []model.Proc{{PID: 100, StartTime: start}}, alive: func(int32, time.Time) bool { return false }}}
+	r, err := tree(context.Background(), p, model.Orphan{RootPID: 100, StartTime: start}, nil, false, time.Millisecond, func(int, syscall.Signal) error { t.Fatal("unexpected signal"); return nil })
+	data, marshalErr := json.Marshal(r)
+	if marshalErr != nil {
+		t.Fatal(marshalErr)
+	}
+	if err == nil || !strings.Contains(err.Error(), "observation unavailable") || !strings.Contains(string(data), `"unknown":[100]`) {
+		t.Fatalf("failed observation reported exits: %s err=%v", data, err)
+	}
+}
 
 type socketPlatform struct {
 	snapshotPlatform

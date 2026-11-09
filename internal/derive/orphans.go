@@ -172,6 +172,9 @@ func FindOrphans(idx ProcIndex, sessions []model.Session, sigs *signatures.Set, 
 		ownerDead := deadEvidence
 		if spawned && owner != 0 {
 			ownerDead = !liveIDs[owner]
+			if liveIDs[owner] {
+				continue
+			}
 		}
 		parentEvidence := ""
 		if idx.windows {
@@ -297,6 +300,10 @@ func FindOrphans(idx ProcIndex, sessions []model.Session, sigs *signatures.Set, 
 					}
 				}
 			}
+		}
+		if reason := OrphanOwnershipReason(idx, sessions, pid); reason != "" {
+			o.Verified = false
+			o.Evidence = append(o.Evidence, reason)
 		}
 		candidates[pid] = o
 	}

@@ -363,22 +363,31 @@ func applyIntake(ctx context.Context, d Deps, st *store.Store, b intake.Batch) (
 			}
 			changed[i] = true
 		}
-		procs, err := tx.Procs()
-		if err != nil {
-			return err
-		}
-		idx, err := derive.NewProcIndexForOS(procs, platform.ProcessOS(d.Plat))
-		if err != nil {
-			return err
-		}
-		items, err := tx.Inbox(time.Time{}, false)
-		if err != nil {
-			return err
-		}
-		unseen := make(map[int64]bool)
-		for _, it := range items {
-			if it.Kind == "finished" {
-				unseen[it.SessionID] = true
+		var idx derive.ProcIndex
+		var unseen map[int64]bool
+		if len(changed) > 0 {
+			// Intake labels only affected sessions. Read their current process
+			// identities in this transaction; unrelated process argv and inbox
+			// content are not label inputs, and metrics-only batches need neither.
+			pids := make([]int32, 0, len(changed))
+			ids := make([]int64, 0, len(changed))
+			for i := range changed {
+				ids = append(ids, ss[i].ID)
+				if ss[i].PID != 0 {
+					pids = append(pids, ss[i].PID)
+				}
+			}
+			procs, err := tx.LabelProcs(pids)
+			if err != nil {
+				return err
+			}
+			idx, err = derive.NewProcIndexForOS(procs, platform.ProcessOS(d.Plat))
+			if err != nil {
+				return err
+			}
+			unseen, err = tx.UnseenFinishedSessions(ids)
+			if err != nil {
+				return err
 			}
 		}
 		for i := range changed {

@@ -43,7 +43,7 @@ func TestCleanupListJSON(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	out, _ := readRun(t, "cleanup", "--json")
+	out, _ := readRun(t, "cleanup", "--kind", "worktree", "--json")
 	var envelope map[string]json.RawMessage
 	if err := json.Unmarshal([]byte(out), &envelope); err != nil {
 		t.Fatal(out, err)

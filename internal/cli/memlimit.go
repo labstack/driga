@@ -18,20 +18,34 @@ const collectorGCPercent = 50
 
 // applyCollectorMemoryLimit sets the soft limit and GC percent unless the user
 // chose them via GOMEMLIMIT or GOGC. The limit is a target, not a cap: the GC
-// works harder near it but never fails allocations.
-func applyCollectorMemoryLimit() {
-	if os.Getenv("GOMEMLIMIT") == "" {
-		debug.SetMemoryLimit(collectorMemoryLimit)
+// works harder near it but never fails allocations. The returned function
+// restores settings changed here when an embedded command returns.
+func applyCollectorMemoryLimit() func() {
+	memory, gc := os.Getenv("GOMEMLIMIT") == "", os.Getenv("GOGC") == ""
+	var previousMemory int64
+	var previousGC int
+	if memory {
+		previousMemory = debug.SetMemoryLimit(collectorMemoryLimit)
 	}
-	if os.Getenv("GOGC") == "" {
-		debug.SetGCPercent(collectorGCPercent)
+	if gc {
+		previousGC = debug.SetGCPercent(collectorGCPercent)
+	}
+	return func() {
+		if gc {
+			debug.SetGCPercent(previousGC)
+		}
+		if memory {
+			debug.SetMemoryLimit(previousMemory)
+		}
 	}
 }
 
 // applyCollectorParallelism reduces GC coordination across Ps for the daemon's
 // small heap and high allocation churn. An explicit user GOMAXPROCS wins.
-func applyCollectorParallelism() {
+func applyCollectorParallelism() func() {
 	if _, set := os.LookupEnv("GOMAXPROCS"); !set {
-		runtime.GOMAXPROCS(min(2, runtime.NumCPU()))
+		previous := runtime.GOMAXPROCS(min(2, runtime.NumCPU()))
+		return func() { runtime.GOMAXPROCS(previous) }
 	}
+	return func() {}
 }

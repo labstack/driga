@@ -54,6 +54,7 @@ type Deps struct {
 	snapshot   bool
 	clock      daemonClock
 	classifier *derive.Classifier
+	gitWork    *gitWorker // Run owns one cancellable background inventory worker.
 }
 
 func (d Deps) now() time.Time {
@@ -74,6 +75,7 @@ type PassReport struct {
 	ObservedAt                                      time.Time
 	Sessions, Procs, Samples, Repos, Orphans, Inbox int
 	SourceErrors                                    map[string]string
+	gitApplied, gitFull                             bool
 }
 
 // Pass gathers and derives one atomic update. Only storage failures abort it.
@@ -391,17 +393,11 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 		if err := writeInboxJumps(tx, ss, collected.jumps); err != nil {
 			return err
 		}
-		items, err := tx.Inbox(time.Time{}, false)
+		unseen, err := tx.UnseenFinishedSessions(nil)
 		if err != nil {
 			return err
 		}
-		unseen := make(map[int64]bool)
-		for _, item := range items {
-			if item.Kind == "finished" {
-				unseen[item.SessionID] = true
-			}
-		}
-		allEvents, err := tx.LatestEvents(time.Time{})
+		allEvents, err := tx.LabelEvents()
 		if err != nil {
 			return err
 		}
@@ -426,17 +422,24 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 				ss[i].ParentID = &parent
 			}
 		}
-		if p.Git || p.GitIdentity {
+		if collected.gitRan {
 			if err := writeGit(tx, collected.git, collected.gitErr, func(name string, err error) error {
 				if p.GitIdentity {
 					name = "git_identity"
 				}
-				return source(name, err)
+				if collected.gitAt.IsZero() {
+					return source(name, err)
+				}
+				if err != nil {
+					r.SourceErrors[name] = scrub.Scrub(err.Error())
+					return tx.SetSourceError(name, r.SourceErrors[name], collected.gitAt)
+				}
+				return tx.SetSourceOK(name, collected.gitAt)
 			}, &r); err != nil {
 				return err
 			}
-			if p.GitFull && r.SourceErrors["git"] == "" {
-				work.gitFullAt = now
+			if collected.gitFull && r.SourceErrors["git"] == "" {
+				work.gitFullAt = collected.gitAt
 			}
 		}
 		if err := mapRepos(tx, ss, collected.paths); err != nil {
@@ -540,9 +543,18 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 			work.sessions[i] = s
 		}
 		r.Sessions, r.Procs = len(ss), len(procs)
+		if d.gitWork != nil && p.Procs {
+			if err := writeRuntimeStats(tx, d.now()); err != nil {
+				return err
+			}
+		}
 		return tx.SetMeta("last_pass_at", now.Format(time.RFC3339Nano))
 	})
 	if err == nil {
+		if collected.gitJob != nil {
+			d.gitWork.ack(collected.gitJob)
+			r.gitApplied, r.gitFull = true, collected.gitFull
+		}
 		state.prev, state.prevAt = work.prev, work.prevAt
 		state.prevMachine = work.prevMachine
 		state.cwds, state.cwdsAt = work.cwds, work.cwdsAt
@@ -1231,18 +1243,24 @@ func sameSessionRow(a, b model.Session) bool {
 		s.ParentExternalID = ""
 		s.Events, s.Completions, s.FilesTouched = nil, nil, nil
 		s.Evidence = evidenceDuration.ReplaceAllString(s.Evidence, "<age>")
-		if s.Mixer != nil {
-			m := *s.Mixer
-			m.ObservedAt = time.Time{}
-			m.Evidence = evidenceDuration.ReplaceAllString(m.Evidence, "<age>")
-			m.Rows = slices.Clone(m.Rows)
-			for i := range m.Rows {
-				m.Rows[i].Age = 0
-				m.Rows[i].Strength = 0
-			}
-			s.Mixer = &m
-		}
+		s.Mixer = nil
 		return s
 	}
-	return reflect.DeepEqual(normalize(a), normalize(b))
+	return sameMixerFacts(a.Mixer, b.Mixer) && reflect.DeepEqual(normalize(a), normalize(b))
+}
+
+func sameMixerFacts(a, b *model.StateMixer) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	if a.StuckAfterMS != b.StuckAfterMS || a.Verdict != b.Verdict || a.Heuristic != b.Heuristic || a.Agreement != b.Agreement || evidenceDuration.ReplaceAllString(a.Evidence, "<age>") != evidenceDuration.ReplaceAllString(b.Evidence, "<age>") || !reflect.DeepEqual(a.Input, b.Input) || (a.Rows == nil) != (b.Rows == nil) || len(a.Rows) != len(b.Rows) {
+		return false
+	}
+	for i := range a.Rows {
+		x, y := &a.Rows[i], &b.Rows[i]
+		if x.Name != y.Name || x.Reading != y.Reading || x.Supports != y.Supports || !reflect.DeepEqual(&x.At, &y.At) || !reflect.DeepEqual(x.Alive, y.Alive) || !reflect.DeepEqual(x.CPUPercent, y.CPUPercent) {
+			return false
+		}
+	}
+	return true
 }

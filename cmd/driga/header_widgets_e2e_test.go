@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -78,7 +79,31 @@ func TestHeaderEditReachesApp(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { cancel(); _ = serve.Wait() }()
-	client := &http.Client{Timeout: 2 * time.Second}
+	// Poll the cheap page route for startup. Dashboard reads use the test's
+	// overall deadline: retrying canceled reads can repeatedly discard work on
+	// a busy host before a complete response reaches the assertions.
+	client := &http.Client{}
+	var readyErr error
+	eventually(t, 20*time.Second, func() bool {
+		probeCtx, probeCancel := context.WithTimeout(ctx, 2*time.Second)
+		defer probeCancel()
+		req, err := http.NewRequestWithContext(probeCtx, http.MethodGet, "http://"+addr+"/app/", nil)
+		if err != nil {
+			readyErr = err
+			return false
+		}
+		response, err := client.Do(req)
+		if err != nil {
+			readyErr = err
+			return false
+		}
+		defer response.Body.Close()
+		if response.StatusCode != http.StatusOK {
+			readyErr = fmt.Errorf("page: HTTP %d", response.StatusCode)
+			return false
+		}
+		return true
+	}, func() string { return fmt.Sprintf("%s\nlast readiness error: %v", logs.String(), readyErr) })
 	open := func() (panel.Fragment, error) {
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://"+addr+"/app/api/open", bytes.NewBufferString(`{"id":"header"}`))
 		if err != nil {
@@ -93,12 +118,16 @@ func TestHeaderEditReachesApp(t *testing.T) {
 		defer response.Body.Close()
 		var f panel.Fragment
 		if response.StatusCode != 200 {
-			return f, fmt.Errorf("open: HTTP %d", response.StatusCode)
+			body, _ := io.ReadAll(io.LimitReader(response.Body, 4096))
+			return f, fmt.Errorf("open: HTTP %d: %s", response.StatusCode, body)
 		}
 		err = json.NewDecoder(response.Body).Decode(&f)
 		return f, err
 	}
-	eventually(t, 20*time.Second, func() bool { f, err := open(); return err == nil && f.ID == "header" && f.Version == 0 }, logs.String)
+	initial, err := open()
+	if err != nil || initial.ID != "header" || initial.Version != 0 {
+		t.Fatalf("initial open: id=%q version=%d error=%v\n%s", initial.ID, initial.Version, err, logs.String())
+	}
 	cmd := n.cmd(ctx, "mcp")
 	cmd.Stderr = &logs
 	session, err := sdk.NewClient(&sdk.Implementation{Name: "header-e2e", Version: "test"}, nil).Connect(ctx, &sdk.CommandTransport{Command: cmd}, nil)
@@ -115,14 +144,7 @@ func TestHeaderEditReachesApp(t *testing.T) {
 	if err != nil || result.IsError {
 		t.Fatalf("MCP edit: %+v %v\n%s", result, err, logs.String())
 	}
-	// One normal app refresh interval, then request exactly what the app polls.
-	timer := time.NewTimer(5 * time.Second)
-	defer timer.Stop()
-	select {
-	case <-timer.C:
-	case <-ctx.Done():
-		t.Fatal(ctx.Err())
-	}
+	// The edit has completed; request exactly what the app polls.
 	f, err := open()
 	if err != nil {
 		t.Fatalf("refresh: %v\n%s", err, logs.String())

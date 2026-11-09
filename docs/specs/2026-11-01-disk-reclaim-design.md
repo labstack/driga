@@ -94,6 +94,7 @@ through `os.Root`; neither invokes a tool.
 | Tool | Location | Command |
 |---|---|---|
 | Go build | `go env GOCACHE` | `go clean -cache` |
+| Stray Go build | direct real directories under temp roots, identified by Go's `README` marker | delete through `os.Root` after over 24h idle |
 | Go modules | `go env GOMODCACHE` | `go clean -modcache` (report only by default) |
 | uv | `uv cache dir` | `uv cache prune` |
 | npm | `npm config get cache` | `npm cache clean --force` |
@@ -106,6 +107,10 @@ through `os.Root`; neither invokes a tool.
 
 Rules:
 
+- Temp Go caches require a regular `README` starting with `This directory holds cached build artifacts from the Go build system.`; deduplicate canonical paths and exclude canonical `go env GOCACHE` (lookup failure excludes nothing extra). The directory and immediate children must be idle over 24h, with no process cwd or open file inside. Discovery and removal are independent of `RunTools`; removal freshly verifies the fingerprint, idle time, liveness, and identity, with refusals visible via `--why`.
+- With `RunTools` disabled, the configured-cache exclusion uses only an absolute
+  exported `GOCACHE`, resolving symlinks without launching Go. Settings written by
+  `go env -w` are not resolved in this mode.
 - A tool that is missing or prints no location is skipped.
 - Commands run only from the CLI in the user's shell environment, never from
   the launchd service, whose `PATH` and version-manager shims differ.

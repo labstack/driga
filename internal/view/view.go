@@ -285,7 +285,11 @@ type OrphanRow struct {
 	MachineFresh
 	MachineID string `json:"machine_id"`
 	model.Orphan
-	Age time.Duration `json:"age_ms"`
+	Age            time.Duration `json:"age_ms"`
+	Memory         uint64        `json:"memory_bytes"`
+	MemoryMeasure  string        `json:"memory_measure"`
+	CPUPercent     float64       `json:"cpu_percent"`
+	ResourcesKnown bool          `json:"resources_known"`
 }
 
 // OrphansView lists reclaim candidates.

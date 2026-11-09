@@ -21,7 +21,10 @@ driga inbox                       # current waits and recent completions; "inbox
 driga inbox list --all                # complete history, including acks and ended waits
 driga inbox ack <item-id>          # explicit acknowledgment
 driga orphans                     # "orphans list" also works
+driga reclaim                     # disk, memory and CPU opportunities, with protected work
+driga reclaim history             # process outcomes and disk cleanup receipts
 driga orphans kill <candidate-id>  # previews the tree and requires y
+driga orphans kill <candidate-id> --yes --json  # structured shutdown outcomes
 driga machines show                     # compact report with 24h trends
 driga machines show --full              # all retained trends and process detail
 driga machines                     # local + paired machine health
@@ -129,6 +132,46 @@ that runs from a running app's bundle protects its tree, unless an agent helper
 started it to borrow the bundle's runtime.
 
 Remote orphans cannot be killed here; run the kill command on their machine.
+Idle helpers that overlap a live session's directory require review; remembered
+live owners protect helpers even after detachment. Driga reloads session records,
+process identities and working directories after consent before authorizing an
+orphan shutdown. Idle CPU alone does not establish that a helper is unneeded.
+The orphan list reports the latest sampled CPU (100% is one core), memory and
+RSS separately. Memory uses physical footprint on macOS, private bytes on Windows,
+RSS plus swap where available on Linux, and RSS otherwise. Footprint may include
+compressed or swapped pages; it is not a promise of immediately freed RAM.
+Missing or changed process identities show unavailable resource estimates.
+
+After confirmation, including `--yes`, Driga checks a fresh idle window, socket
+peers and every member's start time before signaling. Shutdown results distinguish
+confirmed exits, survivors and unknown outcomes. `orphans kill --yes --json`
+returns one versioned document with per-tree outcomes and prior memory usage of
+confirmed exits. Survivors, refusals and observation failures return a nonzero
+exit code. The reported usage belongs to exited processes; machine-wide RAM and
+CPU can change independently as other work continues.
+
+`driga reclaim [--sizes] [--why] [--json]` brings local disk candidates, orphan
+trees and attributed live sessions into one plan. Ready actions sort first,
+followed by sampled CPU, memory and disk size; unlike units are kept separate.
+Unknown sizes remain unknown. Live work is protected and links to its session
+for deliberate review. Displayed next steps use the existing confirmation and
+fresh verification paths; listing a plan never stops or removes anything.
+
+`driga reclaim history [--kind process|disk] [--limit 50] [--json]` shows local
+receipts, newest first. Process receipts include confirmed exits, survivors,
+unknown outcomes and the prior usage of exited processes. The bounded private
+journal omits command lines, session text and error messages. Disk history uses
+the existing cleanup logs. Receipt-write failures produce visible warnings while
+preserving performed action results; a crash before receipt writing may leave no
+receipt. Rotation bounds retained history rather than promising permanent totals.
+
+The background service runs one Git inventory job at a time, allowing process
+sampling, spool handling and telemetry to continue while Git is slow. Completed
+inventory is published separately and retained until its transaction commits.
+Disposable snapshots still finish their Git scan before returning. `driga doctor`
+reports phase-correlated Go heap/GC measurements separately from physical
+footprint, only for a fresh sample belonging to the current collector PID.
+
 Remote inbox acknowledgments require the peer's `--allow-ack` grant; unreachable peers
 show `ack pending` and retry on reconnect.
 
@@ -703,6 +746,12 @@ driga cleanup remove --kind worktree --all # every ready worktree; skips anythin
   (`BUN_INSTALL` defaults to `~/.bun`), without invoking bun. Its cache directory
   and, on macOS, Xcode DerivedData are deleted through `os.Root`. Removing the
   bun cache is safe: installed `node_modules` are APFS clones or copies.
+  Stray Go build caches directly under temp roots are removed when their regular
+  `README` starts with Go's build-cache marker, the directory and its immediate
+  children are idle for over 24 hours, and no process cwd or open file is inside;
+  the canonical `go env GOCACHE` directory is excluded. Outside CLI tool execution,
+  only an absolute exported `GOCACHE` is resolved; `go env -w` settings are not read.
+  `--why` shows refusals.
   Go modules, Cargo registry, rustup toolchains (total usage), Hugging Face models,
   Colima and Docker VM disks, and Codex history are report-only. The service
   never runs these tools. Use `--kind build` or `--kind cache` to filter.
@@ -1052,8 +1101,10 @@ contains related sessions; selecting a session never selects the whole family.
 | `inbox list` | Attention and completion items; `--all` includes acknowledged/history items. Supports read-view options. |
 | `inbox ack <item-id>` or `inbox ack --all` | Explicit acknowledgment; `--machine` selects the source. |
 | `inbox jump <item-id>` | Jump to a local inbox destination without acknowledgment. |
-| `orphans list` | Orphan candidates and evidence; supports read-view options. |
-| `orphans kill <orphan-id>` or `orphans kill --all` | `--all`: Select all local orphan candidates; verify and confirm each unless --yes. Supports `--machine`, `--snapshot`, `--force`, `--yes/-y`. |
+| `orphans list` | Orphan candidates, evidence, sampled CPU, memory measure and RSS; supports read-view options. |
+| `reclaim list` (or `reclaim`) | Local disk, RAM and CPU plan with protected active work; `--sizes`, `--why`, `--json`. |
+| `reclaim history` | Local action receipts; `--kind process\|disk`, `--limit 1–1000`, `--json`. |
+| `orphans kill <orphan-id>` or `orphans kill --all` | `--all`: Select all local orphan candidates; verify and confirm each unless --yes. Supports `--machine`, `--snapshot`, `--force`, `--yes/-y`, and `--json` with `--yes`. |
 | `machines list` | Known machine connection health; `--machine`, `--snapshot`, `--json`, `--no-color`. |
 | `machines show [<machine>]` | Default target is `local`; `all` is rejected. `--full`, `--project`, `--snapshot`, `--json`, `--no-color`. |
 | `machines reset-id` | Confirm local cloned-machine identity repair; `--yes/-y`. |

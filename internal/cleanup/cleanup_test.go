@@ -232,6 +232,46 @@ func TestWorktreeCandidateReady(t *testing.T) {
 		t.Fatal("expected single cwd snapshot", p.cwdCalls)
 	}
 }
+
+func TestWorktreeFinishedSessionLiveness(t *testing.T) {
+	for _, state := range []string{"alive", "unknown pid", "gone", "ended", "dead label", "ended label"} {
+		t.Run(state, func(t *testing.T) {
+			e, p, repo, wt := fixture(t)
+			c := listed(t, e, wt)
+			p.alive = state != "gone"
+			session := model.Session{SessionObs: model.SessionObs{
+				Adapter: "claude", ExternalID: "finished-worktree", Cwd: wt,
+				PID: 4242, ProcStart: e.Now.Add(-10 * 24 * time.Hour), LastActivityAt: e.Now.Add(-8 * 24 * time.Hour),
+			}, Label: "finished"}
+			if state == "unknown pid" {
+				session.PID = 0
+			} else {
+				// The process moved outside the worktree; stored session attribution remains.
+				p.procs = []model.Proc{{PID: 4242, Cwd: repo, Cmdline: "claude"}}
+			}
+			if state == "ended" {
+				ended := e.Now.Add(-8 * 24 * time.Hour)
+				session.EndedAt = &ended
+			}
+			if state == "dead label" || state == "ended label" {
+				session.PID = 0
+				session.Label = strings.TrimSuffix(state, " label")
+			}
+			tx(t, e, func(tx *store.Tx) error { _, err := tx.UpsertSession(session); return err })
+			if state == "alive" || state == "unknown pid" {
+				absent(t, e, wt)
+				if _, err := Apply(context.Background(), e, c, ApplyOpts{}); err == nil || !strings.Contains(err.Error(), "live session") {
+					t.Fatalf("live finished session accepted: %v", err)
+				}
+				if _, err := os.Stat(wt); err != nil {
+					t.Fatal("worktree was removed", err)
+				}
+			} else if err := Verify(context.Background(), e, c); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
 func TestWorktreeRefusals(t *testing.T) {
 	for _, name := range []string{"main", "locked", "dirty", "untracked", "unpushed", "no-upstream", "idle-6d", "process", "live-session"} {
 		t.Run(name, func(t *testing.T) {

@@ -2,7 +2,9 @@ package cleanup
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,6 +14,139 @@ import (
 
 	"github.com/labstack/driga/internal/platform"
 )
+
+const goCacheREADME = "This directory holds cached build artifacts from the Go build system."
+
+func goTmpCacheFingerprint(path string) bool {
+	info, err := os.Lstat(path)
+	if err != nil || !info.IsDir() {
+		return false
+	}
+	readme := filepath.Join(path, "README")
+	info, err = os.Lstat(readme)
+	if err != nil || !info.Mode().IsRegular() {
+		return false
+	}
+	f, err := os.Open(readme)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+	prefix := make([]byte, len(goCacheREADME))
+	_, err = io.ReadFull(f, prefix)
+	return err == nil && string(prefix) == goCacheREADME
+}
+
+func goTmpCacheCandidates(ctx context.Context, e Env, s snapshot) []Candidate {
+	var cs []Candidate
+	seen := map[string]bool{}
+	var active string
+	located := false
+	for _, root := range roots(e) {
+		entries, _ := os.ReadDir(root)
+		for _, entry := range entries {
+			path := filepath.Join(root, entry.Name())
+			if !goTmpCacheFingerprint(path) {
+				continue
+			}
+			path = resolved(path)
+			if seen[path] {
+				continue
+			}
+			seen[path] = true
+			if !located {
+				active, located = configuredGoCache(ctx, e), true
+			}
+			if path == active {
+				continue
+			}
+			c, err := inspectGoTmpCache(e, s, path)
+			if err != nil {
+				if !e.Why {
+					continue
+				}
+				c.Status, c.Evidence = "refused", []string{err.Error()}
+			}
+			cs = append(cs, c)
+		}
+	}
+	return cs
+}
+
+func configuredGoCache(ctx context.Context, e Env) string {
+	// The service can honor an exported path without running Go or its shims.
+	path := os.Getenv("GOCACHE")
+	if e.RunTools {
+		locateCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+		out, err := e.tool(locateCtx, "go", "env", "GOCACHE")
+		if err != nil || locateCtx.Err() != nil {
+			return ""
+		}
+		path = strings.TrimSpace(string(out))
+	}
+	if !filepath.IsAbs(path) {
+		return ""
+	}
+	canonical, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return ""
+	}
+	return canonical
+}
+
+func inspectGoTmpCache(e Env, s snapshot, path string) (Candidate, error) {
+	c := Candidate{ID: fmt.Sprintf("cache:go-tmp:%x", sha256.Sum256([]byte(path)))[:25], Kind: Cache, Path: path, Status: "ready", Ignored: []IgnoredPath{}}
+	attributed := false
+	for _, root := range roots(e) {
+		if filepath.IsAbs(path) && filepath.Dir(path) == resolved(root) {
+			attributed = true
+			break
+		}
+	}
+	if !attributed || resolved(path) != path {
+		return c, fmt.Errorf("cache must be a direct real directory in a temp root")
+	}
+	if !goTmpCacheFingerprint(path) {
+		return c, fmt.Errorf("not a Go build cache directory")
+	}
+	info, err := os.Lstat(path)
+	if err != nil {
+		return c, err
+	}
+	latest := info.ModTime()
+	children, err := os.ReadDir(path)
+	if err != nil {
+		return c, err
+	}
+	for _, child := range children {
+		info, err := child.Info()
+		if err != nil {
+			return c, err
+		}
+		if info.ModTime().After(latest) {
+			latest = info.ModTime()
+		}
+	}
+	if e.now().Sub(latest) <= 24*time.Hour {
+		return c, fmt.Errorf("Go build cache active within 24h")
+	}
+	for _, cwd := range s.cwds {
+		if inside(path, resolved(cwd)) {
+			return c, fmt.Errorf("process cwd is inside Go build cache")
+		}
+	}
+	open, err := openUnder(s, path)
+	if err != nil {
+		return c, err
+	}
+	if open {
+		return c, fmt.Errorf("process has an open file inside Go build cache")
+	}
+	c.Evidence = []string{"Go build cache in temp, idle since " + latest.UTC().Format(time.RFC3339), "clean with: remove " + path}
+	c.identity, err = captureIdentity(path)
+	return c, err
+}
 
 type cacheTool struct {
 	ID, Binary string
@@ -38,6 +173,9 @@ var cacheTools = []cacheTool{
 }
 
 func (e Env) tool(ctx context.Context, binary string, args ...string) ([]byte, error) {
+	if !e.RunTools {
+		return nil, fmt.Errorf("tool commands run from the driga CLI only")
+	}
 	if e.Tool != nil {
 		return e.Tool(ctx, binary, args...)
 	}
@@ -121,6 +259,26 @@ func cacheCandidates(ctx context.Context, e Env) []Candidate {
 }
 
 func applyCache(ctx context.Context, e Env, c Candidate, opts ApplyOpts, r Result) (Result, error) {
+	if strings.HasPrefix(c.ID, "cache:go-tmp:") {
+		r.Commands = [][]string{{"remove", c.Path}}
+		if opts.DryRun {
+			return r, nil
+		}
+		parent := filepath.Dir(c.Path)
+		before, err := freeBytes(parent)
+		if err != nil {
+			return r, err
+		}
+		if err := removeCacheDirectory(c.Path); err != nil {
+			return r, err
+		}
+		after, err := freeBytes(parent)
+		if err != nil {
+			return r, err
+		}
+		r.FreedBytes = max(0, after-before)
+		return r, nil
+	}
 	for _, tool := range cacheTools {
 		if c.ID != "cache:"+tool.ID {
 			continue

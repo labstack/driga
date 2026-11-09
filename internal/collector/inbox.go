@@ -187,17 +187,17 @@ func collectInboxJumps(ctx context.Context, d Deps, ss []model.Session, processe
 }
 
 func writeInboxJumps(tx *store.Tx, ss []model.Session, jumps map[string]*model.InboxJump) error {
-	rows, err := tx.Inbox(time.Time{}, false)
+	rows, err := tx.ActiveInboxIdentities()
 	if err != nil {
 		return err
 	}
-	byID := make(map[int64]model.Session, len(ss))
+	byID := make(map[int64]*model.InboxJump, len(ss))
 	for _, s := range ss {
-		byID[s.ID] = s
+		byID[s.ID] = jumps[sessionKey(s.Adapter, s.ExternalID)]
 	}
 	for _, i := range rows {
-		if s, ok := byID[i.SessionID]; ok {
-			if err := tx.SetInboxJump(i.ID, jumps[sessionKey(s.Adapter, s.ExternalID)]); err != nil {
+		if jump, ok := byID[i.SessionID]; ok {
+			if err := tx.SetInboxJump(i.ID, jump); err != nil {
 				return err
 			}
 		}
