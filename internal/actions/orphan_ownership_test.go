@@ -40,6 +40,11 @@ func TestOrphanOwnershipReloadsSessionsAndNativeDirectories(t *testing.T) {
 	if err := verifyOrphanOwnership(ctx, g, p, o); err != nil {
 		t.Fatal(err)
 	}
+	missing := p
+	missing.cwds = nil
+	if err := verifyOrphanOwnership(ctx, g, missing, o); err == nil {
+		t.Fatal("missing native tree directory authorized kill with no stored sessions")
+	}
 	// A session appeared after the candidate was displayed. Even a previously
 	// verified idle tree must not be automatically stopped below its directory.
 	err = st.Tx(ctx, func(tx *store.Tx) error {

@@ -5,7 +5,9 @@ import (
 	"errors"
 	"io"
 	"os"
+	"os/user"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -91,13 +93,23 @@ func TestKillOutputFailurePreservesObservedOutcome(t *testing.T) {
 			dir := t.TempDir()
 			t.Setenv("DRIGA_DATA_DIR", dir)
 			proc := model.Proc{PID: 123456789, PPID: 1, StartTime: time.Now().Add(-time.Hour), RSS: 128}
+			proc.OwnerKnown, proc.OwnerUID = true, uint32(os.Getuid())
+			if runtime.GOOS == "windows" {
+				u, err := user.Current()
+				if err != nil {
+					t.Fatal(err)
+				}
+				proc.OwnerSID = u.Uid
+			}
+			proc.Exe, proc.Cmdline, proc.Argv = "/fixture/helper", "helper", []string{"helper"}
 			p := &outputFailurePlatform{procs: []model.Proc{proc}}
 			pids := []int32{proc.PID}
 			switch want {
 			case "pending":
 				p.final = p.procs
 			case "partial":
-				child := model.Proc{PID: proc.PID + 1, PPID: proc.PID, StartTime: proc.StartTime, RSS: 64}
+				child := proc
+				child.PID, child.PPID, child.RSS = proc.PID+1, proc.PID, 64
 				p.procs = append(p.procs, child)
 				p.final = []model.Proc{child}
 				pids = append(pids, child.PID)
@@ -176,5 +188,81 @@ func TestHistoryFailurePreservesOutcome(t *testing.T) {
 	report, _ := (KillOptions{}).Execute(ctx, Environment{Stdout: io.Discard}, config.Config{}, nil, []model.Orphan{{ID: "tree-1"}})
 	if len(report.Outcomes) != 1 || report.Outcomes[0].Status != "cancelled" || len(report.Warnings) != 1 {
 		t.Fatalf("%+v", report)
+	}
+}
+
+func TestKillRefusesIdentityChangedDuringConsent(t *testing.T) {
+	for _, change := range []string{"executable", "arguments", "owner", "partial", "display incomplete"} {
+		t.Run(change, func(t *testing.T) {
+			t.Setenv("DRIGA_DATA_DIR", t.TempDir())
+			proc := model.Proc{PID: 123456789, PPID: 1, StartTime: time.Now().Add(-time.Hour), OwnerKnown: true, OwnerUID: uint32(os.Getuid()), Exe: "/fixture/helper", Cmdline: "helper secret", Argv: []string{"helper", "secret"}}
+			if runtime.GOOS == "windows" {
+				u, err := user.Current()
+				if err != nil {
+					t.Fatal(err)
+				}
+				proc.OwnerSID = u.Uid
+			}
+			if change == "display incomplete" {
+				proc.Partial = true
+			}
+			p := &outputFailurePlatform{procs: []model.Proc{proc}}
+			confirmed := false
+			env := Environment{Stdout: io.Discard, Platform: func() platform.Platform { return p }, VerifyWindow: time.Nanosecond, Confirm: func(string) error {
+				confirmed = true
+				switch change {
+				case "executable":
+					p.procs[0].Exe = "/fixture/workload"
+				case "arguments":
+					p.procs[0].Argv[1] = "new-workload"
+				case "owner":
+					p.procs[0].OwnerKnown = false
+				case "partial":
+					p.procs[0].Partial = true
+				}
+				return nil
+			}}
+			report, err := (KillOptions{}).Execute(context.Background(), env, config.Config{}, p.procs, []model.Orphan{{ID: "session:1", RootPID: proc.PID, StartTime: proc.StartTime, Verified: true, PIDs: []int32{proc.PID}}})
+			if err == nil || len(report.Outcomes) != 1 || report.Outcomes[0].Status != "refused" || report.Outcomes[0].Result != nil || p.aliveCalls != 0 {
+				t.Fatalf("changed identity reached shutdown: report=%+v err=%v platform=%+v", report, err, p)
+			}
+			if change == "display incomplete" && (confirmed || p.calls != 0) {
+				t.Fatal("incomplete display identity reached consent or live verification")
+			}
+		})
+	}
+}
+
+func TestKillStoredIdentityRequiresCurrentMatchBeforeConsent(t *testing.T) {
+	for _, scenario := range []string{"match", "changed image", "unknown owner", "partial"} {
+		t.Run(scenario, func(t *testing.T) {
+			t.Setenv("DRIGA_DATA_DIR", t.TempDir())
+			proc := model.Proc{PID: 123456789, PPID: 1, StartTime: time.Now().Add(-time.Hour), OwnerKnown: true, OwnerUID: uint32(os.Getuid()), Exe: "/fixture/helper", Cmdline: "helper", Argv: []string{"helper"}}
+			if runtime.GOOS == "windows" {
+				u, err := user.Current()
+				if err != nil {
+					t.Fatal(err)
+				}
+				proc.OwnerSID = u.Uid
+			}
+			selected := proc
+			// SQLite keeps the displayed image and args, but omits owner fields.
+			selected.OwnerKnown, selected.OwnerUID, selected.OwnerSID = false, 0, ""
+			switch scenario {
+			case "changed image":
+				proc.Exe = "/fixture/workload"
+			case "unknown owner":
+				proc.OwnerKnown = false
+			case "partial":
+				proc.Partial = true
+			}
+			p := &outputFailurePlatform{procs: []model.Proc{proc}}
+			confirmed := false
+			env := Environment{Stdout: io.Discard, Platform: func() platform.Platform { return p }, Confirm: func(string) error { confirmed = true; return ErrRefused }}
+			report, err := (KillOptions{}).Execute(context.Background(), env, config.Config{}, []model.Proc{selected}, []model.Orphan{{ID: "session:1", RootPID: proc.PID, StartTime: proc.StartTime, Verified: true}})
+			if err == nil || confirmed != (scenario == "match") || p.aliveCalls != 0 || len(report.Outcomes) != 1 || report.Outcomes[0].Result != nil {
+				t.Fatalf("stored selection adopted changed identity: %+v err=%v confirmed=%t", report, err, confirmed)
+			}
+		})
 	}
 }

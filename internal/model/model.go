@@ -274,6 +274,8 @@ type Orphan struct {
 	PIDs      []int32   `json:"pids"`
 	// Windows pins every member because creator PIDs survive parent exit.
 	ProcessStarts map[int32]time.Time `json:"process_starts,omitempty"`
+	// ProcessIdentities is ephemeral action authority, never stored or serialized.
+	ProcessIdentities map[int32]Proc `json:"-"`
 }
 
 // Conflict is two or more live sessions overlapping on a worktree or file.

@@ -114,6 +114,20 @@ func (c ReclaimListCmd) Run(g *Globals) error {
 	if err := w.Flush(); err != nil {
 		return err
 	}
+	if c.PID != nil {
+		for _, r := range rows {
+			if r.RootPID == *c.PID && r.Cwd != "" {
+				if _, err := fmt.Fprintf(commandOutput(g), "Working directory: %q\n", r.Cwd); err != nil {
+					return err
+				}
+			}
+			if r.RootPID == *c.PID && r.Kind == "process_review" && r.Status != "not_found" {
+				if _, err := fmt.Fprintln(commandOutput(g), "Next step: review this process in its original session or owning tool; this inspection does not authorize shutdown."); err != nil {
+					return err
+				}
+			}
+		}
+	}
 	if _, err := fmt.Fprintf(commandOutput(g), "observed_at: %s (%s)\n", envelope.ObservedAt.Format(time.RFC3339), envelope.Mode); err != nil {
 		return err
 	}
@@ -125,7 +139,11 @@ func (c ReclaimListCmd) Run(g *Globals) error {
 	}
 	sort.Strings(stale)
 	for _, name := range stale {
-		if _, err := fmt.Fprintf(commandOutput(g), "stale: %s (%s ago)\n", name, envelope.Freshness[name].LastOKAt.Format(time.RFC3339)); err != nil {
+		last := "no successful observation"
+		if !envelope.Freshness[name].LastOKAt.IsZero() {
+			last = "last success " + envelope.Freshness[name].LastOKAt.Format(time.RFC3339)
+		}
+		if _, err := fmt.Fprintf(commandOutput(g), "stale: %s (%s)\n", name, last); err != nil {
 			return err
 		}
 	}

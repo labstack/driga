@@ -27,19 +27,23 @@ func verifyIdle(ctx context.Context, plat platform.Platform, o model.Orphan, exp
 // VerifyForAction pins every member observed across a fresh idle window. The
 // caller passes this candidate to Tree immediately after consent.
 func VerifyForAction(ctx context.Context, plat platform.Platform, o model.Orphan, expect []int32, window time.Duration, opts ...Option) (model.Orphan, error) {
-	var starts map[int32]time.Time
-	ok, reason, err := verifyIdlePinned(ctx, plat, o, expect, window, runtime.GOOS == "windows", &starts, opts...)
+	var identities map[int32]model.Proc
+	ok, reason, err := verifyIdlePinned(ctx, plat, o, expect, window, runtime.GOOS == "windows", &identities, opts...)
 	if err != nil {
 		return o, err
 	}
 	if !ok {
 		return o, fmt.Errorf("not idle: %s", reason)
 	}
-	o.ProcessStarts = starts
+	o.ProcessIdentities = identities
+	o.ProcessStarts = make(map[int32]time.Time, len(identities))
+	for pid, p := range identities {
+		o.ProcessStarts[pid] = p.StartTime
+	}
 	return o, nil
 }
 
-func verifyIdlePinned(ctx context.Context, plat platform.Platform, o model.Orphan, expect []int32, window time.Duration, windows bool, pinned *map[int32]time.Time, opts ...Option) (bool, string, error) {
+func verifyIdlePinned(ctx context.Context, plat platform.Platform, o model.Orphan, expect []int32, window time.Duration, windows bool, pinned *map[int32]model.Proc, opts ...Option) (bool, string, error) {
 	opt := collectOptions(opts)
 	prober, ok := plat.(platform.SocketProber)
 	if !ok {
@@ -48,6 +52,13 @@ func verifyIdlePinned(ctx context.Context, plat platform.Platform, o model.Orpha
 	first, reason, err := verifySample(ctx, plat, o, expect)
 	if err != nil || reason != "" {
 		return false, reason, err
+	}
+	starts := make(map[int32]time.Time, len(first.tree))
+	identities := make(map[int32]model.Proc, len(first.tree))
+	for _, p := range first.tree {
+		starts[p.PID] = p.StartTime
+		p.Argv = append([]string(nil), p.Argv...)
+		identities[p.PID] = p
 	}
 	timer := time.NewTimer(window)
 	select {
@@ -65,16 +76,12 @@ func verifyIdlePinned(ctx context.Context, plat platform.Platform, o model.Orpha
 			return false, reason, nil
 		}
 	}
-	starts := make(map[int32]time.Time, len(first.tree))
-	for _, p := range first.tree {
-		starts[p.PID] = p.StartTime
-	}
 	for _, p := range second.tree {
 		if !starts[p.PID].Equal(p.StartTime) {
 			return false, fmt.Sprintf("pid %d identity changed during idle verification", p.PID), nil
 		}
-		if pinned != nil && p.StartTime.IsZero() {
-			return false, fmt.Sprintf("pid %d identity unavailable", p.PID), nil
+		if pinned != nil && (!Owned(p) || !SameIdentity(identities[p.PID], p)) {
+			return false, fmt.Sprintf("pid %d identity unavailable or changed during idle verification", p.PID), nil
 		}
 	}
 	// CPUSeconds has tick granularity, so each process gets 10ms of slack on
@@ -114,7 +121,7 @@ func verifyIdlePinned(ctx context.Context, plat platform.Platform, o model.Orpha
 		}
 	}
 	if pinned != nil {
-		*pinned = starts
+		*pinned = identities
 	}
 	return true, "", nil
 }
@@ -153,6 +160,9 @@ func verifySample(ctx context.Context, plat platform.Platform, o model.Orphan, e
 	}
 	desc := idx.Descendants(o.RootPID)
 	for _, p := range append(desc, root) {
+		if o.ProcessIdentities != nil && (!Owned(p) || !SameIdentity(o.ProcessIdentities[p.PID], p)) {
+			return idleSample{}, fmt.Sprintf("pid %d identity changed since candidate was selected", p.PID), nil
+		}
 		if start, pinned := o.ProcessStarts[p.PID]; pinned && (start.IsZero() || !p.StartTime.Equal(start)) {
 			return idleSample{}, fmt.Sprintf("pid %d identity changed since candidate was collected", p.PID), nil
 		}

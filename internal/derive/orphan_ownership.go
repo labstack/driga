@@ -30,8 +30,11 @@ func OrphanOwnershipReason(idx ProcIndex, sessions []model.Session, rootPID int3
 	}
 	for _, s := range sessions {
 		_, processLive := live[s.PID]
-		if !familySessionLive(s) || !processLive && !(s.PID == 0 && s.Hosted) || s.Cwd == "" {
+		if !familySessionLive(s) || !processLive && !(s.PID == 0 && s.Hosted) {
 			continue
+		}
+		if s.Cwd == "" {
+			return fmt.Sprintf("ownership requires review: working directory unavailable for live session %d", s.ID)
 		}
 		for _, p := range tree {
 			if p.Cwd == "" {

@@ -57,12 +57,15 @@ func TestChatKillKeepsVerification(t *testing.T) {
 	readEnv(t)
 	start := time.Now().Add(-time.Hour)
 	tree := func(cpu float64) []model.Proc {
-		return []model.Proc{{PID: 4242, PPID: 1, StartTime: start, CPUSeconds: cpu}}
+		return []model.Proc{killFixtureProc(t, model.Proc{PID: 4242, PPID: 1, StartTime: start, CPUSeconds: cpu})}
 	}
 	readDB(t, func(tx *store.Tx) error {
+		if err := tx.ReplaceProcs(tree(1)); err != nil {
+			return err
+		}
 		return tx.ReplaceOrphans([]model.Orphan{{ID: "busy", RootPID: 4242, StartTime: start, PIDs: []int32{4242}}})
 	})
-	plat := &cliSeqPlatform{snaps: [][]model.Proc{tree(1), tree(2)}}
+	plat := &cliSeqPlatform{snaps: [][]model.Proc{tree(1), tree(1), tree(2)}}
 	oldPlat, oldWindow := actPlatform, verifyWindow
 	actPlatform = func() platform.Platform { return plat }
 	verifyWindow = time.Millisecond
@@ -187,7 +190,7 @@ func TestAgentsKillAndChatShareIdentityAndIdleChecks(t *testing.T) {
 			readEnv(t)
 			start := time.Now().Add(-time.Hour)
 			var id int64
-			procs := []model.Proc{{PID: 4242, PPID: 1, StartTime: start, CPUSeconds: 1}}
+			procs := []model.Proc{killFixtureProc(t, model.Proc{PID: 4242, PPID: 1, StartTime: start, CPUSeconds: 1})}
 			readDB(t, func(tx *store.Tx) error {
 				var err error
 				id, err = tx.UpsertSession(model.Session{SessionObs: model.SessionObs{Adapter: "claude", ExternalID: "selected", PID: 4242, ProcStart: start}})
@@ -205,7 +208,7 @@ func TestAgentsKillAndChatShareIdentityAndIdleChecks(t *testing.T) {
 			for _, caller := range []string{"CLI", "Chat"} {
 				later := append([]model.Proc(nil), procs...)
 				later[0].CPUSeconds = 2
-				actPlatform = func() platform.Platform { return &cliSeqPlatform{snaps: [][]model.Proc{procs, later}} }
+				actPlatform = func() platform.Platform { return &cliSeqPlatform{snaps: [][]model.Proc{procs, procs, later}} }
 				var out, diagnostic bytes.Buffer
 				var err error
 				if caller == "CLI" {

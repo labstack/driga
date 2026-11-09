@@ -751,8 +751,8 @@ driga cleanup remove --kind worktree --all # every ready worktree; skips anythin
   `build` need `build.gradle*` or `settings.gradle*`; `.build` needs `Package.swift`;
   `Pods` needs `Podfile`; `.pio` needs `platformio.ini`.
   `__pycache__` is omitted from standalone build candidates.
-  `cleanup.regenerable` adds user-asserted names. `out`, `.terraform` and
-  `.codegraph` are always excluded, including from user additions. Symlinks,
+  `cleanup.regenerable` adds user-asserted names, including an explicit opt-in
+  for `.codegraph`. `out` and `.terraform` are always excluded. Symlinks,
   nested Git repositories, process cwds or open files inside, live sessions in
   the checkout, and checkouts active within `cleanup.build_idle` are refused.
   A terminal at the checkout root does not block build cleanup. Build output is
@@ -771,9 +771,15 @@ driga cleanup remove --kind worktree --all # every ready worktree; skips anythin
   the canonical `go env GOCACHE` directory is excluded. Outside CLI tool execution,
   only an absolute exported `GOCACHE` is resolved; `go env -w` settings are not read.
   `--why` shows refusals.
-  Go modules, Cargo registry, rustup toolchains (total usage), Hugging Face models,
+  Go modules, Cargo registry, rustup toolchains, Hugging Face models,
   Colima and Docker VM disks, and Codex history are report-only. The service
   never runs these tools. Use `--kind build` or `--kind cache` to filter.
+  On demand, rustup inventory reports individual toolchains against known repo
+  and worktree toolchain files, directory overrides, and current selections.
+  A toolchain absent from those observations still requires manual review;
+  missing or invalid configuration makes usage unknown. Background collection
+  reports the aggregate directory without running rustup. Driga never removes
+  toolchains. File precedence follows [Rustup's documented overrides](https://rust-lang.github.io/rustup/overrides.html).
   Size previews show **up to** N bytes; APFS clones and hard links may share
   storage. After cleanup, nonzero free-space deltas are printed as `freed`.
 - **History**: agent history sizes by age. Report only; use the agent's own

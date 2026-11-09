@@ -28,7 +28,7 @@ func TestPlanProtectsAmbiguityAndAttributesNestedWorkOnce(t *testing.T) {
 				t.Fatalf("unsafe action: %+v", r)
 			}
 		case "session:1":
-			if r.Status != "protected" || r.CPU != 100 || r.Memory.RSS != 300 || !strings.Contains(r.Action, "jump 1") {
+			if r.Status != "protected" || r.Name == "" || r.CPU != 100 || r.Memory.RSS != 300 || !strings.Contains(r.Action, "jump 1") {
 				t.Fatalf("active work=%+v", r)
 			}
 		case "unknown-cache":

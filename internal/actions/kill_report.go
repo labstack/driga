@@ -119,7 +119,45 @@ func (c KillOptions) executeOne(ctx context.Context, g Environment, cfg config.C
 			expect = append(expect, pid)
 		}
 	}
+	// Consent applies to the displayed identities, not whichever image occupies
+	// these PIDs when the subsequent idle window starts.
 	plat := g.Platform()
+	var native *derive.ProcIndex
+	approved := make(map[int32]model.Proc, len(pids))
+	for _, pid := range pids {
+		p, present := idx.Get(pid)
+		if present && !p.OwnerKnown && !p.Partial {
+			// Stored snapshots intentionally omit owner metadata. Observe ownership
+			// locally before consent, retaining the displayed executable and args.
+			if native == nil {
+				current, err := plat.Procs(ctx)
+				if err != nil {
+					return fail(err)
+				}
+				currentIndex := derive.NewProcIndex(current)
+				native = &currentIndex
+			}
+			current, found := native.Get(pid)
+			comparison := p
+			comparison.OwnerKnown, comparison.OwnerUID, comparison.OwnerSID = current.OwnerKnown, current.OwnerUID, current.OwnerSID
+			if !found || !kill.Owned(current) || !kill.SameIdentity(comparison, current) {
+				outcome.Status = "refused"
+				return fail(fmt.Errorf("pid %d displayed identity changed or unavailable; collect and list again", pid))
+			}
+			p = current
+		}
+		if !present || !kill.Owned(p) || !kill.SameIdentity(p, p) {
+			outcome.Status = "refused"
+			return fail(fmt.Errorf("pid %d displayed identity unavailable; collect and list again", pid))
+		}
+		if o.ProcessIdentities != nil && !kill.SameIdentity(o.ProcessIdentities[pid], p) {
+			outcome.Status = "refused"
+			return fail(fmt.Errorf("pid %d approved identity changed; collect and list again", pid))
+		}
+		p.Argv = append([]string(nil), p.Argv...)
+		approved[pid] = p
+	}
+	o.ProcessIdentities = approved
 	verify := func(pin bool) error {
 		if _, err := fmt.Fprintf(g.Stdout, "%s: checking it stays idle for %s…\n", o.ID, g.VerifyWindow); err != nil {
 			return err
@@ -130,6 +168,7 @@ func (c KillOptions) executeOne(ctx context.Context, g Environment, cfg config.C
 				return err
 			}
 			o.ProcessStarts = fresh.ProcessStarts
+			o.ProcessIdentities = fresh.ProcessIdentities
 			if err := verifyOrphanOwnership(ctx, g, plat, o); err != nil {
 				return err
 			}

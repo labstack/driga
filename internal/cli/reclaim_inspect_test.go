@@ -74,7 +74,7 @@ func TestReclaimExactPIDWithoutCollectorOrDatabase(t *testing.T) {
 			target = &envelope.Data[i]
 		}
 	}
-	if envelope.Schema != 2 || target == nil || target.Name != "lifecycle.sh" || target.Status != "review" || target.CPUKnown == nil || *target.CPUKnown {
+	if envelope.Schema != 2 || target == nil || target.Name != "lifecycle.sh" || target.Status != "review" || target.CPUKnown == nil || *target.CPUKnown || target.Action != "" || target.Cwd == "" {
 		t.Fatalf("exact PID review = %s", &out)
 	}
 	if p.procsCalls != 1 || len(p.peerCalls) != 1 || len(p.peerCalls[0]) != 1 || p.peerCalls[0][0] != pid {
@@ -84,6 +84,14 @@ func TestReclaimExactPIDWithoutCollectorOrDatabase(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(os.Getenv("DRIGA_DATA_DIR"), name)); !os.IsNotExist(err) {
 			t.Fatalf("read-only inspection wrote %s: %v", name, err)
 		}
+	}
+	out.Reset()
+	g.JSON = false
+	if err := (ReclaimListCmd{PID: &pid}).Run(g); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "Working directory:") || !strings.Contains(out.String(), "original session or owning tool") || strings.Contains(out.String(), fmt.Sprintf("driga reclaim --pid %d", pid)) {
+		t.Fatalf("exact inspection lacks provenance or repeats itself: %s", &out)
 	}
 }
 

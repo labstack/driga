@@ -256,7 +256,8 @@ func cacheCandidates(ctx context.Context, e Env, s snapshot) []Candidate {
 			case "cargo-registry":
 				path, reason = filepath.Join(e.Home, ".cargo/registry"), "dependency downloads"
 			case "rustup":
-				path, reason = filepath.Join(e.Home, ".rustup/toolchains"), "toolchain usage by repo is not checked"
+				cs = append(cs, rustupCandidates(ctx, e, s)...)
+				continue
 			case "huggingface":
 				path, reason = filepath.Join(e.Home, ".cache/huggingface"), "model cache"
 			case "colima":

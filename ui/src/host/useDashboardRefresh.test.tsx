@@ -38,6 +38,20 @@ beforeEach(() => {
 afterEach(async () => { await act(async () => root.unmount()); container.remove(); });
 
 describe("dashboard refresh publications", () => {
+  it("publishes slow initial reads even when another poll becomes due", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+    api.open.mockImplementation((id: string) => new Promise(resolve => setTimeout(() => resolve(fragment(id)), 6000)));
+    try {
+      await mount();
+      await act(async () => { await vi.advanceTimersByTimeAsync(18000); });
+      expect(state.fragment?.id).toBe("home");
+    } finally {
+      vi.useRealTimers();
+      vi.restoreAllMocks();
+    }
+  });
+
   it("retains failed supplements independently and tracks selected freshness", async () => {
     const prompts = [{ id: "pending" }] as Prompt[];
     api.prompts.mockResolvedValue(prompts);

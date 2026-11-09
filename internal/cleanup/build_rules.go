@@ -32,7 +32,7 @@ var buildRules = []buildRule{
 
 var errNotBuild = errors.New("not a known regenerable directory")
 
-var neverBuild = []string{"out", ".terraform", ".codegraph"}
+var neverBuild = []string{"out", ".terraform"}
 
 // regenerableOnly directories may leave with a worktree, but are too small and
 // numerous to list as standalone build candidates.

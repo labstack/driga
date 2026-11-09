@@ -63,6 +63,11 @@ func verifyOrphanOwnership(ctx context.Context, g Environment, plat platform.Pla
 	if err != nil {
 		return fmt.Errorf("cannot verify orphan ownership directories: %w", err)
 	}
+	for _, pid := range pids {
+		if cwds[pid] == "" {
+			return fmt.Errorf("cannot verify orphan ownership: current working directory unavailable for pid %d", pid)
+		}
+	}
 	for i := range procs {
 		if cwd := cwds[procs[i].PID]; cwd != "" {
 			if filepath.IsAbs(cwd) {

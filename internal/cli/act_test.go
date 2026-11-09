@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"io"
 	"os"
+	"os/user"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -54,19 +55,42 @@ func (p *cliSeqPlatform) Procs(context.Context) ([]model.Proc, error) {
 func (p *cliSeqPlatform) Machine(context.Context) (model.MachineSample, error) {
 	return model.MachineSample{}, nil
 }
-func (p *cliSeqPlatform) Cwds(context.Context, []int32) (map[int32]string, error) { return nil, nil }
-func (p *cliSeqPlatform) Alive(int32, time.Time) bool                             { return false }
+func (p *cliSeqPlatform) Cwds(context.Context, []int32) (map[int32]string, error) {
+	cwds := map[int32]string{}
+	for _, proc := range p.snaps[min(max(p.calls-1, 0), len(p.snaps)-1)] {
+		cwds[proc.PID] = proc.Cwd
+	}
+	return cwds, nil
+}
+func (p *cliSeqPlatform) Alive(int32, time.Time) bool { return false }
 func (p *cliSeqPlatform) ExternalPeers(context.Context, []int32) (map[int32]model.PeerState, error) {
 	return platform.FixturePeers(p.peers), nil
 }
 
 var _ platform.SocketProber = (*cliSeqPlatform)(nil)
 
+func killFixtureProc(t *testing.T, p model.Proc) model.Proc {
+	t.Helper()
+	p.OwnerKnown, p.OwnerUID = true, uint32(os.Getuid())
+	if runtime.GOOS == "windows" {
+		u, err := user.Current()
+		if err != nil {
+			t.Fatal(err)
+		}
+		p.OwnerSID = u.Uid
+	}
+	if p.StartTime.IsZero() {
+		p.StartTime = time.Unix(1700000000, 0)
+	}
+	p.Exe, p.Cmdline, p.Argv, p.Cwd = "/fixture/helper", "helper", []string{"helper"}, "/fixture"
+	return p
+}
+
 func TestKillRechecksCPUForPreviouslyVerifiedOrphan(t *testing.T) {
 	readEnv(t)
 	start := time.Now().Add(-time.Hour)
 	process := func(cpu float64) []model.Proc {
-		return []model.Proc{{PID: 4242, PPID: 1, StartTime: start, CPUSeconds: cpu}}
+		return []model.Proc{killFixtureProc(t, model.Proc{PID: 4242, PPID: 1, StartTime: start, CPUSeconds: cpu})}
 	}
 	plat := &cliSeqPlatform{snaps: [][]model.Proc{process(1), process(2)}, peers: map[int32]bool{4242: false}}
 	oldPlat, oldWindow := actPlatform, verifyWindow
@@ -84,7 +108,7 @@ func TestKillRechecksCPUForPreviouslyVerifiedOrphan(t *testing.T) {
 func TestKillVerifiesAfterBothConsents(t *testing.T) {
 	readEnv(t)
 	start := time.Now().Add(-time.Hour)
-	proc := []model.Proc{{PID: 4242, PPID: 1, StartTime: start, CPUSeconds: 1}}
+	proc := []model.Proc{killFixtureProc(t, model.Proc{PID: 4242, PPID: 1, StartTime: start, CPUSeconds: 1})}
 	busy := append([]model.Proc(nil), proc...)
 	busy[0].CPUSeconds = 2
 	plat := &cliSeqPlatform{snaps: [][]model.Proc{proc, proc}, peers: map[int32]bool{4242: false}}
@@ -118,7 +142,7 @@ func TestKillVerifiesUnverifiedOnDemand(t *testing.T) {
 
 	start := time.Unix(1700000000, 0)
 	tree := func(cpu float64) []model.Proc {
-		return []model.Proc{{PID: 4242, PPID: 1, StartTime: start, CPUSeconds: cpu, Cmdline: "helper", Argv: []string{"helper"}}}
+		return []model.Proc{killFixtureProc(t, model.Proc{PID: 4242, PPID: 1, StartTime: start, CPUSeconds: cpu})}
 	}
 	for _, tc := range []struct {
 		name   string
@@ -133,8 +157,12 @@ func TestKillVerifiesUnverifiedOnDemand(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			readEnv(t)
 			readDB(t, func(tx *store.Tx) error {
+				if err := tx.ReplaceProcs(tree(1)); err != nil {
+					return err
+				}
 				return tx.ReplaceOrphans([]model.Orphan{{ID: "unverified", RootPID: 4242, StartTime: start, PIDs: []int32{4242}}})
 			})
+			tc.plat.snaps = append([][]model.Proc{tree(1)}, tc.plat.snaps...)
 			oldPlat, oldWindow := actPlatform, verifyWindow
 			actPlatform, verifyWindow = func() platform.Platform { return tc.plat }, time.Millisecond
 			t.Cleanup(func() { actPlatform, verifyWindow = oldPlat, oldWindow })
@@ -265,7 +293,8 @@ func TestKillConfirmation(t *testing.T) {
 	}
 
 	readEnv(t)
-	procs := []model.Proc{{PID: 1, Exe: "fixture", Cmdline: "fixture", Argv: []string{"fixture"}, RSS: 1024}}
+	procs := []model.Proc{killFixtureProc(t, model.Proc{PID: 1, RSS: 1024})}
+	procs[0].Exe, procs[0].Cmdline, procs[0].Argv = "fixture", "fixture", []string{"fixture"}
 	candidates := []model.Orphan{{ID: "protected", RootPID: 1, StartTime: time.Now().Add(-time.Hour), PIDs: []int32{1}, RSSTotal: 1024, Verified: true}}
 	for _, tc := range []struct {
 		input         string
@@ -292,16 +321,16 @@ func TestKillJSONOutcomes(t *testing.T) {
 		t.Run(status, func(t *testing.T) {
 			readEnv(t)
 			start := time.Now().Add(-time.Hour)
-			proc := []model.Proc{{PID: 4242, PPID: 1, StartTime: start, CPUSeconds: 1, RSS: 1024, Footprint: 8192, MemoryMeasure: "physical_footprint"}}
+			proc := []model.Proc{killFixtureProc(t, model.Proc{PID: 4242, PPID: 1, StartTime: start, CPUSeconds: 1, RSS: 1024, Footprint: 8192, MemoryMeasure: "physical_footprint"})}
 			readDB(t, func(tx *store.Tx) error {
 				if err := tx.ReplaceProcs(proc); err != nil {
 					return err
 				}
 				return tx.ReplaceOrphans([]model.Orphan{{ID: "fixture", RootPID: 4242, StartTime: start, PIDs: []int32{4242}, Verified: true, Young: status == "refused"}})
 			})
-			snaps := [][]model.Proc{proc, proc, proc, proc, {}}
+			snaps := [][]model.Proc{proc, proc, proc, proc, proc, {}}
 			if status == "pending" {
-				snaps[4] = proc
+				snaps[5] = proc
 			}
 			plat := &cliSeqPlatform{snaps: snaps, peers: map[int32]bool{4242: false}}
 			oldPlat, oldWindow := actPlatform, verifyWindow
@@ -350,7 +379,7 @@ func TestKillAllPromptsPerCandidate(t *testing.T) {
 	readEnv(t)
 	candidates := []model.Orphan{{ID: "one", RootPID: 1, Verified: true}, {ID: "two", RootPID: 1, Verified: true}, {ID: "young", Young: true, StartTime: time.Now().Add(-time.Minute)}}
 	var out, errout bytes.Buffer
-	if err := (OrphansKillCmd{All: true}).killCandidates(context.Background(), &Globals{inputTerminal: true, Stdout: &out, Stderr: &errout, Stdin: strings.NewReader("n\nn\ny\n")}, config.Default(), nil, candidates); err == nil {
+	if err := (OrphansKillCmd{All: true}).killCandidates(context.Background(), &Globals{inputTerminal: true, Stdout: &out, Stderr: &errout, Stdin: strings.NewReader("n\nn\ny\n")}, config.Default(), []model.Proc{killFixtureProc(t, model.Proc{PID: 1})}, candidates); err == nil {
 		t.Fatalf("error=%v out=%s err=%s", err, &out, &errout)
 	}
 	if strings.Count(out.String(), "? [y/N]") != 2 || !strings.Contains(out.String(), "Kill one?") || !strings.Contains(out.String(), "Kill two?") || !strings.Contains(out.String(), "too young to kill") {
@@ -389,7 +418,14 @@ func TestKillAllSkipsRemote(t *testing.T) {
 	}
 
 	readEnv(t)
+	proc := []model.Proc{killFixtureProc(t, model.Proc{PID: 4242})}
+	oldPlat := actPlatform
+	actPlatform = func() platform.Platform { return &cliSeqPlatform{snaps: [][]model.Proc{proc}} }
+	t.Cleanup(func() { actPlatform = oldPlat })
 	readDB(t, func(tx *store.Tx) error {
+		if err := tx.ReplaceProcs(proc); err != nil {
+			return err
+		}
 		if err := tx.ReplaceOrphans([]model.Orphan{{ID: "local", RootPID: 4242, Verified: true}}); err != nil {
 			return err
 		}

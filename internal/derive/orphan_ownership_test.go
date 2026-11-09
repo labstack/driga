@@ -71,3 +71,22 @@ func TestOrphanRememberedLiveOwnerProtectedAfterReparenting(t *testing.T) {
 		t.Fatalf("live spawning owner must protect reparented helper: %+v", got)
 	}
 }
+
+func TestOrphanUnknownLiveSessionDirectoryNeedsReview(t *testing.T) {
+	start := time.Now().Add(-time.Hour)
+	idx := NewProcIndex([]model.Proc{{PID: 10, PPID: 1, StartTime: start, Cwd: "/repo"}, {PID: 90, StartTime: start}})
+	for _, hosted := range []bool{false, true} {
+		pid := int32(90)
+		if hosted {
+			pid = 0
+		}
+		session := model.Session{ID: 1, Label: "working", SessionObs: model.SessionObs{PID: pid, ProcStart: start, Hosted: hosted}}
+		if reason := OrphanOwnershipReason(idx, []model.Session{session}, 10); !strings.Contains(reason, "ownership requires review") {
+			t.Fatalf("unknown live directory authorized ownership: %q", reason)
+		}
+		session.Label = "ended"
+		if reason := OrphanOwnershipReason(idx, []model.Session{session}, 10); reason != "" {
+			t.Fatalf("ended session must not protect unrelated work: %q", reason)
+		}
+	}
+}

@@ -167,6 +167,13 @@ func inspectReclaimProcesses(ctx context.Context, tx *store.Tx, inspection recla
 	}
 	reviews := reclaim.ReviewProcesses(in)
 	rows = reclaim.MergeProcessReviews(rows, reviews, time.Now())
+	if inspection.PID != 0 {
+		for i := range rows {
+			if rows[i].Kind == "process_review" {
+				rows[i].Action = "" // Already inspecting it; do not send the user in a loop.
+			}
+		}
+	}
 	if inspection.PID != 0 && len(reviews) == 0 {
 		rows = append(rows, reclaim.Opportunity{ID: fmt.Sprintf("process:%d", inspection.PID), Kind: "process_review", RootPID: inspection.PID, Status: "not_found", ObservedAt: time.Now(), Reason: "PID was not present in the current native snapshot; exit or identity could not be established"})
 	}

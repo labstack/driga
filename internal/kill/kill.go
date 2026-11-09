@@ -104,6 +104,16 @@ func runTree(ctx context.Context, plat platform.Platform, o model.Orphan, expect
 		protected[pid] = true
 	}
 	targets := append(desc, root)
+	if o.ProcessIdentities != nil {
+		if len(o.ProcessIdentities) != len(targets) {
+			return abort("approved process identity set changed")
+		}
+		for _, p := range targets {
+			if !Owned(p) || !SameIdentity(o.ProcessIdentities[p.PID], p) {
+				return abort("approved process identity changed or unavailable")
+			}
+		}
+	}
 	if windows || len(o.ProcessStarts) > 0 {
 		for _, p := range targets {
 			if p.StartTime.IsZero() || o.ProcessStarts[p.PID].IsZero() {

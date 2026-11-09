@@ -46,7 +46,7 @@ func Opportunities(disk []cleanup.Candidate, orphans []view.OrphanRow, sessions 
 	rows := []Opportunity{}
 	claimed := map[int32]bool{}
 	for _, o := range orphans {
-		r := Opportunity{ID: o.ID, Kind: "process", RootPID: o.RootPID, StartedAt: o.StartTime, Status: "review", Reason: strings.Join(o.Evidence, "; "), ResourcesKnown: o.ResourcesKnown, CPU: o.CPUPercent,
+		r := Opportunity{ID: o.ID, Kind: "process", Name: "helper tree", RootPID: o.RootPID, StartedAt: o.StartTime, Status: "review", Reason: strings.Join(o.Evidence, "; "), ResourcesKnown: o.ResourcesKnown, CPU: o.CPUPercent,
 			Memory: derive.MemoryUsage{Processes: o.ProcCount, Memory: o.Memory, Measure: o.MemoryMeasure, RSS: o.RSSTotal}}
 		if o.Young {
 			r.Status = "protected"
@@ -101,10 +101,17 @@ func Opportunities(disk []cleanup.Candidate, orphans []view.OrphanRow, sessions 
 			members = append(members, p)
 			cpu += p.CPUPercent
 		}
-		rows = append(rows, Opportunity{ID: fmt.Sprintf("session:%d", s.ID), Kind: "session", RootPID: root.PID, StartedAt: root.StartTime, Status: "protected", Reason: "live session; open it to review work before stopping or restarting", Memory: derive.SumProcessMemory(members), ResourcesKnown: true, CPU: cpu, Action: fmt.Sprintf("driga agents jump %d", s.ID)})
+		name := s.Title
+		if name == "" {
+			name = s.Adapter
+		}
+		if name == "" {
+			name = "live session"
+		}
+		rows = append(rows, Opportunity{ID: fmt.Sprintf("session:%d", s.ID), Kind: "session", Name: name, RootPID: root.PID, StartedAt: root.StartTime, Status: "protected", Reason: "live session; open it to review work before stopping or restarting", Memory: derive.SumProcessMemory(members), ResourcesKnown: true, CPU: cpu, Action: fmt.Sprintf("driga agents jump %d", s.ID)})
 	}
 	for _, c := range disk {
-		r := Opportunity{ID: c.ID, Kind: "disk", Status: c.Status, Reason: strings.Join(c.Evidence, "; "), DiskBytes: c.Size, DiskKnown: c.SizeKnown && !c.SizeCapped}
+		r := Opportunity{ID: c.ID, Kind: "disk", Name: string(c.Kind), Status: c.Status, Reason: strings.Join(c.Evidence, "; "), DiskBytes: c.Size, DiskKnown: c.SizeKnown && !c.SizeCapped}
 		if c.Status == "ready" {
 			r.Action = "driga cleanup remove " + c.ID
 		}
