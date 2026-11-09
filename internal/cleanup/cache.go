@@ -131,10 +131,8 @@ func inspectGoTmpCache(e Env, s snapshot, path string) (Candidate, error) {
 	if e.now().Sub(latest) <= 24*time.Hour {
 		return c, fmt.Errorf("Go build cache active within 24h")
 	}
-	for _, cwd := range s.cwds {
-		if inside(path, resolved(cwd)) {
-			return c, fmt.Errorf("process cwd is inside Go build cache")
-		}
+	if s.cwdUnder(path) {
+		return c, fmt.Errorf("process cwd is inside Go build cache")
 	}
 	open, err := openUnder(s, path)
 	if err != nil {
@@ -186,24 +184,13 @@ func (e Env) tool(ctx context.Context, binary string, args ...string) ([]byte, e
 // own cleanup semantics. Listing and verification each supply a fresh snapshot.
 func directCacheIdle(e Env, s snapshot, path string) error {
 	path = resolved(path)
-	for _, cwd := range s.cwds {
-		if inside(path, resolved(cwd)) {
-			return fmt.Errorf("process cwd is inside cache")
-		}
+	if s.cwdUnder(path) {
+		return fmt.Errorf("process cwd is inside cache")
 	}
-	for _, session := range s.sessions {
-		if inside(path, resolved(session.Cwd)) && sessionLive(e, session) {
+	for session := range s.sessionsUnder(path) {
+		if sessionLive(e, session) {
 			return fmt.Errorf("live session uses cache")
 		}
-	}
-	// Cache locations and open paths can use different symlink spellings.
-	// Preserve nil so an unavailable observation still fails closed.
-	if s.open != nil {
-		paths := make([]string, len(s.open))
-		for i, path := range s.open {
-			paths[i] = resolved(path)
-		}
-		s.open = paths
 	}
 	open, err := openUnder(s, path)
 	if err != nil {

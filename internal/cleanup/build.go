@@ -177,10 +177,8 @@ func inspectBuild(ctx context.Context, e Env, s snapshot, state checkoutState, c
 	if err := walkCtx.Err(); err != nil {
 		return c, err
 	}
-	for _, cwd := range s.cwds {
-		if inside(path, resolved(cwd)) {
-			return fail("process cwd is inside")
-		}
+	if s.cwdUnder(path) {
+		return fail("process cwd is inside")
 	}
 	open, err := openUnder(s, path)
 	if err != nil {
@@ -190,10 +188,7 @@ func inspectBuild(ctx context.Context, e Env, s snapshot, state checkoutState, c
 		return fail("process has an open file inside")
 	}
 	latest := time.Time{}
-	for _, session := range s.sessions {
-		if !inside(checkout, resolved(session.Cwd)) {
-			continue
-		}
+	for session := range s.sessionsUnder(checkout) {
 		if sessionLive(e, session) {
 			return fail("live session in checkout")
 		}

@@ -159,10 +159,8 @@ func inspectScratchSession(ctx context.Context, e Env, s snapshot, c Candidate, 
 	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
 		return c, fmt.Errorf("scratch must be a real directory")
 	}
-	for _, cwd := range s.cwds {
-		if inside(path, resolved(cwd)) {
-			return c, fmt.Errorf("process cwd inside scratch")
-		}
+	if s.cwdUnder(path) {
+		return c, fmt.Errorf("process cwd inside scratch")
 	}
 	probe, ok := e.Plat.(platform.FileProber)
 	if !ok {

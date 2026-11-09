@@ -152,6 +152,7 @@ type snapshot struct {
 	sessions   []model.Session
 	cwds       map[int32]string
 	unreadable int
+	paths      *snapshotPaths
 }
 
 func read(ctx context.Context, e Env) (snapshot, error) {
@@ -217,6 +218,9 @@ func read(ctx context.Context, e Env) (snapshot, error) {
 				s.unreadable++
 			}
 		}
+	}
+	if err == nil {
+		s.preparePaths()
 	}
 	return s, err
 }
@@ -504,10 +508,5 @@ func openUnder(s snapshot, dir string) (bool, error) {
 	if s.open == nil {
 		return false, fmt.Errorf("open-file inspection unavailable")
 	}
-	for _, path := range s.open {
-		if inside(dir, path) {
-			return true, nil
-		}
-	}
-	return false, nil
+	return observedUnder(s.pathEvidence().open, dir), nil
 }

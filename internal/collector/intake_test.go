@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -54,38 +55,63 @@ func TestIntakeOffAndPortBusy(t *testing.T) {
 	}
 }
 
+// The daemon reaches its first scheduling wait only after starting intake and
+// committing its initial collection. Observe that seam instead of racing schema
+// creation with repeated read-only opens of a fresh database.
+type intakeReadyClock struct {
+	realDaemonClock
+	ready chan struct{}
+	once  sync.Once
+}
+
+func (c *intakeReadyClock) NewTimer(d time.Duration) daemonTimer {
+	timer := c.realDaemonClock.NewTimer(d)
+	c.once.Do(func() { close(c.ready) })
+	return timer
+}
+
 func TestIntakeDaemonHTTP(t *testing.T) {
 	d, _, _, _ := setup(t)
 	dir := t.TempDir()
 	d.Cfg.Intake.OTLP = true
 	d.Cfg.Intake.Listen = "127.0.0.1:0"
+	clock := &intakeReadyClock{ready: make(chan struct{})}
+	d.clock = clock
 	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan error, 1)
-	go func() { done <- Run(ctx, d, dir) }()
+	done := make(chan struct{})
+	var runErr error
+	go func() {
+		runErr = Run(ctx, d, dir)
+		close(done)
+	}()
 	t.Cleanup(func() {
 		cancel()
 		select {
-		case err := <-done:
-			if err != nil {
-				t.Error(err)
+		case <-done:
+			if runErr != nil {
+				t.Error(runErr)
 			}
 		case <-time.After(5 * time.Second):
 			t.Error("collector did not stop")
 		}
 	})
-	var addr string
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		st, err := store.Open(filepath.Join(dir, "driga.db"), store.ReadOnly)
-		if err == nil {
-			ss, _ := st.Sessions(store.SessionFilter{})
-			addr, _ = st.Meta("otlp:listen")
-			st.Close()
-			if len(ss) > 0 && addr != "" {
-				break
-			}
-		}
-		time.Sleep(10 * time.Millisecond)
+	startup := time.NewTimer(30 * time.Second) // Hang guard, not a readiness probe.
+	defer startup.Stop()
+	select {
+	case <-clock.ready:
+	case <-done:
+		t.Fatalf("collector stopped before intake became ready: %v", runErr)
+	case <-startup.C:
+		t.Fatal("collector did not complete its initial pass")
+	}
+	st, err := store.Open(filepath.Join(dir, "driga.db"), store.ReadOnly)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	addr, err := st.Meta("otlp:listen")
+	if err != nil {
+		t.Fatal(err)
 	}
 	if addr == "" {
 		t.Fatal("no intake listener")
@@ -103,14 +129,9 @@ func TestIntakeDaemonHTTP(t *testing.T) {
 	if resp.StatusCode != 200 {
 		t.Fatal(resp.StatusCode)
 	}
-	st, err := store.Open(filepath.Join(dir, "driga.db"), store.ReadOnly)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer st.Close()
-	ss, _ := st.Sessions(store.SessionFilter{})
-	if len(ss) != 1 || ss[0].ExternalID != "one" || ss[0].PID != 101 {
-		t.Fatal(ss)
+	ss, err := st.Sessions(store.SessionFilter{})
+	if err != nil || len(ss) != 1 || ss[0].ExternalID != "one" || ss[0].PID != 101 {
+		t.Fatal(ss, err)
 	}
 	events, err := st.Events("claude", "one", time.Time{})
 	if err != nil || len(events) != 2 {
@@ -135,7 +156,7 @@ func TestIntakeDaemonHTTP(t *testing.T) {
 			t.Fatal(resp.StatusCode)
 		}
 	}
-	deadline = time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(5 * time.Second)
 	for {
 		rejected, err := st.Meta("otlp:rejected")
 		if err == nil && rejected == "2" {

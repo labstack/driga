@@ -104,23 +104,20 @@ func inspectWorktree(ctx context.Context, e Env, s snapshot, w model.Worktree, e
 			return fail("worktree has tracked changes")
 		}
 	}
-	for _, cwd := range s.cwds {
-		if inside(resolved(c.Path), resolved(cwd)) {
-			return fail("process cwd is inside worktree")
-		}
+	canonicalPath := resolved(c.Path)
+	if s.cwdUnder(canonicalPath) {
+		return fail("process cwd is inside worktree")
 	}
 	latest := time.Time{}
-	for _, session := range s.sessions {
-		if inside(resolved(c.Path), resolved(session.Cwd)) {
-			if sessionLive(e, session) {
-				return fail("live session is inside worktree")
-			}
-			if session.LastActivityAt.After(latest) {
-				latest = session.LastActivityAt
-			}
-			if session.EndedAt != nil && session.EndedAt.After(latest) {
-				latest = *session.EndedAt
-			}
+	for session := range s.sessionsUnder(canonicalPath) {
+		if sessionLive(e, session) {
+			return fail("live session is inside worktree")
+		}
+		if session.LastActivityAt.After(latest) {
+			latest = session.LastActivityAt
+		}
+		if session.EndedAt != nil && session.EndedAt.After(latest) {
+			latest = *session.EndedAt
 		}
 	}
 	// Prefer the remote's declared default; local main/master are conservative fallbacks.
