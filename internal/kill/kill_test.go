@@ -237,8 +237,28 @@ func childTree(t *testing.T) (platform.Platform, model.Orphan, []int32, func() i
 	return plat, o, pids, extra
 }
 
+// Pin each test-owned process before acting; a child's start is not its root's.
+func liveTreeProcs(t *testing.T, plat platform.Platform, pids []int32) []model.Proc {
+	t.Helper()
+	procs, err := plat.Procs(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	idx := derive.NewProcIndex(procs)
+	owned := make([]model.Proc, 0, len(pids))
+	for _, pid := range pids {
+		proc, ok := idx.Get(pid)
+		if !ok || !plat.Alive(pid, proc.StartTime) {
+			t.Fatalf("fixture PID %d not alive before Tree", pid)
+		}
+		owned = append(owned, proc)
+	}
+	return owned
+}
+
 func TestKillTerminatesTree(t *testing.T) {
 	plat, o, pids, _ := childTree(t)
+	procs := liveTreeProcs(t, plat, o.PIDs)
 	slices.Reverse(pids) // Membership is a set, independent of display order.
 	r, err := Tree(context.Background(), plat, o, pids, false, 2*time.Second)
 	if err != nil || r.Aborted || len(r.Signaled) != 3 || len(r.Survivors) != 0 {
@@ -247,23 +267,29 @@ func TestKillTerminatesTree(t *testing.T) {
 	if r.Signaled[len(r.Signaled)-1] != o.RootPID {
 		t.Fatalf("root must be last: %+v", r)
 	}
-	for _, pid := range o.PIDs {
-		if plat.Alive(pid, o.StartTime) {
-			t.Fatalf("PID %d still alive", pid)
+	for _, proc := range procs {
+		if plat.Alive(proc.PID, proc.StartTime) {
+			t.Fatalf("PID %d still alive", proc.PID)
 		}
 	}
 }
 
 func TestKillAbortsOnChangedTree(t *testing.T) {
 	plat, o, pids, extra := childTree(t)
+	// Exercise a child born outside SameStart's one-second forward window.
+	time.Sleep(1100 * time.Millisecond)
 	pid := extra()
+	procs := liveTreeProcs(t, plat, append(slices.Clone(o.PIDs), pid))
+	if platform.SameStart(procs[len(procs)-1].StartTime, o.StartTime) {
+		t.Fatal("extra child must start outside the root's identity window")
+	}
 	r, err := Tree(context.Background(), plat, o, pids, true, time.Millisecond)
 	if err != nil || !r.Aborted || r.Reason == "" || len(r.Signaled) != 0 {
 		t.Fatalf("%+v %v", r, err)
 	}
-	for _, p := range append(o.PIDs, pid) {
-		if !plat.Alive(p, o.StartTime) {
-			t.Fatalf("PID %d was signaled", p)
+	for _, proc := range procs {
+		if !plat.Alive(proc.PID, proc.StartTime) {
+			t.Fatalf("PID %d not alive after aborted Tree", proc.PID)
 		}
 	}
 }
