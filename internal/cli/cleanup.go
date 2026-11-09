@@ -151,7 +151,7 @@ func (c CleanupRemoveCmd) Run(g *Globals) error {
 		return err
 	}
 	if c.Kind == "history" {
-		return invalidUsage("history is report-only; use --kind worktree or scratch")
+		return invalidUsage("history is report-only; use --kind worktree, scratch, build, or cache")
 	}
 	if !c.DryRun && !c.Yes {
 		if !terminalInput(g) || g.JSON {

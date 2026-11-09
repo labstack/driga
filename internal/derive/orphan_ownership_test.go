@@ -8,6 +8,41 @@ import (
 	"github.com/labstack/driga/internal/model"
 )
 
+func TestOrphanDirectoryOverlapNeedsOwnershipReview(t *testing.T) {
+	start := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
+	for _, tc := range []struct {
+		name, sourceOS, helper, session, label string
+		wantReview                             bool
+	}{
+		{"same", "linux", "/repo", "/repo", "working", true},
+		{"helper below session", "linux", "/repo/pkg", "/repo", "working", true},
+		{"session below helper", "linux", "/repo", "/repo/pkg", "working", true},
+		{"siblings", "linux", "/repo/pkg", "/repo/other", "working", false},
+		{"prefix is not containment", "linux", "/repo-other", "/repo", "working", false},
+		{"ended session", "linux", "/repo/pkg", "/repo", "ended", false},
+		{"dead session", "linux", "/repo/pkg", "/repo", "dead", false},
+		{"windows case and separators", "windows", `C:\Repo\pkg`, "c:/repo", "working", true},
+		{"windows parent", "windows", `C:\Repo`, "c:/repo/pkg", "working", true},
+		{"windows different volume", "windows", `D:\Repo\pkg`, "c:/repo", "working", false},
+		{"windows UNC", "windows", `\\server\share\repo\pkg`, "//SERVER/share/repo", "working", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			idx, err := NewProcIndexForOS([]model.Proc{
+				{PID: 10, PPID: 1, StartTime: start, Cwd: tc.helper},
+				{PID: 90, StartTime: start, Cwd: tc.session},
+			}, tc.sourceOS)
+			if err != nil {
+				t.Fatal(err)
+			}
+			sessions := []model.Session{{ID: 1, Label: tc.label, SessionObs: model.SessionObs{PID: 90, ProcStart: start, Cwd: tc.session}}}
+			reason := OrphanOwnershipReason(idx, sessions, 10)
+			if got := strings.Contains(reason, "ownership requires review"); got != tc.wantReview {
+				t.Fatalf("ownership review = %t, want %t: %q", got, tc.wantReview, reason)
+			}
+		})
+	}
+}
+
 func TestOrphanSameDirectoryNeedsOwnershipReview(t *testing.T) {
 	procs, sigs, now := orphanFixture(t)
 	procs = append(procs, model.Proc{PID: 90, StartTime: now.Add(-time.Hour), Cwd: "/repo"})

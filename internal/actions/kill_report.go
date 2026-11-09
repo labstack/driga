@@ -93,10 +93,7 @@ func (c KillOptions) Execute(ctx context.Context, g Environment, cfg config.Conf
 func (c KillOptions) executeOne(ctx context.Context, g Environment, cfg config.Config, idx derive.ProcIndex, sigs *signatures.Set, classified kill.Option, o model.Orphan) (KillOutcome, error) {
 	outcome := KillOutcome{ID: o.ID, MachineID: o.MachineID, RootPID: o.RootPID, Status: "failed"}
 	fail := func(err error) (KillOutcome, error) {
-		if outcome.Status == "completed" {
-			outcome.Status = "failed"
-		}
-		if errors.Is(err, ErrRefused) || errors.Is(err, context.Canceled) {
+		if outcome.Result == nil && (errors.Is(err, ErrRefused) || errors.Is(err, context.Canceled)) {
 			outcome.Status = "cancelled"
 		}
 		outcome.Error = &view.ErrorRecord{Code: "kill_failed", Message: scrub.Scrub(err.Error())}
@@ -224,6 +221,9 @@ func (c KillOptions) executeOne(ctx context.Context, g Environment, cfg config.C
 	case err == nil:
 		outcome.Status = "completed"
 	}
+	// Keep the observed shutdown separate from delivery of its terminal report.
+	// A broken pipe must not turn a completed action into a retryable failure.
+	actionErr := err
 	if _, writeErr := fmt.Fprintf(g.Stdout, "stopped %v; survivors %v; unknown %v\n", result.Stopped, result.Survivors, result.Unknown); writeErr != nil {
 		err = errors.Join(err, writeErr)
 	}
@@ -233,7 +233,12 @@ func (c KillOptions) executeOne(ctx context.Context, g Environment, cfg config.C
 		}
 	}
 	if err != nil {
-		return fail(err)
+		if actionErr != nil {
+			outcome.Error = &view.ErrorRecord{Code: "kill_failed", Message: scrub.Scrub(actionErr.Error())}
+		} else {
+			outcome.Error = &view.ErrorRecord{Code: "output_failed", Message: scrub.Scrub(err.Error())}
+		}
+		return outcome, err
 	}
 	return outcome, nil
 }

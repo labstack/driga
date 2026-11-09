@@ -37,8 +37,8 @@ func OrphanOwnershipReason(idx ProcIndex, sessions []model.Session, rootPID int3
 			if p.Cwd == "" {
 				return fmt.Sprintf("ownership requires review: working directory unavailable for pid %d while session %d is live", p.PID, s.ID)
 			}
-			if p.Cwd != "" && pathx.Equal(p.Cwd, s.Cwd) {
-				return fmt.Sprintf("ownership requires review: live session %d in same directory may still need this tree", s.ID)
+			if pathx.RecordedWithin(p.Cwd, s.Cwd) || pathx.RecordedWithin(s.Cwd, p.Cwd) {
+				return fmt.Sprintf("ownership requires review: live session %d in an overlapping directory may still need this tree", s.ID)
 			}
 		}
 	}

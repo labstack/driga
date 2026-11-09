@@ -8,6 +8,7 @@ import (
 
 	"github.com/labstack/driga/internal/config"
 	"github.com/labstack/driga/internal/derive"
+	"github.com/labstack/driga/internal/gitscan"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/platform"
 	"github.com/labstack/driga/internal/store"
@@ -36,6 +37,13 @@ func verifyOrphanOwnership(ctx context.Context, g Environment, plat platform.Pla
 	if err != nil {
 		return fmt.Errorf("cannot verify orphan ownership: %w", err)
 	}
+	// Hook-only rows can retain a logical directory spelling until an adapter
+	// observation arrives. Resolve local aliases at the native action seam.
+	for i := range sessions {
+		if filepath.IsAbs(sessions[i].Cwd) {
+			sessions[i].Cwd = gitscan.NormalizePath(sessions[i].Cwd)
+		}
+	}
 	procs, err := plat.Procs(ctx)
 	if err != nil {
 		return fmt.Errorf("cannot verify orphan ownership: %w", err)
@@ -57,6 +65,9 @@ func verifyOrphanOwnership(ctx context.Context, g Environment, plat platform.Pla
 	}
 	for i := range procs {
 		if cwd := cwds[procs[i].PID]; cwd != "" {
+			if filepath.IsAbs(cwd) {
+				cwd = gitscan.NormalizePath(cwd)
+			}
 			procs[i].Cwd = cwd
 		}
 	}

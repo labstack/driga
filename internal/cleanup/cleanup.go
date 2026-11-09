@@ -254,7 +254,11 @@ func List(ctx context.Context, e Env) ([]Candidate, error) {
 		}
 	}
 	cs = append(cs, scratchCandidates(ctx, e, s)...)
-	cs = append(cs, cacheCandidates(ctx, e)...)
+	for _, c := range cacheCandidates(ctx, e, s) {
+		if c.Status != "refused" || e.Why {
+			cs = append(cs, c)
+		}
+	}
 	cs = append(cs, goTmpCacheCandidates(ctx, e, s)...)
 	cs = append(cs, historyCandidates(e)...)
 	if e.Sizes {
@@ -317,7 +321,7 @@ func verify(ctx context.Context, e Env, c Candidate) (Candidate, error) {
 			break
 		}
 		found := false
-		for _, candidate := range cacheCandidates(ctx, e) {
+		for _, candidate := range cacheCandidates(ctx, e, s) {
 			if candidate.ID == c.ID {
 				fresh, found = candidate, true
 				break
@@ -328,6 +332,9 @@ func verify(ctx context.Context, e Env, c Candidate) (Candidate, error) {
 		}
 		if fresh.Status == "report_only" {
 			return fresh, fmt.Errorf("report only")
+		}
+		if fresh.Status == "refused" {
+			return fresh, fmt.Errorf("%s", strings.Join(fresh.Evidence, "; "))
 		}
 	case Build:
 		rel, relErr := filepath.Rel(c.Repo, c.Path)

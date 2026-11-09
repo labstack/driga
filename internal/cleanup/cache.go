@@ -182,7 +182,40 @@ func (e Env) tool(ctx context.Context, binary string, args ...string) ([]byte, e
 	return platform.ChildOutput(exec.CommandContext(ctx, binary, args...), false)
 }
 
-func cacheCandidates(ctx context.Context, e Env) []Candidate {
+// directCacheIdle gates deletion by Driga; native tool commands retain their
+// own cleanup semantics. Listing and verification each supply a fresh snapshot.
+func directCacheIdle(e Env, s snapshot, path string) error {
+	path = resolved(path)
+	for _, cwd := range s.cwds {
+		if inside(path, resolved(cwd)) {
+			return fmt.Errorf("process cwd is inside cache")
+		}
+	}
+	for _, session := range s.sessions {
+		if inside(path, resolved(session.Cwd)) && sessionLive(e, session) {
+			return fmt.Errorf("live session uses cache")
+		}
+	}
+	// Cache locations and open paths can use different symlink spellings.
+	// Preserve nil so an unavailable observation still fails closed.
+	if s.open != nil {
+		paths := make([]string, len(s.open))
+		for i, path := range s.open {
+			paths[i] = resolved(path)
+		}
+		s.open = paths
+	}
+	open, err := openUnder(s, path)
+	if err != nil {
+		return err
+	}
+	if open {
+		return fmt.Errorf("process has an open file inside cache")
+	}
+	return nil
+}
+
+func cacheCandidates(ctx context.Context, e Env, s snapshot) []Candidate {
 	var cs []Candidate
 	for _, tool := range cacheTools {
 		var path, reason string
@@ -246,6 +279,11 @@ func cacheCandidates(ctx context.Context, e Env) []Candidate {
 			c.Status, c.Evidence = "report_only", []string{"report only; " + reason}
 		} else if tool.Binary == "" {
 			c.Evidence = []string{"clean with: remove " + path}
+			if err := directCacheIdle(e, s, path); err != nil {
+				c.Status, c.Evidence = "refused", []string{err.Error()}
+				cs = append(cs, c)
+				continue
+			}
 		} else {
 			c.Evidence = []string{"clean with: " + strings.Join(append([]string{tool.Binary}, tool.Clean...), " ")}
 		}

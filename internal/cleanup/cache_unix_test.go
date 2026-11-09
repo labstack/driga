@@ -18,7 +18,7 @@ func TestCacheLocationUsesStdout(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", bin)
-	for _, c := range cacheCandidates(context.Background(), e) {
+	for _, c := range cacheCandidates(context.Background(), e, snapshot{}) {
 		if c.ID == "cache:go-build" && c.Path == path {
 			return
 		}

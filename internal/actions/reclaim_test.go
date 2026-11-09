@@ -2,6 +2,7 @@ package actions
 
 import (
 	"context"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -13,6 +14,7 @@ import (
 	"github.com/labstack/driga/internal/derive"
 	"github.com/labstack/driga/internal/kill"
 	"github.com/labstack/driga/internal/model"
+	"github.com/labstack/driga/internal/platform"
 	"github.com/labstack/driga/internal/reclaim"
 	"github.com/labstack/driga/internal/view"
 )
@@ -33,6 +35,109 @@ func TestExecutePersistsCancelledOutcome(t *testing.T) {
 	entry := history.Entries[0]
 	if entry.ID != "tree-1" || entry.MachineID != "host-1" || entry.Status != "cancelled" || entry.At.IsZero() {
 		t.Fatal(entry)
+	}
+}
+
+// Alive always returns false, so these tests cannot reach a native signal.
+type outputFailurePlatform struct {
+	platform.Platform
+	procs             []model.Proc
+	final             []model.Proc
+	finalErr          error
+	refuse            bool
+	calls, aliveCalls int
+	observed          bool
+}
+
+func (p *outputFailurePlatform) Procs(ctx context.Context) ([]model.Proc, error) {
+	p.calls++
+	if _, final := ctx.Deadline(); final {
+		p.observed = true
+		return p.final, p.finalErr
+	}
+	if p.refuse && p.calls >= 3 {
+		return nil, nil
+	}
+	return p.procs, nil
+}
+func (p *outputFailurePlatform) Alive(int32, time.Time) bool {
+	p.aliveCalls++
+	return false
+}
+func (p *outputFailurePlatform) ExternalPeers(_ context.Context, pids []int32) (map[int32]model.PeerState, error) {
+	peers := make(map[int32]model.PeerState)
+	for _, pid := range pids {
+		peers[pid] = model.PeerNone
+	}
+	return peers, nil
+}
+
+type actionOutputWriter struct {
+	fail func() bool
+	err  error
+}
+
+func (w actionOutputWriter) Write(b []byte) (int, error) {
+	if w.fail() {
+		return 0, w.err
+	}
+	return len(b), nil
+}
+
+func TestKillOutputFailurePreservesObservedOutcome(t *testing.T) {
+	for _, want := range []string{"completed", "pending", "partial", "unknown", "refused", "failed"} {
+		t.Run(want, func(t *testing.T) {
+			early := want == "failed"
+			dir := t.TempDir()
+			t.Setenv("DRIGA_DATA_DIR", dir)
+			proc := model.Proc{PID: 123456789, PPID: 1, StartTime: time.Now().Add(-time.Hour), RSS: 128}
+			p := &outputFailurePlatform{procs: []model.Proc{proc}}
+			pids := []int32{proc.PID}
+			switch want {
+			case "pending":
+				p.final = p.procs
+			case "partial":
+				child := model.Proc{PID: proc.PID + 1, PPID: proc.PID, StartTime: proc.StartTime, RSS: 64}
+				p.procs = append(p.procs, child)
+				p.final = []model.Proc{child}
+				pids = append(pids, child.PID)
+			case "unknown":
+				p.finalErr = context.Canceled
+			case "refused":
+				p.refuse = true
+			}
+			outputErr := errors.New("output unavailable")
+			confirmed := false
+			env := Environment{Stdout: actionOutputWriter{fail: func() bool { return early || p.observed || p.refuse && p.calls >= 3 }, err: outputErr}, Platform: func() platform.Platform { return p }, VerifyWindow: time.Nanosecond, Confirm: func(string) error { confirmed = true; return nil }}
+			report, err := (KillOptions{}).Execute(context.Background(), env, config.Config{}, p.procs, []model.Orphan{{ID: "session:1", RootPID: proc.PID, StartTime: proc.StartTime, Verified: true, PIDs: pids}})
+			if !errors.Is(err, outputErr) || len(report.Outcomes) != 1 {
+				t.Fatalf("report=%+v err=%v", report, err)
+			}
+			outcome := report.Outcomes[0]
+			if outcome.Status != want {
+				t.Errorf("status=%s want %s", outcome.Status, want)
+			}
+			if early {
+				if confirmed || p.calls != 0 || p.aliveCalls != 0 || outcome.Result != nil {
+					t.Fatalf("early failure reached action: %+v platform=%+v", outcome, p)
+				}
+			} else if !confirmed || outcome.Result == nil || want != "refused" && !p.observed {
+				t.Errorf("completed action lost: report=%+v platform=%+v", report, p)
+			}
+			if want == "completed" && (len(outcome.Result.Stopped) != 1 || report.Completed != 1 || outcome.Error.Code != "output_failed") {
+				t.Errorf("completed action lost: %+v", report)
+			}
+			if want == "unknown" && (!errors.Is(err, context.Canceled) || outcome.Error.Code != "kill_failed") {
+				t.Errorf("action error lost: %+v %v", outcome, err)
+			}
+			history, readErr := reclaim.Read(dir, 10, "process")
+			if readErr != nil || len(history.Entries) != 1 {
+				t.Fatalf("history=%+v err=%v", history, readErr)
+			}
+			if history.Entries[0].Status != want {
+				t.Errorf("receipt status=%s want %s", history.Entries[0].Status, want)
+			}
+		})
 	}
 }
 
