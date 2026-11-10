@@ -78,9 +78,14 @@ Two new candidate kinds close the gap: `build` and `cache`.
 Delete, do not trash. The kind exists because the contents are regenerable,
 and a 16 GiB rename into the Trash frees nothing and fails across volumes.
 Removal uses `os.Root(checkout).RemoveAll(rel)`, which is fd-relative and does
-not follow symlinks. Before removing a venv, its top-level packages are written
-to `cleanup.log` so an ad hoc environment can be rebuilt. Worktree and scratch
-keep moving to the Trash.
+not follow symlinks. Before removing a venv, its top-level `*.dist-info`
+directory basenames are durably written to `cleanup-reconstruction.log` in the
+private data directory as a `prepared` record. This package/version list helps
+rebuild an ad hoc environment; it is not a complete `pip freeze`. Records are
+limited to 64 KiB, and the log retains 10 MiB plus one rotated file. Failure to
+write or sync the complete record prevents removal. `cleanup.log` still records
+the final outcome, including the package list. Worktree and scratch keep moving
+to the Trash.
 
 Open-file checks use one `lsof -Fn` table matched by path prefix, not
 `lsof +D`, which walks every file of a large `target/`.

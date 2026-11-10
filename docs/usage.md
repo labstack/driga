@@ -756,7 +756,12 @@ driga cleanup remove --kind worktree --all # every ready worktree; skips anythin
   nested Git repositories, process cwds or open files inside, live sessions in
   the checkout, and checkouts active within `cleanup.build_idle` are refused.
   A terminal at the checkout root does not block build cleanup. Build output is
-  deleted through `os.Root`, not moved to Trash; venv package names are logged.
+  deleted through `os.Root`, not moved to Trash. Before venv removal, installed
+  `*.dist-info` directory basenames are durably saved in the private data
+  directory's `cleanup-reconstruction.log` (64 KiB per record, 10 MiB plus one
+  rotated file). A failed write or sync prevents removal. The list helps rebuild
+  the environment but is not a complete `pip freeze`; `cleanup.log` retains the
+  final cleanup outcome.
   Non-Git directories are outside discovery.
 - **Cache**: CLI-only cleanup. Tool-managed caches use: `go clean -cache`,
   `uv cache prune`, `npm cache clean --force`, `pnpm store prune`,

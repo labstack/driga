@@ -429,6 +429,31 @@ func Apply(ctx context.Context, e Env, c Candidate, opts ApplyOpts) (r Result, e
 					r.Packages = append(r.Packages, strings.TrimSuffix(filepath.Base(path), ".dist-info"))
 				}
 			}
+			// Reconstruction must survive a crash during removal. Keep preparation
+			// separate from cleanup.log, whose entries describe final outcomes.
+			entry := struct {
+				At       time.Time `json:"occurred_at"`
+				Phase    string    `json:"phase"`
+				ID       string    `json:"candidate_id"`
+				Path     string    `json:"path"`
+				Packages []string  `json:"packages"`
+			}{e.now().UTC(), "prepared", fresh.ID, fresh.Path, r.Packages}
+			data, recordErr := json.Marshal(entry)
+			if recordErr != nil {
+				return r, recordErr
+			}
+			// A prior failed append may leave a partial line. Delimit both ends
+			// so this acknowledged record can always be read independently.
+			data = append(append([]byte{'\n'}, data...), '\n')
+			// Writer bounds logs by truncating oversized writes; a reconstruction
+			// record must instead be retained whole or prevent deletion.
+			if len(data) > 64<<10 {
+				return r, fmt.Errorf("venv reconstruction record exceeds log limit")
+			}
+			writer := logfile.Writer{Path: filepath.Join(e.DataDir, "cleanup-reconstruction.log"), Durable: true}
+			if _, err := writer.Write(data); err != nil {
+				return r, fmt.Errorf("persist venv reconstruction: %w", err)
+			}
 		}
 		before, statErr := freeBytes(fresh.Repo)
 		if statErr != nil {
