@@ -544,7 +544,7 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 		}
 		r.Sessions, r.Procs = len(ss), len(procs)
 		if d.gitWork != nil && p.Procs {
-			if err := writeRuntimeStats(tx, d.now()); err != nil {
+			if err := writeRuntimeStats(tx, d.now(), d.Owner.Instance); err != nil {
 				return err
 			}
 		}

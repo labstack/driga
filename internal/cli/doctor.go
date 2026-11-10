@@ -253,7 +253,7 @@ func Doctor(ctx context.Context, d DoctorDeps) []Check {
 		}
 	}
 	if err == nil && held && d.Store != nil {
-		stats, sampleErr := collector.ReadRuntimeStats(d.Store, owner.PID, d.Now, 3*intervals.Procs)
+		stats, sampleErr := collector.ReadRuntimeStats(d.Store, owner, d.Now, 3*intervals.Procs)
 		if sampleErr != nil {
 			add("service_runtime", "info", "no fresh Go runtime sample for this collector", "")
 		} else {

@@ -11,7 +11,6 @@ import (
 
 	"github.com/labstack/driga/internal/derive"
 	"github.com/labstack/driga/internal/model"
-	"github.com/labstack/driga/internal/pathx"
 	"github.com/labstack/driga/internal/signatures"
 	"github.com/labstack/driga/internal/view"
 )
@@ -72,24 +71,10 @@ func ReviewProcesses(in ProcessReviewInput) []ProcessReview {
 	classifier := derive.NewClassifier(signatures.Builtin(), len(ordered))
 	type processLabel struct{ category, name string }
 	labels := make(map[int32]processLabel, len(ordered))
-	nativeAgents := []model.Proc{}
-	nativeOwners := map[int32]int32{}
+	nativeAgents := derive.NativeAgentProcesses(ordered, in.Self, in.SourceOS, classifier)
 	for _, p := range ordered {
 		category, name := reviewCategory(p, classifier)
 		labels[p.PID] = processLabel{category, name}
-		sig, matched := classifier.Match(p)
-		role := p.Role
-		if matched {
-			role = string(sig.Role)
-		}
-		owned, _ := reviewOwned(p, in.Self, in.SourceOS)
-		if !p.Zombie && owned && (role == string(signatures.RoleInteractive) || role == string(signatures.RoleHeadless)) && (p.Agent != "" || matched && sig.Agent != "") {
-			nativeAgents = append(nativeAgents, p)
-			nativeOwners[p.PID] = p.PID
-			for _, child := range idx.Descendants(p.PID) {
-				nativeOwners[child.PID] = p.PID
-			}
-		}
 	}
 	claimed := map[int32]bool{}
 	liveSessions := map[int32]bool{}
@@ -109,7 +94,7 @@ func ReviewProcesses(in ProcessReviewInput) []ProcessReview {
 		if !root.StartTime.IsZero() && !in.Now.IsZero() {
 			age = max(time.Duration(0), in.Now.Sub(root.StartTime))
 		}
-		owned, ownerKnown := reviewOwned(root, in.Self, in.SourceOS)
+		owned, ownerKnown := derive.SameProcessOwner(root, in.Self, in.SourceOS)
 		if in.TargetPID == 0 && (claimed[root.PID] || liveSessions[root.PID] || root.PID <= 1 || !detached || !owned || root.Zombie || category == "managed" || category == "database" || selfTree[root.PID] || !root.StartTime.IsZero() && age < in.MinAge) {
 			continue
 		}
@@ -136,7 +121,7 @@ func ReviewProcesses(in ProcessReviewInput) []ProcessReview {
 		for _, p := range tree {
 			r.PIDs = append(r.PIDs, p.PID)
 			claimed[p.PID] = true
-			memberOwned, memberKnown := reviewOwned(p, in.Self, in.SourceOS)
+			memberOwned, memberKnown := derive.SameProcessOwner(p, in.Self, in.SourceOS)
 			r.OwnershipKnown = r.OwnershipKnown && memberKnown
 			if p.Cwd == "" {
 				r.OwnershipKnown = false
@@ -206,26 +191,13 @@ func ReviewProcesses(in ProcessReviewInput) []ProcessReview {
 		if reviewRememberedOwner(in, root, idx) {
 			protect("remembered spawning session is still live")
 		}
-		if reason := reviewNativeAgentReason(tree, nativeAgents, nativeOwners); reason != "" {
+		if reason := derive.NativeAgentOwnershipReason(idx, tree, nativeAgents, in.Self, in.SourceOS); reason != "" {
 			protect(reason)
 		}
 		r.Reasons = reviewUnique(r.Reasons)
 		rows = append(rows, r)
 	}
 	return rows
-}
-
-func reviewOwned(p, self model.Proc, sourceOS string) (bool, bool) {
-	if !p.OwnerKnown || !self.OwnerKnown {
-		return false, false
-	}
-	if sourceOS == "windows" {
-		if p.OwnerSID == "" || self.OwnerSID == "" {
-			return false, false
-		}
-		return strings.EqualFold(p.OwnerSID, self.OwnerSID), true
-	}
-	return p.OwnerUID == self.OwnerUID, true
 }
 
 func reviewDetached(idx derive.ProcIndex, p model.Proc, sourceOS string) bool {
@@ -326,28 +298,6 @@ func reviewCategory(p model.Proc, classifier *derive.Classifier) (string, string
 		}
 	}
 	return "unknown", name
-}
-
-func reviewNativeAgentReason(tree, agents []model.Proc, owners map[int32]int32) string {
-	for _, p := range tree {
-		if pid := owners[p.PID]; pid != 0 {
-			return fmt.Sprintf("tree contains or belongs to live agent PID %d", pid)
-		}
-	}
-	for _, agent := range agents {
-		if agent.Cwd == "" {
-			return fmt.Sprintf("ownership requires review: working directory unavailable for live agent PID %d; this tree may still be needed", agent.PID)
-		}
-		for _, p := range tree {
-			if p.Cwd == "" {
-				return fmt.Sprintf("ownership requires review: working directory unavailable while live agent PID %d may need this tree", agent.PID)
-			}
-			if pathx.RecordedWithin(p.Cwd, agent.Cwd) || pathx.RecordedWithin(agent.Cwd, p.Cwd) {
-				return fmt.Sprintf("ownership requires review: live agent PID %d in an overlapping directory may still need this tree", agent.PID)
-			}
-		}
-	}
-	return ""
 }
 
 func minimumArgOffset(args []string) int {

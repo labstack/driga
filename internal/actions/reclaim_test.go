@@ -66,6 +66,16 @@ func (p *outputFailurePlatform) Alive(int32, time.Time) bool {
 	p.aliveCalls++
 	return false
 }
+
+// The synthetic final table is exhaustive; no native metadata is consulted.
+func (p *outputFailurePlatform) ObserveProcess(_ context.Context, pid int32) (model.Proc, bool, error) {
+	for _, proc := range p.final {
+		if proc.PID == pid {
+			return proc, true, nil
+		}
+	}
+	return model.Proc{}, false, p.finalErr
+}
 func (p *outputFailurePlatform) ExternalPeers(_ context.Context, pids []int32) (map[int32]model.PeerState, error) {
 	peers := make(map[int32]model.PeerState)
 	for _, pid := range pids {

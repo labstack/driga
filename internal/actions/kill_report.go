@@ -169,7 +169,7 @@ func (c KillOptions) executeOne(ctx context.Context, g Environment, cfg config.C
 			}
 			o.ProcessStarts = fresh.ProcessStarts
 			o.ProcessIdentities = fresh.ProcessIdentities
-			if err := verifyOrphanOwnership(ctx, g, plat, o); err != nil {
+			if err := verifyOrphanOwnership(ctx, g, plat, o, sigs); err != nil {
 				return err
 			}
 		} else {

@@ -280,6 +280,23 @@ func TestProcessReviewNativeAgentMissingDirectoryProtectsUnknownOwnership(t *tes
 	}
 }
 
+func TestProcessReviewUnknownNativeAgentOwnerCannotHideOverlap(t *testing.T) {
+	agent := reviewProc(210, 2, "/opt/bin/codex")
+	agent.OwnerKnown = false
+	helper := reviewProc(211, 1, "python3", "/tmp/check.py")
+	in := reviewInput(agent, helper)
+	in.TargetPID = helper.PID
+	got := ReviewProcesses(in)
+	if len(got) != 1 || got[0].Status != "protected" || !strings.Contains(strings.Join(got[0].Reasons, ";"), "process owner unavailable for live agent") {
+		t.Fatalf("unknown native owner hid overlapping work: %+v", got)
+	}
+	in.Processes[0].Cwd += "-separate"
+	got = ReviewProcesses(in)
+	if len(got) != 1 || got[0].Status != "review" {
+		t.Fatalf("disjoint native agent must not claim this tree: %+v", got)
+	}
+}
+
 func TestProcessReviewJavaScriptDistinguishesScriptsFromServers(t *testing.T) {
 	for _, tt := range []struct{ file, category string }{
 		{"schedulers.mjs", "script"},

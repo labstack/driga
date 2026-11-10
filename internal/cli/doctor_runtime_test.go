@@ -11,13 +11,20 @@ import (
 )
 
 func TestDoctorAttributesRuntimeToFreshCollectorOnly(t *testing.T) {
-	for _, variant := range []string{"current", "other pid", "stale", "future", "unlocked"} {
+	for _, variant := range []string{"current", "other pid", "prior run", "missing instance", "stale", "future", "unlocked"} {
 		t.Run(variant, func(t *testing.T) {
 			d, st := doctorFixture(t)
-			s := collector.RuntimeStats{PID: 1, At: d.Now, Phase: "after_process_pass", HeapLiveBytes: 8_000_000, HeapGoalBytes: 16_000_000, HeapAllocatedBytes: 10_000_000, GoSysBytes: 30_000_000, GoReleasedBytes: 5_000_000, GCCycles: 7, GCCPUFraction: 0.002}
+			d.LockProbe = func(string) (collector.Owner, bool, error) {
+				return collector.Owner{PID: 1, Instance: "current"}, true, nil
+			}
+			s := collector.RuntimeStats{PID: 1, Instance: "current", At: d.Now, Phase: "after_process_pass", HeapLiveBytes: 8_000_000, HeapGoalBytes: 16_000_000, HeapAllocatedBytes: 10_000_000, GoSysBytes: 30_000_000, GoReleasedBytes: 5_000_000, GCCycles: 7, GCCPUFraction: 0.002}
 			switch variant {
 			case "other pid":
 				s.PID = 2
+			case "prior run":
+				s.Instance = "previous"
+			case "missing instance":
+				s.Instance = ""
 			case "stale":
 				s.At = d.Now.Add(-time.Hour)
 			case "future":

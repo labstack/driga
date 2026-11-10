@@ -15,6 +15,7 @@ import (
 // HeapLiveBytes is the live heap at the last completed GC, not a current peak.
 type RuntimeStats struct {
 	PID                int       `json:"pid"`
+	Instance           string    `json:"instance_id"`
 	At                 time.Time `json:"observed_at"`
 	Phase              string    `json:"phase"`
 	HeapLiveBytes      uint64    `json:"heap_live_bytes"`
@@ -29,7 +30,7 @@ type RuntimeStats struct {
 	GCCPUFraction float64 `json:"gc_cpu_fraction"`
 }
 
-func writeRuntimeStats(tx *store.Tx, at time.Time) error {
+func writeRuntimeStats(tx *store.Tx, at time.Time, instance string) error {
 	samples := []metrics.Sample{
 		{Name: "/gc/heap/live:bytes"}, {Name: "/gc/heap/goal:bytes"},
 		{Name: "/memory/classes/heap/objects:bytes"}, {Name: "/memory/classes/total:bytes"},
@@ -37,7 +38,7 @@ func writeRuntimeStats(tx *store.Tx, at time.Time) error {
 		{Name: "/cpu/classes/gc/total:cpu-seconds"}, {Name: "/cpu/classes/total:cpu-seconds"},
 	}
 	metrics.Read(samples)
-	s := RuntimeStats{PID: os.Getpid(), At: at, Phase: "after_process_pass",
+	s := RuntimeStats{PID: os.Getpid(), Instance: instance, At: at, Phase: "after_process_pass",
 		HeapLiveBytes: samples[0].Value.Uint64(), HeapGoalBytes: samples[1].Value.Uint64(),
 		HeapAllocatedBytes: samples[2].Value.Uint64(), GoSysBytes: samples[3].Value.Uint64(),
 		GoReleasedBytes: samples[4].Value.Uint64(), GCCycles: samples[5].Value.Uint64(), GCCPUSeconds: samples[6].Value.Float64(),
@@ -54,7 +55,7 @@ func writeRuntimeStats(tx *store.Tx, at time.Time) error {
 
 // ReadRuntimeStats attributes metadata only to the current writer and cadence.
 // A snapshot or a restarted collector cannot borrow an older process's sample.
-func ReadRuntimeStats(r interface{ Meta(string) (string, error) }, ownerPID int, now time.Time, maxAge time.Duration) (RuntimeStats, error) {
+func ReadRuntimeStats(r interface{ Meta(string) (string, error) }, owner Owner, now time.Time, maxAge time.Duration) (RuntimeStats, error) {
 	var s RuntimeStats
 	raw, err := r.Meta("collector_runtime")
 	if err != nil {
@@ -66,8 +67,8 @@ func ReadRuntimeStats(r interface{ Meta(string) (string, error) }, ownerPID int,
 	if err := json.Unmarshal([]byte(raw), &s); err != nil {
 		return s, err
 	}
-	if ownerPID <= 0 || s.PID != ownerPID {
-		return RuntimeStats{}, fmt.Errorf("runtime sample belongs to another process")
+	if owner.PID <= 0 || s.PID != owner.PID || owner.Instance == "" || s.Instance != owner.Instance {
+		return RuntimeStats{}, fmt.Errorf("runtime sample belongs to another collector instance")
 	}
 	if s.At.IsZero() || s.At.After(now) || now.Sub(s.At) > maxAge {
 		return RuntimeStats{}, fmt.Errorf("runtime sample is missing or stale")

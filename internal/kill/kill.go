@@ -187,6 +187,26 @@ func runTree(ctx context.Context, plat platform.Platform, o model.Orphan, expect
 		var stopped []model.Proc
 		for _, p := range targets {
 			now, present := idx.Get(p.PID)
+			if !present {
+				// Native resource inventories can omit live PIDs when metadata is
+				// unreadable. Only an explicit identity observation can prove exit.
+				observer, ok := plat.(platform.ProcessObserver)
+				if !ok {
+					if plat.Alive(p.PID, p.StartTime) {
+						result.Survivors = append(result.Survivors, p.PID)
+					} else {
+						result.Unknown = append(result.Unknown, p.PID)
+					}
+					continue
+				}
+				var err error
+				now, present, err = observer.ObserveProcess(observeCtx, p.PID)
+				if err != nil {
+					result.Unknown = append(result.Unknown, p.PID)
+					retErr = errors.Join(retErr, fmt.Errorf("final observation of PID %d: %w", p.PID, err))
+					continue
+				}
+			}
 			switch {
 			case present && now.StartTime.IsZero() && !now.Zombie:
 				result.Unknown = append(result.Unknown, p.PID)

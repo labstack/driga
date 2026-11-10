@@ -5,6 +5,7 @@ package platform
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -108,6 +109,35 @@ func (p linuxPlatform) Alive(pid int32, start time.Time) bool {
 	}
 	ms, err := proc.CreateTimeWithContext(ctx)
 	return err == nil && SameStart(time.UnixMilli(ms), start)
+}
+
+func (p linuxPlatform) ObserveProcess(ctx context.Context, pid int32) (model.Proc, bool, error) {
+	ctx = p.context(ctx)
+	if err := ctx.Err(); err != nil {
+		return model.Proc{}, false, err
+	}
+	proc := &process.Process{Pid: pid}
+	start, err := proc.CreateTimeWithContext(ctx)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) || errors.Is(err, syscall.ESRCH) {
+			return model.Proc{}, false, nil
+		}
+		return model.Proc{}, false, err
+	}
+	states, err := proc.StatusWithContext(ctx)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) || errors.Is(err, syscall.ESRCH) {
+			return model.Proc{}, false, nil
+		}
+		return model.Proc{}, false, err
+	}
+	if err := ctx.Err(); err != nil {
+		return model.Proc{}, false, err
+	}
+	if start <= 0 {
+		return model.Proc{}, false, errors.New("process start time unavailable")
+	}
+	return model.Proc{PID: pid, StartTime: time.UnixMilli(start), Zombie: slices.Contains(states, process.Zombie)}, true, nil
 }
 
 // linuxUnixPeers asks the kernel for UNIX_DIAG_PEER inode relationships, which

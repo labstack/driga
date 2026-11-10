@@ -28,6 +28,27 @@ var _ SocketProber = darwinPlatform{}
 // New returns the macOS host collector.
 func New() Platform { return darwinPlatform{idents: &identCache{}} }
 
+func (darwinPlatform) ObserveProcess(ctx context.Context, pid int32) (model.Proc, bool, error) {
+	if err := ctx.Err(); err != nil {
+		return model.Proc{}, false, err
+	}
+	// The slice form distinguishes an empty PID result from a failed query;
+	// SysctlKinfoProc reports EIO for an empty result, losing that distinction.
+	entries, err := unix.SysctlKinfoProcSlice("kern.proc.pid", int(pid))
+	if err != nil {
+		return model.Proc{}, false, err
+	}
+	if err := ctx.Err(); err != nil {
+		return model.Proc{}, false, err
+	}
+	for i := range entries {
+		if entries[i].Proc.P_pid == pid {
+			return procFromKinfo(&entries[i]), true, nil
+		}
+	}
+	return model.Proc{}, false, nil
+}
+
 // procFromKinfo decodes the identity and state from the existing sysctl sample.
 func procFromKinfo(k *unix.KinfoProc) model.Proc {
 	const szomb = 5 // XNU sys/proc.h: exited, awaiting parent wait(2).

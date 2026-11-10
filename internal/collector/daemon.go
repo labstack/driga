@@ -16,6 +16,7 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/labstack/driga/internal/chat"
 	"github.com/labstack/driga/internal/feed"
 	"github.com/labstack/driga/internal/fleet"
@@ -31,6 +32,7 @@ var ErrAlreadyRunning = errors.New("collector already running")
 // Owner identifies the process holding the collector writer lock.
 type Owner struct {
 	PID        int    `json:"pid"`
+	Instance   string `json:"instance_id,omitempty"`
 	Kind       string `json:"kind"`
 	Executable string `json:"executable"`
 	Version    string `json:"version"`
@@ -260,6 +262,9 @@ func run(ctx context.Context, d Deps, dataDir string) error {
 	if clock == nil {
 		clock = realDaemonClock{}
 	}
+	// A run identity, rather than PID alone, prevents a restarted embedded
+	// collector or reused OS PID from borrowing an earlier runtime sample.
+	d.Owner.Instance = uuid.NewString()
 	lock, err := lockFor(ctx, clock, dataDir, d.Owner)
 	if err != nil {
 		return err

@@ -314,6 +314,16 @@ type snapshotPlatform struct {
 
 func (p snapshotPlatform) Procs(context.Context) ([]model.Proc, error) { return p.procs, nil }
 
+// This fixture table is exhaustive; absence deliberately represents exit.
+func (p snapshotPlatform) ObserveProcess(_ context.Context, pid int32) (model.Proc, bool, error) {
+	for _, proc := range p.procs {
+		if proc.PID == pid {
+			return proc, true, nil
+		}
+	}
+	return model.Proc{}, false, nil
+}
+
 func (p snapshotPlatform) Alive(pid int32, start time.Time) bool { return p.alive(pid, start) }
 
 func TestKillNeverSignalsSelfOrInit(t *testing.T) {

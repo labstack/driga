@@ -63,6 +63,20 @@ func (p *cliSeqPlatform) Cwds(context.Context, []int32) (map[int32]string, error
 	return cwds, nil
 }
 func (p *cliSeqPlatform) Alive(int32, time.Time) bool { return false }
+
+// The synthetic snapshots are complete identity inventories, unlike native
+// resource snapshots, which can omit a PID after a metadata read failure.
+func (p *cliSeqPlatform) ObserveProcess(ctx context.Context, pid int32) (model.Proc, bool, error) {
+	if err := ctx.Err(); err != nil {
+		return model.Proc{}, false, err
+	}
+	for _, proc := range p.snaps[min(max(p.calls-1, 0), len(p.snaps)-1)] {
+		if proc.PID == pid {
+			return proc, true, nil
+		}
+	}
+	return model.Proc{}, false, nil
+}
 func (p *cliSeqPlatform) ExternalPeers(context.Context, []int32) (map[int32]model.PeerState, error) {
 	return platform.FixturePeers(p.peers), nil
 }
@@ -82,7 +96,7 @@ func killFixtureProc(t *testing.T, p model.Proc) model.Proc {
 	if p.StartTime.IsZero() {
 		p.StartTime = time.Unix(1700000000, 0)
 	}
-	p.Exe, p.Cmdline, p.Argv, p.Cwd = "/fixture/helper", "helper", []string{"helper"}, "/fixture"
+	p.Exe, p.Cmdline, p.Argv, p.Cwd = "/fixture/helper", "helper", []string{"helper"}, filepath.Join(t.TempDir(), "fixture")
 	return p
 }
 
