@@ -72,3 +72,11 @@ custom-tool catalog. Codex requires 0.167.0 and default OpenAI configuration.
 Codex/Copilot expose a smaller action catalog than Claude; direct MCP cleanup,
 acknowledgment, jump, delegated prompt and summary actions remain Claude-only.
 Project summaries retain their existing Claude model and budget contract.
+
+## Final merge review
+
+A second fresh Standards/Spec review of `03d380a` found one additional incomplete
+stream case: Codex accepted `turn.completed` while an MCP call lacked its result.
+A fake-provider regression reproduced it for read and panel tools. Completion
+now rejects unfinished calls, while unresolved panel outcomes remain visible as
+unknown. No approval bypass was found. The Standards review found no blockers.

@@ -149,6 +149,28 @@ func TestCodexReadOnlyAndIncomplete(t *testing.T) {
 	}
 }
 
+func TestCodexCompletedTurnRequiresToolResults(t *testing.T) {
+	for _, tool := range []string{"get_machine", "show_panels"} {
+		t.Run(tool, func(t *testing.T) {
+			events := codexStart + `{"type":"item.started","item":{"id":"unfinished","type":"mcp_tool_call","server":"driga","tool":"` + tool + `","arguments":{}}}` + "\n" + `{"type":"turn.completed"}` + "\n"
+			a, _ := fakeCodex(t, "/bin/cat <<'EVENTS'\n"+events+"EVENTS")
+			var panels []string
+			err := a.Run(context.Background(), Request{ReadOnly: true}, func(d Delta) error {
+				if len(d.Panel) > 0 {
+					panels = append(panels, string(d.Panel))
+				}
+				return nil
+			})
+			if err == nil || !strings.Contains(err.Error(), "unfinished tool") {
+				t.Fatalf("accepted unfinished tool: %v", err)
+			}
+			if tool == "show_panels" && (len(panels) != 1 || !strings.Contains(panels[0], `"status":"unknown"`)) {
+				t.Fatalf("lost unknown panel outcome: %v", panels)
+			}
+		})
+	}
+}
+
 func TestCodexPanelAndToolIdentity(t *testing.T) {
 	_, cancel := context.WithCancel(context.Background())
 	defer cancel()

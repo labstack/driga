@@ -291,6 +291,11 @@ func (s *codexStream) line(line []byte) error {
 		if !s.started {
 			return errors.New("Codex completed before session")
 		}
+		for id := range s.calls {
+			if !s.finished[id] {
+				return errors.New("Codex completed with an unfinished tool call")
+			}
+		}
 		s.completed = true
 	case "turn.failed", "error":
 		return errors.New("Codex turn failed; check CLI authentication and availability")
