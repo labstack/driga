@@ -217,7 +217,18 @@ func handler(b *Broker) http.Handler {
 		case r.Method == "GET" && r.URL.Path == "/conversations":
 			out, err = b.List(r.Context())
 		case r.Method == "POST" && r.URL.Path == "/conversations":
-			out, err = b.Create(r.Context())
+			var in struct {
+				Provider string `json:"provider"`
+			}
+			err = decodeClientJSON(w, r, &in, 4096)
+			if errors.Is(err, io.EOF) {
+				err = nil // Older clients send no request body.
+			}
+			if err == nil {
+				var conversation store.Conversation
+				conversation, err = b.CreateWithProvider(r.Context(), in.Provider)
+				out = createConversationResponse{Conversation: conversation, ProviderPreference: in.Provider}
+			}
 		case r.Method == "POST" && r.URL.Path == "/send":
 			var in struct {
 				ID, Text string
@@ -263,6 +274,13 @@ func handler(b *Broker) http.Handler {
 	})
 }
 
+// The acknowledgement lets a client distinguish provider-aware services from
+// older services that accepted this endpoint but ignored its request body.
+type createConversationResponse struct {
+	store.Conversation
+	ProviderPreference string `json:"provider_preference,omitempty"`
+}
+
 type Remote struct {
 	mu        sync.Mutex
 	fullAuto  map[string]bool
@@ -270,6 +288,7 @@ type Remote struct {
 	keyPath   string
 	http      *http.Client
 	transport *http.Transport
+	provider  string // Optional preference for new conversations from this client.
 }
 
 func Dial(ctx context.Context, dataDir string) (*Remote, error) {
@@ -403,9 +422,16 @@ func (c *Remote) callOnce(ctx context.Context, method, path string, in, out any,
 	return json.NewDecoder(reader).Decode(out)
 }
 func (c *Remote) Create(ctx context.Context) (store.Conversation, error) {
-	var out store.Conversation
-	err := c.call(ctx, "POST", "/conversations", nil, &out)
-	return out, err
+	var out createConversationResponse
+	var in any
+	if c.provider != "" {
+		in = map[string]string{"provider": c.provider}
+	}
+	err := c.call(ctx, "POST", "/conversations", in, &out)
+	if err == nil && c.provider != "" && (out.ProviderPreference != c.provider || c.provider != "auto" && out.Agent != c.provider) {
+		return store.Conversation{}, errors.New("Driga service did not select the requested assistant; restart the service and try again")
+	}
+	return out.Conversation, err
 }
 func (c *Remote) List(ctx context.Context) ([]store.Conversation, error) {
 	var out []store.Conversation
@@ -427,8 +453,12 @@ func (c *Remote) Read(ctx context.Context, id string, after uint64) (State, erro
 // Open uses the service when available. The fallback is private to the opening
 // client, with no persistent driga history or competing collector socket.
 func Open(ctx context.Context, dataDir string, snippets bool, provider string) (Client, bool, func(), error) {
+	if provider != "" && !validProviderPreference(provider) {
+		return nil, false, nil, errors.New("assistant provider must be auto, claude, codex or copilot")
+	}
 	remote, err := Dial(ctx, dataDir)
 	if err == nil {
+		remote.provider = provider
 		return remote, false, remote.Close, nil
 	}
 	// Permission and invalid-path failures must not silently select another broker.

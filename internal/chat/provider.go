@@ -68,8 +68,21 @@ func NewProvider(dataDir, preference string) Agent {
 }
 
 func (p *providers) Select(ctx context.Context) (string, error) {
-	names := []string{p.preference}
-	if p.preference == "auto" {
+	return p.SelectProvider(ctx, p.preference)
+}
+
+func validProviderPreference(preference string) bool {
+	return preference == "auto" || preference == "claude" || preference == "codex" || preference == "copilot"
+}
+
+// SelectProvider resolves a new conversation's explicit preference without
+// changing the broker default or any existing conversation's pinned provider.
+func (p *providers) SelectProvider(ctx context.Context, preference string) (string, error) {
+	if !validProviderPreference(preference) {
+		return "", errors.New("assistant provider must be auto, claude, codex or copilot")
+	}
+	names := []string{preference}
+	if preference == "auto" {
 		names = []string{"claude", "codex", "copilot"}
 	}
 	var failures []error

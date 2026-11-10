@@ -822,9 +822,15 @@ monitoring works without an assistant. Conversations stay with their original
 provider. Authentication, quota and turn failures are never replayed with another
 provider. Start a new conversation after changing providers.
 
-Codex currently requires the audited 0.167.0 CLI series and supports Driga reads,
+CLI preferences apply to new conversations even when the service is already
+running. Desktop Chat uses the service's preference; restart the service after
+changing its configuration. Existing conversations always keep their provider.
+
+Codex currently requires the audited 0.167.0 CLI release and supports Driga reads,
 panels and broker-gated commands; dashboard edits are unavailable through that
-adapter. Copilot requires headless SDK protocol 3 and an exact Driga-only tool
+adapter. It uses Codex's default OpenAI connection and existing authentication;
+custom provider/model settings in `config.toml` are not loaded. Copilot requires
+headless SDK protocol 3 and an exact Driga-only tool
 catalog. Unsupported versions fail with an error rather than loosening approval
 or configuration controls. No real agent CLI is run by tests. Project summaries
 retain their Claude-specific model and budget cap regardless of this setting.
@@ -861,6 +867,11 @@ Commands use the broker's approval cards, process identity checks and sandbox.
 Claude additionally retains its permission-gated native read tools and existing
 action bridge. Copilot exposes a bounded subset of dashboard edits. Vendor-native
 shell and file editing tools are disabled. Chat never types into a live agent terminal.
+
+Direct MCP cleanup, inbox acknowledgment, terminal jumps, delegated prompt answers
+and project-summary actions remain Claude-only. Codex and Copilot use the shared
+broker command tool for supported local commands; their action catalogs are
+deliberately smaller than Claude's permission-bridged catalog.
 
 Each conversation starts in **Confirm**. Change trust mode with the app's Chat
 header buttons or **m** in TUI navigate mode:

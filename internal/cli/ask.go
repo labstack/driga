@@ -17,7 +17,7 @@ import (
 
 type AskCmd struct {
 	AskOptions
-	Question []string `arg:"" required:"" help:"One-shot Chat question using the selected assistant and driga's read-only tools."`
+	Question []string `arg:"" required:"" help:"One-shot Chat question using driga's read-only tools. Select its assistant with assistant.provider or DRIGA_ASSISTANT_PROVIDER (auto, claude, codex, copilot), including when the service runs."`
 }
 
 func (a AskCmd) Run(g *Globals) error {

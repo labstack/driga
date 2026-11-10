@@ -215,8 +215,29 @@ func (b *Broker) dispose(c *conversation) {
 	c.actions, c.messages, c.events, c.queue, c.result = nil, nil, nil, nil, nil
 }
 func (b *Broker) Create(ctx context.Context) (store.Conversation, error) {
+	return b.CreateWithProvider(ctx, "")
+}
+
+// CreateWithProvider overrides selection for this new conversation only. An
+// empty preference uses the broker default for clients that send no override.
+func (b *Broker) CreateWithProvider(ctx context.Context, preference string) (store.Conversation, error) {
 	provider := "claude"
-	if selector, ok := b.agent.(interface {
+	if preference != "" {
+		if !validProviderPreference(preference) {
+			return store.Conversation{}, errors.New("assistant provider must be auto, claude, codex or copilot")
+		}
+		selector, ok := b.agent.(interface {
+			SelectProvider(context.Context, string) (string, error)
+		})
+		if !ok {
+			return store.Conversation{}, errors.New("assistant provider selection is unavailable")
+		}
+		var err error
+		provider, err = selector.SelectProvider(ctx, preference)
+		if err != nil {
+			return store.Conversation{}, err
+		}
+	} else if selector, ok := b.agent.(interface {
 		Select(context.Context) (string, error)
 	}); ok {
 		var err error

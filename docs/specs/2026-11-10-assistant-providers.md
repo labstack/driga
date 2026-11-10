@@ -14,6 +14,11 @@ background probes, installation, login, or model requests are performed.
 Compatibility probes inspect CLI metadata. Users authenticate with their CLI.
 Authentication or quota errors do not trigger automatic replay elsewhere.
 
+CLI clients pass their resolved preference when requesting a new conversation,
+including through an already-running service. This is a per-conversation choice,
+not a mutation of the service's setting. Desktop Chat uses the service preference;
+restart the service after changing its configuration.
+
 The selected provider is persisted before the first prompt. Resumption always
 uses that provider and exact session ID, even if the preferred CLI changes.
 Missing/incompatible CLIs produce an actionable error and leave monitoring alive.
@@ -29,7 +34,9 @@ trust modes and command approvals for every provider.
 
 Claude keeps its strict MCP configuration and permission bridge. Codex uses
 config-free `exec`, retaining authentication in `CODEX_HOME`, ignoring user exec
-rules and project configuration through a private working directory. Its native
+rules and project configuration through a private working directory. Provider
+and model configuration is not loaded; this adapter uses the default OpenAI
+connection rather than user-defined model providers. Its native
 execution environment is disabled with `CODEX_EXEC_SERVER_URL=none`, including
 runtime filesystem/command backstops. The adapter accepts the audited 0.167.0
 release; unknown registries fail closed. Only Driga's read catalog and, for action
