@@ -64,14 +64,17 @@ func (q *querier) AllPanelEvents(since time.Time) ([]model.Event, error) {
 
 // RemoveInternalChat removes only a CLI identity explicitly registered by our
 // Chat broker. Titles and directories never identify a private Chat process.
-func (tx *Tx) RemoveInternalChat(external string) error {
+func (tx *Tx) RemoveInternalChat(agent, external string) error {
+	if !(ChatSession{Agent: agent, SessionID: external}).valid() {
+		return nil
+	}
 	for _, table := range []string{"inbox_items", "handoffs"} {
-		if err := tx.exec("DELETE FROM "+table+" WHERE machine_id=? AND session_id IN (SELECT id FROM sessions WHERE machine_id=? AND adapter='claude' AND external_id=?)", tx.machineID, tx.machineID, external); err != nil {
+		if err := tx.exec("DELETE FROM "+table+" WHERE machine_id=? AND session_id IN (SELECT id FROM sessions WHERE machine_id=? AND adapter=? AND external_id=?)", tx.machineID, tx.machineID, agent, external); err != nil {
 			return err
 		}
 	}
 	for _, table := range []string{"events", "panel_events", "sessions"} {
-		if err := tx.exec("DELETE FROM "+table+" WHERE machine_id=? AND adapter='claude' AND external_id=?", tx.machineID, external); err != nil {
+		if err := tx.exec("DELETE FROM "+table+" WHERE machine_id=? AND adapter=? AND external_id=?", tx.machineID, agent, external); err != nil {
 			return err
 		}
 	}

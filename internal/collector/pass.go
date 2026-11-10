@@ -117,8 +117,8 @@ func Pass(ctx context.Context, d Deps, st *store.Store, p Plan) (PassReport, err
 			}
 			return tx.SetSourceOK(name, now)
 		}
-		for external := range collected.internalChats {
-			if err := tx.RemoveInternalChat(external); err != nil {
+		for identity := range collected.internalChats {
+			if err := tx.RemoveInternalChat(identity.Agent, identity.SessionID); err != nil {
 				return err
 			}
 		}

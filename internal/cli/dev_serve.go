@@ -57,7 +57,7 @@ func (c DevServeCmd) Run(g *Globals) error {
 	opts := pageOptions(g, &local)
 	// Chat goes to the Driga service when it runs, as the app's does.
 	var closeChat func()
-	if opts.Chat, _, closeChat, err = chat.Open(ctx, config.DataDir(), cfg.CaptureSnippets()); err != nil {
+	if opts.Chat, _, closeChat, err = chat.Open(ctx, config.DataDir(), cfg.CaptureSnippets(), cfg.Assistant.Provider); err != nil {
 		return err
 	}
 	defer closeChat()

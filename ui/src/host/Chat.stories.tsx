@@ -75,6 +75,14 @@ export const Answered: Story = {
     await expect(await canvas.findByText("Memory right now")).toBeVisible();
   },
 };
+export const CodexProvider: Story = {
+  parameters: { service: service({ chat: { ...answered, conversation: { ...answered.conversation, agent: "codex" } } }) },
+  play: async ({ canvas }) => { await expect(await canvas.findByLabelText("Assistant provider")).toHaveTextContent("Codex"); },
+};
+export const CopilotProvider: Story = {
+  parameters: { service: service({ chat: { ...answered, conversation: { ...answered.conversation, agent: "copilot" } } }) },
+  play: async ({ canvas }) => { await expect(await canvas.findByLabelText("Assistant provider")).toHaveTextContent("GitHub Copilot CLI"); },
+};
 export const SavedADashboard: Story = { parameters: { service: service({ chat: saved }) }, play: async ({ canvas }) => { await expect(await canvas.findByText("Saved Memory")).toBeVisible(); } };
 export const DraftRejected: Story = { parameters: { service: service({ chat: rejected }) }, play: async ({ canvas }) => { await expect(await canvas.findByText("Draft rejected: Quota")).toBeVisible(); } };
 export const AwaitingApproval: Story = {

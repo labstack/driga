@@ -35,7 +35,7 @@ func TestSocketAndFallback(t *testing.T) {
 	if err != nil || info.Mode().Perm() != 0600 {
 		t.Fatal(info, err)
 	}
-	c, ephemeral, closeClient, err := Open(ctx, dir, true)
+	c, ephemeral, closeClient, err := Open(ctx, dir, true, "auto")
 	if err != nil || ephemeral {
 		t.Fatal(ephemeral, err)
 	}
@@ -51,7 +51,7 @@ func TestSocketAndFallback(t *testing.T) {
 		t.Fatal("replaced live broker")
 	}
 	fallbackDir := filepath.Join(t.TempDir(), "absent")
-	c, ephemeral, closeClient, err = Open(ctx, fallbackDir, true)
+	c, ephemeral, closeClient, err = Open(ctx, fallbackDir, true, "auto")
 	if err != nil || !ephemeral {
 		t.Fatal(ephemeral, err)
 	}

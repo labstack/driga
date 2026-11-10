@@ -112,7 +112,7 @@ func TestRegisteredChatIdentityRemovesStoredSession(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.SaveConversation(context.Background(), store.Conversation{ID: "our-chat", SessionID: "owned-cli-session", CreatedAt: d.now(), UpdatedAt: d.now()}); err != nil {
+	if err := st.SaveConversation(context.Background(), store.Conversation{ID: "our-chat", Agent: "claude", SessionID: "owned-cli-session", CreatedAt: d.now(), UpdatedAt: d.now()}); err != nil {
 		t.Fatal(err)
 	}
 	pass(t, d, st, Plan{})

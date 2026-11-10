@@ -53,7 +53,7 @@ func (c TopCmd) Run(g *Globals) error {
 		return err
 	}
 	defer closeSource()
-	chatClient, ephemeral, closeChat, err := chat.Open(ctx, config.DataDir(), cfg.CaptureSnippets())
+	chatClient, ephemeral, closeChat, err := chat.Open(ctx, config.DataDir(), cfg.CaptureSnippets(), cfg.Assistant.Provider)
 	if err != nil {
 		return err
 	}

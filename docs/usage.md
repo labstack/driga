@@ -798,8 +798,8 @@ read-only MCP tool.
 
 ## Summaries and Chat
 
-Both run your installed `claude` CLI, on demand only; Driga never calls a model in
-the background and has no API key.
+Chat selects an installed assistant CLI on demand; project summaries use Claude.
+Driga never calls a model in the background and requires no separate API key.
 
 ```sh
 driga projects summarize <project>... | --all   # needs [summaries] enabled = true
@@ -813,10 +813,21 @@ contents or paths. It runs `claude -p --safe-mode --no-session-persistence --too
 with a $0.05 budget cap. A summary built from handoff text is shared with fleet
 viewers only at `fleet.share_text = "snippets"`.
 
-`driga ask` is a one-shot Chat broker client. Chat uses your installed Claude CLI
-and login; Codex and Copilot are listed as coming. Required flags are probed on
-the first turn, and an unsupported CLI fails with the missing flag and version.
-No real agent CLI is run by tests.
+`driga ask` is a one-shot, read-only Chat broker client. Chat defaults to
+`assistant.provider = "auto"`: Claude Code, then Codex, then GitHub Copilot CLI,
+skipping missing or incompatible CLIs. Install and sign in through your chosen
+CLI. Set `provider = "claude"`, `"codex"` or `"copilot"` under `[assistant]` in
+TOML (or set `DRIGA_ASSISTANT_PROVIDER`) to select one explicitly. Selection is lazy;
+monitoring works without an assistant. Conversations stay with their original
+provider. Authentication, quota and turn failures are never replayed with another
+provider. Start a new conversation after changing providers.
+
+Codex currently requires the audited 0.167.0 CLI series and supports Driga reads,
+panels and broker-gated commands; dashboard edits are unavailable through that
+adapter. Copilot requires headless SDK protocol 3 and an exact Driga-only tool
+catalog. Unsupported versions fail with an error rather than loosening approval
+or configuration controls. No real agent CLI is run by tests. Project summaries
+retain their Claude-specific model and budget cap regardless of this setting.
 
 In the app, press **c** on any page, or choose View → Chat (Cmd+K, Ctrl+K on
 Windows and Linux), to dock Chat on the right.
@@ -828,7 +839,7 @@ Context chips describe the current page, selected session/project and machine;
 remove a chip to leave it out.
 Session references in answers select the session on the current page. Tool calls
 appear in a collapsed **Tools used** list. Driga replies are rendered as Markdown
-and marked **answered by Claude Code**. A timed indicator shows thinking, writing
+and show the selected provider. A timed indicator shows thinking, writing
 or the current read tool. Streaming follows the bottom until you scroll up; reduced
 motion uses a static dot.
 
@@ -845,19 +856,20 @@ starts a conversation, Ctrl+T toggles tool details, Ctrl+X clears context and
 Alt+0 returns to Flow. Thinking/writing/tool status includes elapsed time and a
 streaming cursor; NoColor uses a static indicator. Flow's copy-resume key is **C**.
 
-Chat can acknowledge inbox items, jump to a session terminal, kill an agent or
-orphan, clean up a candidate and refresh project summaries. It also has Claude’s
-built-in shell and file tools. Actions are local-only and keep the CLI’s process,
-cleanup and jump safety checks. Chat never types into a live agent terminal.
+Chat provides Driga read tools, panels and local commands through `run_command`.
+Commands use the broker's approval cards, process identity checks and sandbox.
+Claude additionally retains its permission-gated native read tools and existing
+action bridge. Copilot exposes a bounded subset of dashboard edits. Vendor-native
+shell and file editing tools are disabled. Chat never types into a live agent terminal.
 
 Each conversation starts in **Confirm**. Change trust mode with the app's Chat
 header buttons or **m** in TUI navigate mode:
 
 | Mode | Runs without asking | Asks |
 |---|---|---|
-| Confirm | Driga read tools and reads inside the working directory | Reads elsewhere and every other call |
-| Auto | Auto allows driga read tools, reads inside the working directory, inbox acknowledgments, jumps and summaries, and allows Edit/Write only inside a git project working directory that is neither home, the driga data directory nor an ancestor of either, with no hidden components or agent instruction names (`claude*.md`, `agents*.md`, `gemini*.md`, `copilot-instructions.md`, case-insensitive) in the given or resolved relative path after trimming trailing dots and spaces, and always asks on colons. | Everything else asks |
-| Full auto | Everything | Nothing |
+| Confirm | Driga read tools | Every local command |
+| Auto | Driga read tools and commands classified Read | Other, Process and Destructive commands |
+| Full auto | Driga read tools, Read commands and sandboxed Other commands | Process and Destructive commands, plus Other when sandboxing is unavailable |
 
 Full auto requires confirmation and is shown in red with its remaining time.
 The TUI warning stays visible while replies and action cards update; press **m**

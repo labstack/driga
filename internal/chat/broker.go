@@ -37,6 +37,7 @@ type Context struct {
 	Machine   string `json:"machine,omitempty"`
 }
 type Request struct {
+	Provider                    string
 	Prompt, Resume, Directory   string
 	Socket, Conversation, Token string
 	ReadOnly                    bool
@@ -214,13 +215,23 @@ func (b *Broker) dispose(c *conversation) {
 	c.actions, c.messages, c.events, c.queue, c.result = nil, nil, nil, nil, nil
 }
 func (b *Broker) Create(ctx context.Context) (store.Conversation, error) {
+	provider := "claude"
+	if selector, ok := b.agent.(interface {
+		Select(context.Context) (string, error)
+	}); ok {
+		var err error
+		provider, err = selector.Select(ctx)
+		if err != nil {
+			return store.Conversation{}, err
+		}
+	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.closed {
 		return store.Conversation{}, errors.New("chat closed")
 	}
 	now := time.Now().UTC()
-	c := store.Conversation{ID: uuid.NewString(), MachineID: b.st.MachineID(), Agent: "claude", CreatedAt: now, UpdatedAt: now}
+	c := store.Conversation{ID: uuid.NewString(), MachineID: b.st.MachineID(), Agent: provider, CreatedAt: now, UpdatedAt: now}
 	if err := b.st.SaveConversation(ctx, c); err != nil {
 		return c, err
 	}
@@ -528,7 +539,7 @@ func (b *Broker) run(ctx context.Context, c *conversation) {
 		if err == nil && !c.readOnly {
 			err = b.ensureSocket()
 		}
-		req := Request{Prompt: preamble(t.context) + t.message.Text, Resume: resume, Directory: dir, Socket: b.socket, Conversation: c.row.ID, Token: c.token, ReadOnly: c.readOnly}
+		req := Request{Provider: c.row.Agent, Prompt: preamble(t.context) + t.message.Text, Resume: resume, Directory: dir, Socket: b.socket, Conversation: c.row.ID, Token: c.token, ReadOnly: c.readOnly}
 		if c.readOnly {
 			req.Prompt = "Use driga read tools only; no actions are available.\n" + req.Prompt
 		}

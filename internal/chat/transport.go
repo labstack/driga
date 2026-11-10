@@ -426,7 +426,7 @@ func (c *Remote) Read(ctx context.Context, id string, after uint64) (State, erro
 
 // Open uses the service when available. The fallback is private to the opening
 // client, with no persistent driga history or competing collector socket.
-func Open(ctx context.Context, dataDir string, snippets bool) (Client, bool, func(), error) {
+func Open(ctx context.Context, dataDir string, snippets bool, provider string) (Client, bool, func(), error) {
 	remote, err := Dial(ctx, dataDir)
 	if err == nil {
 		return remote, false, remote.Close, nil
@@ -440,7 +440,7 @@ func Open(ctx context.Context, dataDir string, snippets bool) (Client, bool, fun
 		return nil, false, nil, err
 	}
 	collected, _ := store.Open(filepath.Join(dataDir, "driga.db"), store.ReadOnly)
-	b, err := New(ctx, st, &Claude{DataDir: dataDir}, Options{Snippets: snippets, Ephemeral: true, DataDir: dataDir, ContextStore: collected})
+	b, err := New(ctx, st, NewProvider(dataDir, provider), Options{Snippets: snippets, Ephemeral: true, DataDir: dataDir, ContextStore: collected})
 	if err != nil {
 		if collected != nil {
 			_ = collected.Close()

@@ -44,7 +44,7 @@ confirmation exits `2` when stdin is not a terminal unless `--yes` is passed.
 | [`driga reclaim`](#driga-reclaim) | Review resource reclaim candidates and local action history. |
 | [`driga top`](#driga-top) | Open the interactive session viewer. |
 | [`driga app`](#driga-app) | Open the Driga desktop app, or focus it. |
-| [`driga ask`](#driga-ask) | Ask a one-shot Chat question through Claude and driga's read-only tools. |
+| [`driga ask`](#driga-ask) | Ask a one-shot Chat question through the selected assistant and driga's read-only tools. |
 | [`driga mcp`](#driga-mcp) | Serve collected views and editable dashboards over MCP stdio. |
 | [`driga doctor`](#driga-doctor) | Check setup and collection health. |
 | [`driga init`](#driga-init) | Guide optional setup. |
@@ -534,7 +534,7 @@ driga app [flags]
 
 ## driga ask
 
-Ask a one-shot Chat question through Claude and driga's read-only tools.
+Ask a one-shot Chat question through the selected assistant and driga's read-only tools.
 
 ```sh
 driga ask <question>... [flags]
@@ -542,7 +542,7 @@ driga ask <question>... [flags]
 
 | Argument | Default | Description |
 |---|---|---|
-| `<question> ...` |  | One-shot Chat question using Claude and driga's read-only tools. |
+| `<question> ...` |  | One-shot Chat question using the selected assistant and driga's read-only tools. |
 
 | Flag | Default | Description |
 |---|---|---|

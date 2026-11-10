@@ -29,6 +29,7 @@ type Config struct {
 	Fleet           FleetConfig
 	Intake          IntakeConfig
 	Summaries       SummariesConfig
+	Assistant       AssistantConfig
 	Machine         MachineConfig
 	Cleanup         CleanupConfig
 	Inbox           InboxConfig
@@ -63,6 +64,9 @@ type SummariesConfig struct {
 	Enabled bool
 	Model   string
 }
+
+// AssistantConfig selects the optional answering CLI independently of monitoring.
+type AssistantConfig struct{ Provider string }
 
 // FleetConfig controls optional fleet serving and text sharing.
 type FleetConfig struct {

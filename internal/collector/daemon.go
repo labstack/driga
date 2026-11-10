@@ -287,7 +287,7 @@ func run(ctx context.Context, d Deps, dataDir string) error {
 	}); err != nil {
 		return err
 	}
-	broker, err := chat.New(ctx, st, &chat.Claude{DataDir: dataDir}, chat.Options{CommandPlatform: d.Plat, Snippets: d.Cfg.CaptureSnippets(), DataDir: dataDir})
+	broker, err := chat.New(ctx, st, chat.NewProvider(dataDir, d.Cfg.Assistant.Provider), chat.Options{CommandPlatform: d.Plat, Snippets: d.Cfg.CaptureSnippets(), DataDir: dataDir})
 	if err != nil {
 		return err
 	}
@@ -567,10 +567,26 @@ func drainOnly(ctx context.Context, d Deps, st *store.Store) error {
 		return err
 	}
 	batch := collectSpool(d, offsets)
+	identities, err := st.InternalChatSessions()
+	if err != nil {
+		return err
+	}
+	internal := make(map[store.ChatSession]bool, len(identities))
+	for _, identity := range identities {
+		internal[identity] = true
+	}
+	batch.events = internalChatEvents(batch.events, internal)
 	sessions, err := st.Sessions(store.SessionFilter{IncludeEnded: true})
 	if err != nil {
 		return err
 	}
+	kept := sessions[:0]
+	for _, session := range sessions {
+		if !internal[store.ChatSession{Agent: session.Adapter, SessionID: session.ExternalID}] {
+			kept = append(kept, session)
+		}
+	}
+	sessions = kept
 	procs, err := st.Procs()
 	if err != nil {
 		return err
@@ -593,6 +609,11 @@ func drainOnly(ctx context.Context, d Deps, st *store.Store) error {
 				return err
 			}
 			return appendPassChanges(tx, before, after, now)
+		}
+		for _, identity := range identities {
+			if err := tx.RemoveInternalChat(identity.Agent, identity.SessionID); err != nil {
+				return err
+			}
 		}
 		hooks, err := writeSpool(d, tx, batch, now, func(name string, err error) error {
 			if err != nil {

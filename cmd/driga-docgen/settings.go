@@ -18,6 +18,7 @@ var settingGroups = []struct{ prefix, title, intro string }{
 	{"orphans", "Orphans", "The `[orphans]` table."},
 	{"machine", "Machine health", "The `[machine]` table."},
 	{"summaries", "Summaries", "The `[summaries]` table. Summaries run your installed Claude CLI on demand."},
+	{"assistant", "Answering assistant", "The `[assistant]` table selects the answering CLI independently of monitored agents."},
 	{"cleanup", "Cleanup", "The `[cleanup]` table."},
 	{"fleet", "Fleet", "The `[fleet]` table for paired machines."},
 	{"inbox", "Inbox and alerts", "The `[inbox]` table."},
