@@ -80,3 +80,8 @@ stream case: Codex accepted `turn.completed` while an MCP call lacked its result
 A fake-provider regression reproduced it for read and panel tools. Completion
 now rejects unfinished calls, while unresolved panel outcomes remain visible as
 unknown. No approval bypass was found. The Standards review found no blockers.
+
+Linux CI additionally exposed a fallback-transport test that depended on an
+installed assistant for its new capability probe. It now uses the existing
+synthetic CLI fixture with a private PATH. The failure was reproduced with an
+agent-free PATH before fixing it; production behavior was unchanged.

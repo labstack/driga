@@ -23,6 +23,9 @@ func TestSocketAndFallback(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Unix socket permissions")
 	}
+	// Fallback creation now probes assistant capabilities. Keep its PATH limited
+	// to a synthetic CLI, including on developer machines with real agents.
+	fakeCLI(t, flags, "")
 	b, _, _ := fixture(t, true)
 	dir := t.TempDir()
 	ctx := context.Background()
