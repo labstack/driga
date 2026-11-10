@@ -50,6 +50,7 @@ var settings = []Setting{
 	{"machine.disk_free_min", "Machine.DiskFreeMin", "size", "0", "Low disk free-space limit. Zero uses the smaller of 10% of the volume or 20 GB (decimal). Replaces cleanup.low_disk_* warning thresholds.", "0..18446744073709551615 bytes; optional KiB/MiB/GiB suffix; zero = automatic"},
 	{"summaries.enabled", "Summaries.Enabled", "bool", false, "Enable optional local Claude summaries.", "true or false"},
 	{"summaries.model", "Summaries.Model", "string", "haiku", "Model selection passed to the Claude CLI.", "nonempty"},
+	{"assistant.provider", "Assistant.Provider", "string", "auto", "Answering assistant; auto prefers Claude, Codex, then Copilot independently of session discovery.", "auto, claude, codex or copilot"},
 	{"cleanup.worktree_idle", "Cleanup.WorktreeIdle", "duration", "168h", "Idle worktree cleanup eligibility.", "0..2562047h47m16.854775807s; zero = no idle minimum"},
 	{"cleanup.build_idle", "Cleanup.BuildIdle", "duration", "168h", "Checkout idle time before its build output is a candidate.", "0..2562047h47m16.854775807s; zero = no idle minimum"},
 	{"cleanup.regenerable", "Cleanup.Regenerable", "list", []string{}, "Extra regenerable directory names, beyond the built-in rules.", "file-only; empty = built-in directories"},
@@ -94,7 +95,7 @@ var runtimeSettings = []RuntimeSetting{
 	{"DRIGA_CHAT_CONVERSATION", "id", "unset", "Chat conversation of the MCP child's turn."},
 	{"DRIGA_CHAT_TOKEN", "secret", "unset", "Per-turn token tying the MCP child's approval requests to its turn."},
 	{"DRIGA_CHAT_READ_ONLY", "marker", "unset", "1 keeps the Chat MCP child read-only."},
-	{"DRIGA_INTERNAL", "marker", "unset", "1 suppresses recursive hooks from Driga-owned Claude subprocesses."},
+	{"DRIGA_INTERNAL", "marker", "unset", "1 suppresses recursive hooks from Driga-owned assistant subprocesses."},
 	{"DRIGA_FIXTURE_OUTPUT", "path", "unset", "Fixture generator output directory (tests only)."},
 	{"DRIGA_COLLECTOR_HEAP_CHILD", "marker", "unset", "1 selects isolated collector heap-test child."},
 	{"DRIGA_FLEET_HEAP_CHILD", "marker", "unset", "1 selects isolated fleet heap-test child."},
@@ -186,6 +187,10 @@ func (s Setting) assign(c *Config, raw any) error {
 			return fmt.Errorf("expected string")
 		}
 		switch s.Key {
+		case "assistant.provider":
+			if text != "auto" && text != "claude" && text != "codex" && text != "copilot" {
+				return fmt.Errorf("allowed values: %s", s.Range)
+			}
 		case "ui.theme":
 			if text != "system" && text != "light" && text != "dark" {
 				return fmt.Errorf("allowed values: %s", s.Range)

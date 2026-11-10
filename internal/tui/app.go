@@ -78,6 +78,7 @@ type app struct {
 	chatBodies     map[string]chatBodyRender
 	chatContext    chat.Context
 	chatID         string
+	chatProvider   string
 	chatStatus     string
 	chatMessages   []store.ChatMessage
 	chatMode       chat.Mode
@@ -347,6 +348,7 @@ func (m *app) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			oldOffset, oldMax = m.chatOffset, m.chatMaxOffset
 		}
 		m.chatID = msg.state.Conversation.ID
+		m.chatProvider = msg.state.Conversation.Agent
 		m.chatMessages = msg.state.Messages
 		if msg.state.Reset {
 			m.chatActions = msg.state.Actions

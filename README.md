@@ -168,8 +168,9 @@ Collection stays local unless you configure fleet peers. Fleet sharing defaults
 to metadata and titles; the serving peer controls text sharing. Optional OTLP
 intake listens on loopback. The desktop app opens no network port.
 
-Optional summaries and Chat run Claude through your installed CLI and its
-existing vendor connection. Explicit questions and permitted context can leave
+Chat automatically selects a compatible installed Claude, Codex or Copilot CLI;
+optional project summaries use Claude. Both use the CLI's existing login and
+vendor connection. Explicit questions and permitted context can leave
 the machine through that connection. Agent configuration changes only through
 explicit setup and hook commands. See [privacy and configuration](docs/usage.md#privacy-and-configuration)
 for paths, capture settings, and the fleet sharing table.

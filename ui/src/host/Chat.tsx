@@ -108,6 +108,8 @@ export function answerLast(messages: ChatMessage[]): ChatMessage[] {
   return out;
 }
 
+const assistantNames: Record<string, string> = { claude: "Claude Code", codex: "Codex", copilot: "GitHub Copilot CLI" };
+
 export function Chat({ inbox, act, ask, onOpen, onClose }: {
   inbox?: { panel: Panel; result?: Result; listed: boolean }; act?: Act;
   /** ask puts a question in the compose box for the user to send. */
@@ -119,6 +121,7 @@ export function Chat({ inbox, act, ask, onOpen, onClose }: {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [actions, setActions] = useState<Map<string, ChatAction>>(new Map());
   const [active, setActive] = useState(false);
+  const [provider, setProvider] = useState<string>();
   const [mode, setMode] = useState<ChatMode | null>(null);
   const [until, setUntil] = useState<string>();
   const [now, setNow] = useState(Date.now);
@@ -145,6 +148,7 @@ export function Chat({ inbox, act, ask, onOpen, onClose }: {
     return () => { mounted = false; };
   }, []);
   useEffect(() => {
+    setProvider(undefined);
     if (!id) return;
     const control = new AbortController();
     let cursor = 0;
@@ -164,6 +168,7 @@ export function Chat({ inbox, act, ask, onOpen, onClose }: {
     };
     const flush = () => setMessages(order.map(id => byId.get(id)!));
     const receive = (s: ChatState) => {
+      setProvider(s.conversation.agent);
       setMode(s.mode);
       setUntil(s.until);
       setNow(Date.now());
@@ -247,6 +252,7 @@ export function Chat({ inbox, act, ask, onOpen, onClose }: {
       </Group>
       {onClose && <ActionIcon aria-label="Close chat" disabled={modeBusy} onClick={() => void close()}><X /></ActionIcon>}
     </Group>
+    {provider && <Text size="xs" c="dimmed" px="md" py={4} aria-label="Assistant provider">{assistantNames[provider] ?? "Assistant"}</Text>}
     <ScrollArea viewportRef={log} style={{ flex: 1 }} type="auto">
       <Stack gap="sm" p="md">
         {messages.every(dropped) && <Brief inbox={inbox} act={act} ask={text => void send(text)} />}

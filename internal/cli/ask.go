@@ -17,7 +17,7 @@ import (
 
 type AskCmd struct {
 	AskOptions
-	Question []string `arg:"" required:"" help:"One-shot Chat question using Claude and driga's read-only tools."`
+	Question []string `arg:"" required:"" help:"One-shot Chat question using driga's read-only tools. Select its assistant with assistant.provider or DRIGA_ASSISTANT_PROVIDER (auto, claude, codex, copilot), including when the service runs."`
 }
 
 func (a AskCmd) Run(g *Globals) error {
@@ -27,7 +27,7 @@ func (a AskCmd) Run(g *Globals) error {
 	if err != nil {
 		return err
 	}
-	client, ephemeral, closeChat, err := chat.Open(ctx, config.DataDir(), cfg.CaptureSnippets())
+	client, ephemeral, closeChat, err := chat.Open(ctx, config.DataDir(), cfg.CaptureSnippets(), cfg.Assistant.Provider)
 	if err != nil {
 		return err
 	}

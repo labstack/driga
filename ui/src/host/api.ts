@@ -72,7 +72,7 @@ export type ProcessRow = { pid: number; owner: string; started_at: string; execu
 export type CommandCard = { requested: { argv?: string[]; script?: string; cwd: string; timeout_seconds: number; network: boolean }; effective: string[][]; cwd: string; class: string; summary: string; boundary: string; error?: string; targets: ProcessRow[]; count: number; memory_bytes: number; force: boolean; stopped?: ProcessRow[]; vanished?: ProcessRow[]; skipped?: ProcessRow[]; survivors?: ProcessRow[] };
 export type GrantDecision = { grant_id: string; action_id?: string; prompt_id?: string; conversation?: string; session?: string; time: string; attribution: string; revoked?: boolean };
 export type ChatAction = { id: string; tool: string; title: string; input: unknown; directory: string; status: string; decided_by?: string; result?: string; command?: CommandCard; delegated?: Prompt; grant_id?: string; grant_eligible?: boolean; grant_pattern?: string; grant_expires_at?: string };
-export type ChatState = { conversation: { id: string }; messages: ChatMessage[]; events: ChatEvent[]; actions: ChatAction[]; cursor: number; reset: boolean; active?: boolean; mode: ChatMode; until?: string };
+export type ChatState = { conversation: { id: string; agent?: string }; messages: ChatMessage[]; events: ChatEvent[]; actions: ChatAction[]; cursor: number; reset: boolean; active?: boolean; mode: ChatMode; until?: string };
 
 export const chat = {
   history: () => get<{ id: string }[]>("/chat/api/history"),

@@ -149,6 +149,7 @@ func (m *app) chatKey(msg tea.KeyPressMsg) tea.Cmd {
 		oldID, oldMode := m.chatID, m.chatMode
 		m.chatGeneration++
 		m.chatID = ""
+		m.chatProvider = ""
 		m.chatMessages = nil
 		m.chatActions = nil
 		m.chatAppeared = nil
@@ -169,6 +170,7 @@ func (m *app) chatKey(msg tea.KeyPressMsg) tea.Cmd {
 			}
 			m.chatGeneration++
 			m.chatID = m.chatHistory[index].ID
+			m.chatProvider = ""
 			m.chatMessages = nil
 			m.chatActions = nil
 			m.chatAppeared = nil
@@ -229,7 +231,12 @@ func (m *app) chatView() string {
 		left := max(0, m.chatUntil.Sub(m.opts.Now()))
 		label += fmt.Sprintf(" · %dm left", int((left+time.Minute-1)/time.Minute))
 	}
-	header := style.Render("Chat · Driga") + "\n" + dim.Render("answered by Claude Code") + " · " + modeStyle.Render(label)
+	provider := map[string]string{"claude": "Claude Code", "codex": "Codex", "copilot": "GitHub Copilot CLI"}[m.chatProvider]
+	caption := "assistant not selected"
+	if provider != "" {
+		caption = "answered by " + provider
+	}
+	header := style.Render("Chat · Driga") + "\n" + dim.Render(caption) + " · " + modeStyle.Render(label)
 	if m.chatEphemeral {
 		header += "\n" + dim.Render("Conversations end with this client.")
 	}

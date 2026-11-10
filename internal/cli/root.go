@@ -62,7 +62,7 @@ type Root struct {
 	Reclaim    ReclaimCmd  `cmd:"" help:"Review resource reclaim candidates and local action history."`
 	Top        TopCmd      `cmd:"" help:"Open the interactive session viewer."`
 	App        AppCmd      `cmd:"" help:"Open the Driga desktop app, or focus it."`
-	Ask        AskCmd      `cmd:"" help:"Ask a one-shot Chat question through Claude and driga's read-only tools."`
+	Ask        AskCmd      `cmd:"" help:"Ask a one-shot Chat question through the selected assistant and driga's read-only tools."`
 	MCP        MCPCmd      `cmd:"" name:"mcp" help:"Serve collected views and editable dashboards over MCP stdio."`
 	Doctor     DoctorCmd   `cmd:"" help:"Check setup and collection health."`
 	Init       InitCmd     `cmd:"" help:"Guide optional setup."`

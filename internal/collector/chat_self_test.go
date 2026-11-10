@@ -17,7 +17,7 @@ func TestChatOwnSessionIsNotCollected(t *testing.T) {
 	chat.ExternalID, chat.PID, chat.Title = "chat", 0, model.ChatPreamble+" Explain collected state"
 	// Before its first prompt is read, Chat is known by where it runs.
 	data := t.TempDir()
-	if err := st.SaveConversation(context.Background(), store.Conversation{ID: "our-chat", SessionID: "chat", CreatedAt: d.now(), UpdatedAt: d.now()}); err != nil {
+	if err := st.SaveConversation(context.Background(), store.Conversation{ID: "our-chat", Agent: "claude", SessionID: "chat", CreatedAt: d.now(), UpdatedAt: d.now()}); err != nil {
 		t.Fatal(err)
 	}
 	early := a.obs[0]

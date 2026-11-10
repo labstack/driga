@@ -44,6 +44,7 @@ variable.
 | [`machine.disk_free_min`](#machinedisk_free_min) | size | `0` | `DRIGA_MACHINE_DISK_FREE_MIN` |
 | [`summaries.enabled`](#summariesenabled) | bool | `false` | `DRIGA_SUMMARIES_ENABLED` |
 | [`summaries.model`](#summariesmodel) | string | `haiku` | `DRIGA_SUMMARIES_MODEL` |
+| [`assistant.provider`](#assistantprovider) | string | `auto` | `DRIGA_ASSISTANT_PROVIDER` |
 | [`cleanup.worktree_idle`](#cleanupworktree_idle) | duration | `168h` | `DRIGA_CLEANUP_WORKTREE_IDLE` |
 | [`cleanup.build_idle`](#cleanupbuild_idle) | duration | `168h` | `DRIGA_CLEANUP_BUILD_IDLE` |
 | [`cleanup.regenerable`](#cleanupregenerable) | list | empty | file only |
@@ -247,6 +248,18 @@ Model selection passed to the Claude CLI.
 |---|---|---|---|
 | string | `haiku` | nonempty | `DRIGA_SUMMARIES_MODEL` |
 
+## Answering assistant
+
+The `[assistant]` table selects the answering CLI independently of monitored agents.
+
+### assistant.provider
+
+Answering assistant; auto prefers Claude, Codex, then Copilot independently of session discovery.
+
+| Type | Default | Allowed | Environment |
+|---|---|---|---|
+| string | `auto` | auto, claude, codex or copilot | `DRIGA_ASSISTANT_PROVIDER` |
+
 ## Cleanup
 
 The `[cleanup]` table.
@@ -396,7 +409,7 @@ those processes start cleanly; they are not configuration.
 | `DRIGA_CHAT_CONVERSATION` | id | Chat conversation of the MCP child's turn. |
 | `DRIGA_CHAT_TOKEN` | secret | Per-turn token tying the MCP child's approval requests to its turn. |
 | `DRIGA_CHAT_READ_ONLY` | marker | 1 keeps the Chat MCP child read-only. |
-| `DRIGA_INTERNAL` | marker | 1 suppresses recursive hooks from Driga-owned Claude subprocesses. |
+| `DRIGA_INTERNAL` | marker | 1 suppresses recursive hooks from Driga-owned assistant subprocesses. |
 | `DRIGA_FIXTURE_OUTPUT` | path | Fixture generator output directory (tests only). |
 | `DRIGA_COLLECTOR_HEAP_CHILD` | marker | 1 selects isolated collector heap-test child. |
 | `DRIGA_FLEET_HEAP_CHILD` | marker | 1 selects isolated fleet heap-test child. |

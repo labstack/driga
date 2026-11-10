@@ -81,6 +81,7 @@ func TestChatGoldens(t *testing.T) {
 			m.width = width
 			m.height = 38
 			m.chatEphemeral = true
+			m.chatProvider = "claude"
 			m.chatContext = chat.Context{Page: "flow", SessionID: 12, Machine: "local"}
 			m.chatMessages = []store.ChatMessage{{ID: "one", Role: "user", Text: "What needs me?", Status: "sent"}, {ID: "two", Role: "tool", Text: "mcp__driga__list_inbox", Status: "used"}, {ID: "three", Role: "assistant", Text: "Session #12 needs input. Its last captured state is waiting.\nUse the session view to inspect the evidence.", Status: "complete"}}
 			m.chatMessages = append(m.chatMessages, store.ChatMessage{ID: "card", Role: "action", Status: "pending", Text: "Bash · touch demo"})
@@ -238,7 +239,7 @@ func TestChatActivityStates(t *testing.T) {
 	m := setup(t, fixture(), Options{Now: func() time.Time { return now }}).(*app)
 	m.tab, m.width, m.height = chatTab, 100, 40
 	row := store.ChatMessage{ID: "reply", Role: "assistant", Status: "streaming"}
-	_, cmd := m.Update(chatStateMsg{state: chat.State{Active: true, Messages: []store.ChatMessage{row}}})
+	_, cmd := m.Update(chatStateMsg{state: chat.State{Conversation: store.Conversation{Agent: "claude"}, Active: true, Messages: []store.ChatMessage{row}}})
 	if cmd == nil {
 		t.Fatal("active reply must poll")
 	}

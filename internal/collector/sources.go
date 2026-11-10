@@ -55,7 +55,7 @@ type sourceResults struct {
 	agents          []attention.Agent
 	sessions        []model.Session
 	processAliases  map[int64]int
-	internalChats   map[string]bool
+	internalChats   map[store.ChatSession]bool
 	original        map[int64]model.Session
 	procs           []model.Proc
 	procErr         error
@@ -123,20 +123,19 @@ func collectSources(ctx context.Context, d Deps, st *store.Store, p Plan, state 
 	if err != nil {
 		return r, err
 	}
-	r.internalChats = make(map[string]bool, len(conversations))
+	r.internalChats = make(map[store.ChatSession]bool, len(conversations))
 	for _, conversation := range conversations {
-		if conversation != "" {
-			r.internalChats[conversation] = true
-		}
+		r.internalChats[conversation] = true
 	}
 	kept := ss[:0]
 	for _, session := range ss {
-		if session.Adapter != "claude" || !r.internalChats[session.ExternalID] {
+		if !r.internalChats[store.ChatSession{Agent: session.Adapter, SessionID: session.ExternalID}] {
 			kept = append(kept, session)
 		}
 	}
 	ss = kept
 	r.spool = collectSpool(d, offsets)
+	r.spool.events = internalChatEvents(r.spool.events, r.internalChats)
 	var knownRepos []model.Repo
 	if p.Git || p.GitIdentity {
 		knownRepos, err = st.Repos()
@@ -267,7 +266,7 @@ func collectSources(ctx context.Context, d Deps, st *store.Store, p Plan, state 
 			if o.Adapter == "" {
 				o.Adapter = result.name
 			}
-			if o.Adapter == "claude" && r.internalChats[o.ExternalID] {
+			if r.internalChats[store.ChatSession{Agent: o.Adapter, SessionID: o.ExternalID}] {
 				continue
 			}
 			if o.Adapter == "claude" && strings.TrimSuffix(o.Origin, "/temporary") == "background" && o.RegistryStatus != "" {
@@ -405,6 +404,19 @@ func collectSources(ctx context.Context, d Deps, st *store.Store, p Plan, state 
 		r.peers, r.socketErr = collectSocketPeers(ctx, d, st, state, r.procs, sessions, r.procAt, now, r.subreaper, spoolHooks(d, r.spool.events), r.processAliases)
 	}
 	return r, ctx.Err()
+}
+
+// internalChatEvents consumes private assistant hooks without exposing their
+// lifecycle or text as monitored user work. Offsets still advance normally.
+func internalChatEvents(events []model.HookEvent, identities map[store.ChatSession]bool) []model.HookEvent {
+	kept := events[:0]
+	for _, event := range events {
+		if event.Event != "summary" && event.Event != "ack" && identities[store.ChatSession{Agent: event.Adapter, SessionID: event.SessionID}] {
+			continue
+		}
+		kept = append(kept, event)
+	}
+	return kept
 }
 
 func claudeConversationClaimed(o model.SessionObs) bool {
