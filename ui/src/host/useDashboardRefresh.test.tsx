@@ -6,7 +6,8 @@ import type { Fragment, Prompt } from "../panels/types";
 import { useDashboardRefresh } from "./useDashboardRefresh";
 
 const api = vi.hoisted(() => ({ open: vi.fn(), run: vi.fn(), list: vi.fn(), prompts: vi.fn(), bursts:vi.fn(), grantHistory: vi.fn().mockResolvedValue([]), edit: vi.fn() }));
-vi.mock("./api", () => ({ dashboards: api, chat: { prompts: api.prompts, grantHistory: api.grantHistory, bursts: api.bursts } }));
+vi.mock("./api", async importOriginal => ({
+  ...await importOriginal<typeof import("./api")>(), dashboards: api, chat: { prompts: api.prompts, grantHistory: api.grantHistory, bursts: api.bursts } }));
 const fragment = (id: string, version = 1): Fragment => ({ id, version, dashboard: { name: id, panels: [] }, results: [], history: { attention: [], polls: [] }, observed_at: "2026-03-14T15:00:00Z" });
 const deferred = <T,>() => {
   let resolve!: (value: T) => void;

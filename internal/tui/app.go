@@ -549,13 +549,25 @@ func (m *app) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.rebuild()
 	case tea.MouseClickMsg:
+		if m.boardStop != 0 {
+			m.boardStop = 0
+			m.status = "Stop cancelled"
+		}
 		return m, m.mouseClick(msg)
 	case tea.MouseWheelMsg:
+		if m.boardStop != 0 {
+			m.boardStop = 0
+			m.status = "Stop cancelled"
+		}
 		return m, m.mouseWheel(msg)
 	case tea.KeyPressMsg:
 		k := msg.String()
 		if k == "ctrl+c" {
 			return m, tea.Quit
+		}
+		if m.boardStop != 0 {
+			cmd, _ := m.boardKey(k)
+			return m, cmd
 		}
 		// Modified tab keys bypass focused composers, filters and overlays.
 		if msg.Mod == tea.ModAlt && msg.Code >= '0' && msg.Code <= '2' {
@@ -687,6 +699,10 @@ func (m *app) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if cmd, handled := m.boardKey(k); handled {
 				return m, cmd
 			}
+		}
+		if k == "k" && m.tab != 3 {
+			msg = tea.KeyPressMsg{Code: tea.KeyUp}
+			k = msg.String()
 		}
 		switch k {
 		case "pgdown", "pgup":

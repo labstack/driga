@@ -15,7 +15,7 @@ import { rows, type Dashboard as DashboardSpec, type Panel, type Prompt } from "
 import "../panels/panels.css";
 import "./host.css";
 import { action, confirmedAction, chat, confirm, dashboards, type Operation } from "./api";
-import { Chat } from "./Chat";
+import { Chat, type ChatHandle } from "./Chat";
 import { ClustersHeader } from "./ClustersHeader";
 import { Dashboard } from "./Dashboard";
 import { attentionKinds, headerOf, type AttentionKind, type HeaderTarget } from "./Header";
@@ -70,11 +70,17 @@ export function App() {
   const [chatOpen, setChatOpen] = useState(() => remembered("driga-chat-open") !== "false");
   const [ask, setAsk] = useState<{ text: string; at: number } | null>(null);
   const say = (message: string) => notifications.show({ message, autoClose: 4000, closeButtonProps: { "aria-label": "Dismiss" } });
-  const { fragment, header, inbox, fleet, prompts, bursts, grantHistory, list, fresh, editing, setEditing, refresh: load, edit, mutateHeader, forgetPrompt } = useDashboardRefresh({ id, vars, onError: say, onMissing: () => setId(homeID) });
+  const { fragment, header, inbox, fleet, prompts, bursts, grantHistory, list, fresh, editing, setEditing, refresh: load, edit, mutateHeader, forgetPrompt } = useDashboardRefresh({ id, vars, onError: say, onMissing: () => {
+    // Replace a dead dashboard entry so Back can continue past it.
+    if (page === "board") history.replaceState(null, "", "/app/");
+    setId(homeID);
+  } });
   useEffect(() => { remember("driga-chat-open", String(chatOpen)); }, [chatOpen]);
   // Chat and the board share the window; dragging the line between them
   // sets Chat's width, which is remembered. Hiding Chat collapses its pane.
   const chatPane = usePanelRef();
+  const chatControl = useRef<ChatHandle>(null);
+  const closeChat = () => { void chatControl.current?.close(); };
   const split = useDefaultLayout({ id: "driga-split", panelIds: ["board", "chat"], onlySaveAfterUserInteractions: true });
   useEffect(() => {
     const pane = chatPane.current;
@@ -82,7 +88,15 @@ export function App() {
     if (chatOpen && pane.isCollapsed()) pane.expand();
     if (!chatOpen && !pane.isCollapsed()) pane.collapse();
   }, [chatOpen, chatPane]);
-  useEffect(() => { history.replaceState(null, "", page === "fleet" ? "/app/?page=fleet" : id === homeID ? "/app/" : `/app/?dashboard=${encodeURIComponent(id)}`); }, [id, page]);
+  useEffect(() => {
+    const restore = () => { setEditing(false); setVars({}); setId(initial()); setPage(initialPage()); };
+    window.addEventListener("popstate", restore);
+    return () => window.removeEventListener("popstate", restore);
+  }, [setEditing]);
+  useEffect(() => {
+    const url = page === "fleet" ? "/app/?page=fleet" : id === homeID ? "/app/" : `/app/?dashboard=${encodeURIComponent(id)}`;
+    if (location.pathname + location.search !== url) history.pushState(null, "", url);
+  }, [id, page]);
 
   // The header reads the server's reconciled counts, the fleet and history.
   const fleetData = useMemo(() => fleet ? fleetOf(fleet, inbox) : null, [fleet, inbox]);
@@ -254,7 +268,7 @@ export function App() {
   return <HostContext.Provider value={host}>
     <AppShell header={{ height: 56 }} padding={0}>
       <AppShell.Header px="md" style={{ background: "color-mix(in srgb, var(--driga-ground) 88%, transparent)", backdropFilter: "blur(10px)", borderColor: "var(--driga-border)" }}>
-        <ClustersHeader data={headerData} filter={filter} chatOpen={chatOpen} onFilter={onFilter} onOpenFleet={openFleet} onSearch={spotlight.open} onToggleChat={() => setChatOpen(o => !o)}
+        <ClustersHeader data={headerData} filter={filter} chatOpen={chatOpen} onFilter={onFilter} onOpenFleet={openFleet} onSearch={spotlight.open} onToggleChat={() => chatOpen ? closeChat() : setChatOpen(true)}
           onShow={panel => void showOnHome(panel)} busy={headerBusy} onRemove={pid => editHeader([{ op: "remove", id: pid }], "Removed a header widget")}
           onMove={(pid, before) => editHeader([{ op: "move", id: pid, ...(before ? { before } : {}) }], "Reordered header widgets")}
           editor={header && <HeaderEditor panels={header.dashboard.panels} busy={headerBusy} onAdd={panel => editHeader([{ op: "add", panel }], "Added a header widget")} onReset={resetHeader} onAsk={askChat} />}
@@ -294,11 +308,20 @@ export function App() {
           </>}
        </Pane>
        <Separator className="split-handle" aria-label="Resize Chat" />
-       <Pane id="chat" inert={!chatOpen} panelRef={chatPane} defaultSize={400} minSize={300} maxSize="65" collapsible collapsedSize={0}
-         onResize={size => { const shown = size.inPixels > 0; if (shown !== chatOpen) setChatOpen(shown); }}
-         style={{ background: "var(--driga-inset)", borderLeft: "1px solid var(--driga-border)", minWidth: 0 }}>
+       <Pane id="chat" inert={!chatOpen} aria-hidden={!chatOpen} panelRef={chatPane} defaultSize={400} minSize={300} maxSize="65" collapsible collapsedSize={0}
+         onResize={size => {
+           if (size.inPixels > 0) { if (!chatOpen) setChatOpen(true); }
+           else if (chatOpen) {
+             // A failed reset must reveal Chat and its error again. Expanding
+             // inside ResizeObserver would start another resize while it drains.
+             void chatControl.current?.close().then(closed => {
+               if (!closed) requestAnimationFrame(() => chatPane.current?.expand());
+             });
+           }
+         }}
+         style={{ background: "var(--driga-inset)", borderLeft: "1px solid var(--driga-border)", minWidth: 0, visibility: chatOpen ? "visible" : "hidden" }}>
         {/* Chat stays mounted while collapsed, so a draft and the conversation survive. */}
-        <Chat inbox={brief} act={act} ask={ask} onOpen={open} onClose={() => setChatOpen(false)} />
+        <Chat ref={chatControl} inbox={brief} act={act} ask={ask} onOpen={open} onClose={() => setChatOpen(false)} />
        </Pane>
        </Split>
       </AppShell.Main>

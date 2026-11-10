@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fleetSpec } from "../fleet/FleetSpec";
 import type { Dashboard, Fragment, Prompt, PromptBurst } from "../panels/types";
-import { chat, dashboards, type Operation, type Summary, type GrantDecision } from "./api";
+import { APIError, chat, dashboards, type Operation, type Summary, type GrantDecision } from "./api";
 
 export const refreshMs = 5000;
 export const headerID = "header";
@@ -57,7 +57,7 @@ export function useDashboardRefresh({ id, vars, onError, onMissing }: Scope & { 
         if (!current()) return;
         setSelected(s => ({ id, navigation: scope.navigation, fragment: s.navigation === scope.navigation ? s.fragment : null, fresh: { at: s.navigation === scope.navigation ? s.fresh.at : 0, failed: true } }));
         callbacks.current.onError((e as Error).message);
-        if (id !== homeID) callbacks.current.onMissing();
+        if (id !== homeID && e instanceof APIError && e.status === 404) callbacks.current.onMissing();
       }
     };
     try {
