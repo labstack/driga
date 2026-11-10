@@ -9,7 +9,8 @@ import { useHost } from "../panels/host";
 import { App } from "./App";
 
 const api = vi.hoisted(() => ({ open: vi.fn(), run: vi.fn(), list: vi.fn(), prompts: vi.fn(), bursts:vi.fn(), grantHistory:vi.fn(), edit: vi.fn() }));
-vi.mock("./api", () => ({
+vi.mock("./api", async importOriginal => ({
+  ...await importOriginal<typeof import("./api")>(),
   dashboards: { open: api.open, run: api.run, list: api.list, edit: api.edit },
   chat: { bursts:api.bursts, grantHistory:api.grantHistory, prompts: api.prompts }, action: vi.fn(), confirmedAction: vi.fn(), confirm: vi.fn(),
 }));

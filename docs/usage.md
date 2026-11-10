@@ -925,15 +925,15 @@ agent automatically. Clients resume from a cursor over bounded ordered events;
 an expired cursor or service restart sends a replacement snapshot. The app and
 TUI reload the local broker key after the Driga service restart.
 
-Your explicitly submitted question is scrubbed and sent to Claude. Context and
+Your explicitly submitted question is scrubbed and sent to the selected assistant. Context and
 MCP evidence pass the capture policy before reaching the agent. Driga retains no
 chat message bodies under `capture_text = "titles"`; `snippets` retains scrubbed
 200-character snippets. Live conversation text and drafts are bounded in memory,
 and the app stores no chat text on disk. Tool names and safe action decision metadata are retained as
 metadata. Process command lines and argv require `capture_text = "snippets"` in
 Chat tool responses; other policies remove both argument-bearing fields. Downgrading to titles erases retained bodies when the broker starts.
-Claude's own session history is vendor-managed and enables `--resume`; driga's
-capture policy does not control that vendor history. Chat tools may make network connections when approved; Claude uses its existing
+The assistant's own session history is vendor-managed and enables resume; driga's
+capture policy does not control that vendor history. Chat tools may make network connections when approved; the assistant uses its existing
 vendor connection.
 
 ## Desktop app
@@ -951,7 +951,7 @@ port. It opens on Home, a dashboard that fills the window, with Chat docked
 beside it and a row of metrics above: by default Need you, To review, Possibly
 stuck, Leftover processes and Reclaimable. Click a metric to ask Chat about it.
 Change the row by asking Chat ("add cost today to the header"), or remove a
-metric in Edit. The header holds only single numbers, eight at most.
+metric in Edit. The header holds only single numbers, sixteen at most.
 
 Home shows the inbox with pending permission prompts (Allow or Deny), leftover
 process trees, sessions that look stuck, every session, and memory. Panels take

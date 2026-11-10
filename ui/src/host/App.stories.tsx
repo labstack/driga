@@ -176,3 +176,138 @@ export const NotificationSession: Story = {
   await waitFor(() => expect(notificationRequest).toHaveBeenCalledWith("/app/action", { action: "jump", session_id: 11, machine: "studio-id" }));
  },
 };
+
+
+export const BackAndForward: Story = {
+  play: async ({ canvas }) => {
+    await expect(await canvas.findByRole("heading", { name: "Home", level: 1 })).toBeVisible();
+    await userEvent.click(canvas.getByRole("button", { name: /^Fleet: 3 machines/ }));
+    await expect(await canvas.findByRole("heading", { name: "Fleet", level: 1 })).toBeVisible();
+    desktopCommand("back", undefined);
+    await expect(await canvas.findByRole("heading", { name: "Home", level: 1 })).toBeVisible();
+    desktopCommand("forward", undefined);
+    await expect(await canvas.findByRole("heading", { name: "Fleet", level: 1 })).toBeVisible();
+  },
+};
+
+const closeRequests = fn();
+const fullAutoChat = { ...answered, mode: "full auto" as const, until: "2099-01-01T00:00:00Z" };
+export const HeaderClosesFullAuto: Story = {
+  parameters: { makeService: () => fakeService({ chat: fullAutoChat, onRequest: closeRequests }) },
+  play: async ({ canvas }) => {
+    await waitFor(() => expect(canvas.getByLabelText("Current trust mode")).toHaveTextContent("Full auto"));
+    await userEvent.click(canvas.getByRole("button", { name: "Chat" }));
+    await waitFor(() => expect(closeRequests).toHaveBeenCalledWith("/chat/api/mode", { id: fullAutoChat.conversation.id, mode: "confirm" }));
+    await expect(canvas.getByRole("button", { name: "Chat" })).toHaveAttribute("aria-pressed", "false");
+  },
+};
+export const FailedHeaderCloseStaysOpen: Story = {
+  parameters: { makeService: () => {
+    const service = fakeService({ chat: fullAutoChat });
+    return (input: RequestInfo | URL, init?: RequestInit) => String(input).includes("/chat/api/mode") ? Promise.resolve(new Response("Could not change mode", { status: 503 })) : service(input, init);
+  } },
+  play: async ({ canvas }) => {
+    await waitFor(() => expect(canvas.getByLabelText("Current trust mode")).toHaveTextContent("Full auto"));
+    await userEvent.click(canvas.getByRole("button", { name: "Chat" }));
+    await expect(await canvas.findByText("Could not change mode")).toBeVisible();
+    await expect(canvas.getByRole("button", { name: "Chat" })).toHaveAttribute("aria-pressed", "true");
+  },
+};
+
+
+export const SavedDashboardUnavailable: Story = {
+  parameters: { makeService: () => {
+    const service = fakeService({ open: { saved: { ...fragments.home, dashboard: { ...fragments.home.dashboard, name: "Saved board" } } } });
+    let reads = 0;
+    return (input: RequestInfo | URL, init?: RequestInit) => {
+      const body = init?.body ? JSON.parse(String(init.body)) : {};
+      if (String(input).includes("/app/api/open") && body.id === "saved" && ++reads > 1) return Promise.resolve(new Response("Temporary failure", { status: 503 }));
+      return service(input, init);
+    };
+  } },
+  beforeEach: () => { history.replaceState(null, "", "/app/?dashboard=saved"); },
+  play: async ({ canvas }) => {
+    await expect(await canvas.findByRole("heading", { name: "Saved board", level: 1 })).toBeVisible();
+    desktopCommand("reload", undefined);
+    await expect(await canvas.findByText(/Not updated since/)).toBeVisible();
+    await expect(canvas.getByRole("heading", { name: "Saved board", level: 1 })).toBeVisible();
+  },
+};
+export const MissingDashboardReturnsHome: Story = {
+  beforeEach: () => { history.replaceState(null, "", "/app/?dashboard=missing"); },
+  play: async ({ canvas }) => { await expect(await canvas.findByRole("heading", { name: "Home", level: 1 })).toBeVisible(); },
+};
+
+
+export const KeyboardCollapseClosesFullAuto: Story = {
+  parameters: { makeService: () => fakeService({ chat: fullAutoChat, onRequest: closeRequests }) },
+  play: async ({ canvas }) => {
+    await waitFor(() => expect(canvas.getByLabelText("Current trust mode")).toHaveTextContent("Full auto"));
+    const separator = canvas.getByRole("separator", { name: "Resize Chat" });
+    separator.focus();
+    await userEvent.keyboard("{End}");
+    await waitFor(() => expect(closeRequests).toHaveBeenCalledWith("/chat/api/mode", { id: fullAutoChat.conversation.id, mode: "confirm" }));
+    await waitFor(() => expect(canvas.getByRole("button", { name: "Chat" })).toHaveAttribute("aria-pressed", "false"));
+  },
+};
+export const FailedKeyboardCollapseStaysOpen: Story = {
+  parameters: FailedHeaderCloseStaysOpen.parameters,
+  play: async ({ canvas }) => {
+    await waitFor(() => expect(canvas.getByLabelText("Current trust mode")).toHaveTextContent("Full auto"));
+    canvas.getByRole("separator", { name: "Resize Chat" }).focus();
+    await userEvent.keyboard("{End}");
+    await expect(await canvas.findByText("Could not change mode")).toBeVisible();
+    await expect(canvas.getByRole("button", { name: "Chat" })).toHaveAttribute("aria-pressed", "true");
+    await expect(canvas.getByLabelText("Current trust mode")).toBeVisible();
+  },
+};
+
+export const CloseWhileHistoryLoads: Story = {
+  parameters: { makeService: () => {
+    const service = fakeService({ chat: fullAutoChat });
+    return (input: RequestInfo | URL, init?: RequestInit) => String(input).includes("/chat/api/history") ? new Promise<Response>(() => undefined) : service(input, init);
+  } },
+  play: async ({ canvas }) => {
+    await expect(await canvas.findByRole("heading", { name: "Home", level: 1 })).toBeVisible();
+    await userEvent.click(canvas.getByRole("button", { name: "Chat" }));
+    await expect(canvas.getByRole("button", { name: "Chat" })).toHaveAttribute("aria-pressed", "true");
+  },
+};
+export const CloseWhileEnablingFullAuto: Story = {
+  parameters: { makeService: () => {
+    const service = fakeService({ chat: answered });
+    return (input: RequestInfo | URL, init?: RequestInit) => String(input).includes("/chat/api/mode") ? new Promise<Response>(() => undefined) : service(input, init);
+  } },
+  play: async ({ canvas }) => {
+    await waitFor(() => expect(canvas.getByLabelText("Current trust mode")).toHaveTextContent("Confirm"));
+    await userEvent.click(canvas.getByRole("button", { name: "Full auto" }));
+    const dialog = await screen.findByRole("dialog", { name: "Enable Full auto?" });
+    await userEvent.click(within(dialog).getByRole("button", { name: "Enable Full auto" }));
+    await userEvent.click(canvas.getByRole("button", { name: "Chat" }));
+    await expect(canvas.getByRole("button", { name: "Chat" })).toHaveAttribute("aria-pressed", "true");
+  },
+};
+
+export const BackPastDeletedDashboard: Story = {
+  beforeEach: () => { history.replaceState(null, "", "/app/?dashboard=previous"); },
+  parameters: { makeService: () => {
+    const service = fakeService({ open: { previous: { ...fragments.home, dashboard: { ...fragments.home.dashboard, name: "Previous board" } } } });
+    return (input: RequestInfo | URL, init?: RequestInit) => {
+      const body = init?.body ? JSON.parse(String(init.body)) : {};
+      if (String(input).includes("/app/api/open") && body.id === "deleted") return Promise.resolve(new Response("Dashboard missing", { status: 404 }));
+      return service(input, init);
+    };
+  } },
+  play: async ({ canvas }) => {
+    await expect(await canvas.findByRole("heading", { name: "Previous board", level: 1 })).toBeVisible();
+    // The middle entry was saved before its dashboard was deleted elsewhere.
+    history.pushState(null, "", "/app/?dashboard=deleted");
+    history.pushState(null, "", "/app/");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await expect(await canvas.findByRole("heading", { name: "Home", level: 1 })).toBeVisible();
+    desktopCommand("back", undefined);
+    await waitFor(() => expect(location.search).toBe(""));
+    desktopCommand("back", undefined);
+    await expect(await canvas.findByRole("heading", { name: "Previous board", level: 1 })).toBeVisible();
+  },
+};

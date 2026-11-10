@@ -1,6 +1,6 @@
 import { Accordion, ActionIcon, Box, Button, Group, Modal, Paper, ScrollArea, Stack, Text, Textarea, Title } from "@mantine/core";
 import { Check, Sparkle, X } from "@phosphor-icons/react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useImperativeHandle, type Ref, useRef, useState } from "react";
 import { bytes } from "../panels/format";
 import { useHost } from "../panels/host";
 import { PanelView, type Act } from "../panels/PanelView";
@@ -110,7 +110,10 @@ export function answerLast(messages: ChatMessage[]): ChatMessage[] {
 
 const assistantNames: Record<string, string> = { claude: "Claude Code", codex: "Codex", copilot: "GitHub Copilot CLI" };
 
-export function Chat({ inbox, act, ask, onOpen, onClose }: {
+export type ChatHandle = { close: () => Promise<boolean> };
+
+export function Chat({ inbox, act, ask, onOpen, onClose, ref }: {
+  ref?: Ref<ChatHandle>;
   inbox?: { panel: Panel; result?: Result; listed: boolean }; act?: Act;
   /** ask puts a question in the compose box for the user to send. */
   ask: { text: string; at: number } | null;
@@ -209,10 +212,24 @@ export function Chat({ inbox, act, ask, onOpen, onClose }: {
     catch (e) { setProblem((e as Error).message); return false; }
     finally { changingMode.current = false; setModeBusy(false); }
   };
+  const closing = useRef(false);
   const close = async () => {
-    if (mode === "full auto" && !await setTrustMode("confirm")) return;
-    onClose?.();
+    if (closing.current || changingMode.current) return false;
+    if ((id && !mode) || (!id && historyStatus !== "empty")) {
+      setProblem("Chat's trust mode is not available yet. Wait for it to load before closing.");
+      return false;
+    }
+    closing.current = true;
+    try {
+      // The server may have changed since the last poll. A known conversation
+      // must acknowledge Confirm before it can disappear, even if the last
+      // poll already reported Confirm.
+      if (id && !await setTrustMode("confirm")) return false;
+      onClose?.();
+      return true;
+    } finally { closing.current = false; }
   };
+  useImperativeHandle(ref, () => ({ close }));
   const modeLabels: Record<ChatMode, string> = { confirm: "Confirm", auto: "Auto", "full auto": "Full auto" };
   let modeLabel = mode ? `Mode: ${modeLabels[mode]}` : !id && historyStatus === "empty" ? "Mode: Confirm" : !id && historyStatus === "unavailable" ? "Mode unavailable" : "Loading mode…";
   if (mode === "full auto" && until) modeLabel += ` · ${Math.max(0, Math.ceil((Date.parse(until) - now) / 60_000))}m left`;

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -15,14 +16,18 @@ import (
 
 type launchdController struct {
 	Controller
-	binPath   string
-	plistPath string
-	register  func(string) error
+	binPath       string
+	plistPath     string
+	register      func(string) error
+	statusCommand func(context.Context, ...string) *exec.Cmd
 }
 
 func newLaunchdController(controller Controller, binPath string) *launchdController {
 	return &launchdController{Controller: controller, binPath: binPath,
 		plistPath: filepath.Join(config.ExpandHome("~"), "Library", "LaunchAgents", Label("darwin")+".plist"),
+		statusCommand: func(ctx context.Context, args ...string) *exec.Cmd {
+			return exec.CommandContext(ctx, "/bin/launchctl", args...)
+		},
 		register: func(app string) error {
 			// Apple requires Launch Services to know the associated bundle,
 			// wherever Driga.app was installed.
@@ -42,7 +47,7 @@ func (s *launchdController) recordedDataDir() (string, error) {
 
 // Start makes repeating service install harmless when launchd already runs it.
 func (s *launchdController) Start() error {
-	status, err := s.Controller.Status()
+	status, err := s.Status()
 	if err == nil && status == ks.StatusRunning {
 		return nil
 	}

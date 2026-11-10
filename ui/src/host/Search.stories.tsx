@@ -79,3 +79,13 @@ export const ServiceUnreachable: Story = {
     await expect(await within(dialog).findByText(/can't reach its service/)).toBeVisible();
   },
 };
+
+
+export const ClipboardRejected: Story = {
+  beforeEach: () => { spyOn(navigator.clipboard, "writeText").mockRejectedValue(new Error("Clipboard unavailable")); },
+  play: async ({ canvas, args }) => {
+    const dialog = await search(canvas);
+    await userEvent.click(await within(dialog).findByRole("button", { name: /Split the payments service/ }));
+    await waitFor(() => expect(args.say).toHaveBeenCalledWith("Couldn't copy. Resume with: cd '/home/dev/src/harbor' && codex resume 'd4e5f6'"));
+  },
+};
