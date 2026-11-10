@@ -19,7 +19,7 @@ func TestCleanupConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Cleanup.WorktreeIdle != 48*time.Hour || len(cfg.Cleanup.Regenerable) != len(Default().Cleanup.Regenerable)+1 {
+	if cfg.Cleanup.WorktreeIdle != 48*time.Hour || len(cfg.Cleanup.Regenerable) != 2 {
 		t.Fatal(cfg.Cleanup)
 	}
 	for _, line := range []string{"worktree_idle = '-1h'", "regenerable = ['../outside/']"} {

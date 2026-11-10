@@ -72,7 +72,7 @@ func Measure(ctx context.Context, c Candidate, now time.Time) (Candidate, error)
 	c.Ignored = append([]IgnoredPath(nil), c.Ignored...)
 	c.Evidence = append([]string(nil), c.Evidence...)
 	var err error
-	if c.Kind == History {
+	if c.Kind == History || c.Status == "report_only" {
 		var buckets [3]int64
 		c.Size, c.SizeCapped, err = walkStatsWithPath(ctx, c.Path, devicePath, func(info os.FileInfo) {
 			age := now.Sub(info.ModTime())

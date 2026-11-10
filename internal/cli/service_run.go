@@ -47,9 +47,9 @@ func (c ServiceRunCmd) Run(g *Globals) error {
 			return err
 		}
 	}
-	applyCollectorMemoryLimit()
+	defer applyCollectorMemoryLimit()()
 	if !c.Once {
-		applyCollectorParallelism()
+		defer applyCollectorParallelism()()
 	}
 	overrides := map[string]any{}
 	if c.Serve != nil {

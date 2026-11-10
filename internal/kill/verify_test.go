@@ -2,7 +2,12 @@ package kill
 
 import (
 	"context"
+	"encoding/json"
+	"os"
+	"os/user"
+	"runtime"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -33,6 +38,15 @@ func (p *seqPlatform) Alive(int32, time.Time) bool                             {
 
 type seqProber struct{ *seqPlatform }
 
+type mutatingArgvProber struct{ seqProber }
+
+func (p mutatingArgvProber) Procs(ctx context.Context) ([]model.Proc, error) {
+	if p.calls == 1 {
+		p.snaps[0][1].Argv[0] = "replacement"
+	}
+	return p.seqPlatform.Procs(ctx)
+}
+
 var _ platform.SocketProber = seqProber{}
 
 func (p seqProber) ExternalPeers(_ context.Context, pids []int32) (map[int32]model.PeerState, error) {
@@ -53,6 +67,19 @@ func verifyFixture(cpuAfter float64) (model.Orphan, [][]model.Proc) {
 	o := model.Orphan{ID: "100:1700000000", RootPID: 100, StartTime: start, PIDs: []int32{100, 101}}
 	before := []model.Proc{{PID: 100, PPID: 1, StartTime: start, CPUSeconds: 2}, {PID: 101, PPID: 100, StartTime: start, CPUSeconds: 1}}
 	after := []model.Proc{{PID: 100, PPID: 1, StartTime: start, CPUSeconds: 2}, {PID: 101, PPID: 100, StartTime: start, CPUSeconds: cpuAfter}}
+	for _, snapshot := range [][]model.Proc{before, after} {
+		for i := range snapshot {
+			snapshot[i].OwnerKnown = true
+			snapshot[i].OwnerUID = uint32(os.Getuid())
+			if runtime.GOOS == "windows" {
+				u, _ := user.Current()
+				snapshot[i].OwnerSID = u.Uid
+			}
+			snapshot[i].Exe = "/fixture/helper"
+			snapshot[i].Cmdline = "helper"
+			snapshot[i].Argv = []string{"helper"}
+		}
+	}
 	return o, [][]model.Proc{before, after}
 }
 
@@ -70,6 +97,88 @@ func TestVerifyIdleRejectsCPUGrowth(t *testing.T) {
 	ok, reason, err := VerifyIdle(context.Background(), seqProber{&seqPlatform{snaps: snaps}}, o, []int32{101}, time.Millisecond)
 	if err != nil || ok || reason == "" {
 		t.Fatalf("busy tree accepted: %v %v %q", ok, err, reason)
+	}
+}
+
+func TestVerifyIdleRejectsReusedChildOnUnix(t *testing.T) {
+	o, snaps := verifyFixture(0)
+	snaps[1][1].StartTime = snaps[1][1].StartTime.Add(time.Second)
+	ok, reason, err := verifyIdle(context.Background(), seqProber{&seqPlatform{snaps: snaps}}, o, []int32{101}, time.Millisecond, false)
+	if err != nil || ok || !strings.Contains(reason, "identity changed") {
+		t.Fatalf("replacement child accepted as idle: ok=%t reason=%q err=%v", ok, reason, err)
+	}
+}
+
+func TestVerifyForActionPreservesCollectedIdentities(t *testing.T) {
+	o, snaps := verifyFixture(1)
+	o.ProcessStarts = map[int32]time.Time{100: o.StartTime, 101: o.StartTime.Add(-time.Second)}
+	_, err := VerifyForAction(context.Background(), seqProber{&seqPlatform{snaps: snaps}}, o, []int32{101}, time.Millisecond)
+	if err == nil || !strings.Contains(err.Error(), "identity changed since candidate was collected") {
+		t.Fatalf("replaced collected child accepted: %v", err)
+	}
+}
+
+func TestVerifyForActionPinsAllMembers(t *testing.T) {
+	o, snaps := verifyFixture(1)
+	fresh, err := VerifyForAction(context.Background(), seqProber{&seqPlatform{snaps: snaps}}, o, []int32{101}, time.Millisecond)
+	if err != nil || len(fresh.ProcessStarts) != 2 || !fresh.ProcessStarts[101].Equal(o.StartTime) {
+		t.Fatalf("fresh=%+v err=%v", fresh, err)
+	}
+}
+
+func TestVerifyForActionSnapshotsArgumentsBeforeWaiting(t *testing.T) {
+	o, snaps := verifyFixture(1)
+	p := mutatingArgvProber{seqProber{&seqPlatform{snaps: snaps[:1]}}}
+	_, err := VerifyForAction(context.Background(), p, o, []int32{101}, time.Millisecond)
+	if err == nil {
+		t.Fatal("in-place argument change during idle window authorized action")
+	}
+}
+
+func TestActionRejectsExecAcrossIdleAndSignalSeam(t *testing.T) {
+	for _, phase := range []string{"during idle", "before signal", "partial identity"} {
+		t.Run(phase, func(t *testing.T) {
+			o, snaps := verifyFixture(1)
+			for _, snapshot := range snaps {
+				for i := range snapshot {
+					snapshot[i].OwnerKnown = true
+					snapshot[i].OwnerUID = uint32(os.Getuid())
+					snapshot[i].Exe = "/fixture/helper"
+					snapshot[i].Cmdline = "helper secret-argument"
+					snapshot[i].Argv = []string{"helper", "secret-argument"}
+				}
+			}
+			if phase == "during idle" {
+				snaps[1][1].Exe = "/fixture/workload"
+			} else if phase == "partial identity" {
+				snaps[1][1].Partial = true
+			}
+			p := seqProber{&seqPlatform{snaps: snaps}}
+			fresh, err := VerifyForAction(context.Background(), p, o, []int32{101}, time.Millisecond)
+			if phase != "before signal" {
+				if err == nil {
+					t.Fatal("changed or incomplete identity authorized action")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			data, err := json.Marshal(fresh)
+			if err != nil || strings.Contains(string(data), "secret-argument") || strings.Contains(string(data), "/fixture/helper") {
+				t.Fatalf("action identity entered JSON: %s, %v", data, err)
+			}
+			// Exec preserves PID and start time, but replaces the approved image.
+			p.snaps[1][1].Exe = "/fixture/workload"
+			signals := 0
+			result, err := tree(context.Background(), p, fresh, []int32{101}, false, time.Millisecond, func(int, syscall.Signal) error {
+				signals++
+				return nil
+			})
+			if err != nil || !result.Aborted || signals != 0 {
+				t.Fatalf("exec reached signal: %+v err=%v signals=%d", result, err, signals)
+			}
+		})
 	}
 }
 

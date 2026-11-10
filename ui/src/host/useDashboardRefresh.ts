@@ -24,7 +24,7 @@ export function useDashboardRefresh({ id, vars, onError, onMissing }: Scope & { 
   const [prompts, setPrompts] = useState<Prompt[]>([]);
   const [list, setList] = useState<Summary[]>([]);
   const [editing, setEditingState] = useState(false);
-  const control = useRef({ scope: { id, vars, mutations: 0, reconcile: false, navigation: 0 }, generation: 0, editing: false, headerMutations: 0 });
+  const control = useRef({ scope: { id, vars, mutations: 0, reconcile: false, navigation: 0 }, generation: 0, refreshing: -1, request: null as AbortController | null, editing: false, headerMutations: 0 });
   const callbacks = useRef({ onError, onMissing });
   callbacks.current = { onError, onMissing };
   const c = control.current;
@@ -38,24 +38,43 @@ export function useDashboardRefresh({ id, vars, onError, onMissing }: Scope & { 
   const refresh = useCallback(async (explicit = false) => {
     const c = control.current;
     if (c.scope.id !== id || c.scope.vars !== vars || c.scope.mutations > 0 || c.headerMutations > 0 || c.editing && !explicit) return;
+    // A timer must not invalidate a still-running read: a response slower
+    // than the polling interval would otherwise never reach the screen.
+    if (!explicit && c.refreshing === c.generation) return;
     const scope = c.scope;
     const generation = ++c.generation;
+    c.request?.abort();
+    const request = new AbortController();
+    c.request = request;
+    c.refreshing = generation;
     const current = () => c.generation === generation && c.scope === scope;
-    const [h, i, f] = await Promise.allSettled([dashboards.open(headerID), dashboards.run(inboxSpec), dashboards.run(fleetSpec)]);
-    if (!current()) return;
-    if (h.status === "fulfilled") setHeader(h.value);
-    if (i.status === "fulfilled") setInbox(i.value);
-    if (f.status === "fulfilled") setFleet(f.value);
-    chat.bursts().then(bs => { if (current()) setBursts(bs); }, () => undefined);
-    chat.grantHistory().then(h => { if (current()) setGrantHistory(h); }, () => undefined);
-    chat.prompts().then(ps => { if (current()) setPrompts(ps); }, () => undefined);
+    const publish = (read: Promise<Fragment>, save: (value: Fragment) => void) => read.then(value => { if (current()) save(value); }, () => undefined);
+    const selectedRead = async () => {
+      try {
+        const next = await dashboards.open(id, vars, request.signal);
+        if (current()) setSelected({ id, navigation: scope.navigation, fragment: next, fresh: { at: Date.now(), failed: false } });
+      } catch (e) {
+        if (!current()) return;
+        setSelected(s => ({ id, navigation: scope.navigation, fragment: s.navigation === scope.navigation ? s.fragment : null, fresh: { at: s.navigation === scope.navigation ? s.fresh.at : 0, failed: true } }));
+        callbacks.current.onError((e as Error).message);
+        if (id !== homeID) callbacks.current.onMissing();
+      }
+    };
     try {
-      const next = await dashboards.open(id, vars);
-      if (current()) setSelected({ id, navigation: scope.navigation, fragment: next, fresh: { at: Date.now(), failed: false } });
-    } catch (e) {
-      if (!current()) return;
-      setSelected(s => ({ id, navigation: scope.navigation, fragment: s.navigation === scope.navigation ? s.fragment : null, fresh: { at: s.navigation === scope.navigation ? s.fresh.at : 0, failed: true } }));
-      if (id !== homeID) { callbacks.current.onError((e as Error).message); callbacks.current.onMissing(); }
+      chat.bursts().then(bs => { if (current()) setBursts(bs); }, () => undefined);
+      chat.grantHistory().then(h => { if (current()) setGrantHistory(h); }, () => undefined);
+      chat.prompts().then(ps => { if (current()) setPrompts(ps); }, () => undefined);
+      // Supplemental widgets must not hold the selected page behind a slow
+      // cleanup scan, or withhold each other's successful observations.
+      await Promise.all([
+        selectedRead(),
+        publish(dashboards.open(headerID, undefined, request.signal), setHeader),
+        publish(dashboards.run(inboxSpec, undefined, request.signal), setInbox),
+        publish(dashboards.run(fleetSpec, undefined, request.signal), setFleet),
+      ]);
+    } finally {
+      if (c.request === request) c.request = null;
+      if (c.refreshing === generation) c.refreshing = -1;
     }
   }, [id, vars]);
 
@@ -64,7 +83,7 @@ export function useDashboardRefresh({ id, vars, onError, onMissing }: Scope & { 
 
   useEffect(() => {
     void refresh(true);
-    return () => { control.current.generation++; };
+    return () => { control.current.generation++; control.current.request?.abort(); };
   }, [refresh]);
   useEffect(() => {
     if (editing) return;

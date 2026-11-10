@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -29,6 +28,27 @@ var _ SocketProber = darwinPlatform{}
 // New returns the macOS host collector.
 func New() Platform { return darwinPlatform{idents: &identCache{}} }
 
+func (darwinPlatform) ObserveProcess(ctx context.Context, pid int32) (model.Proc, bool, error) {
+	if err := ctx.Err(); err != nil {
+		return model.Proc{}, false, err
+	}
+	// The slice form distinguishes an empty PID result from a failed query;
+	// SysctlKinfoProc reports EIO for an empty result, losing that distinction.
+	entries, err := unix.SysctlKinfoProcSlice("kern.proc.pid", int(pid))
+	if err != nil {
+		return model.Proc{}, false, err
+	}
+	if err := ctx.Err(); err != nil {
+		return model.Proc{}, false, err
+	}
+	for i := range entries {
+		if entries[i].Proc.P_pid == pid {
+			return procFromKinfo(&entries[i]), true, nil
+		}
+	}
+	return model.Proc{}, false, nil
+}
+
 // procFromKinfo decodes the identity and state from the existing sysctl sample.
 func procFromKinfo(k *unix.KinfoProc) model.Proc {
 	const szomb = 5 // XNU sys/proc.h: exited, awaiting parent wait(2).
@@ -49,7 +69,6 @@ func (d darwinPlatform) Procs(ctx context.Context) ([]model.Proc, error) {
 	if err != nil {
 		return nil, err
 	}
-	uid := uint32(os.Getuid())
 	ttys := ttyDevices()
 	out := make([]model.Proc, 0, len(kprocs))
 	seen := make(map[int32]struct{}, len(kprocs))
@@ -77,23 +96,20 @@ func (d darwinPlatform) Procs(ctx context.Context) ([]model.Proc, error) {
 			continue
 		}
 		key := identKey{start: start, comm: unix.ByteSliceToString(k.Proc.P_comm[:])}
-		argv, exe, err := d.idents.get(pid, key, func() ([]string, string, error) {
-			argv, err := p.CmdlineSliceWithContext(ctx)
-			if err != nil {
-				return nil, "", err
-			}
-			exe, err := p.ExeWithContext(ctx)
-			return argv, exe, err
+		argv, exe, _ := d.idents.get(pid, key, func() ([]string, string, error) {
+			return readIdentity(key,
+				func() ([]string, error) { return p.CmdlineSliceWithContext(ctx) },
+				func() (string, error) { return p.ExeWithContext(ctx) },
+				func() (identKey, error) {
+					current, err := unix.SysctlKinfoProc("kern.proc.pid", int(pid))
+					if err != nil {
+						return identKey{}, err
+					}
+					return identKey{start: procFromKinfo(current).StartTime.UnixMilli(), comm: unix.ByteSliceToString(current.Proc.P_comm[:])}, nil
+				})
 		})
-		if err != nil {
-			// argv may be unreadable during exec or for other users. Keep the
-			// sampled resources for the machine view; expose only the sysctl
-			// command name when another user's executable is inaccessible.
-			argv, exe = nil, unix.ByteSliceToString(k.Proc.P_comm[:])
-			if k.Eproc.Pcred.P_ruid == uid {
-				exe = ""
-			}
-		}
+		// Keep independently readable fields; an empty field means unavailable.
+		// The kernel command name is an image key, not an executable path.
 		seen[pid] = struct{}{}
 		sample.RSS, sample.CPUSeconds = rss.RSS, times.User+times.System
 		sample.Cmdline, sample.Exe, sample.Argv = strings.Join(argv, " "), exe, argv

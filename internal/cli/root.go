@@ -2,6 +2,7 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -27,13 +28,15 @@ type Globals struct {
 	Machine       string `kong:"-"`
 	// CleanupPlatform injects read-only inspection for embedded callers/tests.
 	CleanupPlatform platform.Platform `kong:"-"`
-	cachedMachines  bool              `kong:"-"`
-	JSON            bool              `kong:"-"`
-	Project         string            `kong:"-"`
-	Since           string            `kong:"-"`
-	Snapshot        bool              `kong:"-"`
-	Theme           *string           `kong:"-"`
-	NoColor         bool              `kong:"-"`
+	// ReclaimTool injects the read-only simulator inventory command.
+	ReclaimTool    func(context.Context, string, ...string) ([]byte, error) `kong:"-"`
+	cachedMachines bool                                                     `kong:"-"`
+	JSON           bool                                                     `kong:"-"`
+	Project        string                                                   `kong:"-"`
+	Since          string                                                   `kong:"-"`
+	Snapshot       bool                                                     `kong:"-"`
+	Theme          *string                                                  `kong:"-"`
+	NoColor        bool                                                     `kong:"-"`
 
 	Version string    `kong:"-"`
 	Commit  string    `kong:"-"`
@@ -56,6 +59,7 @@ type Root struct {
 	Orphans    OrphansCmd  `cmd:"" help:"List orphan process trees."`
 	Machines   MachinesCmd `cmd:"" help:"List known machines and their connection health."`
 	Cleanup    CleanupCmd  `cmd:"" help:"Inspect and explicitly clean local agent disk candidates."`
+	Reclaim    ReclaimCmd  `cmd:"" help:"Review resource reclaim candidates and local action history."`
 	Top        TopCmd      `cmd:"" help:"Open the interactive session viewer."`
 	App        AppCmd      `cmd:"" help:"Open the Driga desktop app, or focus it."`
 	Ask        AskCmd      `cmd:"" help:"Ask a one-shot Chat question through Claude and driga's read-only tools."`
@@ -248,9 +252,11 @@ func supportsJSON(command string) bool {
 		return true
 	case "machines":
 		return len(words) < 2 || words[1] == "list" || words[1] == "show"
-	case "cleanup":
+	case "cleanup", "reclaim":
 		return true
-	case "inbox", "orphans":
+	case "orphans":
+		return len(words) < 2 || words[1] == "list" || words[1] == "kill"
+	case "inbox":
 		return len(words) < 2 || words[1] == "list"
 	case "config":
 		return len(words) > 1 && words[1] == "path"

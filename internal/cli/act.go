@@ -2,24 +2,37 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"time"
 
 	"github.com/labstack/driga/internal/actions"
 
+	"github.com/labstack/driga/internal/collector"
 	"github.com/labstack/driga/internal/config"
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/platform"
+	"github.com/labstack/driga/internal/scrub"
 	"github.com/labstack/driga/internal/view"
 )
 
 // OrphansKillCmd terminates explicitly confirmed orphan trees.
 type OrphansKillCmd struct {
 	OrphanActionOptions
+	JSON  bool   `help:"Print versioned shutdown outcomes; requires --yes."`
 	Yes   bool   `short:"y" help:"Skip confirmation; identity and idle checks still apply."`
 	ID    string `arg:"" name:"orphan-id" optional:"" help:"Orphan candidate ID."`
 	All   bool   `help:"Select all local orphan candidates; verify and confirm each unless --yes"`
 	Force bool   `help:"Escalate survivors to SIGKILL (TerminateProcess on Windows); confirmation is still required unless --yes."`
+}
+
+func (c *OrphansKillCmd) AfterApply(g *Globals) error {
+	if err := c.OrphanActionOptions.AfterApply(g); err != nil {
+		return err
+	}
+	g.JSON = c.JSON
+	return nil
 }
 
 // InboxAckCmd records explicit acknowledgments through the collector's spool.
@@ -45,13 +58,13 @@ var (
 
 func (c OrphansKillCmd) Run(g *Globals) error { return c.run(context.Background(), g) }
 func (c OrphansKillCmd) run(ctx context.Context, g *Globals) error {
-	if !c.Yes && !terminalInput(g) {
+	if !c.Yes && (g.JSON || !terminalInput(g)) {
 		return invalidUsage("not applied; pass --yes to apply without asking")
 	}
 	if err := actionSelection(c.ID, c.All); err != nil {
 		return err
 	}
-	st, _, closeFn, err := OpenReader(ctx, g)
+	st, mode, closeFn, err := OpenReader(ctx, g)
 	if err != nil {
 		return err
 	}
@@ -81,10 +94,12 @@ func (c OrphansKillCmd) run(ctx context.Context, g *Globals) error {
 	}
 	local := candidates[:0]
 	skipped := 0
+	var remote []actions.KillOutcome
 	for _, o := range candidates {
 		if o.MachineID != st.MachineID() {
 			if c.All {
 				skipped++
+				remote = append(remote, actions.KillOutcome{ID: o.ID, MachineID: o.MachineID, RootPID: o.RootPID, Status: "skipped", Reason: "run driga orphans kill on that machine"})
 				continue
 			}
 			name := o.MachineID
@@ -98,7 +113,7 @@ func (c OrphansKillCmd) run(ctx context.Context, g *Globals) error {
 		local = append(local, o)
 	}
 	candidates = local
-	if skipped > 0 {
+	if skipped > 0 && !g.JSON {
 		if _, err := fmt.Fprintf(g.Stdout, "skipped %d orphans on other machines\n", skipped); err != nil {
 			return err
 		}
@@ -111,7 +126,29 @@ func (c OrphansKillCmd) run(ctx context.Context, g *Globals) error {
 	if err != nil {
 		return err
 	}
-	return c.killCandidates(ctx, g, cfg, procs, candidates)
+	if !g.JSON {
+		return c.killCandidates(ctx, g, cfg, procs, candidates)
+	}
+	env := actionEnvironment(g, c.Yes)
+	env.Stdout = io.Discard
+	envelope, err := view.NewEnvelope(st, mode, time.Now(), collector.Cadence(0), nil, scope)
+	if err != nil {
+		return err
+	}
+	report, actionErr := (actions.KillOptions{All: c.All, Force: c.Force}).Execute(ctx, env, cfg, procs, candidates)
+	report.Skipped = skipped
+	report.Outcomes = append(report.Outcomes, remote...)
+	envelope.Data = report
+	if actionErr != nil {
+		envelope.Error = &view.ErrorRecord{Code: "kill_failed", Message: scrub.Scrub(actionErr.Error())}
+	}
+	if err := json.NewEncoder(commandOutput(g)).Encode(envelope); err != nil {
+		return reportedError{err}
+	}
+	if actionErr != nil {
+		return reportedError{actionErr}
+	}
+	return nil
 }
 
 func (c OrphansKillCmd) killCandidates(ctx context.Context, g *Globals, cfg config.Config, procs []model.Proc, candidates []model.Orphan) error {

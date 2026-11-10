@@ -8,7 +8,6 @@ import { value as format } from "../panels/format";
 import type { Panel } from "../panels/types";
 import { pressureTone } from "../widgets/BarGauge";
 import { KpiTile, type MenuItem } from "../widgets/KpiTile";
-import { RingGauge } from "../widgets/RingGauge";
 import { stateVar } from "../widgets/StatusBadge";
 import { Brand } from "./Brand";
 import { changeWords, fleetSummary, kinds, machineSummary, percent, worst, type HeaderTile, type HeaderProps, type Machine } from "./Header";
@@ -89,18 +88,18 @@ export function ClustersHeader({ data, filter, chatOpen, onFilter, onOpenFleet, 
     const trend = tile.trend;
     const first = trend?.[0], last = trend?.[trend.length - 1];
     const delta = typeof first === "number" && typeof last === "number" && trend!.length > 1 ? { change: last - first, window: "1h" } : undefined;
-    const pct = tile.value !== null && tile.total != null ? percent(tile.value, tile.total) : null;
-    const totalBar = tile.viz === "stat" && pct !== null;
+    // A gauge is a stat with a bar here: a ring beside its label would break
+    // the row's label-over-value line.
+    const gauge = tile.viz === "gauge" && tile.value !== null;
+    const pct = tile.value === null ? null : gauge ? percent(tile.value, tile.max ?? 100) : tile.total != null ? percent(tile.value, tile.total) : null;
+    const totalBar = (tile.viz === "stat" || gauge) && pct !== null;
     const tooltip = tile.error ?? (kind ? `${kinds[kind].hint} · ${changeWords({ count: tile.value ?? 0, trend: trend ?? [], delta: delta?.change ?? 0 })}` : tile.panel.description ?? tile.title);
     const content = <KpiTile menuItem={overflow} size="header" label={tile.title} sublabel={tile.behavior.sublabel ? data?.localMachine : undefined} icon={tile.behavior.icon}
-        value={tile.value} unit={tile.unit} total={tile.total ?? undefined} caption={tile.caption != null ? captionOf(tile.panel, tile.caption) : undefined}
+        value={tile.value} unit={tile.unit} total={gauge ? undefined : tile.total ?? undefined} caption={tile.caption != null ? captionOf(tile.panel, tile.caption) : undefined}
         trend={totalBar ? undefined : trend} delta={totalBar ? undefined : delta} direction={tile.behavior.direction} attention={kind} selected={kind ? filter === kind : undefined}
         shortcut={!measuring && kind ? kinds[kind].key : undefined} tooltip={measuring ? undefined : tooltip} onClick={measuring ? undefined : () => kind ? onFilter(kind) : onShow(tile.panel)}
-        menu={measuring ? undefined : tileMenu(tile.panel, onShow, onAsk, onRemove, tiles.length === 1, busy)}
-        visual={tile.viz === "gauge" && tile.value !== null ? <RingGauge value={tile.value} max={tile.max ?? 100} format={n => format(n, tile.unit)} label={tile.behavior.sublabel ? `${tile.title} · ${data?.localMachine}` : tile.title} size={36}
-          // The ring already shows a share of 100 in its centre; "42% / 100%" beside it would repeat it.
-          caption={tile.unit === "percent" && (tile.max ?? 100) === 100 ? "" : undefined} /> : undefined}>
-        {totalBar && <Progress size="xs" value={pct} color={pressureTone(pct / 100, [0.9, 0.9])} aria-label={`${pct}% of ${tile.title.toLowerCase()} used`} styles={{ root: { background: "var(--driga-border)" } }} />}
+        menu={measuring ? undefined : tileMenu(tile.panel, onShow, onAsk, onRemove, tiles.length === 1, busy)}>
+        {totalBar && <Progress size="xs" value={pct} color={gauge ? pressureTone(pct / 100) : pressureTone(pct / 100, [0.9, 0.9])} aria-label={`${pct}% of ${tile.title.toLowerCase()} used`} styles={{ root: { background: "var(--driga-border)" } }} />}
       </KpiTile>;
     return measuring ? <Measured key={tile.id} id={tile.id} onWidth={onWidth}>{content}</Measured> :
       <SortableTile key={tile.id} tile={tile} enabled={!!onMove && !busy}>{content}</SortableTile>;

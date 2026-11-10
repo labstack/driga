@@ -502,6 +502,14 @@ func orphansLocal(r Reader, f Filter, now time.Time) (OrphansView, error) {
 	if err != nil {
 		return v, err
 	}
+	procs, err := r.Procs()
+	if err != nil {
+		return v, err
+	}
+	idx, err := recordedProcIndex(r, procs)
+	if err != nil {
+		return v, err
+	}
 	wts := []model.Worktree{}
 	if f.Project != "" {
 		repos, err := r.Repos()
@@ -532,7 +540,16 @@ func orphansLocal(r Reader, f Filter, now time.Time) (OrphansView, error) {
 		}
 		o.Evidence = nonNil(o.Evidence)
 		o.PIDs = nonNil(o.PIDs)
-		v.Rows = append(v.Rows, OrphanRow{MachineID: r.MachineID(), Orphan: o, Age: max(0, now.Sub(o.StartTime))})
+		row := OrphanRow{MachineID: r.MachineID(), Orphan: o, Age: max(0, now.Sub(o.StartTime)), MemoryMeasure: "unknown"}
+		if members, known := derive.OrphanProcesses(idx, o); known {
+			usage := derive.SumProcessMemory(members)
+			row.Memory, row.MemoryMeasure, row.ResourcesKnown = usage.Memory, usage.Measure, true
+			row.RSSTotal = usage.RSS
+			for _, p := range members {
+				row.CPUPercent += p.CPUPercent
+			}
+		}
+		v.Rows = append(v.Rows, row)
 	}
 	return v, nil
 }

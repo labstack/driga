@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/labstack/driga/internal/attention"
 	"github.com/labstack/driga/internal/cleanup"
 	"github.com/labstack/driga/internal/scrub"
 	"github.com/labstack/driga/internal/view"
@@ -88,6 +89,11 @@ func (c CleanupOptions) Remove(ctx context.Context, g Environment, env cleanup.E
 				return err
 			}
 		}
+		if result.FreedBytes > 0 {
+			if _, err := fmt.Fprintf(out, "freed %s\n", attention.DecimalBytes(uint64(result.FreedBytes))); err != nil {
+				return err
+			}
+		}
 		for _, w := range result.Warnings {
 			if _, err := fmt.Fprintf(out, "%s: warning: %s\n", candidate.ID, w); err != nil {
 				return err
@@ -106,16 +112,16 @@ func shellWord(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
 }
 func PrintCleanup(out io.Writer, cs []cleanup.Candidate, sizes bool) error {
-	for _, kind := range []cleanup.Kind{cleanup.Worktree, cleanup.Scratch, cleanup.History} {
+	for _, kind := range []cleanup.Kind{cleanup.Worktree, cleanup.Scratch, cleanup.Build, cleanup.Cache, cleanup.History} {
 		for _, c := range cs {
 			if c.Kind != kind {
 				continue
 			}
 			size := ""
 			if sizes {
-				size = strconv.FormatInt(c.Size, 10) + " bytes"
+				size = "up to " + strconv.FormatInt(c.Size, 10) + " bytes"
 				if c.SizeCapped {
-					size = "≥" + size
+					size = "≥" + strconv.FormatInt(c.Size, 10) + " bytes (size capped)"
 				}
 			}
 			if _, err := fmt.Fprintf(out, "%s %s %s %s %s\n", c.Kind, c.ID, view.FriendlyEnum(c.Status), c.Path, size); err != nil {
@@ -166,6 +172,9 @@ func (c CleanupOptions) JSONCandidates(ctx context.Context, env cleanup.Env, cs 
 			outcome.Error = &view.ErrorRecord{Code: "cancelled", Message: ctx.Err().Error()}
 			failures = append(failures, ctx.Err())
 		case c.All && candidate.Status != "ready":
+			if candidate.Status == "report_only" {
+				outcome.Status = "skipped"
+			}
 			outcome.Reason = candidate.Status
 		case !c.DryRun && !c.Yes:
 			err := InvalidUsage("not applied; pass --yes to apply without asking")

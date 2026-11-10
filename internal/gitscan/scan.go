@@ -58,12 +58,23 @@ func foreignPath(p string) bool {
 // DiscoverRepos finds repositories above cwds and at most depth levels below
 // roots. Linked worktrees resolve to their main repository, without running Git.
 func DiscoverRepos(cwds, roots []string, depth int, exclude []string) ([]string, error) {
+	return DiscoverReposContext(context.Background(), cwds, roots, depth, exclude)
+}
+
+// DiscoverReposContext allows a collector shutdown to stop inventory discovery.
+func DiscoverReposContext(ctx context.Context, cwds, roots []string, depth int, exclude []string) ([]string, error) {
 	found := make(map[string]bool)
 	for _, cwd := range cwds {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		if cwd == "" || foreignPath(cwd) {
 			continue
 		}
 		for p := NormalizePath(cwd); ; p = filepath.Dir(p) {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
 			repo, err := repoAt(p)
 			if err != nil {
 				return nil, err
@@ -79,6 +90,9 @@ func DiscoverRepos(cwds, roots []string, depth int, exclude []string) ([]string,
 	}
 	var walk func(string, int) error
 	walk = func(p string, level int) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if filepath.Base(p) == ".git" || excluded(p, exclude) {
 			return nil
 		}

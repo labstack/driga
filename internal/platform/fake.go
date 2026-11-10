@@ -193,3 +193,7 @@ func (f *Fake) Alive(pid int32, start time.Time) bool {
 	}
 	return false
 }
+
+func (f *Fake) OpenFilePaths(ctx context.Context) ([]string, error) {
+	return append([]string{}, f.openFiles...), ctx.Err()
+}

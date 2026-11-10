@@ -45,7 +45,8 @@ variable.
 | [`summaries.enabled`](#summariesenabled) | bool | `false` | `DRIGA_SUMMARIES_ENABLED` |
 | [`summaries.model`](#summariesmodel) | string | `haiku` | `DRIGA_SUMMARIES_MODEL` |
 | [`cleanup.worktree_idle`](#cleanupworktree_idle) | duration | `168h` | `DRIGA_CLEANUP_WORKTREE_IDLE` |
-| [`cleanup.regenerable`](#cleanupregenerable) | list | `node_modules/`, `target/`, `.venv/`, `venv/`, `dist/`, `build/`, `.next/`, `__pycache__/`, `.gradle/`, `.terraform/` | file only |
+| [`cleanup.build_idle`](#cleanupbuild_idle) | duration | `168h` | `DRIGA_CLEANUP_BUILD_IDLE` |
+| [`cleanup.regenerable`](#cleanupregenerable) | list | empty | file only |
 | [`fleet.serve`](#fleetserve) | bool | `false` | `DRIGA_FLEET_SERVE` |
 | [`fleet.listen`](#fleetlisten) | string | empty | `DRIGA_FLEET_LISTEN` |
 | [`fleet.share_text`](#fleetshare_text) | string | `titles` | `DRIGA_FLEET_SHARE_TEXT` |
@@ -258,13 +259,21 @@ Idle worktree cleanup eligibility.
 |---|---|---|---|
 | duration | `168h` | 0..2562047h47m16.854775807s; zero = no idle minimum | `DRIGA_CLEANUP_WORKTREE_IDLE` |
 
-### cleanup.regenerable
+### cleanup.build_idle
 
-Additional regenerable relative directories (merged with defaults).
+Checkout idle time before its build output is a candidate.
 
 | Type | Default | Allowed | Environment |
 |---|---|---|---|
-| list | `node_modules/`, `target/`, `.venv/`, `venv/`, `dist/`, `build/`, `.next/`, `__pycache__/`, `.gradle/`, `.terraform/` | file-only; empty = built-in directories | file only |
+| duration | `168h` | 0..2562047h47m16.854775807s; zero = no idle minimum | `DRIGA_CLEANUP_BUILD_IDLE` |
+
+### cleanup.regenerable
+
+Extra regenerable directory names, beyond the built-in rules.
+
+| Type | Default | Allowed | Environment |
+|---|---|---|---|
+| list | empty | file-only; empty = built-in directories | file only |
 
 ## Fleet
 

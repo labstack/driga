@@ -92,14 +92,9 @@ func inspectWorktree(ctx context.Context, e Env, s snapshot, w model.Worktree, e
 		case "!!":
 			path := entry[3:]
 			regen := false
-			// Only whole ignored directories from the allowlist are regenerable.
-			// A file called 'build' or '.env' never inherits that permission.
 			if strings.HasSuffix(path, "/") {
-				for _, rule := range e.Cfg.Regenerable {
-					if strings.HasSuffix(rule, "/") && strings.HasSuffix("/"+path, "/"+rule) {
-						regen = true
-					}
-				}
+				_, err := qualifyRegenerable(c.Path, path, e.Cfg.Regenerable)
+				regen = err == nil
 			}
 			c.Ignored = append(c.Ignored, IgnoredPath{Path: path, Regenerable: regen})
 			if !regen {
@@ -109,23 +104,20 @@ func inspectWorktree(ctx context.Context, e Env, s snapshot, w model.Worktree, e
 			return fail("worktree has tracked changes")
 		}
 	}
-	for _, cwd := range s.cwds {
-		if inside(resolved(c.Path), resolved(cwd)) {
-			return fail("process cwd is inside worktree")
-		}
+	canonicalPath := resolved(c.Path)
+	if s.cwdUnder(canonicalPath) {
+		return fail("process cwd is inside worktree")
 	}
 	latest := time.Time{}
-	for _, session := range s.sessions {
-		if inside(resolved(c.Path), resolved(session.Cwd)) {
-			if session.Label != "dead" && session.Label != "ended" && session.Label != "finished" {
-				return fail("live session is inside worktree")
-			}
-			if session.LastActivityAt.After(latest) {
-				latest = session.LastActivityAt
-			}
-			if session.EndedAt != nil && session.EndedAt.After(latest) {
-				latest = *session.EndedAt
-			}
+	for session := range s.sessionsUnder(canonicalPath) {
+		if sessionLive(e, session) {
+			return fail("live session is inside worktree")
+		}
+		if session.LastActivityAt.After(latest) {
+			latest = session.LastActivityAt
+		}
+		if session.EndedAt != nil && session.EndedAt.After(latest) {
+			latest = *session.EndedAt
 		}
 	}
 	// Prefer the remote's declared default; local main/master are conservative fallbacks.

@@ -26,6 +26,9 @@ func (p *socketPlatform) ExternalPeers(_ context.Context, pids []int32) (map[int
 
 func TestPassVerifiesOrphansViaSocketProber(t *testing.T) {
 	d, st, p, _ := setup(t)
+	// This fixture is disconnected from the live session's directory; unreadable
+	// ownership is now deliberately review-only, independently of socket idleness.
+	p.cwds = map[int32]string{200: t.TempDir(), 201: t.TempDir()}
 	p.procs = append(p.procs, model.Proc{PID: 200, PPID: 1, StartTime: d.Now().Add(-time.Hour), Cmdline: "claude mcp serve", Argv: []string{"claude", "mcp", "serve"}}, model.Proc{PID: 201, PPID: 200, StartTime: d.Now().Add(-time.Hour), Cmdline: "worker", Argv: []string{"worker"}})
 	probe := &socketPlatform{fakePlatform: p, peers: map[int32]bool{200: false, 201: true}}
 	d.Plat = probe

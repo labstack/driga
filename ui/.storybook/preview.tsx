@@ -2,7 +2,7 @@ import "@mantine/notifications/styles.css";
 import "@mantine/spotlight/styles.css";
 import "../src/panels/panels.css";
 import "../src/host/host.css";
-import { Notifications } from "@mantine/notifications";
+import { Notifications, notifications } from "@mantine/notifications";
 import { type Args, INTERNAL_DEFAULT_PROJECT_ANNOTATIONS, type Preview, type StoryContext } from "@storybook/react-vite";
 import { UPDATE_STORY_ARGS } from "storybook/internal/core-events";
 import { addons } from "storybook/preview-api";
@@ -43,6 +43,9 @@ const preview: Preview = {
   },
   initialGlobals: { colorScheme: "light", viewport: { value: "desktop", isRotated: false } },
   beforeEach: context => {
+    // Mantine keeps toasts in a module store beyond a story's React tree.
+    // Failure-state stories must not leave their notifications in the next one.
+    notifications.clean();
     // Time is the fixtures' own, so "12m ago" reads the same every run.
     const realNow = Date.now;
     Date.now = () => storyNow;
@@ -70,9 +73,13 @@ const preview: Preview = {
     return () => { Date.now = realNow; channel.off(UPDATE_STORY_ARGS, onUpdate); };
   },
   afterEach: async () => {
-    await document.fonts.ready;
-    assertTextLayout(document.body);
-    assertScrollbarsClear(document.body);
+    try {
+      await document.fonts.ready;
+      assertTextLayout(document.body);
+      assertScrollbarsClear(document.body);
+    } finally {
+      notifications.clean();
+    }
   },
   decorators: [
     (Story, { globals }) => <Provider scheme={globals.colorScheme === "dark" ? "dark" : "light"}>

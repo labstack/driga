@@ -83,6 +83,7 @@ func (c TopCmd) Run(g *Globals) error {
 			return cleanup.Result{}, err
 		}
 		defer closeFn()
+		env.RunTools = true
 		return cleanup.Apply(ctx, env, c, cleanup.ApplyOpts{})
 	}
 	opts.Summarize = func(ctx context.Context, path string) error {

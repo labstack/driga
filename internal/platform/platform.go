@@ -61,6 +61,11 @@ type FileProber interface {
 	OpenFiles(context.Context, string) (bool, error)
 }
 
+// OpenFileLister lists canonical absolute paths without walking candidate directories.
+type OpenFileLister interface {
+	OpenFilePaths(context.Context) ([]string, error)
+}
+
 // SameStart compares a kernel create time with a recorded process start.
 // Registries may be written up to a minute after exec, or round a second early.
 func SameStart(create, recorded time.Time) bool {

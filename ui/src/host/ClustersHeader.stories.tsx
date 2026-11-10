@@ -71,6 +71,13 @@ function geometry(root: HTMLElement) {
     expect(rect.right).toBeLessThanOrEqual(slot.parentElement!.parentElement!.getBoundingClientRect().right + 1);
     expect(rect.right).toBeLessThanOrEqual(within(root).getByRole("button", { name: /^Fleet:/ }).getBoundingClientRect().left);
   }
+  // Each tile sits inside the row with equal room above and below.
+  for (const slot of slots) {
+    const tile = slot.querySelector<HTMLElement>(".w-tile")!.getBoundingClientRect();
+    const above = tile.top - bounds.top, below = bounds.bottom - tile.bottom;
+    expect(above, `${slot.dataset.headerTile} room above`).toBeGreaterThanOrEqual(2);
+    expect(Math.abs(above - below), `${slot.dataset.headerTile} room ${above} above, ${below} below`).toBeLessThanOrEqual(1);
+  }
   // Labels and values share one line across the row, whether or not a tile
   // has a bar under its value.
   const stacks = slots.map(slot => slot.querySelector<HTMLElement>(".w-tile > .mantine-Stack-root")).filter(stack => stack?.checkVisibility()) as HTMLElement[];
@@ -137,6 +144,11 @@ export const OneStuck: Story = {
     const stuck = await tile(canvasElement, "stuck");
     await expect(stuck).toHaveTextContent(/Stuck\s*1/);
     await expect(stuck).toHaveAttribute("data-attention", "danger");
+    // In the header, attention is the colored icon and dot alone: a tint or
+    // rule would read as the selected tile.
+    const look = getComputedStyle(stuck);
+    await expect(look.backgroundColor).toBe("rgba(0, 0, 0, 0)");
+    await expect(look.boxShadow).toBe("none");
     await userEvent.click(stuck); await expect(args.onFilter).toHaveBeenCalledWith("stuck");
     await expect(await tile(canvasElement, "waiting")).toHaveTextContent(/Need you\s*0/);
     await rest(canvasElement);
@@ -226,10 +238,10 @@ function widget(id: string): Story {
     const reading = allWidgets.tiles.find(t => t.id === id)!;
     expect(reading.value).not.toBeNull();
     const number = format(reading.value!, reading.unit).split(" ")[0];
-    // A gauge shows its share inside the ring and names the full reading for assistive tech.
-    if (panel.viz === "gauge") await expect(within(rendered).getByRole("img")).toHaveAccessibleName(new RegExp(number));
-    else await expect(rendered).toHaveTextContent(number);
-    if (reading.total != null) await expect(rendered).toHaveTextContent(`/ ${format(reading.total, reading.unit).split(" ")[0]}`);
+    await expect(rendered).toHaveTextContent(number);
+    // A gauge is a stat with a bar here, not a ring beside its label.
+    if (panel.viz === "gauge") await expect(within(rendered).getByRole("progressbar")).toBeInTheDocument();
+    if (reading.total != null && panel.viz !== "gauge") await expect(rendered).toHaveTextContent(`/ ${format(reading.total, reading.unit).split(" ")[0]}`);
     if (reading.caption != null) await expect(rendered).toHaveTextContent(`· ${reading.caption} trees`);
     geometry(canvasElement);
   } };

@@ -4,6 +4,7 @@ import (
 	"context"
 	drigamcp "github.com/labstack/driga/internal/mcp"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
+	"reflect"
 	"slices"
 	"testing"
 )
@@ -43,8 +44,10 @@ func TestCollectionLimitsAndEnums(t *testing.T) {
 		if props["limit"] == nil {
 			t.Fatal("missing limit schema", tool.Name)
 		}
-		if tool.Name == "list_cleanup_candidates" && props["kind"].(map[string]any)["enum"] == nil {
-			t.Fatal("missing cleanup enum")
+		if tool.Name == "list_cleanup_candidates" {
+			if got := props["kind"].(map[string]any)["enum"]; !reflect.DeepEqual(got, []any{"worktree", "scratch", "build", "cache", "history"}) {
+				t.Fatal("cleanup enum", got)
+			}
 		}
 	}
 }

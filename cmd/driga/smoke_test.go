@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,6 +17,11 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/labstack/driga/internal/cleanup"
+	"github.com/labstack/driga/internal/cli"
+	"github.com/labstack/driga/internal/platform"
+	"github.com/labstack/driga/internal/store"
 )
 
 // logBuffer is written by a child process's copier while the test reads it.
@@ -179,56 +185,8 @@ func TestSmoke(t *testing.T) {
 	}
 	local.run("config", "show")
 	local.run("service", "run", "--once")
-
-	if agents := local.data("agents", "--all"); !field(agents, "title", "Smoke title") {
-		t.Fatalf("session missing from agents: %s", agents)
-	}
-	if projects := local.data("projects"); !field(projects, "name", "smoke-project") {
-		t.Fatalf("project missing: %s", projects)
-	}
-	local.run("inbox")
-	local.run("orphans")
-	local.run("machines", "show")
-	local.run("doctor")
-	// Cleanup refuses when a live agent hides its cwd (non-dumpable agents
-	// on Linux); unreadable non-agent processes are reported as evidence. That is the
-	// host's state, not a smoke failure, so only that refusal skips the check.
-	for _, why := range []bool{false, true} {
-		args := []string{"cleanup", "--json"}
-		if why {
-			args = append(args, "--why")
-		}
-		out, errout, err := local.try(args...)
-		if err != nil && strings.Contains(errout, "cannot inspect cwd") {
-			t.Logf("cleanup checks skipped: %s", strings.TrimSpace(errout))
-			break
-		}
-		if err != nil {
-			t.Fatalf("cleanup: %v: %s", err, errout)
-		}
-		var compact bytes.Buffer
-		if err := json.Compact(&compact, []byte(out)); err != nil {
-			t.Fatal(err)
-		}
-		cs := compact.String()
-		if !why && field(cs, "path", "smoke-topic") {
-			t.Fatalf("unidle worktree offered: %s", cs)
-		}
-		if why && (!field(cs, "status", "refused") || !field(cs, "path", "smoke-topic")) {
-			t.Fatalf("--why lacks refused worktree: %s", cs)
-		}
-	}
-	// The agent count includes whatever agents the host is running, so only
-	// the line's fixed parts are checked.
-	summary := local.run()
-	for _, part := range []string{" agents (", " working, ", "inbox ", "orphans ", "snapshot"} {
-		if !strings.Contains(summary, part) {
-			t.Fatalf("summary lacks %q: %s", part, summary)
-		}
-	}
-
-	// Fleet: the local node serves on loopback; a viewer with an empty HOME
-	// pairs and must see the served session through the stream.
+	// Subsequent reads use this real service's database instead of collecting
+	// the host again for every command. Fleet exercises this same service below.
 	write(t, local.path("config.toml"), "roots = ['"+filepath.Dir(repo)+"']\n[fleet]\nserve = true\nlisten = \"127.0.0.1:0\"\n[intake]\notlp = false\n[adapters.copilot]\nenabled = false\n")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -240,8 +198,80 @@ func TestSmoke(t *testing.T) {
 	}
 	defer func() { cancel(); _ = serve.Wait() }()
 	eventually(t, 30*time.Second, func() bool {
-		return local.cmd(context.Background(), "fleet", "status").Run() == nil
-	}, func() string { return serveLog.String() })
+		probeCtx, stop := context.WithTimeout(ctx, 2*time.Second)
+		defer stop()
+		return local.cmd(probeCtx, "fleet", "status").Run() == nil
+	}, serveLog.String)
+
+	if agents := local.data("agents", "--all"); !field(agents, "title", "Smoke title") {
+		t.Fatalf("session missing from agents: %s", agents)
+	}
+	if projects := local.data("projects"); !field(projects, "name", "smoke-project") {
+		t.Fatalf("project missing: %s", projects)
+	}
+	local.run("inbox")
+	local.run("orphans")
+	local.run("machines", "show")
+	local.run("doctor")
+	// Exercise the real CLI cleanup handler against the collected fixture and
+	// actual Git worktree, with deterministic process inspection. Other agents
+	// running tests on this host must neither delay this check nor make it skip.
+	t.Run("cleanup", func(t *testing.T) {
+		fixture := cleanupNode(t, local, repo)
+		for key, value := range map[string]string{
+			"HOME": fixture.path("home"), "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
+			"DRIGA_DATA_DIR": fixture.path("data"), "DRIGA_SPOOL_DIR": fixture.path("spool"),
+			"DRIGA_CONFIG": fixture.path("config.toml"),
+		} {
+			t.Setenv(key, value)
+		}
+		for _, why := range []bool{false, true} {
+			var out bytes.Buffer
+			g := cli.Globals{JSON: true, Stdout: &out, Stderr: &out, CleanupPlatform: &platform.Fake{}}
+			if err := (cli.CleanupListCmd{Why: why}).Run(&g); err != nil {
+				t.Fatalf("cleanup why=%t: %v", why, err)
+			}
+			var envelope struct {
+				Schema int                 `json:"schema"`
+				Data   []cleanup.Candidate `json:"data"`
+			}
+			if err := json.Unmarshal(out.Bytes(), &envelope); err != nil || envelope.Schema != 2 {
+				t.Fatalf("cleanup envelope: %v: %s", err, out.String())
+			}
+			found := false
+			for _, candidate := range envelope.Data {
+				if candidate.Path != filepath.Join(filepath.Dir(repo), "smoke-topic") {
+					continue
+				}
+				found = true
+				if !why {
+					t.Fatalf("unidle worktree offered: %+v", candidate)
+				}
+				if candidate.Status != "refused" {
+					t.Fatalf("--why worktree not refused: %+v", candidate)
+				}
+			}
+			if why && !found {
+				t.Fatalf("--why lacks refused worktree: %s", out.String())
+			}
+		}
+	})
+	// The agent count includes whatever agents the host is running, so only
+	// the line's fixed parts are checked.
+	summary := local.run()
+	for _, part := range []string{" agents (", " working, ", "inbox ", "orphans ", "daemon"} {
+		if !strings.Contains(summary, part) {
+			t.Fatalf("summary lacks %q: %s", part, summary)
+		}
+	}
+	// Keep one explicit snapshot read through the built binary. The fixture's
+	// adapter roots are isolated, and no assertion depends on the host's counts.
+	if snapshot := local.run("summary", "--snapshot"); !strings.Contains(snapshot, "snapshot") {
+		t.Fatalf("explicit snapshot mode missing: %s", snapshot)
+	}
+
+	// Fleet: the local node serves on loopback; a viewer with an empty HOME
+	// pairs and must see the served session through the stream.
 	addrBytes, err := os.ReadFile(local.path("data", "fleet", "listen"))
 	if err != nil {
 		t.Fatal(err)
@@ -271,6 +301,85 @@ func TestSmoke(t *testing.T) {
 	if machines := viewer.data("machines"); !field(machines, "name", "smoke-peer") {
 		t.Fatalf("peer missing from machines: %s", machines)
 	}
+}
+
+// Retain the collector's actual fixture attribution while excluding repositories
+// discovered from unrelated host processes. Cleanup must inspect only test trees.
+func cleanupNode(t *testing.T, source node, repo string) node {
+	t.Helper()
+	fixture := newNode(t, source.bin, "cleanup")
+	write(t, fixture.path("config.toml"), "")
+	collected, err := store.Open(source.path("data", "driga.db"), store.ReadOnly)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer collected.Close()
+	isolated, err := store.Open(fixture.path("data", "driga.db"), store.ReadWrite)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer isolated.Close()
+	err = collected.Tx(context.Background(), func(from *store.Tx) error {
+		repos, err := from.Repos()
+		if err != nil {
+			return err
+		}
+		for _, r := range repos {
+			if r.Path != repo {
+				continue
+			}
+			worktrees, err := from.Worktrees(r.ID)
+			if err != nil {
+				return err
+			}
+			if len(worktrees) != 2 {
+				return fmt.Errorf("fixture collector returned %d worktrees, want 2", len(worktrees))
+			}
+			sessions, err := from.Sessions(store.SessionFilter{IncludeEnded: true})
+			if err != nil {
+				return err
+			}
+			return isolated.Tx(context.Background(), func(to *store.Tx) error {
+				repoID, err := to.UpsertRepo(r)
+				if err != nil {
+					return err
+				}
+				worktreeIDs := map[int64]int64{}
+				for _, w := range worktrees {
+					if w.Path != repo && w.Path != filepath.Join(filepath.Dir(repo), "smoke-topic") {
+						return fmt.Errorf("unexpected fixture worktree %q", w.Path)
+					}
+					w.RepoID = repoID
+					id, err := to.UpsertWorktree(w)
+					if err != nil {
+						return err
+					}
+					worktreeIDs[w.ID] = id
+				}
+				for _, s := range sessions {
+					if s.ExternalID != "smoke-session" || s.Cwd != repo {
+						continue
+					}
+					s.RepoID = &repoID
+					if s.WorktreeID != nil {
+						id, ok := worktreeIDs[*s.WorktreeID]
+						if !ok {
+							return fmt.Errorf("fixture session references uncollected worktree")
+						}
+						s.WorktreeID = &id
+					}
+					_, err := to.UpsertSession(s)
+					return err
+				}
+				return fmt.Errorf("fixture session not collected")
+			})
+		}
+		return fmt.Errorf("fixture repository not collected")
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return fixture
 }
 
 func eventually(t *testing.T, limit time.Duration, ok func() bool, logs func() string) {

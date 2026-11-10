@@ -169,12 +169,12 @@ func NewServer(o Options) *sdk.Server {
 	register(s, o.CaptureText, "inspect_setup", "Read setup and collection diagnostics.", func(ctx context.Context, _ struct{}) (view.Envelope, error) {
 		return o.Doctor(ctx)
 	})
-	register(s, o.CaptureText, "list_cleanup_candidates", "Inspect local disk cleanup candidates read-only. Optional kind is worktree, scratch, or history (omit for all); sizes=true opts into bounded directory sizing. This tool never removes anything.", func(ctx context.Context, in struct {
+	register(s, o.CaptureText, "list_cleanup_candidates", "Inspect local disk cleanup candidates read-only. Optional kind is worktree, scratch, build, cache, history (omit for all); sizes=true opts into bounded directory sizing. This tool never removes anything.", func(ctx context.Context, in struct {
 		Kind  string `json:"kind,omitempty"`
 		Sizes bool   `json:"sizes,omitempty"`
 	}) (view.Envelope, error) {
-		if in.Kind != "" && in.Kind != "worktree" && in.Kind != "scratch" && in.Kind != "history" {
-			return view.Envelope{}, fmt.Errorf("unknown cleanup kind %q", in.Kind)
+		if in.Kind != "" && in.Kind != "worktree" && in.Kind != "scratch" && in.Kind != "build" && in.Kind != "cache" && in.Kind != "history" {
+			return view.Envelope{}, fmt.Errorf("unknown cleanup kind %q; expected worktree, scratch, build, cache, history", in.Kind)
 		}
 		if o.Cleanup == nil {
 			return view.Envelope{}, fmt.Errorf("cleanup inspection unavailable")
@@ -242,7 +242,7 @@ func register[In any](s *sdk.Server, capture, name, description string, read fun
 		schema.Properties["project"].MinLength = &n
 	}
 	if name == "list_cleanup_candidates" {
-		schema.Properties["kind"].Enum = []any{"worktree", "scratch", "history"}
+		schema.Properties["kind"].Enum = []any{"worktree", "scratch", "build", "cache", "history"}
 	}
 	sdk.AddTool(s, &sdk.Tool{Name: name, InputSchema: schema, Description: description + readDescription, Annotations: &sdk.ToolAnnotations{ReadOnlyHint: true}}, func(ctx context.Context, req *sdk.CallToolRequest, args map[string]any) (*sdk.CallToolResult, view.Envelope, error) {
 		limit := 100

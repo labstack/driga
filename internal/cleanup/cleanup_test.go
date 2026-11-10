@@ -24,12 +24,35 @@ import (
 )
 
 type fakePlatform struct {
-	procs    []model.Proc
-	open     bool
-	cwdCalls int
-	pids     []int32
-	probe    func()
-	alive    bool
+	openPaths     []string
+	openPathCalls int
+	openCalls     int
+	procs         []model.Proc
+	open          bool
+	cwdCalls      int
+	pids          []int32
+	probe         func()
+	alive         bool
+}
+
+func (f *fakePlatform) OpenFilePaths(context.Context) ([]string, error) {
+	f.openPathCalls++
+	return append([]string{}, f.openPaths...), nil
+}
+
+func TestOpenUnderPrefix(t *testing.T) {
+	for _, tc := range []struct {
+		path string
+		want bool
+	}{{"/a/node_modules/x", true}, {"/a/node_modules2/x", false}, {"/a/x", false}} {
+		got, err := openUnder(snapshot{open: []string{tc.path}}, "/a/node_modules")
+		if err != nil || got != tc.want {
+			t.Fatalf("%s: %v %v", tc.path, got, err)
+		}
+	}
+	if _, err := openUnder(snapshot{}, "/a/node_modules"); err == nil {
+		t.Fatal("nil table accepted")
+	}
 }
 
 func (f *fakePlatform) Procs(context.Context) ([]model.Proc, error) { return f.procs, nil }
@@ -47,6 +70,7 @@ func (f *fakePlatform) Cwds(_ context.Context, pids []int32) (map[int32]string, 
 	return m, nil
 }
 func (f *fakePlatform) OpenFiles(context.Context, string) (bool, error) {
+	f.openCalls++
 	if f.probe != nil {
 		f.probe()
 	}
@@ -110,15 +134,6 @@ func git(t *testing.T, dir string, args ...string) string {
 	}
 	return strings.TrimSpace(string(out))
 }
-func put(t *testing.T, p, s string) {
-	t.Helper()
-	if err := os.MkdirAll(filepath.Dir(p), 0700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(p, []byte(s), 0600); err != nil {
-		t.Fatal(err)
-	}
-}
 func tx(t *testing.T, e Env, f func(*store.Tx) error) {
 	t.Helper()
 	if err := e.Store.Tx(context.Background(), f); err != nil {
@@ -148,6 +163,7 @@ func fixture(t *testing.T) (Env, *fakePlatform, string, string) {
 	git(t, repo, "config", "user.email", "test@example.invalid")
 	git(t, repo, "config", "user.name", "Test")
 	put(t, filepath.Join(repo, "tracked"), "one")
+	put(t, filepath.Join(repo, "package.json"), "{}")
 	put(t, filepath.Join(repo, ".gitignore"), "node_modules/\n.env\n")
 	git(t, repo, "add", ".")
 	git(t, repo, "commit", "-m", "base")
@@ -216,6 +232,46 @@ func TestWorktreeCandidateReady(t *testing.T) {
 		t.Fatal("expected single cwd snapshot", p.cwdCalls)
 	}
 }
+
+func TestWorktreeFinishedSessionLiveness(t *testing.T) {
+	for _, state := range []string{"alive", "unknown pid", "gone", "ended", "dead label", "ended label"} {
+		t.Run(state, func(t *testing.T) {
+			e, p, repo, wt := fixture(t)
+			c := listed(t, e, wt)
+			p.alive = state != "gone"
+			session := model.Session{SessionObs: model.SessionObs{
+				Adapter: "claude", ExternalID: "finished-worktree", Cwd: wt,
+				PID: 4242, ProcStart: e.Now.Add(-10 * 24 * time.Hour), LastActivityAt: e.Now.Add(-8 * 24 * time.Hour),
+			}, Label: "finished"}
+			if state == "unknown pid" {
+				session.PID = 0
+			} else {
+				// The process moved outside the worktree; stored session attribution remains.
+				p.procs = []model.Proc{{PID: 4242, Cwd: repo, Cmdline: "claude"}}
+			}
+			if state == "ended" {
+				ended := e.Now.Add(-8 * 24 * time.Hour)
+				session.EndedAt = &ended
+			}
+			if state == "dead label" || state == "ended label" {
+				session.PID = 0
+				session.Label = strings.TrimSuffix(state, " label")
+			}
+			tx(t, e, func(tx *store.Tx) error { _, err := tx.UpsertSession(session); return err })
+			if state == "alive" || state == "unknown pid" {
+				absent(t, e, wt)
+				if _, err := Apply(context.Background(), e, c, ApplyOpts{}); err == nil || !strings.Contains(err.Error(), "live session") {
+					t.Fatalf("live finished session accepted: %v", err)
+				}
+				if _, err := os.Stat(wt); err != nil {
+					t.Fatal("worktree was removed", err)
+				}
+			} else if err := Verify(context.Background(), e, c); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
 func TestWorktreeRefusals(t *testing.T) {
 	for _, name := range []string{"main", "locked", "dirty", "untracked", "unpushed", "no-upstream", "idle-6d", "process", "live-session"} {
 		t.Run(name, func(t *testing.T) {
@@ -271,6 +327,20 @@ func TestWorktreeIgnoredClassification(t *testing.T) {
 	}
 	if _, err := Apply(context.Background(), e, c, ApplyOpts{IncludeIgnored: true}); err != nil {
 		t.Fatal("explicit ignored consent", err)
+	}
+}
+
+func TestWorktreePycacheRegenerable(t *testing.T) {
+	e, _, repo, wt := fixture(t)
+	// Keep the ignore rule outside tracked files so the worktree stays clean.
+	put(t, filepath.Join(repo, ".git", "info", "exclude"), "__pycache__/\n")
+	put(t, filepath.Join(wt, "__pycache__", "module.pyc"), "bytecode")
+	c := listed(t, e, wt)
+	if c.Status != "ready" || len(c.Ignored) != 1 || c.Ignored[0].Path != "__pycache__/" || !c.Ignored[0].Regenerable {
+		t.Fatal(c)
+	}
+	if _, err := Apply(context.Background(), e, c, ApplyOpts{DryRun: true}); err != nil {
+		t.Fatal(err)
 	}
 }
 func TestVerifyAtActionTime(t *testing.T) {

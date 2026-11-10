@@ -21,7 +21,13 @@ driga inbox                       # current waits and recent completions; "inbox
 driga inbox list --all                # complete history, including acks and ended waits
 driga inbox ack <item-id>          # explicit acknowledgment
 driga orphans                     # "orphans list" also works
+driga reclaim                     # disk, memory and CPU opportunities, with protected work
+driga reclaim --processes         # detached work review without disk scans
+driga reclaim --pid 12345         # exact current PID, including protection reasons
+driga reclaim --simulators        # booted iOS devices; read-only, macOS
+driga reclaim history             # process outcomes and disk cleanup receipts
 driga orphans kill <candidate-id>  # previews the tree and requires y
+driga orphans kill <candidate-id> --yes --json  # structured shutdown outcomes
 driga machines show                     # compact report with 24h trends
 driga machines show --full              # all retained trends and process detail
 driga machines                     # local + paired machine health
@@ -129,6 +135,62 @@ that runs from a running app's bundle protects its tree, unless an agent helper
 started it to borrow the bundle's runtime.
 
 Remote orphans cannot be killed here; run the kill command on their machine.
+Idle helpers that overlap a live session's directory require review; remembered
+live owners protect helpers even after detachment. Driga reloads session records,
+process identities and working directories after consent before authorizing an
+orphan shutdown. Idle CPU alone does not establish that a helper is unneeded.
+The orphan list reports the latest sampled CPU (100% is one core), memory and
+RSS separately. Memory uses physical footprint on macOS, private bytes on Windows,
+RSS plus swap where available on Linux, and RSS otherwise. Footprint may include
+compressed or swapped pages; it is not a promise of immediately freed RAM.
+Missing or changed process identities show unavailable resource estimates.
+
+After confirmation, including `--yes`, Driga checks a fresh idle window, socket
+peers and every member's start time before signaling. Shutdown results distinguish
+confirmed exits, survivors and unknown outcomes. `orphans kill --yes --json`
+returns one versioned document with per-tree outcomes and prior memory usage of
+confirmed exits. Survivors, refusals and observation failures return a nonzero
+exit code. The reported usage belongs to exited processes; machine-wide RAM and
+CPU can change independently as other work continues.
+
+`driga reclaim [--sizes] [--why] [--json]` brings local disk candidates, orphan
+trees and attributed live sessions into one plan. Ready actions sort first,
+followed by sampled CPU, memory and disk size; unlike units are kept separate.
+Unknown sizes remain unknown. Live work is protected and links to its session
+for deliberate review. Displayed next steps use the existing confirmation and
+fresh verification paths; listing a plan never stops or removes anything.
+
+The plan also reviews general detached work, including scripts, dev servers and
+databases with temporary data-directory provenance. These are human review
+records, not automatically safe shutdown targets. Current native agents and
+session ownership protect overlapping work; missing identity, CPU or socket
+observations remain explicit. `--processes` skips disk and simulator discovery.
+`--pid PID` inspects the exact current process, even if protected, attached, young
+or absent from ranked machine tables. An absent PID is not reported as a
+confirmed exit. These fast reads do not start a collector, read transcripts,
+walk Git repositories or create a persistent database.
+
+On macOS, `--simulators` lists booted iOS devices with their exact device IDs.
+The last-used timestamp is separate from boot time and does not establish
+present idleness. Unknown boot time and memory stay unknown; Driga does not
+automatically stop devices. Combine `--processes --simulators` to inspect both
+without disk scanning. An unavailable inventory is shown as a coverage gap.
+
+`driga reclaim history [--kind process|disk] [--limit 50] [--json]` shows local
+receipts, newest first. Process receipts include confirmed exits, survivors,
+unknown outcomes and the prior usage of exited processes. The bounded private
+journal omits command lines, session text and error messages. Disk history uses
+the existing cleanup logs. Receipt-write failures produce visible warnings while
+preserving performed action results; a crash before receipt writing may leave no
+receipt. Rotation bounds retained history rather than promising permanent totals.
+
+The background service runs one Git inventory job at a time, allowing process
+sampling, spool handling and telemetry to continue while Git is slow. Completed
+inventory is published separately and retained until its transaction commits.
+Disposable snapshots still finish their Git scan before returning. `driga doctor`
+reports phase-correlated Go heap/GC measurements separately from physical
+footprint, only for a fresh sample belonging to the current collector PID.
+
 Remote inbox acknowledgments require the peer's `--allow-ack` grant; unreachable peers
 show `ack pending` and retry on reconnect.
 
@@ -226,7 +288,8 @@ Defaults and their purpose:
 | `summaries.model` | `haiku` | Model passed to `claude -p` for summaries. |
 | `cleanup.worktree_idle` | `168h` | Minimum idle time before a worktree is a candidate. |
 | `machine.disk_free_min` | `"0"` (automatic) | Inbox `low_disk` warning below the smaller of 10% of the volume or decimal 20 GB; override with a byte string or KiB/MiB/GiB. Env: `DRIGA_MACHINE_DISK_FREE_MIN`. |
-| `cleanup.regenerable` | `node_modules/`, `target/`, `.venv/`, … | Ignored directories that may leave with a worktree; extends the defaults. |
+| `cleanup.build_idle` | `168h` | Checkout idle time before its build output is a candidate. |
+| `cleanup.regenerable` | `[]` | Extra regenerable directory names, beyond the built-in rules. |
 
 The Claude, Codex, Copilot and Gemini adapters are enabled by default. Disable individual
 adapters with `[adapters.<name>]` and `enabled = false`. Windows collection resolves the account's
@@ -663,7 +726,7 @@ automatically, and nothing is removed on another machine.
 ```sh
 driga cleanup list                        # candidates with evidence
 driga cleanup list --sizes                # walk sizes on demand (30 s cap per walk)
-driga cleanup list --why                  # also list worktrees that don't qualify, and why
+driga cleanup list --why                  # also list refused worktrees and build output, and why
 driga cleanup remove <id> --dry-run        # print the exact commands
 driga cleanup remove <id>                  # re-verify, then ask y/N
 driga cleanup remove --kind worktree --all # every ready worktree; skips anything changed
@@ -673,12 +736,57 @@ driga cleanup remove --kind worktree --all # every ready worktree; skips anythin
   session or process inside, no tracked or untracked changes, commits merged
   into the default branch or pushed, and idle for `cleanup.worktree_idle`. The
   action is `git worktree remove`, `git worktree prune`, then `git branch -d`
-  only when merged (never `-D`). Ignored build output (`cleanup.regenerable`) leaves
-  with the worktree; any other ignored file (`.env`, local databases) makes the
+  only when merged (never `-D`). Ignored build output (built-in rules plus `cleanup.regenerable`) leaves
+  with the worktree; `__pycache__/` is also regenerable without sibling evidence.
+  Any other ignored file (`.env`, local databases) makes the
   candidate `needs-review`, and acting on it needs `--include-ignored`.
 - **Scratch**: a Claude Code per-session temp directory whose session has ended
   for 24 h and has no open files. It is moved to the trash (macOS Trash,
   or the freedesktop trash on Linux), never deleted.
+- **Build**: whole ignored directories in stored Git checkouts and sibling repos
+  within two levels of their parent. Built-in rules require sibling evidence:
+  `node_modules`, `.next`, `.nuxt`, `.svelte-kit`, `.turbo`, `dist` need
+  `package.json`; `target` needs `Cargo.toml`; `.venv` and `venv` need
+  `pyproject.toml`, `requirements*.txt`, `uv.lock` or `setup.py`; `.gradle` and
+  `build` need `build.gradle*` or `settings.gradle*`; `.build` needs `Package.swift`;
+  `Pods` needs `Podfile`; `.pio` needs `platformio.ini`.
+  `__pycache__` is omitted from standalone build candidates.
+  `cleanup.regenerable` adds user-asserted names, including an explicit opt-in
+  for `.codegraph`. `out` and `.terraform` are always excluded. Symlinks,
+  nested Git repositories, process cwds or open files inside, live sessions in
+  the checkout, and checkouts active within `cleanup.build_idle` are refused.
+  A terminal at the checkout root does not block build cleanup. Build output is
+  deleted through `os.Root`, not moved to Trash. Before venv removal, installed
+  `*.dist-info` directory basenames are durably saved in the private data
+  directory's `cleanup-reconstruction.log` (64 KiB per record, 10 MiB plus one
+  rotated file). A failed write or sync prevents removal. The list helps rebuild
+  the environment but is not a complete `pip freeze`; `cleanup.log` retains the
+  final cleanup outcome.
+  Non-Git directories are outside discovery.
+- **Cache**: CLI-only cleanup. Tool-managed caches use: `go clean -cache`,
+  `uv cache prune`, `npm cache clean --force`, `pnpm store prune`,
+  and `brew cleanup`. Missing tools and empty cache locations are skipped.
+  Bun uses `BUN_INSTALL_CACHE_DIR` if set, otherwise `$BUN_INSTALL/install/cache`
+  (`BUN_INSTALL` defaults to `~/.bun`), without invoking bun. Its cache directory
+  and, on macOS, Xcode DerivedData are deleted through `os.Root`. Removing the
+  bun cache is safe: installed `node_modules` are APFS clones or copies.
+  Stray Go build caches directly under temp roots are removed when their regular
+  `README` starts with Go's build-cache marker, the directory and its immediate
+  children are idle for over 24 hours, and no process cwd or open file is inside;
+  the canonical `go env GOCACHE` directory is excluded. Outside CLI tool execution,
+  only an absolute exported `GOCACHE` is resolved; `go env -w` settings are not read.
+  `--why` shows refusals.
+  Go modules, Cargo registry, rustup toolchains, Hugging Face models,
+  Colima and Docker VM disks, and Codex history are report-only. The service
+  never runs these tools. Use `--kind build` or `--kind cache` to filter.
+  On demand, rustup inventory reports individual toolchains against known repo
+  and worktree toolchain files, directory overrides, and current selections.
+  A toolchain absent from those observations still requires manual review;
+  missing or invalid configuration makes usage unknown. Background collection
+  reports the aggregate directory without running rustup. Driga never removes
+  toolchains. File precedence follows [Rustup's documented overrides](https://rust-lang.github.io/rustup/overrides.html).
+  Size previews show **up to** N bytes; APFS clones and hard links may share
+  storage. After cleanup, nonzero free-space deltas are printed as `freed`.
 - **History**: agent history sizes by age. Report only; use the agent's own
   retention setting (Claude Code: `cleanupPeriodDays`).
 
@@ -1023,14 +1131,16 @@ contains related sessions; selecting a session never selects the whole family.
 | `inbox list` | Attention and completion items; `--all` includes acknowledged/history items. Supports read-view options. |
 | `inbox ack <item-id>` or `inbox ack --all` | Explicit acknowledgment; `--machine` selects the source. |
 | `inbox jump <item-id>` | Jump to a local inbox destination without acknowledgment. |
-| `orphans list` | Orphan candidates and evidence; supports read-view options. |
-| `orphans kill <orphan-id>` or `orphans kill --all` | `--all`: Select all local orphan candidates; verify and confirm each unless --yes. Supports `--machine`, `--snapshot`, `--force`, `--yes/-y`. |
+| `orphans list` | Orphan candidates, evidence, sampled CPU, memory measure and RSS; supports read-view options. |
+| `reclaim list` (or `reclaim`) | Local disk, RAM, CPU and simulator review with protected active work; `--sizes`, `--why`, `--processes`, `--pid PID`, `--simulators`, `--json`. |
+| `reclaim history` | Local action receipts; `--kind process\|disk`, `--limit 1–1000`, `--json`. |
+| `orphans kill <orphan-id>` or `orphans kill --all` | `--all`: Select all local orphan candidates; verify and confirm each unless --yes. Supports `--machine`, `--snapshot`, `--force`, `--yes/-y`, and `--json` with `--yes`. |
 | `machines list` | Known machine connection health; `--machine`, `--snapshot`, `--json`, `--no-color`. |
 | `machines show [<machine>]` | Default target is `local`; `all` is rejected. `--full`, `--project`, `--snapshot`, `--json`, `--no-color`. |
 | `machines reset-id` | Confirm local cloned-machine identity repair; `--yes/-y`. |
-| `cleanup list` | Local candidates; `--kind=worktree\|scratch\|history`, `--sizes`, `--why`, `--json`. History is report-only. |
+| `cleanup list` | Local candidates; `--kind=worktree\|scratch\|build\|cache\|history`, `--sizes`, `--why`, `--json`. History is report-only. |
 | `cleanup remove <candidate-id>` | Verify and remove one candidate; `--dry-run`, `--sizes`, `--include-ignored`, `--yes/-y`, `--json`. |
-| `cleanup remove --all --kind worktree` or `--kind scratch` | Remove ready candidates of the selected kind; report completed/skipped/failed counts. `--include-ignored` requires one explicit ID. |
+| `cleanup remove --all --kind worktree` , `--kind scratch`, `--kind build`, or `--kind cache` | Remove ready candidates of the selected kind; report completed/skipped/failed counts. `--include-ignored` requires one explicit ID. |
 | `top` | Interactive terminal dashboard; `--tab=flow\|projects\|machines`, `--theme=system\|light\|dark`, `--machine`, `--project`, `--since`, `--snapshot`, `--no-color`. |
 | `app` | Open the Driga desktop app, or bring the running one forward. |
 | `ask <question>...` | One-shot Chat question; `--machine`, `--project`, `--json`. |

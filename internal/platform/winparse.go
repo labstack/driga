@@ -133,6 +133,23 @@ func (p winPlatform) Alive(pid int32, start time.Time) bool {
 	d, err := p.inspect(pid)
 	return err == nil && !winTime(d.Start).IsZero() && SameStart(winTime(d.Start), start)
 }
+
+func (p winPlatform) ObserveProcess(ctx context.Context, pid int32) (model.Proc, bool, error) {
+	if err := ctx.Err(); err != nil {
+		return model.Proc{}, false, err
+	}
+	d, err := p.inspect(pid)
+	if err := ctx.Err(); err != nil {
+		return model.Proc{}, false, err
+	}
+	if errors.Is(err, errWinProcessGone) {
+		return model.Proc{}, false, nil
+	}
+	if err != nil {
+		return model.Proc{}, false, err
+	}
+	return model.Proc{PID: pid, StartTime: winTime(d.Start)}, true, nil
+}
 func (p winPlatform) Machine(ctx context.Context) (model.MachineSample, error) {
 	if err := ctx.Err(); err != nil {
 		return model.MachineSample{}, err

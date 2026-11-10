@@ -177,11 +177,16 @@ func Render(w io.Writer, v any, opts RenderOpts) error {
 		}
 		multi := multipleMachines(ids) || stale
 		fmt.Fprint(tw, machineHeading(multi))
-		fmt.Fprintln(tw, "ID\tAGE\tSIGNATURE\tPROCS\t~RECLAIM\tCWD\tYOUNG\tVERIFIED\tEVIDENCE")
+		fmt.Fprintln(tw, "ID\tAGE\tSIGNATURE\tPROCS\tMEMORY\tMEASURE\tRSS\tCPU\tCWD\tYOUNG\tVERIFIED\tEVIDENCE")
 		for _, o := range x.Rows {
 			fmt.Fprint(tw, machinePrefix(multi, o.MachineID, o.MachineFresh))
-			fmt.Fprintf(tw, "%s\t%s\t%s\t%d\t~%s\t%s\t%t\t%t\t%s\n", cell(o.ID), age(o.Age), cell(o.Signature), o.ProcCount, HumanBytes(o.RSSTotal), cell(o.Cwd), o.Young, o.Verified, cell(strings.Join(o.Evidence, "; ")))
+			memory, cpu := "—", "—"
+			if o.ResourcesKnown {
+				memory, cpu = HumanBytes(o.Memory), fmt.Sprintf("%.2f%%", o.CPUPercent)
+			}
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%d\t%s\t%s\t%s\t%s\t%s\t%t\t%t\t%s\n", cell(o.ID), age(o.Age), cell(o.Signature), o.ProcCount, memory, cell(o.MemoryMeasure), HumanBytes(o.RSSTotal), cpu, cell(o.Cwd), o.Young, o.Verified, cell(strings.Join(o.Evidence, "; ")))
 		}
+		fmt.Fprintln(tw, "Footprint includes compressed/swapped pages; CPU 100% is one core. Machine usage also changes with ongoing work.")
 		if opts.Envelope.Mode == "snapshot" {
 			fmt.Fprintln(tw, "unverified (snapshot)")
 		}

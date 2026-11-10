@@ -30,10 +30,17 @@ func TextHandler(w io.Writer) *slog.TextHandler {
 // continue to refer to the current log rather than an unlinked rotated inode.
 type Writer struct {
 	Path string
-	mu   sync.Mutex
+	// Durable synchronizes retained receipts before releasing their file lock.
+	// Diagnostic logs leave this false to avoid synchronous disk I/O.
+	Durable bool
+	mu      sync.Mutex
 }
 
 func (w *Writer) Write(p []byte) (int, error) {
+	return w.write(p, (*os.File).Sync)
+}
+
+func (w *Writer) write(p []byte, syncFile func(*os.File) error) (int, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if err := secfile.MkdirPrivate(filepath.Dir(w.Path)); err != nil {
@@ -68,7 +75,12 @@ func (w *Writer) Write(p []byte) (int, error) {
 			return 0, err
 		}
 		_, copyErr := io.Copy(old, io.NewSectionReader(f, max(0, info.Size()-MaxSize), min(info.Size(), MaxSize)))
-		if err := errors.Join(copyErr, old.Close()); err != nil {
+		var syncErr error
+		if copyErr == nil && w.Durable {
+			// The original must remain intact unless the retained copy is durable.
+			syncErr = syncFile(old)
+		}
+		if err := errors.Join(copyErr, syncErr, old.Close()); err != nil {
 			return 0, err
 		}
 		if err := f.Truncate(0); err != nil {
@@ -86,6 +98,11 @@ func (w *Writer) Write(p []byte) (int, error) {
 	}
 	if n != len(p) {
 		return n, io.ErrShortWrite
+	}
+	if w.Durable {
+		if err := syncFile(f); err != nil {
+			return n, err
+		}
 	}
 	return original, nil
 }

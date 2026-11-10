@@ -152,9 +152,13 @@ func (v ConflictsView) MarshalJSON() ([]byte, error) {
 }
 func (v OrphanRow) MarshalJSON() ([]byte, error) {
 	return jsonx.Object(v.MachineFresh, v.Orphan, struct {
-		MachineID string        `json:"machine_id"`
-		Age       time.Duration `json:"age_ms"`
-	}{v.MachineID, v.Age})
+		MachineID      string        `json:"machine_id"`
+		Age            time.Duration `json:"age_ms"`
+		Memory         uint64        `json:"memory_bytes"`
+		MemoryMeasure  string        `json:"memory_measure"`
+		CPUPercent     float64       `json:"cpu_percent"`
+		ResourcesKnown bool          `json:"resources_known"`
+	}{v.MachineID, v.Age, v.Memory, v.MemoryMeasure, v.CPUPercent, v.ResourcesKnown})
 }
 func (v OrphansView) MarshalJSON() ([]byte, error) {
 	type plain OrphansView

@@ -30,6 +30,8 @@ type Kind string
 const (
 	Worktree Kind = "worktree"
 	Scratch  Kind = "scratch"
+	Build    Kind = "build"
+	Cache    Kind = "cache"
 	History  Kind = "history"
 )
 
@@ -73,14 +75,20 @@ type Env struct {
 	TempRoots []string
 	// Rename is an injectable same_filesystem rename, never a copy fallback.
 	Rename func(string, string) error
+	// RunTools is set only by CLI entry points; the service never runs tool commands.
+	RunTools bool
+	// Tool is an injectable runner for tests; nil uses exec.
+	Tool func(context.Context, string, ...string) ([]byte, error)
 }
 type ApplyOpts struct{ DryRun, IncludeIgnored bool }
 type Result struct {
-	ID        string     `json:"id"`
-	Commands  [][]string `json:"commands"`
-	TrashPath string     `json:"trash_path,omitempty"`
-	DryRun    bool       `json:"dry_run"`
-	Warnings  []string   `json:"warnings,omitempty"`
+	ID         string     `json:"id"`
+	Commands   [][]string `json:"commands"`
+	TrashPath  string     `json:"trash_path,omitempty"`
+	DryRun     bool       `json:"dry_run"`
+	Warnings   []string   `json:"warnings,omitempty"`
+	FreedBytes int64      `json:"freed_bytes,omitempty"`
+	Packages   []string   `json:"packages,omitempty"`
 }
 
 func (e Env) now() time.Time {
@@ -125,12 +133,26 @@ func resolved(path string) string {
 }
 func wtID(path string) string { return fmt.Sprintf("wt:%x", sha256.Sum256([]byte(path)))[:15] }
 
+func sessionLive(e Env, session model.Session) bool {
+	switch session.Label {
+	case "dead", "ended":
+		return false
+	case "finished":
+		// Completion may be awaiting acknowledgment while the agent remains alive.
+		return session.EndedAt == nil && (session.PID == 0 || e.Plat.Alive(session.PID, session.ProcStart))
+	default:
+		return true
+	}
+}
+
 type snapshot struct {
+	open       []string
 	repos      []model.Repo
 	worktrees  []model.Worktree
 	sessions   []model.Session
 	cwds       map[int32]string
 	unreadable int
+	paths      *snapshotPaths
 }
 
 func read(ctx context.Context, e Env) (snapshot, error) {
@@ -151,6 +173,12 @@ func read(ctx context.Context, e Env) (snapshot, error) {
 	})
 	if err != nil {
 		return s, err
+	}
+	if lister, ok := e.Plat.(platform.OpenFileLister); ok {
+		paths, err := lister.OpenFilePaths(ctx)
+		if err == nil {
+			s.open = append([]string{}, paths...)
+		}
 	}
 	procs, err := e.Plat.Procs(ctx)
 	if err != nil {
@@ -191,6 +219,9 @@ func read(ctx context.Context, e Env) (snapshot, error) {
 			}
 		}
 	}
+	if err == nil {
+		s.preparePaths()
+	}
 	return s, err
 }
 
@@ -220,12 +251,19 @@ func List(ctx context.Context, e Env) ([]Candidate, error) {
 			cs = append(cs, Candidate{ID: wtID(w.Path), Kind: Worktree, Path: w.Path, Repo: c.Repo, Branch: c.Branch, Status: "refused", Evidence: []string{err.Error()}, Ignored: []IgnoredPath{}})
 		}
 	}
+	cs = append(cs, buildCandidates(ctx, e, s)...)
 	if s.unreadable > 0 {
 		for i := range cs {
 			cs[i].Evidence = append(cs[i].Evidence, fmt.Sprintf("%d processes with unreadable cwd were not checked", s.unreadable))
 		}
 	}
 	cs = append(cs, scratchCandidates(ctx, e, s)...)
+	for _, c := range cacheCandidates(ctx, e, s) {
+		if c.Status != "refused" || e.Why {
+			cs = append(cs, c)
+		}
+	}
+	cs = append(cs, goTmpCacheCandidates(ctx, e, s)...)
 	cs = append(cs, historyCandidates(e)...)
 	if e.Sizes {
 		for i := range cs {
@@ -245,6 +283,14 @@ func List(ctx context.Context, e Env) ([]Candidate, error) {
 func verify(ctx context.Context, e Env, c Candidate) (Candidate, error) {
 	if c.Kind == History {
 		return Candidate{}, fmt.Errorf("agent history is report-only; use the agent's retention setting")
+	}
+	if c.Kind == Cache {
+		if c.Status == "report_only" {
+			return Candidate{}, fmt.Errorf("report only")
+		}
+		if !e.RunTools && !strings.HasPrefix(c.ID, "cache:go-tmp:") {
+			return Candidate{}, fmt.Errorf("cache cleanup runs from the driga CLI only")
+		}
 	}
 	if c.Status == "refused" {
 		return Candidate{}, fmt.Errorf("candidate was refused when listed (%s); list again", strings.Join(c.Evidence, "; "))
@@ -270,6 +316,40 @@ func verify(ctx context.Context, e Env, c Candidate) (Candidate, error) {
 		if !found {
 			return fresh, fmt.Errorf("worktree no longer attributed")
 		}
+	case Cache:
+		if strings.HasPrefix(c.ID, "cache:go-tmp:") {
+			fresh, err = inspectGoTmpCache(e, s, c.Path)
+			if err == nil && c.Path == configuredGoCache(ctx, e) {
+				err = fmt.Errorf("cache is the configured GOCACHE")
+			}
+			break
+		}
+		found := false
+		for _, candidate := range cacheCandidates(ctx, e, s) {
+			if candidate.ID == c.ID {
+				fresh, found = candidate, true
+				break
+			}
+		}
+		if !found {
+			return fresh, fmt.Errorf("cache no longer available")
+		}
+		if fresh.Status == "report_only" {
+			return fresh, fmt.Errorf("report only")
+		}
+		if fresh.Status == "refused" {
+			return fresh, fmt.Errorf("%s", strings.Join(fresh.Evidence, "; "))
+		}
+	case Build:
+		rel, relErr := filepath.Rel(c.Repo, c.Path)
+		if relErr != nil {
+			return fresh, relErr
+		}
+		state, stateErr := readCheckoutState(ctx, e, c.Repo)
+		if stateErr != nil {
+			return fresh, stateErr
+		}
+		fresh, err = inspectBuild(ctx, e, s, state, c.Repo, rel)
 	case Scratch:
 		fresh, err = inspectScratch(ctx, e, s, c)
 	default:
@@ -331,6 +411,73 @@ func Apply(ctx context.Context, e Env, c Candidate, opts ApplyOpts) (r Result, e
 	if fresh.Status == "needs_review" && !opts.IncludeIgnored {
 		return r, fmt.Errorf("ignored non-regenerable files require --include-ignored for this candidate")
 	}
+	if fresh.Kind == Cache {
+		return applyCache(ctx, e, fresh, opts, r)
+	}
+	if fresh.Kind == Build {
+		r.Commands = [][]string{{"remove", fresh.Path}}
+		if opts.DryRun {
+			return r, nil
+		}
+		if name := filepath.Base(fresh.Path); name == ".venv" || name == "venv" {
+			packages, globErr := filepath.Glob(filepath.Join(fresh.Path, "lib", "python*", "site-packages", "*.dist-info"))
+			if globErr != nil {
+				return r, globErr
+			}
+			for _, path := range packages {
+				if info, err := os.Lstat(path); err == nil && info.IsDir() {
+					r.Packages = append(r.Packages, strings.TrimSuffix(filepath.Base(path), ".dist-info"))
+				}
+			}
+			// Reconstruction must survive a crash during removal. Keep preparation
+			// separate from cleanup.log, whose entries describe final outcomes.
+			entry := struct {
+				At       time.Time `json:"occurred_at"`
+				Phase    string    `json:"phase"`
+				ID       string    `json:"candidate_id"`
+				Path     string    `json:"path"`
+				Packages []string  `json:"packages"`
+			}{e.now().UTC(), "prepared", fresh.ID, fresh.Path, r.Packages}
+			data, recordErr := json.Marshal(entry)
+			if recordErr != nil {
+				return r, recordErr
+			}
+			// A prior failed append may leave a partial line. Delimit both ends
+			// so this acknowledged record can always be read independently.
+			data = append(append([]byte{'\n'}, data...), '\n')
+			// Writer bounds logs by truncating oversized writes; a reconstruction
+			// record must instead be retained whole or prevent deletion.
+			if len(data) > 64<<10 {
+				return r, fmt.Errorf("venv reconstruction record exceeds log limit")
+			}
+			writer := logfile.Writer{Path: filepath.Join(e.DataDir, "cleanup-reconstruction.log"), Durable: true}
+			if _, err := writer.Write(data); err != nil {
+				return r, fmt.Errorf("persist venv reconstruction: %w", err)
+			}
+		}
+		before, statErr := freeBytes(fresh.Repo)
+		if statErr != nil {
+			return r, statErr
+		}
+		root, rootErr := os.OpenRoot(fresh.Repo)
+		if rootErr != nil {
+			return r, rootErr
+		}
+		defer root.Close()
+		rel, relErr := filepath.Rel(fresh.Repo, fresh.Path)
+		if relErr != nil {
+			return r, relErr
+		}
+		if err := root.RemoveAll(rel); err != nil {
+			return r, err
+		}
+		after, statErr := freeBytes(fresh.Repo)
+		if statErr != nil {
+			return r, statErr
+		}
+		r.FreedBytes = max(0, after-before)
+		return r, nil
+	}
 	if fresh.Kind == Worktree {
 		// Prune before the branch: once the worktree is gone, the action has
 		// succeeded even if git judges the branch unmerged against its upstream.
@@ -380,4 +527,11 @@ func Apply(ctx context.Context, e Env, c Candidate, opts ApplyOpts) (r Result, e
 		return r, nil
 	}
 	return trash(ctx, e, fresh, opts, r)
+}
+
+func openUnder(s snapshot, dir string) (bool, error) {
+	if s.open == nil {
+		return false, fmt.Errorf("open-file inspection unavailable")
+	}
+	return observedUnder(s.pathEvidence().open, dir), nil
 }

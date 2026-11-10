@@ -30,6 +30,36 @@ func TestMixerRetainsLabelInputs(t *testing.T) {
 	}
 }
 
+func TestMixerDetachesTransientInputs(t *testing.T) {
+	now := time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC)
+	events := []model.Event{{TS: now.Add(-time.Minute)}}
+	procs := []model.Proc{{PID: 42, CPUPercent: 0.1, Cmdline: "agent --prompt private", Argv: []string{"agent", "private"}}}
+	obs := model.SessionObs{
+		Adapter: "claude", PID: 42, RegistryStatus: "idle", LastActivityAt: events[0].TS,
+		Events: events, Completions: []model.CompletionEvent{{Text: "transient completion"}},
+		FilesTouched: []model.FileTouch{{Path: "/transient/path"}},
+	}
+	mixed := LabelWithEvidence(StateInput{Obs: obs, Proc: &procs[0], LastStop: &events[0].TS, Unseen: true}, now, Thresholds{})
+	// The collector retains the session and mixer after dropping adapter batches.
+	session := model.Session{SessionObs: obs, Mixer: &mixed}
+	session.Events, session.Completions, session.FilesTouched = nil, nil, nil
+	saved := session.Mixer.Input
+	if saved == nil || saved.Obs.Events != nil || saved.Obs.Completions != nil || saved.Obs.FilesTouched != nil {
+		t.Fatal("mixer retained a transient observation batch")
+	}
+	if saved.Proc == nil || saved.Proc == &procs[0] || saved.Proc.Cmdline != "" || saved.Proc.Argv != nil || saved.LastStop == nil || saved.LastStop == &events[0].TS {
+		t.Fatal("mixer retained a process or event batch reference")
+	}
+	procs[0].CPUPercent = 99
+	events[0].TS = now.Add(time.Hour)
+	if saved.Proc.CPUPercent != 0.1 || !saved.LastStop.Equal(now.Add(-time.Minute)) {
+		t.Fatal("caller mutation changed retained label inputs")
+	}
+	if replay := SessionMixer(session); !reflect.DeepEqual(replay, mixed) {
+		t.Fatalf("retained mixer changed after transient batch reuse: %+v", replay)
+	}
+}
+
 func TestLabel(t *testing.T) {
 	now := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
 	ago := func(d time.Duration) time.Time { return now.Add(-d) }

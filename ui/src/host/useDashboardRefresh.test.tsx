@@ -38,6 +38,32 @@ beforeEach(() => {
 afterEach(async () => { await act(async () => root.unmount()); container.remove(); });
 
 describe("dashboard refresh publications", () => {
+  it("publishes the selected page and healthy supplements while the header is pending", async () => {
+    const pending = deferred<Fragment>();
+    api.open.mockImplementation((id: string) => id === "header" ? pending.promise : Promise.resolve(fragment(id)));
+    await mount();
+    expect(state.fragment?.id).toBe("home");
+    expect(state.inbox?.id).toBe("Inbox");
+    expect(state.fleet?.id).toBe("Fleet");
+    expect(state.header).toBeNull();
+    await act(async () => { pending.resolve(fragment("header")); });
+    expect(state.header?.id).toBe("header");
+  });
+
+  it("publishes slow initial reads even when another poll becomes due", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+    api.open.mockImplementation((id: string) => new Promise(resolve => setTimeout(() => resolve(fragment(id)), 6000)));
+    try {
+      await mount();
+      await act(async () => { await vi.advanceTimersByTimeAsync(18000); });
+      expect(state.fragment?.id).toBe("home");
+    } finally {
+      vi.useRealTimers();
+      vi.restoreAllMocks();
+    }
+  });
+
   it("retains failed supplements independently and tracks selected freshness", async () => {
     const prompts = [{ id: "pending" }] as Prompt[];
     api.prompts.mockResolvedValue(prompts);
@@ -54,6 +80,7 @@ describe("dashboard refresh publications", () => {
     expect(state.prompts).toEqual(prompts);
     expect(state.fragment?.id).toBe("home");
     expect(state.fresh).toEqual({ at, failed: true });
+    expect(onError).toHaveBeenCalledWith("offline");
     expect(onMissing).not.toHaveBeenCalled();
   });
 

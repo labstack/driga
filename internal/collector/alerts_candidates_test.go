@@ -3,6 +3,7 @@ package collector
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -216,4 +217,26 @@ func TestAlertCandidatesRemoteReplayAndMetadataExpiry(t *testing.T) {
 	if len(n.notes) != 2 {
 		t.Fatal(n.notes)
 	}
+}
+
+func TestLowDiskSummaryReclaimCommands(t *testing.T) {
+	d, st, _, _ := setup(t)
+	if err := st.Tx(t.Context(), func(tx *store.Tx) error {
+		return lowDiskInbox(tx, config.MachineConfig{DiskFreeMin: 20_000_000_000}, model.MachineSample{DiskTotal: 100_000_000_000, DiskFree: 1}, d.now())
+	}); err != nil {
+		t.Fatal(err)
+	}
+	items, err := st.Inbox(time.Time{}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range items {
+		if item.Kind == "low_disk" {
+			if !strings.Contains(item.Summary, "--kind build --sizes") || !strings.Contains(item.Summary, "--kind cache --sizes") {
+				t.Fatal(item.Summary)
+			}
+			return
+		}
+	}
+	t.Fatal("no low disk item")
 }

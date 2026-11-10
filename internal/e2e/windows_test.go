@@ -303,6 +303,24 @@ func TestWindowsEndToEnd(t *testing.T) {
 		for _, h := range handles {
 			assertAlive(t, h, true)
 		}
+		// The sentinel's initial cwd is a parent of work. Even idle helpers must
+		// remain protected while a live session can still own that directory tree.
+		_, protected := f.try("", "orphans", "kill", candidate.ID, "--snapshot", "--force", "--yes")
+		if protected == nil || !strings.Contains(protected.Error(), "ownership requires review") {
+			t.Fatalf("overlapping live session did not protect owned tree: %v", protected)
+		}
+		for _, h := range handles {
+			assertAlive(t, h, true)
+		}
+		sentinel.stop()
+		select {
+		case <-sentinel.done:
+		case <-time.After(10 * time.Second):
+			t.Fatal("owned overlapping sentinel failed to stop")
+		}
+		// Keep an unrelated sentinel alive in a sibling checkout for the allowed
+		// shutdown. Parent-directory ambiguity is no longer part of this fixture.
+		sentinel = f.startAt(t, f.repo, f.helper, "sentinel")
 		proof := f.run(t, "", "orphans", "kill", candidate.ID, "--snapshot", "--force", "--yes")
 		if !strings.Contains(string(proof), "verified idle") || !strings.Contains(string(proof), "driga orphans kill "+candidate.ID) {
 			t.Fatalf("missing idle verification/evidence: %s", proof)

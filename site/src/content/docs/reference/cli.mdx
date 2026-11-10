@@ -41,6 +41,7 @@ confirmation exits `2` when stdin is not a terminal unless `--yes` is passed.
 | [`driga orphans`](#driga-orphans) | List orphan process trees. |
 | [`driga machines`](#driga-machines) | List known machines and their connection health. |
 | [`driga cleanup`](#driga-cleanup) | Inspect and explicitly clean local agent disk candidates. |
+| [`driga reclaim`](#driga-reclaim) | Review resource reclaim candidates and local action history. |
 | [`driga top`](#driga-top) | Open the interactive session viewer. |
 | [`driga app`](#driga-app) | Open the Driga desktop app, or focus it. |
 | [`driga ask`](#driga-ask) | Ask a one-shot Chat question through Claude and driga's read-only tools. |
@@ -346,6 +347,7 @@ driga orphans kill [<orphan-id>] [flags]
 |---|---|---|
 | `--machine=<machine>` | `all` | Select orphan candidates from this machine, local, or all. |
 | `--snapshot` |  | Collect one snapshot before selecting candidates. |
+| `--json` |  | Print versioned shutdown outcomes; requires --yes. |
 | `-y, --yes` |  | Skip confirmation; identity and idle checks still apply. |
 | `--all` |  | Select all local orphan candidates; verify and confirm each unless --yes. |
 | `--force` |  | Escalate survivors to SIGKILL (TerminateProcess on Windows); confirmation is still required unless --yes. |
@@ -431,9 +433,9 @@ driga cleanup list [flags]
 | Flag | Default | Description |
 |---|---|---|
 | `--json` |  | Print versioned JSON instead of tables. |
-| `--kind=<kind>` |  | Filter by worktree, scratch, or history. |
+| `--kind=<kind>` |  | Filter by worktree, scratch, build, cache, history. |
 | `--sizes` |  | Walk candidate sizes on demand. |
-| `--why` |  | Include worktrees that do not qualify, with reasons. |
+| `--why` |  | Include worktrees and build directories that do not qualify, with reasons. |
 
 ### driga cleanup remove
 
@@ -450,12 +452,54 @@ driga cleanup remove [<candidate-id>] [flags]
 | Flag | Default | Description |
 |---|---|---|
 | `--json` |  | Print versioned JSON instead of tables. |
-| `--kind=<kind>` |  | Filter by worktree or scratch (required with --all); history is report-only. |
+| `--kind=<kind>` |  | Filter by worktree, scratch, build, cache, history (required with --all); history is report-only. |
 | `--sizes` |  | Walk candidate sizes on demand (30s cap per walk). |
 | `--all` |  | Remove ready candidates of --kind; skip candidates needing review and report failures. |
 | `--dry-run` |  | Print exact commands after verification without removing anything. |
 | `-y, --yes` |  | Confirm the displayed action without prompting. |
 | `--include-ignored` |  | Allow listed non-regenerable ignored files for one explicit ID. |
+
+## driga reclaim
+
+Review resource reclaim candidates and local action history.
+
+Without a subcommand, runs `driga reclaim list`.
+
+| Subcommand | Description |
+|---|---|
+| [`driga reclaim list`](#driga-reclaim-list) | Review local resource reclaim candidates and safety decisions. |
+| [`driga reclaim history`](#driga-reclaim-history) | Show local process and disk action receipts. |
+
+### driga reclaim list
+
+Review local resource reclaim candidates and safety decisions.
+
+```sh
+driga reclaim list [flags]
+```
+
+| Flag | Default | Description |
+|---|---|---|
+| `--json` |  | Print versioned JSON instead of tables. |
+| `--sizes` |  | Measure disk candidates on demand (30s cap per walk). |
+| `--why` |  | Include disk candidates that require review or are protected. |
+| `--processes` |  | Review local detached processes without scanning disk. |
+| `--simulators` |  | Review booted iOS simulators without scanning disk. |
+| `--pid=<pid>` |  | Inspect one current process, including protections and missing evidence. |
+
+### driga reclaim history
+
+Show local process and disk action receipts.
+
+```sh
+driga reclaim history [flags]
+```
+
+| Flag | Default | Description |
+|---|---|---|
+| `--json` |  | Print versioned JSON instead of tables. |
+| `--kind=<kind>` |  | Filter by process or disk. |
+| `--limit=<limit>` | `50` | Maximum receipts, newest first (1–1000). |
 
 ## driga top
 

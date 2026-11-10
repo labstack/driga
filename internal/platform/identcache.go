@@ -1,6 +1,9 @@
 package platform
 
-import "sync"
+import (
+	"errors"
+	"sync"
+)
 
 // identKey distinguishes one process image: exec keeps the pid and start time
 // but replaces the kernel command name.
@@ -19,27 +22,58 @@ type ident struct {
 // process image, and reading argv also copies the process environment.
 type identCache struct {
 	mu sync.Mutex
-	m  map[int32]ident
+	m  map[int32]*ident
 }
 
 func (c *identCache) get(pid int32, key identKey, load func() ([]string, string, error)) ([]string, string, error) {
 	c.mu.Lock()
 	v, ok := c.m[pid]
-	c.mu.Unlock()
-	if ok && v.key == key {
+	if ok && v.key == key && len(v.argv) > 0 && v.argv[0] != "" && v.exe != "" {
+		c.mu.Unlock()
 		return v.argv, v.exe, nil
 	}
-	argv, exe, err := load()
-	if err != nil {
-		return nil, "", err
-	}
-	c.mu.Lock()
 	if c.m == nil {
-		c.m = make(map[int32]ident)
+		c.m = make(map[int32]*ident)
 	}
-	c.m[pid] = ident{key: key, argv: argv, exe: exe}
+	// Invalidate the previous image before reading. A pending entry also keeps
+	// an older concurrent load from replacing a newer observation or retain.
+	pending := &ident{key: key}
+	c.m[pid] = pending
 	c.mu.Unlock()
-	return argv, exe, nil
+	argv, exe, err := load()
+	c.mu.Lock()
+	if c.m[pid] == pending {
+		if err == nil && len(argv) > 0 && argv[0] != "" && exe != "" {
+			c.m[pid] = &ident{key: key, argv: argv, exe: exe}
+		} else {
+			delete(c.m, pid)
+		}
+	}
+	c.mu.Unlock()
+	// Partial observations remain useful for this scan, but retry next time.
+	// Never combine fields obtained in separate attempts/process images.
+	return argv, exe, err
+}
+
+var errIdentityChanged = errors.New("process image changed during identity read")
+
+func readIdentity(key identKey, readArgv func() ([]string, error), readExe func() (string, error), currentKey func() (identKey, error)) ([]string, string, error) {
+	argv, argvErr := readArgv()
+	exe, exeErr := readExe()
+	if argvErr != nil {
+		argv = nil
+	}
+	if exeErr != nil {
+		exe = ""
+	}
+	current, keyErr := currentKey()
+	if keyErr != nil {
+		return nil, "", errors.Join(argvErr, exeErr, keyErr)
+	}
+	if current != key {
+		return nil, "", errors.Join(argvErr, exeErr, errIdentityChanged)
+	}
+	return argv, exe, errors.Join(argvErr, exeErr)
 }
 
 // retain drops processes absent from the latest scan.

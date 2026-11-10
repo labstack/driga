@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"os/user"
 	"runtime"
 	"syscall"
@@ -24,6 +25,17 @@ type approvedSnapshotPlatform struct {
 
 func TestSnapshotFixture(t *testing.T) {
 	if os.Getenv("DRIGA_SNAPSHOT_FIXTURE") != "1" {
+		return
+	}
+	if runtime.GOOS != "windows" {
+		stop := make(chan os.Signal, 1)
+		signal.Notify(stop, syscall.SIGTERM)
+		defer signal.Stop(stop)
+		fmt.Println("fixture ready")
+		<-stop
+		// Exercise ordinary graceful shutdown latency. Immediate exit made the
+		// parent's former 100ms assertion depend on host scheduling and load.
+		time.Sleep(250 * time.Millisecond)
 		return
 	}
 	fmt.Println("fixture ready")
@@ -68,12 +80,14 @@ func TestSnapshotOwnedChild(t *testing.T) {
 	if target.PID == 0 {
 		t.Fatal("owned fixture not collected")
 	}
-	r, e := Snapshot(context.Background(), plat, []model.Proc{target}, nil, false, 100*time.Millisecond)
+	// Use the production grace period: scheduling and native observations need
+	// not establish exit within the former 100ms fixture-only deadline.
+	r, e := Snapshot(context.Background(), plat, []model.Proc{target}, nil, false, 0)
 	if e != nil {
 		t.Fatal(e)
 	}
 	if runtime.GOOS == "windows" && len(r.Survivors) == 1 {
-		r, e = Snapshot(context.Background(), plat, r.Survivors, nil, true, 100*time.Millisecond)
+		r, e = Snapshot(context.Background(), plat, r.Survivors, nil, true, 0)
 	}
 	if e != nil || len(r.Stopped) != 1 || len(r.Survivors) != 0 || len(r.Skipped) != 0 {
 		t.Fatalf("owned child: %#v %v", r, e)

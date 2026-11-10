@@ -5,6 +5,7 @@ package kill
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -21,6 +22,90 @@ import (
 	"github.com/labstack/driga/internal/model"
 	"github.com/labstack/driga/internal/platform"
 )
+
+func TestKillReportsObservedExitsAndFootprint(t *testing.T) {
+	for _, force := range []bool{false, true} {
+		t.Run(fmt.Sprint(force), func(t *testing.T) {
+			start := time.Now().Add(-time.Hour)
+			p := snapshotPlatform{procs: []model.Proc{
+				{PID: 100, StartTime: start, RSS: 12 << 20, Footprint: 3 << 30, MemoryMeasure: "physical_footprint"},
+				{PID: 200, PPID: 100, StartTime: start, RSS: 4 << 20, Footprint: 512 << 20, MemoryMeasure: "physical_footprint"},
+			}}
+			p.alive = func(pid int32, at time.Time) bool {
+				for _, proc := range p.procs {
+					if proc.PID == pid && proc.StartTime.Equal(at) {
+						return true
+					}
+				}
+				return false
+			}
+			r, err := tree(context.Background(), &p, model.Orphan{RootPID: 100, StartTime: start}, []int32{200}, force, time.Millisecond, func(pid int, sig syscall.Signal) error {
+				if pid == 200 || sig == syscall.SIGKILL {
+					p.procs = slices.DeleteFunc(p.procs, func(proc model.Proc) bool { return int(proc.PID) == pid })
+				}
+				return nil
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			data, err := json.Marshal(r)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var got struct {
+				Stopped   []int32 `json:"stopped"`
+				Survivors []int32 `json:"survivors"`
+				Before    struct {
+					Memory  uint64 `json:"memory_bytes"`
+					RSS     uint64 `json:"rss_bytes"`
+					Measure string `json:"memory_measure"`
+				} `json:"before"`
+				StoppedUsage struct {
+					Memory uint64 `json:"memory_bytes"`
+				} `json:"stopped_usage"`
+			}
+			if err := json.Unmarshal(data, &got); err != nil {
+				t.Fatal(err)
+			}
+			if got.Before.Memory != 3758096384 || got.Before.RSS != 16777216 || got.Before.Measure != "physical_footprint" {
+				t.Fatalf("lost memory measure: %s", data)
+			}
+			if force {
+				if len(got.Stopped) != 2 || len(got.Survivors) != 0 || got.StoppedUsage.Memory != 3758096384 {
+					t.Fatalf("force outcome: %s", data)
+				}
+			} else if !slices.Equal(got.Stopped, []int32{200}) || !slices.Equal(got.Survivors, []int32{100}) || got.StoppedUsage.Memory != 536870912 {
+				t.Fatalf("partial outcome: %s", data)
+			}
+		})
+	}
+}
+
+type failedFinalObservation struct {
+	snapshotPlatform
+	calls int
+}
+
+func (p *failedFinalObservation) Procs(context.Context) ([]model.Proc, error) {
+	p.calls++
+	if p.calls > 1 {
+		return nil, errors.New("process observation unavailable")
+	}
+	return p.procs, nil
+}
+
+func TestKillDoesNotInferExitFromFailedObservation(t *testing.T) {
+	start := time.Now().Add(-time.Hour)
+	p := &failedFinalObservation{snapshotPlatform: snapshotPlatform{procs: []model.Proc{{PID: 100, StartTime: start}}, alive: func(int32, time.Time) bool { return false }}}
+	r, err := tree(context.Background(), p, model.Orphan{RootPID: 100, StartTime: start}, nil, false, time.Millisecond, func(int, syscall.Signal) error { t.Fatal("unexpected signal"); return nil })
+	data, marshalErr := json.Marshal(r)
+	if marshalErr != nil {
+		t.Fatal(marshalErr)
+	}
+	if err == nil || !strings.Contains(err.Error(), "observation unavailable") || !strings.Contains(string(data), `"unknown":[100]`) {
+		t.Fatalf("failed observation reported exits: %s err=%v", data, err)
+	}
+}
 
 type socketPlatform struct {
 	snapshotPlatform
@@ -152,8 +237,28 @@ func childTree(t *testing.T) (platform.Platform, model.Orphan, []int32, func() i
 	return plat, o, pids, extra
 }
 
+// Pin each test-owned process before acting; a child's start is not its root's.
+func liveTreeProcs(t *testing.T, plat platform.Platform, pids []int32) []model.Proc {
+	t.Helper()
+	procs, err := plat.Procs(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	idx := derive.NewProcIndex(procs)
+	owned := make([]model.Proc, 0, len(pids))
+	for _, pid := range pids {
+		proc, ok := idx.Get(pid)
+		if !ok || !plat.Alive(pid, proc.StartTime) {
+			t.Fatalf("fixture PID %d not alive before Tree", pid)
+		}
+		owned = append(owned, proc)
+	}
+	return owned
+}
+
 func TestKillTerminatesTree(t *testing.T) {
 	plat, o, pids, _ := childTree(t)
+	procs := liveTreeProcs(t, plat, o.PIDs)
 	slices.Reverse(pids) // Membership is a set, independent of display order.
 	r, err := Tree(context.Background(), plat, o, pids, false, 2*time.Second)
 	if err != nil || r.Aborted || len(r.Signaled) != 3 || len(r.Survivors) != 0 {
@@ -162,23 +267,29 @@ func TestKillTerminatesTree(t *testing.T) {
 	if r.Signaled[len(r.Signaled)-1] != o.RootPID {
 		t.Fatalf("root must be last: %+v", r)
 	}
-	for _, pid := range o.PIDs {
-		if plat.Alive(pid, o.StartTime) {
-			t.Fatalf("PID %d still alive", pid)
+	for _, proc := range procs {
+		if plat.Alive(proc.PID, proc.StartTime) {
+			t.Fatalf("PID %d still alive", proc.PID)
 		}
 	}
 }
 
 func TestKillAbortsOnChangedTree(t *testing.T) {
 	plat, o, pids, extra := childTree(t)
+	// Exercise a child born outside SameStart's one-second forward window.
+	time.Sleep(1100 * time.Millisecond)
 	pid := extra()
+	procs := liveTreeProcs(t, plat, append(slices.Clone(o.PIDs), pid))
+	if platform.SameStart(procs[len(procs)-1].StartTime, o.StartTime) {
+		t.Fatal("extra child must start outside the root's identity window")
+	}
 	r, err := Tree(context.Background(), plat, o, pids, true, time.Millisecond)
 	if err != nil || !r.Aborted || r.Reason == "" || len(r.Signaled) != 0 {
 		t.Fatalf("%+v %v", r, err)
 	}
-	for _, p := range append(o.PIDs, pid) {
-		if !plat.Alive(p, o.StartTime) {
-			t.Fatalf("PID %d was signaled", p)
+	for _, proc := range procs {
+		if !plat.Alive(proc.PID, proc.StartTime) {
+			t.Fatalf("PID %d not alive after aborted Tree", proc.PID)
 		}
 	}
 }
@@ -202,6 +313,16 @@ type snapshotPlatform struct {
 }
 
 func (p snapshotPlatform) Procs(context.Context) ([]model.Proc, error) { return p.procs, nil }
+
+// This fixture table is exhaustive; absence deliberately represents exit.
+func (p snapshotPlatform) ObserveProcess(_ context.Context, pid int32) (model.Proc, bool, error) {
+	for _, proc := range p.procs {
+		if proc.PID == pid {
+			return proc, true, nil
+		}
+	}
+	return model.Proc{}, false, nil
+}
 
 func (p snapshotPlatform) Alive(pid int32, start time.Time) bool { return p.alive(pid, start) }
 
